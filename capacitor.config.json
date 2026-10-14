@@ -1,0 +1,8 @@
+{
+  "appId": "br.com.magnaenecon.diagrama230",
+  "appName": "Diagrama 230",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always"
+  }
+}
