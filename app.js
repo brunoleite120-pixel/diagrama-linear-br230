@@ -838,6 +838,11 @@
           state.activeId = id; ui.open = {}; save(); renderAll();
         },
         gps: true, share: !!navigator.canShare, saveBlob: saveBlob, notify: function (m) { toast(m); },
+        drive: driveQ && {
+          ready: driveReady,
+          add: function (items) { return driveQ.add(items); },
+          status: driveStatus
+        },
         getTeamLogo: function () { return (banco.on && banco.cfg.fotoLogo) || null; },
         canSetTeamLogo: function () { return banco.on && isResp(); },
         setTeamLogo: function (v) { return saveTeamLogo({ t: 'config', chave: 'fotoLogo', valor: v }); },
@@ -1543,6 +1548,7 @@
       }
       keepSync();
       if (logoMudou && foto) foto.refreshTeam();
+      if (driveQ) { driveQ.pump(); onDriveChange(); }
       checkOld();
       syncStatus();
     }, function (err) {
@@ -1568,6 +1574,8 @@
     else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
     else if (banco.at) t = 'Banco da equipe · ' + hhmm(banco.at);
     else t = 'Conectando ao banco…';
+    var dq = driveQ && driveReady() ? driveQ.info() : null;
+    if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo'; }
     el.textContent = t;
     el.classList.toggle('warn', warn);
   }
@@ -1578,6 +1586,7 @@
     lsPut(LOGIN_KEY, l);
     document.body.classList.toggle('ro', readOnly());
     renderLoginBtn();
+    if (driveQ && l) { driveQ.resetCode(); driveQ.pump(); }
   }
   function renderLoginBtn() {
     var b = $('btnLogin');
@@ -1750,6 +1759,29 @@
     b[1].addEventListener('click', function () { bar.remove(); });
     document.body.appendChild(bar);
   }
+  // ---------------- fotos para o Google Drive da equipe (drive.js); o endereço do envio fica no banco (config "driveFotos")
+  var driveQ = null;
+  function driveReady() { return !!(banco.on && banco.cfg.driveFotos && banco.cfg.driveFotos.url); }
+  function driveStatus() {
+    if (!driveQ || !driveReady()) return '';
+    var i = driveQ.info(), n = i.n, fotos = n + (n === 1 ? ' foto' : ' fotos');
+    if (!n) return i.enviadas ? 'Fotos enviadas ao Drive da equipe.' : 'As fotos também vão para o Drive da equipe.';
+    if (!banco.login) return fotos + ' esperando para o Drive: entre com o código da equipe.';
+    if (i.erro === 'codigo') return fotos + ' esperando para o Drive: o código mudou, entre de novo.';
+    if (i.busy) return 'Enviando ao Drive… (' + fotos + ' na fila)';
+    if (i.erro === 'rede' || navigator.onLine === false) return 'Sem sinal: ' + fotos + ' esperando para o Drive.';
+    if (i.erro) return fotos + ' esperando para o Drive (o Google recusou; tenta de novo sozinho).';
+    return fotos + ' na fila para o Drive.';
+  }
+  function onDriveChange() { syncStatus(); if (foto) foto.refreshDrive(); }
+  function initDrive() {
+    if (!banco.on || !window.DriveFotos || driveQ) return;
+    driveQ = window.DriveFotos({
+      getUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
+      getLogin: function () { return banco.login; },
+      onChange: onDriveChange
+    });
+  }
   // logo da equipe no carimbo das fotos: vai direto ao banco (só o responsável)
   function saveTeamLogo(op) {
     if (!banco.on || !isResp()) return Promise.reject(new Error('so_responsavel'));
@@ -1776,6 +1808,7 @@
       banco.meta = s.meta && typeof s.meta === 'object' ? s.meta : {}; banco.conf = Array.isArray(s.conf) ? s.conf : [];
     }
     banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
+    initDrive();
     setLogin(lsGet(LOGIN_KEY));
     if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
@@ -1850,6 +1883,7 @@
     state: function () { return state; },
     mapa: function () { return mapa; },
     banco: function () { return banco; },
+    drive: function () { return driveQ; },
     diffOps: diffOps,
     applyOps: applyOps
   };

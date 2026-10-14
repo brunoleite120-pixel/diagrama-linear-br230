@@ -236,6 +236,8 @@
     '.ft-ihead{display:flex;align-items:center;justify-content:space-between;gap:8px}',
     '.ft-iname{font-weight:650;font-size:13px;overflow-wrap:anywhere;min-width:0}',
     '.ft-prog{margin-right:auto;align-self:center;font-size:13px;color:var(--ft-ink-2);font-variant-numeric:tabular-nums}',
+    '.ft-dstat{align-self:center;font-size:12.5px;color:var(--ft-ink-2);flex:1 1 180px;min-width:0}',
+    '.ft-prog:not(:empty)+.ft-dstat{flex-basis:100%;order:-1}',
     '.ft-src small{display:block;margin-top:4px;color:var(--ft-ink-3);font-variant-numeric:tabular-nums}',
     '.ft-note a{color:var(--ft-accent);font-weight:600}',
     // câmera dentro do app
@@ -398,8 +400,9 @@
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="ft-foot" hidden><span class="ft-prog ft-many" role="status"></span>' +
+        '<div class="ft-foot" hidden><span class="ft-prog ft-many" role="status"></span><span class="ft-dstat" role="status" hidden></span>' +
           '<button type="button" class="ft-btn" data-ft="new"><span class="ft-one">Nova foto</span><span class="ft-many">Nova seleção</span></button>' +
+          '<button type="button" class="ft-btn ft-one ft-drv" data-ft="drive" hidden>Enviar ao Drive</button><button type="button" class="ft-btn ft-many ft-drv" data-ft="b-drive" hidden>Enviar todas ao Drive</button>' +
           (opts.share ? '<button type="button" class="ft-btn ft-one" data-ft="share">Compartilhar</button><button type="button" class="ft-btn ft-many" data-ft="b-share">Compartilhar todas</button>' : '') +
           '<button type="button" class="ft-btn primary ft-one" data-ft="save">Salvar foto</button>' +
           '<button type="button" class="ft-btn primary ft-many" data-ft="b-save">Salvar todas (.zip)</button></div>';
@@ -534,7 +537,7 @@
     }
     function setupPhoto(img, url, file, ex, from) {
       if (st && st.url) URL.revokeObjectURL(st.url);
-      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '' };
+      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: newUid() };
       place(st, ex, file, from);
       showWork();
     }
@@ -872,12 +875,13 @@
         cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', 0.9);
       });
     }
-    function busy(on) { root.querySelectorAll('[data-ft="save"],[data-ft="share"]').forEach(function (b) { b.disabled = on; }); }
+    function busy(on) { root.querySelectorAll('[data-ft="save"],[data-ft="share"],[data-ft="drive"]').forEach(function (b) { b.disabled = on; }); }
     function save() {
       if (!st) return;
       busy(true);
       makeBlob().then(function (blob) {
         if (!blob) { notify('Não foi possível gerar a foto. Tente com uma imagem menor.'); return; }
+        toDrive([driveItem(st, blob, fileName())], true);
         return opts.saveBlob(fileName(), blob);
       }).then(function () { busy(false); }, function () { busy(false); });
     }
@@ -885,10 +889,64 @@
       if (!st) return;
       busy(true);
       makeBlob().then(function (blob) {
+        toDrive([driveItem(st, blob, fileName())], true);
         var f = new File([blob], fileName(), { type: 'image/jpeg' });
         if (navigator.canShare && navigator.canShare({ files: [f] })) return navigator.share({ files: [f], title: fileName() });
         notify('Este navegador não compartilha arquivos. Use Salvar foto.');
       }).catch(function () { /* compartilhamento cancelado */ }).then(function () { busy(false); });
+    }
+
+    // ---------------- Google Drive da equipe: toda foto salva, compartilhada ou enviada vai para "Lote / Ponto"
+    function newUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+    function driveOn() { return !!(opts.drive && opts.drive.ready()); }
+    function driveItem(it, blob, name) {
+      return withItem(it, function () {
+        var c = contract(), p = findPoint(st.pid), ll = st.ll || (st.km != null ? ref.at(st.km) : null);
+        var desc = (st.desc || '').trim() || (st.bi != null && batch ? batch.common.trim() : '');
+        var info = [
+          c ? lotName(c) : '',
+          p ? 'Ponto ' + p.nome : 'Sem ponto',
+          st.km != null ? kmLine(st.km, st.side, st.dist, true) : '',
+          ll ? coordTxt(ll) : '',
+          st.date ? dateTxt(st.date) : '',
+          desc
+        ].filter(Boolean).join('\n');
+        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && (c.lote || lotName(c))) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], descricao: info };
+      });
+    }
+    function toDrive(list, auto) {
+      if (!driveOn() || !list.length) return;
+      opts.drive.add(list).then(function () {
+        if (!auto) notify(list.length === 1 ? 'Foto na fila para o Drive da equipe.' : list.length + ' fotos na fila para o Drive da equipe.');
+        refreshDrive();
+      }, function () { notify('Não foi possível guardar a foto para o Drive neste aparelho.'); });
+    }
+    function sendDrive() {
+      if (!st || !driveOn()) return;
+      busy(true);
+      makeBlob().then(function (blob) {
+        if (!blob) { notify('Não foi possível gerar a foto. Tente com uma imagem menor.'); return; }
+        toDrive([driveItem(st, blob, fileName())]);
+      }).then(function () { busy(false); }, function () { busy(false); });
+    }
+    function sendAllDrive() {
+      if (!batch || batch.busy || !driveOn()) return;
+      var b = batch;
+      setBatchBusy(true);
+      outputs().then(function (files) {
+        if (!files.length) { notify('Nenhuma foto pôde ser gerada.'); return; }
+        toDrive(files.map(function (f) { return driveItem(f.it, f.blob, f.name); }));
+      }).catch(function (e) {
+        if (!e || e.message !== 'cancel') notify('Não foi possível gerar as fotos. Tente com menos fotos por vez.');
+      }).then(function () { if (batch === b) setBatchBusy(false); });
+    }
+    // situação da fila (texto do app) e botões do Drive
+    function refreshDrive() {
+      if (!root) return;
+      var on = driveOn();
+      root.querySelectorAll('.ft-drv').forEach(function (b) { b.hidden = !on; });
+      var el = q('.ft-dstat');
+      if (el) { var t = on && opts.drive.status ? opts.drive.status() : ''; el.textContent = t; el.hidden = !t; }
     }
 
     // ---------------- várias fotos de uma vez (Arquivos do celular): cada uma com o km, o ponto e o lote do próprio GPS
@@ -903,7 +961,7 @@
       if (extra > 0) files = files.slice(0, MAX_FOTOS);
       clearBatch();
       var b = batch = { common: '', ver: 0, out: null, busy: false, items: files.map(function (f, i) {
-        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true, preset: presets ? presets[i] : null };
+        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true, preset: presets ? presets[i] : null, uid: newUid() };
       }) };
       showBatch();
       if (extra > 0) notify('Abertas as primeiras ' + MAX_FOTOS + ' fotos. Salve estas e depois abra as outras ' + extra + '.');
@@ -1045,7 +1103,7 @@
         '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">Corrigir o lote ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km</button></div>' : '';
       box.hidden = !wrong;
       var n = ok.length, off = batch.busy || wait > 0 || !n;
-      root.querySelectorAll('[data-ft="b-save"],[data-ft="b-share"]').forEach(function (b) { b.disabled = off; });
+      root.querySelectorAll('[data-ft="b-save"],[data-ft="b-share"],[data-ft="b-drive"]').forEach(function (b) { b.disabled = off; });
       var bs = q('[data-ft="b-save"]'), sh = q('[data-ft="b-share"]');
       bs.textContent = n > 1 ? 'Salvar as ' + n + ' fotos (.zip)' : 'Salvar (.zip)';
       if (sh) sh.textContent = n > 1 ? 'Compartilhar as ' + n : 'Compartilhar';
@@ -1128,7 +1186,7 @@
             var name = withItem(it, fileName), base = name.replace(/\.jpg$/i, ''), n = 2;
             while (used[name.toLowerCase()]) name = base + ' (' + (n++) + ').jpg';
             used[name.toLowerCase()] = true;
-            out.push({ name: name, blob: blob, date: it.date });
+            out.push({ name: name, blob: blob, date: it.date, it: it });
           });
         });
       }, Promise.resolve()).then(function () {
@@ -1148,6 +1206,7 @@
       setBatchBusy(true);
       outputs().then(function (files) {
         if (!files.length) { notify('Nenhuma foto pôde ser gerada.'); return; }
+        toDrive(files.map(function (f) { return driveItem(f.it, f.blob, f.name); }), true);
         prog('Montando o .zip…');
         return makeZip(files).then(function (zip) {
           var name = zipName(files.length);
@@ -1162,12 +1221,13 @@
       if (!batch || batch.busy) return;
       var b = batch;
       // já prontas: abre o compartilhar ainda dentro do toque
-      if (b.out && b.out.ver === b.ver) { shareFiles(b.out.files, false); return; }
+      if (b.out && b.out.ver === b.ver) { shareFiles(b.out.files, false); toDrive(b.out.files.map(function (f) { return driveItem(f.it, f.blob, f.name); }), true); return; }
       setBatchBusy(true);
       outputs().then(function (files) {
         if (batch !== b) return;
         setBatchBusy(false);
         shareFiles(files, true);
+        toDrive(files.map(function (f) { return driveItem(f.it, f.blob, f.name); }), true);
       }).catch(function (e) {
         if (batch === b) setBatchBusy(false);
         if (!e || e.message !== 'cancel') notify('Não foi possível gerar as fotos. Tente com menos fotos por vez.');
@@ -1399,6 +1459,8 @@
       }
       if (b.dataset.ft === 'b-save') { saveAll(); return; }
       if (b.dataset.ft === 'b-share') { shareAll(); return; }
+      if (b.dataset.ft === 'b-drive') { sendAllDrive(); return; }
+      if (b.dataset.ft === 'drive') { sendDrive(); return; }
       if (b.dataset.ft === 'b-fixall') { if (batch) fixAll(); return; }
       if (b.dataset.ft === 'close') close();
       else if (b.dataset.ft === 'new') { startView(); }
@@ -1626,6 +1688,7 @@
       refreshLogo();
       startGps();
       startView();
+      refreshDrive();
       setTimeout(function () { var x = q('.ft-x'); if (x) x.focus(); }, 30);
     }
     function close() {
@@ -1641,7 +1704,7 @@
     // o padrão da equipe mudou no banco
     function refreshTeam() { if (root && root.parentNode) { renderOpts(); } refreshLogo(); }
 
-    return { open: open, close: close, refreshTeam: refreshTeam, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; } };
+    return { open: open, close: close, refreshTeam: refreshTeam, refreshDrive: refreshDrive, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; } };
   }
 
   FotoCarimbo.readExif = readExif;
