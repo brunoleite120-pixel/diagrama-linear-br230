@@ -260,6 +260,22 @@
     '.ft-shot{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.2);cursor:pointer;padding:0}',
     '.ft-shot:active{background:#fff}',
     '.ft-shot[disabled]{opacity:.5}',
+    // celular deitado: GPS numa coluna do lado de cima do celular, a imagem com toda a altura e os botões do lado de baixo
+    // (como a câmera do celular); virando para o outro lado (.ft-cw), as colunas trocam de lado
+    '@media (orientation:landscape) and (max-height:560px){' +
+      '.ft.camming{background:#000}' +
+      '.ft-cam{flex-direction:row}' +
+      '.ft-camview{align-items:stretch}' +
+      '.ft-camgps{position:static;order:-1;flex:0 0 clamp(150px,27%,260px);align-self:flex-start;margin:8px 0 8px 8px;max-height:calc(100% - 16px);overflow:auto;padding:6px 9px;font-size:12.5px;background:rgba(255,255,255,.08)}' +
+      '.ft-cam.ft-cw,.ft-cw .ft-camview{flex-direction:row-reverse}' +
+      '.ft-cw .ft-camgps{margin:8px 8px 8px 0}' +
+      '.ft-camview video{flex:1;min-width:0;width:auto;height:100%}' +
+      '.ft-camctl{grid-template-columns:none;grid-template-rows:1fr auto 1fr;justify-items:center;gap:8px;padding:8px 10px}' +
+      '.ft-camb{align-self:start;justify-self:center;flex-direction:column;gap:4px;max-width:96px;padding:6px 8px;font-size:13px;text-align:center}' +
+      '.ft-camdone{align-self:end}' +
+      '.ft-camlast{width:34px;height:34px}' +
+      '.ft-shot{width:64px;height:64px}' +
+    '}',
     '@media (max-width:820px){.ft-work,.ft-batch{grid-template-columns:1fr}.ft-prev{position:static}.ft-prev canvas{max-height:58vh}.ft-body{padding:12px}}',
     '@media (max-width:560px){.ft-item{grid-template-columns:1fr}.ft-thumb img{max-height:52vh}}',
     '@media (max-width:420px){.ft-checks{grid-template-columns:1fr}}'
@@ -1305,6 +1321,10 @@
         root.classList.add('camming');
         q('.ft-start').hidden = true;
         q('.ft-cam').hidden = false;
+        camLado();
+        window.addEventListener('resize', camVirou);
+        window.addEventListener('orientationchange', camVirou);
+        if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', camVirou);
         renderCam();
       }, function (e) {
         startMsg(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
@@ -1318,11 +1338,21 @@
         if (cam.lastUrl) URL.revokeObjectURL(cam.lastUrl);
       }
       cam = null;
+      window.removeEventListener('resize', camVirou);
+      window.removeEventListener('orientationchange', camVirou);
+      if (screen.orientation && screen.orientation.removeEventListener) screen.orientation.removeEventListener('change', camVirou);
       if (!root) return;
       q('.ft-cam video').srcObject = null;
       root.classList.remove('camming');
       q('.ft-cam').hidden = true;
     }
+    // deitado com o topo do celular para a direita (ângulo 270): botões à esquerda, que fica sendo o lado de baixo do celular
+    function camLado() {
+      if (!root) return;
+      var o = screen.orientation, a = o && typeof o.angle === 'number' ? o.angle : window.orientation;
+      q('.ft-cam').classList.toggle('ft-cw', ((+a || 0) % 360 + 360) % 360 === 270);
+    }
+    function camVirou() { camLado(); setTimeout(camLado, 400); }   // o iPhone às vezes só atualiza o ângulo depois de girar a tela
     function camFix() { return lastFix && Date.now() - lastFix.t < 30000 ? lastFix : null; }
     function renderCamGps() {
       var el = q('.ft-camgps'), f = camFix();
