@@ -529,6 +529,7 @@
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
+      saveTimer = null;
       var el = document.getElementById('saveState');
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -539,6 +540,7 @@
         el.textContent = 'Não salvou no navegador: use "Salvar backup"';
         el.classList.add('warn');
       }
+      if (banco.on) { trackChanges(); syncStatus(); }
     }, 300);
   }
   function active() {
@@ -617,7 +619,12 @@
     h.push('<div class="pt-list" id="ptList">');
     pts.forEach(function (p) { h.push(pointCard(p)); });
     h.push('</div>');
+    if (readOnly()) {
+      h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o código da equipe.</span>' +
+        '<button type="button" class="btn small primary" data-act="login">Entrar para editar</button></div>');
+    }
     $('editor').innerHTML = h.join('');
+    lockEditor();
   }
 
   function pointHead(p) {
@@ -686,6 +693,7 @@
   function rerenderPoint(p) {
     var art = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"]');
     if (art) art.outerHTML = pointCard(p);
+    lockEditor();
   }
 
   // ------------------------------------------------------------------ interface: pré-visualização
@@ -829,7 +837,11 @@
           if (state.activeId === id || !state.contracts.some(function (c) { return c.id === id; })) return;
           state.activeId = id; ui.open = {}; save(); renderAll();
         },
-        gps: true, share: !!navigator.canShare, saveBlob: saveBlob, notify: function (m) { toast(m); }
+        gps: true, share: !!navigator.canShare, saveBlob: saveBlob, notify: function (m) { toast(m); },
+        getTeamLogo: function () { return (banco.on && banco.cfg.fotoLogo) || null; },
+        canSetTeamLogo: function () { return banco.on && isResp(); },
+        setTeamLogo: function (v) { return saveTeamLogo({ t: 'config', chave: 'fotoLogo', valor: v }); },
+        clearTeamLogo: function () { return saveTeamLogo({ t: 'apagar_config', chave: 'fotoLogo' }); }
       });
     }
     if (foto) foto.open({ pointId: pid || '' });
@@ -923,6 +935,8 @@
     var b = e.target.closest('[data-act]');
     if (!b) return;
     var act = b.dataset.act, c = active(), p;
+    if (act === 'login') { openLogin(); return; }
+    if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o código da equipe.'); openLogin(); return; }
     switch (act) {
       case 'toggle-contract':
         ui.contractOpen = !ui.contractOpen;
@@ -1127,12 +1141,16 @@
       try {
         var s = JSON.parse(reader.result);
         if (!validState(s)) throw new Error('formato');
-        if (!confirm('Substituir os dados atuais pelos do backup "' + file.name + '"?')) return;
-        state = normalize(s);
+        if (!confirm(banco.on
+          ? 'Substituir os dados do banco da equipe pelos do backup "' + file.name + '"? Todos vão passar a ver os dados do backup (a troca fica no histórico).'
+          : 'Substituir os dados atuais pelos do backup "' + file.name + '"?')) return;
+        s = normalize(s);
+        s.activeId = s.contracts.some(function (c) { return c.id === state.activeId; }) ? state.activeId : s.activeId;
+        state = s;
         ui.open = {};
         save();
         renderAll();
-        toast('Backup carregado.');
+        toast(banco.on ? 'Backup carregado. Enviando ao banco da equipe…' : 'Backup carregado.');
       } catch (e) {
         toast('Esse arquivo não é um backup válido deste site.');
       }
@@ -1148,7 +1166,10 @@
     closeMenu();
     var act = b.dataset.act;
     if (act === 'backup') downloadBackup();
-    else if (act === 'restore') $('fileInput').click();
+    else if (act === 'restore') {
+      if (banco.on && !isResp()) { toast('Só o responsável pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
+      $('fileInput').click();
+    }
     else if (act === 'print') printSheets();
     else if (act === 'reset') {
       if (!confirm('Apagar as alterações deste navegador e voltar aos dados iniciais da planilha? Faça um backup antes, se precisar.')) return;
@@ -1158,6 +1179,419 @@
       renderAll();
       toast('Dados iniciais restaurados.');
     }
+  }
+
+  // ------------------------------------------------------------------ banco compartilhado (Supabase, banco.js)
+  // Todos veem os mesmos dados; edita quem entrou com o código da equipe. Cada alteração vira uma operação numa fila
+  // guardada no aparelho, que sobe ao banco assim que houver sinal. Os aparelhos conferem a versão do banco a cada 20 s.
+  var SYNC_KEY = 'diagrama-linear.banco';           // {versao, pend, cfg}
+  var LOGIN_KEY = 'diagrama-linear.acesso';         // {codigo, nome, papel} deste aparelho
+  var NAME_KEY = 'diagrama-linear.nome';
+  var OLD_KEY = 'diagrama-linear.antes-do-banco';   // o que estava só neste aparelho antes do banco da equipe
+  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false };
+  var flushTimer = null;
+
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
+  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg }); }
+  function readOnly() { return banco.on && !banco.login; }
+  function isResp() { return !!(banco.login && banco.login.papel === 'responsavel'); }
+
+  function contractFields(c) { var o = {}; Object.keys(c).forEach(function (k) { if (k !== 'id' && k !== 'pontos') o[k] = c[k]; }); return o; }
+  function pointFields(p) { var o = {}; Object.keys(p).forEach(function (k) { if (k !== 'id') o[k] = p[k]; }); return o; }
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  // operações que levam o estado `a` ao estado `b`
+  function diffOps(a, b) {
+    var ops = [], am = {}, bm = {};
+    a.contracts.forEach(function (c, i) { am[c.id] = { c: c, i: i }; });
+    b.contracts.forEach(function (c, i) {
+      var o = am[c.id], f = contractFields(c), old = {};
+      bm[c.id] = true;
+      if (!o || o.i !== i || !same(contractFields(o.c), f)) ops.push({ t: 'contrato', id: c.id, ordem: i, dados: f });
+      if (o) o.c.pontos.forEach(function (p) { old[p.id] = p; });
+      c.pontos.forEach(function (p) {
+        var f2 = pointFields(p);
+        if (!old[p.id] || !same(pointFields(old[p.id]), f2)) ops.push({ t: 'ponto', cid: c.id, id: p.id, dados: f2 });
+        delete old[p.id];
+      });
+      Object.keys(old).forEach(function (id) { ops.push({ t: 'apagar_ponto', cid: c.id, id: id }); });
+    });
+    a.contracts.forEach(function (c) { if (!bm[c.id]) ops.push({ t: 'apagar_contrato', id: c.id }); });
+    return ops;
+  }
+  // aplica as operações ainda não enviadas sobre o que veio do banco
+  function applyOps(s, ops) {
+    ops.forEach(function (op) {
+      var c = s.contracts.find(function (x) { return x.id === (op.cid || op.id); });
+      if (op.t === 'contrato') {
+        var nc = clone(op.dados);
+        nc.id = op.id; nc.pontos = c ? c.pontos : [];
+        if (c) s.contracts.splice(s.contracts.indexOf(c), 1);
+        s.contracts.splice(Math.min(op.ordem || 0, s.contracts.length), 0, nc);
+      } else if (op.t === 'apagar_contrato') {
+        if (c) s.contracts.splice(s.contracts.indexOf(c), 1);
+      } else if (op.t === 'ponto' && c) {
+        var np = clone(op.dados), k = c.pontos.findIndex(function (p) { return p.id === op.id; });
+        np.id = op.id;
+        if (k >= 0) c.pontos[k] = np; else c.pontos.push(np);
+      } else if (op.t === 'apagar_ponto' && c) {
+        c.pontos = c.pontos.filter(function (p) { return p.id !== op.id; });
+      }
+    });
+    return s;
+  }
+  function opKey(op) {
+    if (op.t === 'ponto' || op.t === 'apagar_ponto') return 'p:' + op.cid + ':' + op.id;
+    if (op.t === 'config' || op.t === 'apagar_config') return 'g:' + op.chave;
+    return 'c:' + op.id;
+  }
+  // a operação mais nova de cada contrato/ponto substitui a anterior, no mesmo lugar da fila
+  // (as que já estão a caminho do banco ficam como estão: a nova entra no fim)
+  function enqueue(ops) {
+    ops.forEach(function (op) {
+      var sent = banco.pend.slice(0, banco.sending), rest = banco.pend.slice(banco.sending);
+      if (op.t === 'apagar_contrato') rest = rest.filter(function (x) { return x.cid !== op.id; });
+      var k = opKey(op), i = rest.findIndex(function (x) { return opKey(x) === k; });
+      if (i >= 0) rest[i] = op; else rest.push(op);
+      banco.pend = sent.concat(rest);
+    });
+    keepSync();
+  }
+  // texto curto do que mudou, para o histórico
+  function opsResumo(ops) {
+    var names = [];
+    ops.forEach(function (op) {
+      var c = state.contracts.find(function (x) { return x.id === (op.cid || op.id); }), lote = c ? (c.lote || c.numero || 'Contrato') : 'Contrato', t;
+      if (op.t === 'ponto') t = lote + ' ' + (op.dados.nome || 'ponto');
+      else if (op.t === 'apagar_ponto') t = lote + ': ponto excluído';
+      else if (op.t === 'contrato') t = (op.dados.lote || 'Contrato') + ': dados do contrato';
+      else if (op.t === 'apagar_contrato') t = 'Contrato excluído';
+      else t = 'Configuração';
+      if (names.indexOf(t) < 0) names.push(t);
+    });
+    return names.slice(0, 8).join('; ') + (names.length > 8 ? ' e mais ' + (names.length - 8) : '');
+  }
+  // chamada a cada alteração local (save): o que mudou desde a última vez entra na fila
+  function trackChanges() {
+    if (!banco.on || !banco.base) return;
+    var ops = diffOps(banco.base, state);
+    banco.base = clone(state);
+    if (!ops.length) return;
+    enqueue(ops);
+    scheduleFlush(1200);
+  }
+  function scheduleFlush(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms || 0); syncStatus(); }
+  function flush() {
+    if (!banco.on || banco.busy || !banco.pend.length || !banco.login) { syncStatus(); return; }
+    var ops = banco.pend.slice(0, 500), n = ops.length;
+    banco.busy = true;
+    banco.sending = n;
+    syncStatus();
+    window.Banco.salvar(banco.login.codigo, banco.login.nome, opsResumo(ops), ops).then(function (v) {
+      banco.busy = false;
+      banco.sending = 0;
+      banco.online = true;
+      banco.at = new Date();
+      banco.pend.splice(0, n);
+      if (v === banco.versao + 1) banco.versao = v; else refresh();   // outra pessoa gravou no meio: recarrega
+      keepSync();
+      if (banco.pend.length) scheduleFlush(300);
+      syncStatus();
+    }, function (err) {
+      banco.busy = false;
+      banco.sending = 0;
+      var code = err && err.code;
+      if (code === 'sem_rede') { banco.online = false; syncStatus(); return; }
+      if (code === 'codigo_invalido') { logout(true); toast('O código da equipe mudou. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
+      if (code === 'muitas_tentativas') { toast('O banco bloqueou por muitas tentativas com código errado. Tente de novo em 10 minutos.', 7000); syncStatus(); return; }
+      banco.pend.splice(0, n);   // o banco recusou os dados: descarta e volta ao que está lá
+      keepSync();
+      toast('O banco recusou uma alteração (' + ((err && err.message) || 'erro') + '). Os dados foram recarregados.', 7000);
+      refresh();
+    });
+  }
+  function typing() {
+    var a = document.activeElement;
+    return !!(a && a.closest && a.closest('#editor') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+  }
+  function fromServer(r) {
+    var s = { activeId: state ? state.activeId : null, contracts: [] }, byId = {};
+    r.contratos.forEach(function (row) { var c = clone(row.dados || {}); c.id = row.id; c.pontos = []; byId[c.id] = c; s.contracts.push(c); });
+    r.pontos.forEach(function (row) { var c = byId[row.contrato_id]; if (c) { var p = clone(row.dados || {}); p.id = row.id; c.pontos.push(p); } });
+    s.contracts.forEach(function (c) { c.pontos.sort(function (a, b) { return a.id.localeCompare(b.id, 'pt-BR', { numeric: true }); }); });
+    return s;
+  }
+  // traz o banco (mais o que ainda não subiu deste aparelho); espera a pessoa parar de digitar
+  function refresh(force) {
+    if (!banco.on) return Promise.resolve();
+    if (!force && typing()) { banco.want = true; return Promise.resolve(); }
+    banco.want = false;
+    return window.Banco.carregar().then(function (r) {
+      if (!force && typing()) { banco.want = true; return; }
+      banco.online = true;
+      banco.at = new Date();
+      banco.versao = r.versao;
+      var cfg = {};
+      r.config.forEach(function (x) { cfg[x.chave] = x.valor; });
+      var logoMudou = !same(cfg.fotoLogo || null, banco.cfg.fotoLogo || null);
+      banco.cfg = cfg;
+      if (r.contratos.length) {
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+        trackChanges();   // o que acabou de ser mudado aqui entra na fila antes de trocar o estado
+        state = normalize(applyOps(fromServer(r), banco.pend));
+        banco.base = clone(state);
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
+        renderAll();
+      }
+      keepSync();
+      if (logoMudou && foto) foto.refreshTeam();
+      checkOld();
+      syncStatus();
+    }, function (err) {
+      if (err && err.code === 'sem_rede') banco.online = false;
+      syncStatus();
+    });
+  }
+  function poll() {
+    if (!banco.on || document.visibilityState === 'hidden') return;
+    if (banco.pend.length && banco.login && !banco.busy) flush();
+    window.Banco.versao().then(function (v) {
+      banco.online = true;
+      if (v !== banco.versao && !banco.busy) refresh(); else syncStatus();
+    }, function () { banco.online = false; syncStatus(); });
+  }
+  function hhmm(d) { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function syncStatus() {
+    if (!banco.on) return;
+    var el = $('saveState'), n = banco.pend.length, t, warn = false;
+    if (banco.busy) t = 'Enviando ao banco…';
+    else if (n && !banco.login) { t = n + (n === 1 ? ' alteração não enviada' : ' alterações não enviadas') + ': entre para enviar'; warn = true; }
+    else if (n) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' alteração aguardando' : ' alterações aguardando'); warn = banco.online === false; }
+    else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
+    else if (banco.at) t = 'Banco da equipe · ' + hhmm(banco.at);
+    else t = 'Conectando ao banco…';
+    el.textContent = t;
+    el.classList.toggle('warn', warn);
+  }
+
+  // ---------------- acesso: código da equipe (edita) e do responsável (também troca os códigos e a logo da equipe)
+  function setLogin(l) {
+    banco.login = l;
+    lsPut(LOGIN_KEY, l);
+    document.body.classList.toggle('ro', readOnly());
+    renderLoginBtn();
+  }
+  function renderLoginBtn() {
+    var b = $('btnLogin');
+    if (!b) return;
+    b.hidden = !banco.on;
+    b.textContent = banco.login ? (banco.login.nome || 'Equipe') + ' · ' + (isResp() ? 'responsável' : 'equipe') : 'Entrar para editar';
+    b.classList.toggle('primary', !banco.login);
+  }
+  function logout(silent) {
+    setLogin(null);
+    renderAll();
+    syncStatus();
+    if (!silent) toast('Você saiu. Este aparelho fica só para consulta.');
+  }
+  function modal(html, onSubmit) {
+    closeModal();
+    var m = document.createElement('div');
+    m.className = 'modal';
+    m.id = 'modal';
+    m.innerHTML = '<form class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle" novalidate>' + html + '</form>';
+    (document.fullscreenElement || document.body).appendChild(m);
+    var f = m.querySelector('form');
+    f.addEventListener('submit', function (e) { e.preventDefault(); if (onSubmit) onSubmit(f); });
+    m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('[data-close]')) closeModal(); });
+    m.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+    f.addEventListener('change', function (e) {
+      if (e.target.hasAttribute('data-showpw')) f.querySelectorAll('input[data-pw]').forEach(function (i) { i.type = e.target.checked ? 'text' : 'password'; });
+    });
+    setTimeout(function () { var x = f.querySelector('input:not([type=checkbox]),button[type=submit],button'); if (x) x.focus(); }, 30);
+    return f;
+  }
+  function closeModal() { var m = $('modal'); if (m) m.remove(); }
+  function modalErr(f, t) { var e = f.querySelector('.modal-err'); if (e) { e.textContent = t || ''; e.hidden = !t; } }
+  function busyBtn(f, on, label) {
+    var b = f.querySelector('button[type=submit]');
+    if (!b) return;
+    if (on) { b.dataset.old = b.textContent; b.textContent = label || 'Aguarde…'; } else if (b.dataset.old) b.textContent = b.dataset.old;
+    b.disabled = on;
+  }
+  function errText(err) {
+    var c = err && err.code;
+    return c === 'sem_rede' ? 'Sem conexão com o banco. Tente quando tiver sinal.'
+      : c === 'codigo_invalido' ? 'Código errado.'
+      : c === 'muitas_tentativas' ? 'Muitas tentativas erradas. Espere 10 minutos e tente de novo.'
+      : c === 'codigo_curto' ? 'O código da equipe precisa de pelo menos 6 caracteres e o do responsável, de 8.'
+      : c === 'codigos_iguais' ? 'Os dois códigos precisam ser diferentes.'
+      : 'Não deu certo (' + ((err && err.message) || 'erro') + ').';
+  }
+  function mField(id, label, pw, value) {
+    return '<div class="field"><label for="' + id + '">' + esc(label) + '</label><input id="' + id + '"' + (pw ? ' type="password" data-pw autocomplete="off"' : ' autocomplete="name"') +
+      ' maxlength="' + (pw ? 200 : 60) + '" value="' + esc(value || '') + '"></div>';
+  }
+  var SHOWPW = '<label class="show-pw"><input type="checkbox" data-showpw> Mostrar o que digitei</label>';
+  var MFOOT = '<p class="modal-err" role="alert" hidden></p><div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button>';
+  function openLogin() {
+    if (banco.login) { openAccount(); return; }
+    modal('<h2 id="modalTitle">Entrar para editar</h2>' +
+      '<p>Os dados são de toda a equipe: com o código, o que você mudar aparece para todos (e fica no histórico com o seu nome).</p>' +
+      mField('lgNome', 'Seu nome', false, lsGet(NAME_KEY) || '') + mField('lgCod', 'Código da equipe', true) + SHOWPW +
+      MFOOT + '<button type="submit" class="btn primary">Entrar</button></div>',
+    function (f) {
+      var n = f.querySelector('#lgNome').value.trim(), c = f.querySelector('#lgCod').value;
+      if (!n) { modalErr(f, 'Escreva seu nome.'); return; }
+      if (!c) { modalErr(f, 'Digite o código.'); return; }
+      modalErr(f, '');
+      busyBtn(f, true, 'Conferindo…');
+      window.Banco.entrar(c).then(function (papel) {
+        busyBtn(f, false);
+        if (!papel) { modalErr(f, 'Código errado.'); return; }
+        lsPut(NAME_KEY, n);
+        setLogin({ codigo: c, nome: n, papel: papel });
+        closeModal();
+        renderAll();
+        toast(papel === 'responsavel' ? 'Você entrou como responsável.' : 'Pronto, ' + n + ': o que você mudar vai para o banco da equipe.');
+        flush();
+      }, function (err) { busyBtn(f, false); modalErr(f, errText(err)); });
+    });
+  }
+  function openAccount() {
+    var f = modal('<h2 id="modalTitle">' + esc(banco.login.nome || 'Equipe') + '</h2>' +
+      '<p>Este aparelho está editando o banco da equipe como <b>' + (isResp() ? 'responsável' : 'equipe') + '</b>.</p>' +
+      '<div class="modal-list"><button type="button" class="btn" data-acc="hist">Histórico de alterações</button>' +
+      (isResp() ? '<button type="button" class="btn" data-acc="codes">Trocar códigos</button>' : '') +
+      '<button type="button" class="btn danger" data-acc="sair">Sair deste aparelho</button></div>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-acc]');
+      if (!b) return;
+      if (b.dataset.acc === 'hist') openHist();
+      else if (b.dataset.acc === 'codes') openCodes();
+      else if (b.dataset.acc === 'sair') {
+        if (banco.pend.length && !confirm('Há ' + banco.pend.length + ' alteração(ões) deste aparelho que ainda não subiram para o banco. Sair e descartar?')) return;
+        banco.pend = []; keepSync();
+        closeModal(); logout(); refresh(true);
+      }
+    });
+  }
+  function openHist() {
+    var f = modal('<h2 id="modalTitle">Histórico de alterações</h2><div class="hist" aria-live="polite">Carregando…</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
+    window.Banco.historico(40).then(function (rows) {
+      var el = f.querySelector('.hist');
+      el.innerHTML = rows.length ? rows.map(function (r) {
+        var d = new Date(r.em);
+        var dia = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+        return '<div class="hist-row"><span class="hist-when">' + dia + ' ' + hhmm(d) + '</span><span><b>' + esc(r.autor || '—') + '</b> ' + esc(r.resumo || '') + '</span></div>';
+      }).join('') : '<p>Nada gravado ainda.</p>';
+    }, function (err) { f.querySelector('.hist').textContent = errText(err); });
+  }
+  // #configurar (primeira vez: cria os códigos) ou "Trocar códigos" (pede o código atual do responsável)
+  function openCodes() {
+    window.Banco.codigosDefinidos().then(function (def) {
+      modal('<h2 id="modalTitle">' + (def ? 'Trocar códigos' : 'Criar os códigos de acesso') + '</h2>' +
+        (def ? '<p>Precisa do código atual do responsável. Deixe em branco o que não quiser trocar. Quem usa o código antigo vai precisar entrar de novo.</p>'
+          : '<p>O <b>código do responsável</b> (pelo menos 8 caracteres) fica só com você: troca os códigos e a logo da equipe. O <b>código da equipe</b> (pelo menos 6) é o que você passa para quem vai editar.</p>' + mField('cdNome', 'Seu nome', false, lsGet(NAME_KEY) || '')) +
+        (def ? mField('cdAtual', 'Código atual do responsável', true) : '') +
+        mField('cdResp', def ? 'Novo código do responsável (opcional)' : 'Código do responsável', true) +
+        mField('cdEq', def ? 'Novo código da equipe (opcional)' : 'Código da equipe', true) + SHOWPW +
+        MFOOT + '<button type="submit" class="btn primary">Salvar códigos</button></div>',
+      function (f) {
+        var atual = def ? f.querySelector('#cdAtual').value : null, resp = f.querySelector('#cdResp').value, eq = f.querySelector('#cdEq').value;
+        var nome = def ? (banco.login && banco.login.nome) || lsGet(NAME_KEY) || '' : f.querySelector('#cdNome').value.trim();
+        if (!def && !nome) { modalErr(f, 'Escreva seu nome.'); return; }
+        if (def && !atual) { modalErr(f, 'Digite o código atual do responsável.'); return; }
+        if (!def && (!resp || !eq)) { modalErr(f, 'Crie os dois códigos.'); return; }
+        if (def && !resp && !eq) { modalErr(f, 'Digite pelo menos um código novo.'); return; }
+        if ((resp && resp.length < 8) || (eq && eq.length < 6)) { modalErr(f, errText({ code: 'codigo_curto' })); return; }
+        if (resp && eq && resp === eq) { modalErr(f, errText({ code: 'codigos_iguais' })); return; }
+        modalErr(f, '');
+        busyBtn(f, true, 'Salvando…');
+        window.Banco.definirCodigos(atual, eq || null, resp || null).then(function () {
+          busyBtn(f, false);
+          closeModal();
+          if (nome) lsPut(NAME_KEY, nome);
+          setLogin({ codigo: resp || atual, nome: nome, papel: 'responsavel' });
+          renderAll();
+          toast(def ? 'Códigos trocados.' : 'Códigos criados. Passe o código da equipe para quem vai editar.', 6000);
+          if (location.hash === '#configurar') history.replaceState(null, '', location.pathname + location.search);
+          flush();
+        }, function (err) { busyBtn(f, false); modalErr(f, errText(err)); });
+      });
+    }, function (err) { toast(errText(err), 6000); });
+  }
+  // primeira abertura com o banco: o que estava só neste aparelho fica guardado à parte, com opção de baixar
+  function prepareOld() {
+    if (!banco.on || lsGet(SYNC_KEY)) return;
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw && !localStorage.getItem(OLD_KEY)) localStorage.setItem(OLD_KEY, raw);
+    } catch (e) { /* sem armazenamento */ }
+  }
+  function checkOld() {
+    var old = lsGet(OLD_KEY);
+    if (!old || old.avisado) return;
+    if (!validState(old) || !diffOps(state, normalize(clone(old))).length) { lsPut(OLD_KEY, null); return; }
+    old.avisado = true;
+    lsPut(OLD_KEY, old);
+    var bar = document.createElement('div');
+    bar.className = 'share-ready';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = '<span>Agora os dados vêm do banco da equipe. O que estava só neste aparelho foi guardado: se alguém editou aqui, baixe o backup e mande ao responsável.</span>' +
+      '<button type="button" class="btn primary">Baixar backup</button><button type="button" class="btn">Dispensar</button>';
+    var b = bar.querySelectorAll('button');
+    b[0].addEventListener('click', function () {
+      var o = lsGet(OLD_KEY) || old;
+      delete o.avisado;
+      saveBlob('dados-deste-aparelho-' + todayIso() + '.json', new Blob([JSON.stringify(o, null, 2)], { type: 'application/json' }));
+      bar.remove();
+    });
+    b[1].addEventListener('click', function () { bar.remove(); });
+    document.body.appendChild(bar);
+  }
+  // logo da equipe no carimbo das fotos: vai direto ao banco (só o responsável)
+  function saveTeamLogo(op) {
+    if (!banco.on || !isResp()) return Promise.reject(new Error('so_responsavel'));
+    var resumo = op.t === 'config' ? 'Logo da equipe nas fotos: ' + (op.valor.nome || 'nova') : 'Logo da equipe nas fotos removida';
+    return window.Banco.salvar(banco.login.codigo, banco.login.nome, resumo, [op]).then(function (v) {
+      if (op.t === 'config') banco.cfg.fotoLogo = op.valor; else delete banco.cfg.fotoLogo;
+      if (v === banco.versao + 1) banco.versao = v; else refresh();
+      keepSync();
+      syncStatus();
+    });
+  }
+  // editor só para consulta enquanto ninguém entrou
+  function lockEditor() {
+    if (!readOnly()) return;
+    $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
+  }
+  var EDIT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract'];
+  function initBanco() {
+    if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }
+    prepareOld();
+    var s = lsGet(SYNC_KEY);
+    if (s) { banco.versao = Number(s.versao) || 0; banco.pend = Array.isArray(s.pend) ? s.pend : []; banco.cfg = s.cfg || {}; }
+    banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
+    setLogin(lsGet(LOGIN_KEY));
+    $('btnLogin').addEventListener('click', openLogin);
+    document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
+    $('editor').addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
+    window.addEventListener('online', function () { banco.online = true; flush(); poll(); });
+    window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') poll(); });
+    window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openCodes(); });
+    setInterval(poll, 20000);
+    syncStatus();
+    refresh().then(function () {
+      if (banco.login) window.Banco.entrar(banco.login.codigo).then(function (p) {   // o código pode ter sido trocado
+        if (!p) { logout(true); toast('O código da equipe mudou. Entre de novo para editar.', 6000); }
+        else if (p !== banco.login.papel) setLogin({ codigo: banco.login.codigo, nome: banco.login.nome, papel: p });
+      }, function () { /* sem sinal: confere depois */ });
+      flush();
+      if (location.hash === '#configurar') openCodes();
+    });
   }
 
   // ------------------------------------------------------------------ início
@@ -1199,6 +1633,7 @@
       e.target.value = '';
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    initBanco();
     renderAll();
     if (view === 'mapa') setView('mapa');
     save();
@@ -1210,7 +1645,10 @@
     buildPdf: function () { return buildPdf(active()); },
     renderSheets: function () { return renderSheets(active()); },
     state: function () { return state; },
-    mapa: function () { return mapa; }
+    mapa: function () { return mapa; },
+    banco: function () { return banco; },
+    diffOps: diffOps,
+    applyOps: applyOps
   };
 
   init();
