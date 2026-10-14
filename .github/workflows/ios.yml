@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       versao:
-        description: Versão mostrada no TestFlight (ex.: 1.0.0)
+        description: "Versão mostrada no TestFlight, por exemplo 1.0.0"
         required: false
         default: 1.0.0
 
