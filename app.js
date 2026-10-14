@@ -583,7 +583,7 @@
     h.push('<section class="card">');
     h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub">· ' + esc(c.lote || '') + ' ' + esc(c.numero || '') + '</span></span>' + ICON_CHEV + '</button>');
     if (ui.contractOpen) {
-      h.push('<div class="card-body"><div class="grid">');
+      h.push('<div class="card-body">' + (banco.on ? lastLine(metaKey(c.id)) : '') + '<div class="grid">');
       h.push(field('Nº da obra / contrato', 'data-c="numero" type="text"', c.numero));
       h.push(field('Lote', 'data-c="lote" type="text"', c.lote));
       h.push(field('Executora', 'data-c="executora" type="text"', c.executora, ' full'));
@@ -642,7 +642,7 @@
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + pointHead(p) + '</button>';
     if (open) {
       var id = esc(p.id), len = pointLen(p);
-      h += '<div class="pt-body"><div class="grid">';
+      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(active().id, p.id)) : '') + '<div class="grid">';
       h += field('Nome do ponto', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
       h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
       h += field('KM inicial', 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
@@ -1188,33 +1188,82 @@
   var LOGIN_KEY = 'diagrama-linear.acesso';         // {codigo, nome, papel} deste aparelho
   var NAME_KEY = 'diagrama-linear.nome';
   var OLD_KEY = 'diagrama-linear.antes-do-banco';   // o que estava só neste aparelho antes do banco da equipe
-  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false };
+  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false };
   var flushTimer = null;
 
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
-  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg }); }
+  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf }); }
   function readOnly() { return banco.on && !banco.login; }
   function isResp() { return !!(banco.login && banco.login.papel === 'responsavel'); }
 
   function contractFields(c) { var o = {}; Object.keys(c).forEach(function (k) { if (k !== 'id' && k !== 'pontos') o[k] = c[k]; }); return o; }
   function pointFields(p) { var o = {}; Object.keys(p).forEach(function (k) { if (k !== 'id') o[k] = p[k]; }); return o; }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  // Campos, como o banco conta: cada dado do contrato/ponto; nos pontos, cada serviço é um campo ("serv.aterro").
+  // Só os campos alterados sobem, com a hora da alteração. Se duas pessoas alteraram o mesmo campo,
+  // o banco fica com o valor de quem alterou por último e avisa quem enviou.
+  function units(o, isPoint) {
+    var u = {};
+    Object.keys(o || {}).forEach(function (k) {
+      if (isPoint && k === 'serv' && o.serv && typeof o.serv === 'object' && !Array.isArray(o.serv)) {
+        Object.keys(o.serv).forEach(function (s) { u['serv.' + s] = o.serv[s]; });
+      } else u[k] = o[k];
+    });
+    return u;
+  }
+  function setField(o, k, has, v) {
+    var p = k.split('.');
+    if (p.length === 2) {
+      if (!o[p[0]] || typeof o[p[0]] !== 'object') { if (!has) return; o[p[0]] = {}; }
+      if (has) o[p[0]][p[1]] = v === undefined ? null : clone(v); else delete o[p[0]][p[1]];
+    } else if (has) o[k] = v === undefined ? null : clone(v);
+    else delete o[k];
+  }
+  function applyFields(o, campos) {
+    Object.keys(campos || {}).forEach(function (k) { setField(o, k, 'v' in campos[k], campos[k].v); });
+  }
+  // {campo: {v: novo valor (sem v = apagado), a: valor de antes (sem a = não existia), em: hora}}
+  function fieldDiff(a, b, isPoint, em) {
+    var ua = units(a, isPoint), ub = units(b, isPoint), c = {}, n = 0;
+    function has(u, k) { return Object.prototype.hasOwnProperty.call(u, k) && u[k] !== undefined; }
+    Object.keys(ub).forEach(function (k) {
+      if (!has(ub, k) || (has(ua, k) && same(ua[k], ub[k]))) return;
+      c[k] = { v: ub[k], em: em };
+      if (has(ua, k)) c[k].a = ua[k];
+      n++;
+    });
+    Object.keys(ua).forEach(function (k) { if (has(ua, k) && !has(ub, k)) { c[k] = { a: ua[k], em: em }; n++; } });
+    return n ? c : null;
+  }
   // operações que levam o estado `a` ao estado `b`
-  function diffOps(a, b) {
+  function diffOps(a, b, em) {
     var ops = [], am = {}, bm = {};
+    em = em || new Date().toISOString();
     a.contracts.forEach(function (c, i) { am[c.id] = { c: c, i: i }; });
     b.contracts.forEach(function (c, i) {
-      var o = am[c.id], f = contractFields(c), old = {};
+      var o = am[c.id], old = {};
       bm[c.id] = true;
-      if (!o || o.i !== i || !same(contractFields(o.c), f)) ops.push({ t: 'contrato', id: c.id, ordem: i, dados: f });
-      if (o) o.c.pontos.forEach(function (p) { old[p.id] = p; });
+      if (!o) ops.push({ t: 'contrato', id: c.id, ordem: i, dados: contractFields(c), em: em });
+      else {
+        var cf = fieldDiff(contractFields(o.c), contractFields(c), false, em);
+        if (cf || o.i !== i) {
+          var co = { t: 'contrato_campos', id: c.id, nome: c.lote || c.numero || '', campos: cf || {} };
+          if (o.i !== i) co.ordem = i;
+          ops.push(co);
+        }
+        o.c.pontos.forEach(function (p) { old[p.id] = p; });
+      }
       c.pontos.forEach(function (p) {
-        var f2 = pointFields(p);
-        if (!old[p.id] || !same(pointFields(old[p.id]), f2)) ops.push({ t: 'ponto', cid: c.id, id: p.id, dados: f2 });
+        if (!old[p.id]) ops.push({ t: 'ponto', cid: c.id, id: p.id, dados: pointFields(p), em: em });
+        else {
+          var pf = fieldDiff(pointFields(old[p.id]), pointFields(p), true, em);
+          if (pf) ops.push({ t: 'ponto_campos', cid: c.id, id: p.id, nome: p.nome || '', campos: pf });
+        }
         delete old[p.id];
       });
-      Object.keys(old).forEach(function (id) { ops.push({ t: 'apagar_ponto', cid: c.id, id: id }); });
+      Object.keys(old).forEach(function (id) { ops.push({ t: 'apagar_ponto', cid: c.id, id: id, nome: old[id].nome || '', em: em }); });
     });
     a.contracts.forEach(function (c) { if (!bm[c.id]) ops.push({ t: 'apagar_contrato', id: c.id }); });
     return ops;
@@ -1222,54 +1271,190 @@
   // aplica as operações ainda não enviadas sobre o que veio do banco
   function applyOps(s, ops) {
     ops.forEach(function (op) {
-      var c = s.contracts.find(function (x) { return x.id === (op.cid || op.id); });
+      var c = s.contracts.find(function (x) { return x.id === (op.cid || op.id); }), p;
       if (op.t === 'contrato') {
         var nc = clone(op.dados);
         nc.id = op.id; nc.pontos = c ? c.pontos : [];
         if (c) s.contracts.splice(s.contracts.indexOf(c), 1);
         s.contracts.splice(Math.min(op.ordem || 0, s.contracts.length), 0, nc);
+      } else if (op.t === 'contrato_campos' && c) {
+        applyFields(c, op.campos);
+        if (op.ordem != null) { s.contracts.splice(s.contracts.indexOf(c), 1); s.contracts.splice(Math.min(op.ordem, s.contracts.length), 0, c); }
       } else if (op.t === 'apagar_contrato') {
         if (c) s.contracts.splice(s.contracts.indexOf(c), 1);
       } else if (op.t === 'ponto' && c) {
-        var np = clone(op.dados), k = c.pontos.findIndex(function (p) { return p.id === op.id; });
+        var np = clone(op.dados), k = c.pontos.findIndex(function (x) { return x.id === op.id; });
         np.id = op.id;
         if (k >= 0) c.pontos[k] = np; else c.pontos.push(np);
+      } else if (op.t === 'ponto_campos' && c) {
+        p = c.pontos.find(function (x) { return x.id === op.id; });
+        if (p) applyFields(p, op.campos);   // se outra pessoa excluiu o ponto, não volta
       } else if (op.t === 'apagar_ponto' && c) {
-        c.pontos = c.pontos.filter(function (p) { return p.id !== op.id; });
+        c.pontos = c.pontos.filter(function (x) { return x.id !== op.id; });
       }
     });
     return s;
   }
   function opKey(op) {
-    if (op.t === 'ponto' || op.t === 'apagar_ponto') return 'p:' + op.cid + ':' + op.id;
+    if (/^(ponto|ponto_campos|apagar_ponto)$/.test(op.t)) return 'p:' + op.cid + ':' + op.id;
     if (op.t === 'config' || op.t === 'apagar_config') return 'g:' + op.chave;
     return 'c:' + op.id;
   }
-  // a operação mais nova de cada contrato/ponto substitui a anterior, no mesmo lugar da fila
-  // (as que já estão a caminho do banco ficam como estão: a nova entra no fim)
+  // junta uma alteração nova com a que ainda espera na fila para o mesmo ponto/contrato
+  function mergeOp(old, op) {
+    if (!/_campos$/.test(op.t)) return op;                        // exclusão, registro novo, configuração: vale a nova
+    if (old.t === 'ponto' || old.t === 'contrato') {               // registro novo que ainda não subiu: continua completo
+      var full = clone(old), em = null;
+      applyFields(full.dados, op.campos);
+      Object.keys(op.campos).forEach(function (k) { em = op.campos[k].em; });
+      if (em) full.em = em;
+      if (op.ordem != null) full.ordem = op.ordem;
+      return full;
+    }
+    if (old.t !== op.t) return old;
+    var m = clone(old);
+    m.nome = op.nome || m.nome;
+    Object.keys(op.campos).forEach(function (k) {
+      var nf = op.campos[k], of = m.campos[k], f = { em: nf.em };
+      if ('v' in nf) f.v = nf.v;
+      if (of) { if ('a' in of) f.a = of.a; } else if ('a' in nf) f.a = nf.a;   // "antes" é o da primeira alteração
+      if (of && ('a' in f) === ('v' in f) && (!('v' in f) || same(f.a, f.v))) delete m.campos[k];   // voltou ao que era
+      else m.campos[k] = f;
+    });
+    if (op.ordem != null) m.ordem = op.ordem;
+    return Object.keys(m.campos).length || m.ordem != null ? m : null;
+  }
+  // a fila guarda uma operação por ponto/contrato; as que já estão a caminho do banco ficam como estão
   function enqueue(ops) {
     ops.forEach(function (op) {
       var sent = banco.pend.slice(0, banco.sending), rest = banco.pend.slice(banco.sending);
       if (op.t === 'apagar_contrato') rest = rest.filter(function (x) { return x.cid !== op.id; });
       var k = opKey(op), i = rest.findIndex(function (x) { return opKey(x) === k; });
-      if (i >= 0) rest[i] = op; else rest.push(op);
+      if (i < 0) rest.push(op);
+      else { var m = mergeOp(rest[i], op); if (m) rest[i] = m; else rest.splice(i, 1); }
       banco.pend = sent.concat(rest);
     });
     keepSync();
   }
+  var FIELD_NAMES = {
+    nome: 'nome', kmIni: 'KM inicial', kmFim: 'KM final', enr: 'enrocamento (m³)', sb: 'solo-brita (m³)', obs: 'observações', disp: 'dispositivos',
+    numero: 'nº do contrato', lote: 'lote', executora: 'executora', supervisora: 'supervisora', ctSupervisao: 'contrato da supervisora',
+    orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
+    plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos'
+  };
+  function fieldName(k) {
+    if (k.indexOf('serv.') === 0) { var s = SERVICES.find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
+    return FIELD_NAMES[k] || k;
+  }
+  function loteOf(cid) { var c = state.contracts.find(function (x) { return x.id === cid; }); return c ? (c.lote || c.numero || 'Contrato') : 'Contrato'; }
   // texto curto do que mudou, para o histórico
   function opsResumo(ops) {
     var names = [];
     ops.forEach(function (op) {
-      var c = state.contracts.find(function (x) { return x.id === (op.cid || op.id); }), lote = c ? (c.lote || c.numero || 'Contrato') : 'Contrato', t;
-      if (op.t === 'ponto') t = lote + ' ' + (op.dados.nome || 'ponto');
-      else if (op.t === 'apagar_ponto') t = lote + ': ponto excluído';
-      else if (op.t === 'contrato') t = (op.dados.lote || 'Contrato') + ': dados do contrato';
+      var t, f = op.campos ? Object.keys(op.campos).map(fieldName).join(', ') : '';
+      if (op.t === 'ponto_campos') t = loteOf(op.cid) + ' ' + (op.nome || 'ponto') + (f ? ': ' + f : '');
+      else if (op.t === 'ponto') t = loteOf(op.cid) + ' ' + (op.dados.nome || 'ponto') + ' (novo ponto)';
+      else if (op.t === 'apagar_ponto') t = loteOf(op.cid) + ' ' + (op.nome || '') + ': ponto excluído';
+      else if (op.t === 'contrato_campos') t = (op.nome || 'Contrato') + ': ' + (f || 'ordem das abas');
+      else if (op.t === 'contrato') t = (op.dados.lote || 'Contrato') + ' (novo contrato)';
       else if (op.t === 'apagar_contrato') t = 'Contrato excluído';
       else t = 'Configuração';
       if (names.indexOf(t) < 0) names.push(t);
     });
     return names.slice(0, 8).join('; ') + (names.length > 8 ? ' e mais ' + (names.length - 8) : '');
+  }
+
+  // ---------------- quem alterou por último (por campo, como veio do banco)
+  function metaKey(cid, id) { return id == null ? 'c:' + cid : 'p:' + cid + ':' + id; }
+  function metaOf(key) { return banco.meta[key] || (banco.meta[key] = { m: {}, por: null, em: null }); }
+  function lastChange(key) {
+    var x = banco.meta[key];
+    if (!x) return null;
+    var best = null;
+    Object.keys(x.m || {}).forEach(function (k) {
+      var f = x.m[k], t = Date.parse(f && f.em);
+      if (isFinite(t) && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
+    });
+    if (!best) return x.por ? { por: x.por, em: x.em, campos: [] } : null;
+    var campos = Object.keys(x.m).filter(function (k) {
+      var f = x.m[k];
+      return f.por === best.por && best.t - Date.parse(f.em) < 3 * 60000;
+    });
+    return { por: best.por, em: best.em, campos: campos };
+  }
+  function fmtWhen(iso, secs) {
+    var d = new Date(iso);
+    if (!isFinite(d)) return '';
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' às ' + hhmm(d) + (secs ? ':' + String(d.getSeconds()).padStart(2, '0') : '');
+  }
+  function lastHtml(key) {
+    var l = banco.on && lastChange(key);
+    if (!l) return '';
+    var f = l.campos.length && l.campos.length <= 4 ? ' · ' + esc(l.campos.map(fieldName).join(', ')) : '';
+    return 'Última alteração: <b>' + esc(l.por || 'sem nome') + '</b> · ' + esc(fmtWhen(l.em)) + f;
+  }
+  function lastLine(key) {
+    var h = lastHtml(key);
+    return '<div class="last-edit" data-last="' + esc(key) + '"' + (h ? '' : ' hidden') + '>' + h + '</div>';
+  }
+  function refreshLastLines() {
+    document.querySelectorAll('[data-last]').forEach(function (el) { var h = lastHtml(el.getAttribute('data-last')); el.innerHTML = h; el.hidden = !h; });
+  }
+  // depois de gravar: o que entrou passa a ter este aparelho como último a alterar
+  function noteMeta(ops, conf) {
+    var lost = {}, me = (banco.login && banco.login.nome) || null;
+    conf.forEach(function (x) { if (x.tipo === 'perdeu') lost[metaKey(x.cid || x.id, x.alvo === 'ponto' ? x.id : null) + '|' + x.campo] = 1; });
+    ops.forEach(function (op) {
+      var isP = /ponto/.test(op.t), key = isP ? metaKey(op.cid, op.id) : metaKey(op.id), mm;
+      if (/^apagar_/.test(op.t)) { if (!conf.length) delete banco.meta[key]; return; }
+      if (op.campos) {
+        mm = metaOf(key).m;
+        Object.keys(op.campos).forEach(function (k) { if (!lost[key + '|' + k]) mm[k] = { por: me, em: op.campos[k].em }; });
+      } else if (op.dados) {
+        mm = metaOf(key).m;
+        Object.keys(units(op.dados, isP)).forEach(function (k) { mm[k] = { por: me, em: op.em }; });
+      }
+    });
+  }
+
+  // ---------------- avisos de alterações que se cruzaram (ficam até a pessoa dispensar)
+  function fmtValue(campo, v) {
+    if (v == null || v === '') return '(vazio)';
+    if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
+      var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
+      return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
+    }
+    if (Array.isArray(v)) return v.length + (v.length === 1 ? ' item' : ' itens');
+    if (typeof v === 'number') return fmt(v, v % 1 ? 2 : 0);
+    var s = String(v);
+    return '"' + (s.length > 60 ? s.slice(0, 57) + '…' : s) + '"';
+  }
+  function conflictText(x, autor) {
+    var alvo = x.alvo === 'ponto' ? loteOf(x.cid) + ' ' + (x.nome || 'ponto') : (x.nome || 'Contrato');
+    var secs = !!(x.em && x.seu_em && fmtWhen(x.em) === fmtWhen(x.seu_em));   // no mesmo minuto: mostra os segundos
+    var campo = x.campo ? ' · ' + fieldName(x.campo) : '', quem = x.por || 'outra pessoa', quando = x.em ? ' (' + fmtWhen(x.em, secs) + ')' : '';
+    var sua = autor ? 'a alteração de ' + autor : 'a sua alteração', seu = x.seu_em ? ' (' + fmtWhen(x.seu_em, secs) + ')' : '';
+    if (x.tipo === 'perdeu') return alvo + campo + ': ficou o valor de ' + quem + ', que alterou depois' + quando + ': ' + fmtValue(x.campo, x.valor) + '. ' + sua.charAt(0).toUpperCase() + sua.slice(1) + seu + ' não entrou.';
+    if (x.tipo === 'substituiu') return alvo + campo + ': ficou o ' + (autor ? 'valor de ' + autor : 'seu valor') + ', alterado por último' + seu + '. Substituiu o de ' + quem + quando + ': ' + fmtValue(x.campo, x.valor) + '.';
+    if (x.tipo === 'nao_excluido') return alvo + ': não foi excluído, porque ' + quem + ' alterou o ponto depois' + quando + '.';
+    if (x.tipo === 'excluido') return alvo + ': ' + (x.alvo === 'ponto' ? 'o ponto' : 'o contrato') + ' já tinha sido excluído por outra pessoa; ' + sua + ' nele não entrou.';
+    return alvo + campo;
+  }
+  function showConflicts(list) {
+    if (list) { banco.conf = banco.conf.concat(list).slice(-30); keepSync(); }
+    var bar = $('confBar');
+    if (!banco.conf.length) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'confBar';
+      bar.className = 'share-ready conf-bar';
+      bar.setAttribute('role', 'status');
+      (document.fullscreenElement || document.body).appendChild(bar);
+    }
+    bar.innerHTML = '<div class="conf-body"><b>Alterações que se cruzaram</b><span>Duas pessoas mexeram no mesmo campo: ficou o valor de quem alterou por último.</span><ul>' +
+      banco.conf.map(function (x) { return '<li>' + esc(conflictText(x)) + '</li>'; }).join('') + '</ul></div>' +
+      '<button type="button" class="btn primary">Entendi</button>';
+    bar.querySelector('button').addEventListener('click', function () { banco.conf = []; keepSync(); bar.remove(); });
   }
   // chamada a cada alteração local (save): o que mudou desde a última vez entra na fila
   function trackChanges() {
@@ -1287,13 +1472,17 @@
     banco.busy = true;
     banco.sending = n;
     syncStatus();
-    window.Banco.salvar(banco.login.codigo, banco.login.nome, opsResumo(ops), ops).then(function (v) {
+    window.Banco.salvarCampos(banco.login.codigo, banco.login.nome, opsResumo(ops), ops).then(function (res) {
+      var v = Number(res && res.versao), conf = (res && res.conflitos) || [];
       banco.busy = false;
       banco.sending = 0;
       banco.online = true;
       banco.at = new Date();
       banco.pend.splice(0, n);
-      if (v === banco.versao + 1) banco.versao = v; else refresh();   // outra pessoa gravou no meio: recarrega
+      noteMeta(ops, conf);
+      if (conf.length) { showConflicts(conf); refresh(); }          // o banco ficou com outro valor em algum campo
+      else if (v === banco.versao + 1) { banco.versao = v; refreshLastLines(); }
+      else refresh();                                                // outra pessoa gravou no meio: recarrega
       keepSync();
       if (banco.pend.length) scheduleFlush(300);
       syncStatus();
@@ -1316,8 +1505,17 @@
   }
   function fromServer(r) {
     var s = { activeId: state ? state.activeId : null, contracts: [] }, byId = {};
-    r.contratos.forEach(function (row) { var c = clone(row.dados || {}); c.id = row.id; c.pontos = []; byId[c.id] = c; s.contracts.push(c); });
-    r.pontos.forEach(function (row) { var c = byId[row.contrato_id]; if (c) { var p = clone(row.dados || {}); p.id = row.id; c.pontos.push(p); } });
+    banco.meta = {};
+    r.contratos.forEach(function (row) {
+      var c = clone(row.dados || {}); c.id = row.id; c.pontos = []; byId[c.id] = c; s.contracts.push(c);
+      banco.meta[metaKey(row.id)] = { m: row.meta || {}, por: row.atualizado_por || null, em: row.atualizado_em || null };
+    });
+    r.pontos.forEach(function (row) {
+      var c = byId[row.contrato_id];
+      if (!c) return;
+      var p = clone(row.dados || {}); p.id = row.id; c.pontos.push(p);
+      banco.meta[metaKey(row.contrato_id, row.id)] = { m: row.meta || {}, por: row.atualizado_por || null, em: row.atualizado_em || null };
+    });
     s.contracts.forEach(function (c) { c.pontos.sort(function (a, b) { return a.id.localeCompare(b.id, 'pt-BR', { numeric: true }); }); });
     return s;
   }
@@ -1484,7 +1682,8 @@
       el.innerHTML = rows.length ? rows.map(function (r) {
         var d = new Date(r.em);
         var dia = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
-        return '<div class="hist-row"><span class="hist-when">' + dia + ' ' + hhmm(d) + '</span><span><b>' + esc(r.autor || '—') + '</b> ' + esc(r.resumo || '') + '</span></div>';
+        var conf = Array.isArray(r.conflitos) ? r.conflitos.map(function (x) { return '<span class="hist-conf">' + esc(conflictText(x, r.autor || 'quem enviou')) + '</span>'; }).join('') : '';
+        return '<div class="hist-row"><span class="hist-when">' + dia + ' ' + hhmm(d) + '</span><span><b>' + esc(r.autor || '—') + '</b> ' + esc(r.resumo || '') + conf + '</span></div>';
       }).join('') : '<p>Nada gravado ainda.</p>';
     }, function (err) { f.querySelector('.hist').textContent = errText(err); });
   }
@@ -1572,9 +1771,13 @@
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }
     prepareOld();
     var s = lsGet(SYNC_KEY);
-    if (s) { banco.versao = Number(s.versao) || 0; banco.pend = Array.isArray(s.pend) ? s.pend : []; banco.cfg = s.cfg || {}; }
+    if (s) {
+      banco.versao = Number(s.versao) || 0; banco.pend = Array.isArray(s.pend) ? s.pend : []; banco.cfg = s.cfg || {};
+      banco.meta = s.meta && typeof s.meta === 'object' ? s.meta : {}; banco.conf = Array.isArray(s.conf) ? s.conf : [];
+    }
     banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
     setLogin(lsGet(LOGIN_KEY));
+    if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
     document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
     $('editor').addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });

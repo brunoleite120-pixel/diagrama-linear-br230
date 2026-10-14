@@ -6,6 +6,7 @@
  *   Banco.carregar()                      -> {contratos, pontos, config, versao}
  *   Banco.versao()                        -> número que muda a cada gravação
  *   Banco.entrar(codigo)                  -> 'equipe' | 'responsavel' | null
+ *   Banco.salvarCampos(codigo, autor, resumo, ops) -> {versao, conflitos} (só os campos alterados; fica o de quem alterou por último)
  *   Banco.salvar(codigo, autor, resumo, ops) -> nova versão
  *   Banco.codigosDefinidos(), Banco.definirCodigos(atual, equipe, responsavel), Banco.historico(n)
  */
@@ -48,8 +49,8 @@
   window.Banco = {
     carregar: function () {
       return Promise.all([
-        req('contratos?select=id,dados,ordem&order=ordem.asc,id.asc'),
-        req('pontos?select=contrato_id,id,dados&order=contrato_id.asc,id.asc'),
+        req('contratos?select=id,dados,ordem,meta,atualizado_em,atualizado_por&order=ordem.asc,id.asc'),
+        req('pontos?select=contrato_id,id,dados,meta,atualizado_em,atualizado_por&order=contrato_id.asc,id.asc'),
         req('config?select=chave,valor'),
         rpc('versao')
       ]).then(function (r) { return { contratos: r[0] || [], pontos: r[1] || [], config: r[2] || [], versao: Number(r[3]) || 0 }; });
@@ -60,9 +61,12 @@
     definirCodigos: function (atual, equipe, responsavel) {
       return rpc('definir_codigos', { p_atual: atual || null, p_equipe: equipe || null, p_responsavel: responsavel || null });
     },
+    salvarCampos: function (codigo, autor, resumo, ops) {
+      return rpc('salvar_v2', { p_codigo: codigo, p_autor: autor || null, p_resumo: resumo || null, p_ops: ops });
+    },
     salvar: function (codigo, autor, resumo, ops) {
       return rpc('salvar', { p_codigo: codigo, p_autor: autor || null, p_resumo: resumo || null, p_ops: ops }).then(Number);
     },
-    historico: function (n) { return req('historico?select=em,autor,papel,resumo&order=id.desc&limit=' + (n || 40)); }
+    historico: function (n) { return req('historico?select=em,autor,papel,resumo,conflitos&order=id.desc&limit=' + (n || 40)); }
   };
 })();
