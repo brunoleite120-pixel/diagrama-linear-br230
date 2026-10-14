@@ -55,7 +55,7 @@ jobs:
       - name: Ícone e permissões
         run: |
           PL=ios/App/App/Info.plist
-          plutil -replace CFBundleDisplayName -string "DNIT 230" "$PL"
+          plutil -replace CFBundleDisplayName -string "VIA-230" "$PL"
           plutil -replace NSLocationWhenInUseUsageDescription -string "O app usa a sua posição para mostrar o km da BR-230 no mapa e identificar o ponto da foto." "$PL"
           plutil -replace NSCameraUsageDescription -string "A câmera é usada para tirar as fotos com carimbo dos pontos." "$PL"
           plutil -replace NSPhotoLibraryUsageDescription -string "A galeria é usada para escolher fotos e ler a localização gravada nelas." "$PL"
