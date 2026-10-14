@@ -860,6 +860,8 @@
     }
 
     // ---------------- salvar
+    // qualidade do JPEG final (salvar, compartilhar, Drive): 85% fica igual a olho nu e uns 10% menor que 90%
+    var QUALIDADE = 0.85;
     function fileName() {
       var p = findPoint(st.pid), d = st.date || new Date();
       var parts = ['Foto', rodovia().replace(/[\/\s]+/g, '-')];
@@ -872,7 +874,7 @@
       return new Promise(function (resolve) {
         var cv = document.createElement('canvas');
         draw(cv, 3200);
-        cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', 0.9);
+        cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', QUALIDADE);
       });
     }
     function busy(on) { root.querySelectorAll('[data-ft="save"],[data-ft="share"],[data-ft="drive"]').forEach(function (b) { b.disabled = on; }); }
@@ -1180,7 +1182,7 @@
             if (!d) return null;
             withItem(it, function () { var keep = it.img; it.img = d.img; try { draw(cv, 3200); } finally { it.img = keep; } });
             URL.revokeObjectURL(d.url);
-            return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', 0.9); });
+            return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', QUALIDADE); });
           }).then(function (blob) {
             if (!blob) return;
             var name = withItem(it, fileName), base = name.replace(/\.jpg$/i, ''), n = 2;
