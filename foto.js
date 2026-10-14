@@ -214,7 +214,24 @@
     '.ft-btn{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 16px;border:1px solid var(--ft-line);border-radius:8px;background:var(--ft-panel);color:var(--ft-ink);font:inherit;font-size:14px;font-weight:650;cursor:pointer}',
     '.ft-btn.primary{background:var(--ft-accent);border-color:var(--ft-accent);color:var(--ft-accent-ink)}',
     '.ft-btn[disabled]{opacity:.6;cursor:progress}',
-    '@media (max-width:820px){.ft-work{grid-template-columns:1fr}.ft-prev{position:static}.ft-prev canvas{max-height:58vh}.ft-body{padding:12px}}',
+    '.ft [hidden]{display:none!important}',
+    '.ft-sub{font-size:13px;font-weight:600;opacity:.85}',
+    // várias fotos de uma vez
+    '.ft:not(.many) .ft-many,.ft.many .ft-one{display:none}',
+    '.ft-batch{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}',
+    '.ft-bmain{display:flex;flex-direction:column;gap:10px;min-width:0}',
+    '.ft-blist{display:flex;flex-direction:column;gap:10px}',
+    '.ft-bstat{font-variant-numeric:tabular-nums}',
+    '.ft-item{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:12px;align-items:start;padding:10px;background:var(--ft-panel);border:1px solid var(--ft-line);border-radius:10px}',
+    '.ft-item.err{border-color:var(--danger,#B42318)}',
+    '.ft-thumb{background:#000;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:150px;color:#C9CFCB;font-size:12.5px}',
+    '.ft-thumb img{display:block;max-width:100%;max-height:320px;width:auto;height:auto}',
+    '.ft-ifields{display:flex;flex-direction:column;gap:8px;min-width:0}',
+    '.ft-ihead{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+    '.ft-iname{font-weight:650;font-size:13px;overflow-wrap:anywhere;min-width:0}',
+    '.ft-prog{margin-right:auto;align-self:center;font-size:13px;color:var(--ft-ink-2);font-variant-numeric:tabular-nums}',
+    '@media (max-width:820px){.ft-work,.ft-batch{grid-template-columns:1fr}.ft-prev{position:static}.ft-prev canvas{max-height:58vh}.ft-body{padding:12px}}',
+    '@media (max-width:560px){.ft-item{grid-template-columns:1fr}.ft-thumb img{max-height:52vh}}',
     '@media (max-width:420px){.ft-checks{grid-template-columns:1fr}}'
   ].join('\n');
   function injectStyle() {
@@ -295,7 +312,7 @@
             '<div class="ft-gps"></div>' +
             '<label class="ft-big">' + CAM + 'Tirar foto<input class="ft-file" type="file" id="ftCam" accept="image/*" capture="environment"></label>' +
             '<label class="ft-big alt">' + GAL + 'Escolher da galeria<input class="ft-file" type="file" id="ftGal" accept="image/*"></label>' +
-            '<label class="ft-big alt">' + ARQ + 'Arquivos do celular<input class="ft-file" type="file" id="ftArq"></label>' +
+            '<label class="ft-big alt">' + ARQ + 'Arquivos do celular <span class="ft-sub">· uma ou várias</span><input class="ft-file" type="file" id="ftArq" multiple></label>' +
             '<p class="ft-msg ft-warn" hidden></p>' +
             '<p class="ft-note"></p>' +
           '</div>' +
@@ -313,10 +330,10 @@
                   '<label class="ft-f full"><span>Descrição</span><textarea id="ftDesc" maxlength="240" placeholder="Ex.: lançamento de enrocamento no bueiro"></textarea></label>' +
                 '</div>' +
               '</section>' +
-              '<section class="ft-sec"><h4>O que aparece na legenda</h4><div class="ft-checks">' +
+              '<section class="ft-sec ft-shared"><h4>O que aparece na legenda</h4><div class="ft-checks">' +
                 FIELDS.map(function (f) { return '<label><input type="checkbox" id="ftC-' + f.k + '" data-campo="' + f.k + '">' + f.label + '</label>'; }).join('') +
               '</div></section>' +
-              '<section class="ft-sec"><h4>Aparência</h4>' +
+              '<section class="ft-sec ft-shared"><h4>Aparência</h4>' +
                 '<div class="ft-row"><span>Logo</span><div class="ft-opts" data-group="logoOn"></div><div class="ft-corners" data-group="logo"></div></div>' +
                 '<div class="ft-row"><span>Legenda</span><div class="ft-corners" data-group="leg"></div></div>' +
                 '<div class="ft-row"><span>Cor do texto</span><div class="ft-opts" data-group="cor"></div></div>' +
@@ -332,10 +349,22 @@
               '</section>' +
             '</div>' +
           '</div>' +
+          '<div class="ft-batch" hidden>' +
+            '<div class="ft-bmain">' +
+              '<section class="ft-sec ft-bsum"><h4 class="ft-bcount">Fotos</h4><div class="ft-src ft-bstat"></div><div class="ft-lot ft-blot" role="status" hidden></div>' +
+                '<label class="ft-f"><span>Descrição de todas as fotos</span><textarea id="ftBDesc" maxlength="240" placeholder="Ex.: lançamento de enrocamento no bueiro"></textarea></label>' +
+                '<div class="ft-src">Cada foto também pode ter a própria descrição; se ficar em branco, vale esta.</div>' +
+              '</section>' +
+              '<div class="ft-blist"></div>' +
+            '</div>' +
+            '<div class="ft-side ft-bside"></div>' +
+          '</div>' +
         '</div>' +
-        '<div class="ft-foot" hidden><button type="button" class="ft-btn" data-ft="new">Nova foto</button>' +
-          (opts.share ? '<button type="button" class="ft-btn" data-ft="share">Compartilhar</button>' : '') +
-          '<button type="button" class="ft-btn primary" data-ft="save">Salvar foto</button></div>';
+        '<div class="ft-foot" hidden><span class="ft-prog ft-many" role="status"></span>' +
+          '<button type="button" class="ft-btn" data-ft="new"><span class="ft-one">Nova foto</span><span class="ft-many">Nova seleção</span></button>' +
+          (opts.share ? '<button type="button" class="ft-btn ft-one" data-ft="share">Compartilhar</button><button type="button" class="ft-btn ft-many" data-ft="b-share">Compartilhar todas</button>' : '') +
+          '<button type="button" class="ft-btn primary ft-one" data-ft="save">Salvar foto</button>' +
+          '<button type="button" class="ft-btn primary ft-many" data-ft="b-save">Salvar todas (.zip)</button></div>';
       root.addEventListener('click', onClick);
       root.addEventListener('input', onInput);
       root.addEventListener('change', onChange);
@@ -362,17 +391,23 @@
     }
 
     function startView() {
+      clearBatch();
+      root.classList.remove('many');
       renderHead();
       q('.ft-start').hidden = false;
       q('.ft-work').hidden = true;
+      q('.ft-batch').hidden = true;
       q('.ft-foot').hidden = true;
       startMsg('');
       q('.ft-note').textContent = (opts.gps
         ? 'O km sai do GPS do aparelho na hora da foto ou da localização gravada na foto. '
         : 'Neste link o navegador não informa a localização do aparelho: o km sai da localização gravada na foto. Deixe a câmera do celular salvando o local. ') +
-        'Se a galeria entregar a foto sem localização, abra a mesma foto por "Arquivos do celular" (pasta DCIM > Câmera). Se ainda faltar, você digita o km ou escolhe o ponto.';
+        'Se a galeria entregar a foto sem localização, abra a mesma foto por "Arquivos do celular" (pasta DCIM > Câmera). Se ainda faltar, você digita o km ou escolhe o ponto. ' +
+        'Em "Arquivos do celular" dá para marcar várias fotos de uma vez: cada uma recebe o km, o ponto e o lote do próprio GPS.';
       renderGps();
     }
+    // as seções de legenda e aparência valem para a foto única e para o lote de fotos
+    function moveShared(target) { root.querySelectorAll('.ft-shared').forEach(function (s) { target.appendChild(s); }); }
     function renderGps() {
       var el = q('.ft-gps');
       if (!opts.gps) { el.hidden = true; return; }
@@ -390,6 +425,12 @@
     }
     function renderHead() {
       var c = contract();
+      if (batch) {   // lote de fotos: os lotes/contratos em uso
+        var seen = {}, names = [];
+        readyItems().forEach(function (it) { var x = byId(it.cid); if (x && !seen[x.id]) { seen[x.id] = 1; names.push(x.lote || lotName(x)); } });
+        q('.ft-ct').textContent = [rodovia()].concat(names.length ? [names.join(', ')] : []).join(' · ');
+        return;
+      }
       q('.ft-ct').textContent = c ? [c.lote, c.numero, rodovia()].filter(Boolean).join(' · ') : rodovia();
     }
     var lastFixErr = '';
@@ -431,23 +472,32 @@
     }
     function setupPhoto(img, url, file, ex, from) {
       if (st && st.url) URL.revokeObjectURL(st.url);
-      var ac = activeContract();
-      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, ll: null, km: null, side: '', dist: null, acc: null, src: 'manual', pid: '', desc: '', cid: ac ? ac.id : '' };
-      st.date = ex.date || (from === 'camera' ? new Date() : new Date(file.lastModified || Date.now()));
-      st.from = from;
-      if (ex.ll) { st.ll = ex.ll; st.src = 'exif'; }
-      else if (from === 'camera' && lastFix && Date.now() - lastFix.t < 120000) { st.ll = lastFix.ll; st.acc = lastFix.acc; st.src = 'gps'; }
-      if (st.ll) {
-        var loc = ref.locate(st.ll[0], st.ll[1]);
-        st.loc = loc;
-        if (loc.dist <= 2000) { st.km = loc.km; st.side = loc.dist >= 10 ? loc.side : ''; st.dist = loc.dist >= 10 ? Math.round(loc.dist) : null; }
-      }
-      st.noLoc = !st.ll;
-      var auto = st.km != null ? identify(st.km) : null;
-      st.pid = auto && auto.d <= 0.05 ? auto.p.id : (opts.initialPoint || '');
-      if (!st.ll && st.pid) { var p0 = findPoint(st.pid); if (p0) st.km = p0.kmIni; }
+      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '' };
+      place(st, ex, file, from);
       showWork();
     }
+    // posição, data, lote e ponto de uma foto (a única ou cada uma do lote de fotos)
+    function place(o, ex, file, from) {
+      var ac = activeContract();
+      o.ll = null; o.km = null; o.side = ''; o.dist = null; o.acc = null; o.src = 'manual'; o.pid = ''; o.cid = ac ? ac.id : '';
+      o.date = ex.date || (from === 'camera' ? new Date() : new Date(file.lastModified || Date.now()));
+      o.from = from;
+      if (ex.ll) { o.ll = ex.ll; o.src = 'exif'; }
+      else if (from === 'camera' && lastFix && Date.now() - lastFix.t < 120000) { o.ll = lastFix.ll; o.acc = lastFix.acc; o.src = 'gps'; }
+      if (o.ll) {
+        var loc = ref.locate(o.ll[0], o.ll[1]);
+        o.loc = loc;
+        if (loc.dist <= 2000) { o.km = loc.km; o.side = loc.dist >= 10 ? loc.side : ''; o.dist = loc.dist >= 10 ? Math.round(loc.dist) : null; }
+      }
+      o.noLoc = !o.ll;
+      withItem(o, function () {
+        var auto = o.km != null ? identify(o.km) : null;
+        o.pid = auto && auto.d <= 0.05 ? auto.p.id : (opts.initialPoint || '');
+        if (!o.ll && o.pid) { var p0 = findPoint(o.pid); if (p0) o.km = p0.kmIni; }
+      });
+    }
+    // as funções de desenho e de texto leem `st`: no lote, cada foto passa por aqui
+    function withItem(it, fn) { var old = st; st = it; try { return fn(); } finally { st = old; } }
     function findPoint(id) { var c = contract(); return c && id ? (c.pontos || []).find(function (p) { return p.id === id; }) || null : null; }
     function identify(km) {
       var c = contract(), best = null;
@@ -461,7 +511,10 @@
     }
 
     function showWork() {
+      root.classList.remove('many');
+      moveShared(q('.ft-work .ft-side'));
       q('.ft-start').hidden = true;
+      q('.ft-batch').hidden = true;
       q('.ft-work').hidden = false;
       q('.ft-foot').hidden = false;
       q('#ftKm').value = st.km != null ? nf(st.km, 2) : '';
@@ -475,7 +528,8 @@
       renderOpts();
       scheduleDraw(0);
     }
-    function renderPontos() {
+    function renderPontos() { q('#ftPonto').innerHTML = pontoOptions(); }
+    function pontoOptions() {
       var c = contract(), list = c ? (c.pontos || []).filter(function (p) { return p.kmIni != null; }).slice() : [];
       list.sort(function (a, b) { return a.kmIni - b.kmIni; });
       var h = '<option value="">Nenhum</option>';
@@ -484,14 +538,23 @@
         var dist = d == null ? '' : d === 0 ? ' · aqui' : ' · a ' + (d < 1 ? Math.round(d * 1000) + ' m' : nf(d, 1) + ' km');
         h += '<option value="' + esc(p.id) + '"' + (p.id === st.pid ? ' selected' : '') + '>' + esc(p.nome) + ' (km ' + nf(p.kmIni, 2) + ')' + dist + '</option>';
       });
-      q('#ftPonto').innerHTML = h;
+      return h;
     }
     function renderSrc() {
+      q('.ft-work .ft-src').innerHTML = srcHtml(false);
+      renderLote();
+    }
+    // de onde veio a posição; `short` é o texto curto de cada foto do lote
+    function srcHtml(short) {
       var h;
-      if (st.src === 'exif') h = 'Posição: <b>GPS gravado na foto</b> ' + coordTxt(st.ll) + '.';
+      if (short) {
+        if (st.src === 'exif') h = 'Posição: <b>GPS gravado na foto</b> ' + coordTxt(st.ll) + (st.side ? ' · ' + st.side + (st.dist != null ? ' a ' + st.dist + ' m do eixo' : '') : '') + ' · ' + dateTxt(st.date) + '.';
+        else if (st.noLoc && st.km == null) h = '<span class="ft-warn">Foto sem localização gravada.</span> Digite o km ou escolha o ponto.';
+        else h = 'Posição: <b>km informado à mão</b> (coordenadas do eixo' + (st.noLoc ? '; a foto não tem localização gravada' : '') + ').';
+      } else if (st.src === 'exif') h = 'Posição: <b>GPS gravado na foto</b> ' + coordTxt(st.ll) + '.';
       else if (st.src === 'gps') h = 'Posição: <b>GPS do aparelho</b> na hora da foto ' + coordTxt(st.ll) + (st.acc ? ' (precisão ' + Math.round(st.acc) + ' m)' : '') + '.';
       else h = 'Posição: <b>informada à mão</b>. As coordenadas são as do eixo no km digitado (SNV ' + esc(snv.versao) + ').';
-      if (st.src === 'manual' && st.noLoc) {
+      if (!short && st.src === 'manual' && st.noLoc) {
         h += ' <span class="ft-warn">Esta foto chegou sem localização.</span> ' + (st.from === 'camera'
           ? 'A câmera não gravou o local: ative a localização nas configurações da câmera (Android: "Tags de local"; iPhone: Ajustes > Privacidade > Serviços de Localização > Câmera).'
           : st.from === 'galeria'
@@ -504,28 +567,35 @@
         var b = p.kmFim != null ? p.kmFim : p.kmIni;
         if (st.km < p.kmIni - 0.05 || st.km > b + 0.05) h += ' <span class="ft-warn">O km está fora do ' + esc(p.nome) + ' (km ' + nf(p.kmIni, 2) + ' a ' + nf(b, 2) + ').</span>';
       }
-      q('.ft-src').innerHTML = h;
-      renderLote();
+      return h;
     }
     // confere se o km cai no trecho do lote da foto; se for de outro lote, avisa e oferece a correção
     function renderLote() {
-      var list = contracts(), cur = contract(), box = q('.ft-lot');
-      var here = st.km != null ? lotsAt(st.km) : [];
-      q('#ftLoteWrap').hidden = list.length < 2;
-      q('#ftLote').innerHTML = list.map(function (c) {
+      var box = q('.ft-work .ft-lot'), h = lotHtml();
+      q('#ftLoteWrap').hidden = contracts().length < 2;
+      q('#ftLote').innerHTML = loteOptions();
+      box.innerHTML = h;
+      box.hidden = !h;
+    }
+    function loteOptions() {
+      var cur = contract(), here = st.km != null ? lotsAt(st.km) : [];
+      return contracts().map(function (c) {
         var r = rangeTxt(c);
         return '<option value="' + esc(c.id) + '"' + (cur && c.id === cur.id ? ' selected' : '') + '>' + esc(lotName(c)) + (r ? ' · ' + r : '') + (has(here, c) ? ' · o km está aqui' : '') + '</option>';
       }).join('');
-      var h = '';
+    }
+    function lotHtml() {
+      var list = contracts(), cur = contract(), here = st.km != null ? lotsAt(st.km) : [], h = '';
+      var di = st.bi != null ? ' data-i="' + st.bi + '"' : '';   // foto do lote de fotos
       if (st.km != null && cur && !has(here, cur)) {
         if (here.length) {
           h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica no <b>' + esc(lotName(here[0])) + '</b> (' + esc(rangeTxt(here[0])) + '), não no ' + esc(lotName(cur)) +
             (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '') + '. A legenda e o ponto estão usando o lote errado.</div><div class="ft-opts">' +
             here.map(function (c) {
               var a = pointNear(c, st.km);
-              return '<button type="button" class="ft-opt ft-fix" data-ft="fix-lot" data-cid="' + esc(c.id) + '">Corrigir para ' + esc(c.lote || lotName(c)) + (a ? ' · ' + esc(a.nome) : '') + '</button>';
+              return '<button type="button" class="ft-opt ft-fix" data-ft="fix-lot" data-cid="' + esc(c.id) + '"' + di + '>Corrigir para ' + esc(c.lote || lotName(c)) + (a ? ' · ' + esc(a.nome) : '') + '</button>';
             }).join('') +
-            '<button type="button" class="ft-opt" data-ft="keep-lot">Manter ' + esc(cur.lote || lotName(cur)) + '</button></div>';
+            '<button type="button" class="ft-opt" data-ft="keep-lot"' + di + '>Manter ' + esc(cur.lote || lotName(cur)) + '</button></div>';
           if (st.keepLot === cur.id + '@' + nf(st.km, 2)) h = '';
         } else if (lotRange(cur)) {
           h = '<div>O km <b>' + nf(st.km, 2) + '</b> está fora do trecho de todos os contratos cadastrados (' +
@@ -533,8 +603,7 @@
             '). Confira o km.</div>';
         }
       }
-      box.innerHTML = h;
-      box.hidden = !h;
+      return h;
     }
     // ponto do lote c que fica no km (até 50 m)
     function pointNear(c, km) {
@@ -575,7 +644,8 @@
       if (C.contrato && c) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
       if (C.executora && c && c.executora) out.push('Executora: ' + c.executora);
       if (C.supervisora && c && c.supervisora) out.push('Supervisão: ' + c.supervisora);
-      if (C.desc && st.desc.trim()) out.push({ wrap: st.desc.trim() });
+      var desc = (st.desc || '').trim() || (st.bi != null && batch ? batch.common.trim() : '');
+      if (C.desc && desc) out.push({ wrap: desc });
       if (C.snv) out.push(snvTxt(snv.versao));
       return out;
     }
@@ -657,7 +727,10 @@
     }
     function scheduleDraw(ms) {
       clearTimeout(drawTimer);
-      drawTimer = setTimeout(function () { if (st) draw(q('.ft-prev canvas'), 1600); }, ms == null ? 90 : ms);
+      drawTimer = setTimeout(function () {
+        if (batch) { batch.items.forEach(function (it, i) { if (it.img && !it.gone) queueDraw(i); }); return; }
+        if (st) draw(q('.ft-prev canvas'), 1600);
+      }, ms == null ? 90 : ms);
     }
 
     // ---------------- salvar
@@ -695,6 +768,340 @@
       }).catch(function () { /* compartilhamento cancelado */ }).then(function () { busy(false); });
     }
 
+    // ---------------- várias fotos de uma vez (Arquivos do celular): cada uma com o km, o ponto e o lote do próprio GPS
+    // Só a miniatura (1000 px) fica na memória; a foto inteira é aberta de novo na hora de salvar.
+    var MAX_FOTOS = 80, batch = null, drawQ = [], drawing = false, prevCv = null, descTimer = null;
+    function onFiles(list, from) {
+      var files = Array.prototype.slice.call(list || []);
+      if (files.length <= 1) { onFile(files[0], from); return; }
+      startMsg('');
+      var extra = files.length - MAX_FOTOS;
+      if (extra > 0) files = files.slice(0, MAX_FOTOS);
+      clearBatch();
+      var b = batch = { common: '', ver: 0, out: null, busy: false, items: files.map(function (f, i) {
+        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true };
+      }) };
+      showBatch();
+      if (extra > 0) notify('Abertas as primeiras ' + MAX_FOTOS + ' fotos. Salve estas e depois abra as outras ' + extra + '.');
+      (function next(i) {
+        if (batch !== b) return;
+        if (i >= b.items.length) { renderBatchSum(); return; }
+        var it = b.items[i];
+        loadItem(it).then(null, function () { it.err = it.err || 'Não foi possível abrir esta imagem.'; }).then(function () {
+          if (batch !== b) { if (it.url) URL.revokeObjectURL(it.url); return; }
+          it.wait = false;
+          renderItem(i);
+          renderBatchSum();
+          next(i + 1);
+        });
+      })(0);
+    }
+    function decode(file) {
+      return new Promise(function (resolve) {
+        var url = URL.createObjectURL(file), img = new Image();
+        img.onload = function () { resolve({ img: img, url: url }); };
+        img.onerror = function () { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      });
+    }
+    function loadItem(it) {
+      if (it.file.type && !/^image\//.test(it.file.type)) { it.err = 'Este arquivo não é uma imagem.'; return Promise.resolve(); }
+      return it.file.slice(0, 1048576).arrayBuffer().then(function (buf) { return buf; }, function () { return null; }).then(function (buf) {
+        var meta = buf ? readMeta(buf) : {}, heif = buf ? isHeif(buf) : false;
+        return decode(it.file).then(function (d) {
+          if (!d) {
+            it.err = heif ? 'Foto em HEIC/HEIF, que o navegador não abre. Mude a câmera para JPEG (iPhone: Ajustes > Câmera > Formatos > Mais compatível).' : 'Não foi possível abrir esta imagem.';
+            return;
+          }
+          it.w = d.img.naturalWidth; it.h = d.img.naturalHeight;
+          var sc = Math.min(1, 1000 / Math.max(it.w, it.h)), cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(it.w * sc)); cv.height = Math.max(1, Math.round(it.h * sc));
+          cv.getContext('2d').drawImage(d.img, 0, 0, cv.width, cv.height);
+          URL.revokeObjectURL(d.url);
+          return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', 0.85); }).then(function (blob) {
+            cv.width = cv.height = 0;
+            if (!blob) { it.err = 'Não foi possível abrir esta imagem.'; return; }
+            return decode(blob).then(function (t) {
+              if (!t) { it.err = 'Não foi possível abrir esta imagem.'; return; }
+              it.img = t.img; it.url = t.url;
+              place(it, meta, it.file, it.from);
+            });
+          });
+        });
+      });
+    }
+    function clearBatch() {
+      if (!batch) return;
+      batch.items.forEach(function (it) { if (it.url) URL.revokeObjectURL(it.url); if (it.prevUrl) URL.revokeObjectURL(it.prevUrl); });
+      batch = null;
+      drawQ = [];
+      if (root) { q('.ft-blist').innerHTML = ''; q('.ft-prog').textContent = ''; }
+    }
+    function showBatch() {
+      root.classList.add('many');
+      moveShared(q('.ft-bside'));
+      q('.ft-start').hidden = true;
+      q('.ft-work').hidden = true;
+      q('.ft-batch').hidden = false;
+      q('.ft-foot').hidden = false;
+      q('#ftBDesc').value = batch.common;
+      renderHead();
+      renderOpts();
+      q('.ft-blist').innerHTML = batch.items.map(function (it, i) { return '<article class="ft-item" data-i="' + i + '" aria-label="Foto ' + (i + 1) + '"></article>'; }).join('');
+      batch.items.forEach(function (it, i) { renderItem(i); });
+      renderBatchSum();
+      q('.ft-body').scrollTop = 0;
+    }
+    function itemEl(i) { return q('.ft-item[data-i="' + i + '"]'); }
+    function renderItem(i) {
+      var it = batch.items[i], el = itemEl(i);
+      if (!el) return;
+      var head = '<div class="ft-ihead"><span class="ft-iname">' + (i + 1) + '. ' + esc(it.name) + '</span>' +
+        (it.wait ? '' : '<button type="button" class="ft-opt" data-ft="b-del" data-i="' + i + '" aria-label="Tirar a foto ' + (i + 1) + ' da seleção">Tirar</button>') + '</div>';
+      if (it.wait) { el.innerHTML = '<div class="ft-thumb">Lendo a foto…</div><div class="ft-ifields">' + head + '</div>'; return; }
+      if (it.err) {
+        el.classList.add('err');
+        el.innerHTML = '<div class="ft-thumb">Sem prévia</div><div class="ft-ifields">' + head + '<p class="ft-src ft-warn">' + esc(it.err) + ' Esta foto fica de fora.</p></div>';
+        return;
+      }
+      var d = ' data-i="' + i + '"';
+      el.innerHTML = '<div class="ft-thumb"><span>Gerando prévia…</span><img alt="Foto ' + (i + 1) + ' com o carimbo" hidden></div>' +
+        '<div class="ft-ifields">' + head + '<div class="ft-src"></div><div class="ft-lot" role="status" hidden></div>' +
+          '<div class="ft-grid">' +
+            (contracts().length > 1 ? '<label class="ft-f full"><span>Lote / contrato</span><select data-b="lote"' + d + '></select></label>' : '') +
+            '<label class="ft-f"><span>km</span><input data-b="km"' + d + ' inputmode="decimal" autocomplete="off"></label>' +
+            '<label class="ft-f"><span>Ponto</span><select data-b="ponto"' + d + '></select></label>' +
+            '<label class="ft-f full"><span>Descrição desta foto</span><input data-b="desc"' + d + ' maxlength="240" autocomplete="off"></label>' +
+          '</div></div>';
+      el.querySelector('[data-b="km"]').value = it.km != null ? nf(it.km, 2) : '';
+      el.querySelector('[data-b="desc"]').value = it.desc;
+      refreshItem(i);
+      queueDraw(i);
+    }
+    // textos, avisos e listas da foto i (sem tocar no campo que está sendo digitado)
+    function refreshItem(i) {
+      var it = batch.items[i], el = itemEl(i);
+      if (!el || it.wait || it.err) return;
+      withItem(it, function () {
+        el.querySelector('.ft-src').innerHTML = srcHtml(true);
+        var lot = lotHtml(), box = el.querySelector('.ft-lot'), ls = el.querySelector('[data-b="lote"]');
+        box.innerHTML = lot;
+        box.hidden = !lot;
+        el.querySelector('[data-b="ponto"]').innerHTML = pontoOptions();
+        if (ls) ls.innerHTML = loteOptions();
+      });
+      var c = batch.common.trim();
+      el.querySelector('[data-b="desc"]').placeholder = c ? 'Igual à de todas: ' + c : 'Ex.: vista geral do bueiro';
+    }
+    function liveItems() { return batch ? batch.items.filter(function (it) { return !it.gone; }) : []; }
+    function readyItems() { return liveItems().filter(function (it) { return !it.wait && !it.err; }); }
+    // fotos cujo km fica em outro lote (e que ninguém mandou manter)
+    function wrongLot(it) {
+      if (it.km == null) return null;
+      return withItem(it, function () {
+        var cur = contract(), here = lotsAt(it.km);
+        if (!cur || !here.length || has(here, cur) || it.keepLot === cur.id + '@' + nf(it.km, 2)) return null;
+        return here[0];
+      });
+    }
+    function renderBatchSum() {
+      if (!batch) return;
+      var live = liveItems(), ok = readyItems();
+      var wait = live.filter(function (it) { return it.wait; }).length, bad = live.filter(function (it) { return it.err; }).length;
+      var gps = ok.filter(function (it) { return it.src === 'exif'; }).length, sem = ok.filter(function (it) { return it.noLoc; }).length;
+      q('.ft-bcount').textContent = live.length + (live.length === 1 ? ' foto' : ' fotos');
+      renderHead();
+      var parts = [];
+      if (wait) parts.push('lendo ' + wait + (wait === 1 ? ' foto' : ' fotos') + '…');
+      if (ok.length) parts.push(gps + ' com GPS gravado na foto');
+      if (sem) parts.push('<span class="ft-warn">' + sem + ' sem localização</span>: digite o km ou escolha o ponto nelas');
+      if (bad) parts.push('<span class="ft-warn">' + bad + (bad === 1 ? ' não abriu' : ' não abriram') + '</span>');
+      q('.ft-bstat').innerHTML = parts.join(' · ');
+      var wrong = ok.filter(function (it) { return wrongLot(it); }).length, box = q('.ft-blot');
+      box.innerHTML = wrong ? '<div><b>' + wrong + (wrong === 1 ? ' foto está' : ' fotos estão') + ' com o km em outro lote.</b> A legenda e o ponto ' + (wrong === 1 ? 'dela' : 'delas') + ' estão usando o lote errado.</div>' +
+        '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">Corrigir o lote ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km</button></div>' : '';
+      box.hidden = !wrong;
+      var n = ok.length, off = batch.busy || wait > 0 || !n;
+      root.querySelectorAll('[data-ft="b-save"],[data-ft="b-share"]').forEach(function (b) { b.disabled = off; });
+      var bs = q('[data-ft="b-save"]'), sh = q('[data-ft="b-share"]');
+      bs.textContent = n > 1 ? 'Salvar as ' + n + ' fotos (.zip)' : 'Salvar (.zip)';
+      if (sh) sh.textContent = n > 1 ? 'Compartilhar as ' + n : 'Compartilhar';
+    }
+    function setItemLot(it, id) {
+      var c = byId(id);
+      if (!c) return null;
+      withItem(it, function () {
+        it.cid = c.id;
+        it.keepLot = '';
+        var auto = it.km != null ? identify(it.km) : null;
+        it.pid = auto && auto.d <= 0.05 ? auto.p.id : '';
+      });
+      return c;
+    }
+    function fixAll() {
+      var n = 0;
+      batch.items.forEach(function (it, i) {
+        if (it.gone || it.wait || it.err) return;
+        var to = wrongLot(it);
+        if (!to) return;
+        setItemLot(it, to.id);
+        n++;
+        refreshItem(i);
+        queueDraw(i);
+      });
+      renderBatchSum();
+      if (n) notify(n + (n === 1 ? ' foto corrigida' : ' fotos corrigidas') + ' para o lote do km.');
+    }
+    function itemChanged(i, later) {
+      batch.ver++;
+      var it = batch.items[i];
+      clearTimeout(it.t);
+      if (later) it.t = setTimeout(function () { queueDraw(i); }, 250);
+      else queueDraw(i);
+    }
+    // prévias com carimbo, uma de cada vez, num canvas só
+    function queueDraw(i) {
+      if (!batch) return;
+      batch.ver++;
+      if (drawQ.indexOf(i) < 0) drawQ.push(i);
+      if (!drawing) pump();
+    }
+    function pump() {
+      var b = batch;
+      if (!b || !drawQ.length) { drawing = false; return; }
+      drawing = true;
+      var i = drawQ.shift(), it = b.items[i], el = itemEl(i), img = el && el.querySelector('.ft-thumb img');
+      if (!it || it.gone || !it.img || !img) { pump(); return; }
+      prevCv = prevCv || document.createElement('canvas');
+      withItem(it, function () { draw(prevCv, 900); });
+      prevCv.toBlob(function (blob) {
+        if (blob && batch === b && !it.gone) {
+          if (it.prevUrl) URL.revokeObjectURL(it.prevUrl);
+          it.prevUrl = URL.createObjectURL(blob);
+          img.onload = function () { img.hidden = false; var s = img.previousElementSibling; if (s) s.remove(); };
+          img.src = it.prevUrl;
+        }
+        pump();
+      }, 'image/jpeg', 0.85);
+    }
+    function prog(t) { q('.ft-prog').textContent = t || ''; }
+    function setBatchBusy(on) { if (!batch) return; batch.busy = on; if (!on) prog(''); renderBatchSum(); }
+    // gera as fotos finais (3200 px) e guarda enquanto nada mudar
+    function outputs() {
+      var b = batch, ver = b.ver;
+      if (b.out && b.out.ver === ver) return Promise.resolve(b.out.files);
+      var list = readyItems(), out = [], used = {}, cv = document.createElement('canvas');
+      return list.reduce(function (p, it, k) {
+        return p.then(function () {
+          if (batch !== b) throw new Error('cancel');
+          prog('Gerando ' + (k + 1) + ' de ' + list.length + '…');
+          return decode(it.file).then(function (d) {
+            if (!d) return null;
+            withItem(it, function () { var keep = it.img; it.img = d.img; try { draw(cv, 3200); } finally { it.img = keep; } });
+            URL.revokeObjectURL(d.url);
+            return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', 0.9); });
+          }).then(function (blob) {
+            if (!blob) return;
+            var name = withItem(it, fileName), base = name.replace(/\.jpg$/i, ''), n = 2;
+            while (used[name.toLowerCase()]) name = base + ' (' + (n++) + ').jpg';
+            used[name.toLowerCase()] = true;
+            out.push({ name: name, blob: blob, date: it.date });
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        cv.width = cv.height = 0;
+        if (b.ver === ver) b.out = { ver: ver, files: out };
+        return out;
+      });
+    }
+    function zipName(n) {
+      var d = new Date();
+      return ('Fotos ' + rodovia().replace(/[\/\s]+/g, '-') + ' ' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+        pad(d.getHours()) + 'h' + pad(d.getMinutes()) + ' (' + n + ' fotos).zip').replace(/[\\:*?"<>|]+/g, '-');
+    }
+    function saveAll() {
+      if (!batch || batch.busy) return;
+      var b = batch;
+      setBatchBusy(true);
+      outputs().then(function (files) {
+        if (!files.length) { notify('Nenhuma foto pôde ser gerada.'); return; }
+        prog('Montando o .zip…');
+        return makeZip(files).then(function (zip) {
+          var name = zipName(files.length);
+          prog('');
+          return opts.saveBlob(name, zip, files.length + ' fotos com carimbo: ' + name);
+        });
+      }).catch(function (e) {
+        if (!e || e.message !== 'cancel') notify('Não foi possível gerar as fotos. Tente com menos fotos por vez.');
+      }).then(function () { if (batch === b) setBatchBusy(false); });
+    }
+    function shareAll() {
+      if (!batch || batch.busy) return;
+      var b = batch;
+      // já prontas: abre o compartilhar ainda dentro do toque
+      if (b.out && b.out.ver === b.ver) { shareFiles(b.out.files, false); return; }
+      setBatchBusy(true);
+      outputs().then(function (files) {
+        if (batch !== b) return;
+        setBatchBusy(false);
+        shareFiles(files, true);
+      }).catch(function (e) {
+        if (batch === b) setBatchBusy(false);
+        if (!e || e.message !== 'cancel') notify('Não foi possível gerar as fotos. Tente com menos fotos por vez.');
+      });
+    }
+    function shareFiles(files, late) {
+      var list = files.map(function (f) { return new File([f.blob], f.name, { type: 'image/jpeg' }); });
+      var can = false;
+      try { can = !!(navigator.canShare && navigator.canShare({ files: list })); } catch (e) { can = false; }
+      if (!list.length) return;
+      if (!can) { notify('Este navegador não compartilha tantas fotos de uma vez. Use "Salvar (.zip)".'); return; }
+      navigator.share({ files: list, title: list.length + ' fotos com carimbo' }).then(function () { prog(''); }, function (err) {
+        if (err && err.name === 'AbortError') return;
+        if (late) { prog(list.length + ' fotos prontas: toque em Compartilhar de novo.'); return; }   // o toque expirou enquanto gerava
+        notify('Não foi possível compartilhar. Use "Salvar (.zip)".');
+      });
+    }
+    // .zip sem compressão (o JPEG já é comprimido); nomes em UTF-8
+    var CRC_T = null;
+    function crc32(u8) {
+      if (!CRC_T) {
+        CRC_T = new Uint32Array(256);
+        for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; }
+      }
+      var r = 0xFFFFFFFF;
+      for (var i = 0; i < u8.length; i++) r = CRC_T[(r ^ u8[i]) & 0xFF] ^ (r >>> 8);
+      return (r ^ 0xFFFFFFFF) >>> 0;
+    }
+    function makeZip(files) {
+      var parts = [], central = [], offset = 0, enc = new TextEncoder();
+      return files.reduce(function (p, f) {
+        return p.then(function () { return f.blob.arrayBuffer(); }).then(function (buf) {
+          var name = enc.encode(f.name), size = buf.byteLength, crc = crc32(new Uint8Array(buf));
+          var d = f.date instanceof Date && isFinite(f.date.getTime()) ? f.date : new Date();
+          var time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+          var day = ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+          var lh = new DataView(new ArrayBuffer(30));
+          lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+          lh.setUint16(10, time, true); lh.setUint16(12, day, true); lh.setUint32(14, crc, true);
+          lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+          parts.push(lh.buffer, name, f.blob);
+          var ch = new DataView(new ArrayBuffer(46));
+          ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+          ch.setUint16(12, time, true); ch.setUint16(14, day, true); ch.setUint32(16, crc, true);
+          ch.setUint32(20, size, true); ch.setUint32(24, size, true); ch.setUint16(28, name.length, true);
+          ch.setUint32(42, offset, true);
+          central.push(ch.buffer, name);
+          offset += 30 + name.length + size;
+        });
+      }, Promise.resolve()).then(function () {
+        var cdSize = central.reduce(function (s, x) { return s + x.byteLength; }, 0), end = new DataView(new ArrayBuffer(22));
+        end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+        end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+        return new Blob(parts.concat(central, [end.buffer]), { type: 'application/zip' });
+      });
+    }
+
     // ---------------- eventos
     function onClick(e) {
       var o = e.target.closest('[data-set]');
@@ -708,6 +1115,10 @@
       if (lg) { selectLogo(lg.dataset.logo); return; }
       var b = e.target.closest('[data-ft]');
       if (!b) return;
+      if (batch && b.dataset.i != null) { batchClick(b, +b.dataset.i); return; }
+      if (b.dataset.ft === 'b-save') { saveAll(); return; }
+      if (b.dataset.ft === 'b-share') { shareAll(); return; }
+      if (b.dataset.ft === 'b-fixall') { if (batch) fixAll(); return; }
       if (b.dataset.ft === 'close') close();
       else if (b.dataset.ft === 'new') { startView(); }
       else if (b.dataset.ft === 'save') save();
@@ -718,8 +1129,71 @@
       else if (b.dataset.ft === 'fix-lot') applyLot(b.dataset.cid, 'fix');
       else if (b.dataset.ft === 'keep-lot' && st) { var kc = contract(); st.keepLot = kc ? kc.id + '@' + nf(st.km, 2) : ''; renderLote(); }
     }
+    // botões de uma foto do lote de fotos
+    function batchClick(b, i) {
+      var it = batch.items[i];
+      if (!it || it.gone) return;
+      if (b.dataset.ft === 'b-del') {
+        it.gone = true;
+        batch.ver++;
+        if (it.url) URL.revokeObjectURL(it.url);
+        if (it.prevUrl) URL.revokeObjectURL(it.prevUrl);
+        it.url = it.prevUrl = null; it.img = null;
+        var el = itemEl(i);
+        if (el) el.remove();
+        if (!liveItems().length) { startView(); return; }
+        renderBatchSum();
+      } else if (b.dataset.ft === 'fix-lot') {
+        var c = setItemLot(it, b.dataset.cid);
+        if (!c) return;
+        refreshItem(i); itemChanged(i); renderBatchSum();
+        var p = withItem(it, function () { return findPoint(it.pid); });
+        notify('Foto ' + (i + 1) + ' no ' + lotName(c) + (p ? ' · ponto ' + p.nome : '') + '.');
+      } else if (b.dataset.ft === 'keep-lot') {
+        var kc = withItem(it, contract);
+        it.keepLot = kc && it.km != null ? kc.id + '@' + nf(it.km, 2) : '';
+        refreshItem(i); renderBatchSum();
+      }
+    }
+    function batchInput(t) {
+      if (t.id === 'ftBDesc') {
+        batch.common = t.value;
+        batch.ver++;
+        clearTimeout(descTimer);
+        descTimer = setTimeout(function () {
+          if (!batch) return;
+          batch.items.forEach(function (it, i) { if (!it.gone && !it.wait && !it.err) { refreshItem(i); if (!it.desc.trim()) queueDraw(i); } });
+        }, 300);
+        return true;
+      }
+      if (!t.dataset || !t.dataset.b) return false;
+      var i = +t.dataset.i, it = batch.items[i];
+      if (!it || it.gone || it.wait || it.err) return true;
+      if (t.dataset.b === 'km') {
+        var k = parseNum(t.value);
+        withItem(it, function () {
+          it.km = k != null && k >= ref.kmMin - 50 && k <= ref.kmMax + 50 ? k : null;
+          if (it.src !== 'manual' && it.loc && it.km != null && Math.abs(it.km - it.loc.km) > 0.001) { it.src = 'manual'; it.ll = null; it.loc = null; }
+          var auto = it.km != null ? identify(it.km) : null;
+          if (auto && auto.d <= 0.05) it.pid = auto.p.id;
+        });
+        refreshItem(i); renderBatchSum(); itemChanged(i, true);
+      } else if (t.dataset.b === 'desc') { it.desc = t.value; itemChanged(i, true); }
+      else if (t.dataset.b === 'ponto') {
+        withItem(it, function () {
+          it.pid = t.value;
+          var p = findPoint(it.pid);
+          if (p && (it.km == null || it.src === 'manual')) it.km = p.kmIni;
+        });
+        var ki = itemEl(i).querySelector('[data-b="km"]');
+        if (ki) ki.value = it.km != null ? nf(it.km, 2) : '';
+        refreshItem(i); renderBatchSum(); itemChanged(i);
+      } else if (t.dataset.b === 'lote') { setItemLot(it, t.value); refreshItem(i); renderBatchSum(); itemChanged(i); }
+      return true;
+    }
     function onInput(e) {
       var t = e.target;
+      if (batch && t.tagName !== 'SELECT' && batchInput(t)) return;
       if (!st) return;
       if (t.id === 'ftKm') {
         var k = parseNum(t.value);
@@ -739,7 +1213,8 @@
     }
     function onChange(e) {
       var t = e.target;
-      if (t.id === 'ftCam' || t.id === 'ftGal' || t.id === 'ftArq') { origin = t.id === 'ftCam' ? 'camera' : t.id === 'ftGal' ? 'galeria' : 'arquivos'; onFile(t.files && t.files[0], origin); t.value = ''; return; }
+      if (t.id === 'ftCam' || t.id === 'ftGal') { origin = t.id === 'ftCam' ? 'camera' : 'galeria'; onFile(t.files && t.files[0], origin); t.value = ''; return; }
+      if (t.id === 'ftArq') { origin = 'arquivos'; onFiles(t.files, origin); t.value = ''; return; }
       if (t.id === 'ftLogoFile') {
         var f = t.files && t.files[0];
         if (f) addLogo(f);
@@ -747,6 +1222,7 @@
         return;
       }
       if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; saveSet(set); scheduleDraw(0); return; }
+      if (batch && t.tagName === 'SELECT' && batchInput(t)) return;
       if (!st) return;
       if (t.id === 'ftPonto') {
         st.pid = t.value;
@@ -869,12 +1345,13 @@
       document.documentElement.style.overflow = '';
       if (st && st.url) URL.revokeObjectURL(st.url);
       st = null;
+      clearBatch();
     }
 
     // o padrão da equipe mudou no banco
     function refreshTeam() { if (root && root.parentNode) { renderOpts(); } refreshLogo(); }
 
-    return { open: open, close: close, refreshTeam: refreshTeam, readExif: readExif, _state: function () { return st; } };
+    return { open: open, close: close, refreshTeam: refreshTeam, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; } };
   }
 
   FotoCarimbo.readExif = readExif;
