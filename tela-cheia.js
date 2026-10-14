@@ -261,8 +261,10 @@
       clearTimeout(st.hintTimer);
       st.hintTimer = setTimeout(function () { $.hint.classList.add('gone'); }, 4000);
       $.close.focus();
+      // no app do iPhone a tela cheia do sistema mostra aviso e um X por cima: a camada já cobre a tela toda
+      var nativo = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       try {
-        var r = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
+        var r = el.requestFullscreen && !nativo ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
         if (r && r.then) r.then(function () {
           try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); } catch (err) { /* sem trava de orientação */ }
         }, function () {});

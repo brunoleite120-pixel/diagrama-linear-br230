@@ -241,6 +241,7 @@
     '.ft-src small{display:block;margin-top:4px;color:var(--ft-ink-3);font-variant-numeric:tabular-nums}',
     '.ft-note a{color:var(--ft-accent);font-weight:600}',
     // câmera dentro do app
+    '.ft.camming{background:#000}',
     '.ft.camming .ft-head{display:none}',
     '.ft.camming .ft-body{padding:0;overflow:hidden;background:#000}',
     '.ft-cam{height:100%;display:flex;flex-direction:column;background:#000;color:#fff}',
@@ -264,7 +265,6 @@
     // do celular (como a câmera do celular); virando para o outro lado (.ft-cw), os botões trocam de lado.
     // --ar é a proporção da câmera (vem do vídeo), para a área da imagem ter o tamanho exato dela
     '@media (orientation:landscape) and (max-height:560px){' +
-      '.ft.camming{background:#000}' +
       '.ft-cam{flex-direction:row}' +
       '.ft-cam.ft-cw{flex-direction:row-reverse}' +
       '.ft-camview{flex:0 1 auto;height:100%;aspect-ratio:var(--ar,4/3);min-width:0;margin:0 auto}' +

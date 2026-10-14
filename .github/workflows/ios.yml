@@ -44,6 +44,9 @@ jobs:
           mkdir -p www
           cp index.html app.js foto.js mapa.js banco.js drive.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
           cp -R lib icons www/
+          # no app: a página vai até a borda da tela (o CSS desvia do relógio e do recorte) e não dá zoom
+          sed -i '' 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
+          grep -q 'viewport-fit=cover' www/index.html || { echo "Não achei a linha do viewport em index.html"; exit 1; }
           # bibliotecas do PDF dentro do app (gera o PDF sem internet)
           cp node_modules/jspdf/dist/jspdf.umd.min.js node_modules/svg2pdf.js/dist/svg2pdf.umd.min.js www/lib/
 
@@ -59,6 +62,8 @@ jobs:
         run: |
           PL=ios/App/App/Info.plist
           plutil -replace CFBundleDisplayName -string "VIA-230" "$PL"
+          # o app é claro: com o iPhone no modo escuro o relógio ficaria branco em cima da barra branca
+          plutil -replace UIUserInterfaceStyle -string Light "$PL"
           plutil -replace NSLocationWhenInUseUsageDescription -string "O app usa a sua posição para mostrar o km da BR-230 no mapa e identificar o ponto da foto." "$PL"
           plutil -replace NSCameraUsageDescription -string "A câmera é usada para tirar as fotos com carimbo dos pontos." "$PL"
           plutil -replace NSPhotoLibraryUsageDescription -string "A galeria é usada para escolher fotos e ler a localização gravada nelas." "$PL"

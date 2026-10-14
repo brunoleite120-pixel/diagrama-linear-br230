@@ -3,6 +3,6 @@
   "appName": "VIA-230",
   "webDir": "www",
   "ios": {
-    "contentInset": "always"
+    "contentInset": "never"
   }
 }

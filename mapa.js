@@ -604,7 +604,9 @@
       root.classList.add('mp-full');
       document.documentElement.style.overflow = 'hidden';
       setFullBtn();
-      try { var r = root.requestFullscreen && root.requestFullscreen({ navigationUI: 'hide' }); if (r && r.catch) r.catch(function () {}); } catch (e) { /* sem tela cheia do navegador: fica a de página */ }
+      // no app do iPhone a tela cheia do sistema mostra aviso e um X por cima: lá fica só a de página, que já cobre tudo
+      var nativo = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      if (!nativo) try { var r = root.requestFullscreen && root.requestFullscreen({ navigationUI: 'hide' }); if (r && r.catch) r.catch(function () {}); } catch (e) { /* sem tela cheia do navegador: fica a de página */ }
       setTimeout(function () { map.invalidateSize(); }, 60);
     }
     function closeFull() {
