@@ -3,7 +3,7 @@
 // se a rede falhar ou demorar mais de 4 s. Bibliotecas do PDF (endereço com versão fixa): cópia guardada primeiro.
 // O mapa offline (osm-br230.js, OpenStreetMap) e o fundo (fundo-br230.js, MapBiomas, imagens embutidas) vêm junto;
 // as imagens online (OSM/Esri) ficam no cache normal do navegador.
-var CACHE = 'diagrama-linear-v4';
+var CACHE = 'diagrama-linear-v5';
 var SHELL = [
   './', 'index.html', 'app.js', 'foto.js', 'mapa.js', 'snv-br230.js', 'osm-br230.js', 'tela-cheia.js', 'logo.js',
   'dados-iniciais.js', 'fundo-br230.js', 'lib/leaflet.js', 'manifest.webmanifest',
