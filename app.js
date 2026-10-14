@@ -549,6 +549,15 @@
   function findPoint(id) {
     return active().pontos.find(function (p) { return p.id === id; });
   }
+  // mexer num ponto conta como vistoria: a "Data da última vistoria" do contrato vai para hoje
+  // (só avança; quem quiser pode corrigir à mão no formulário do contrato)
+  function marcaVistoria(c) {
+    var hoje = todayIso();
+    if (!c || (c.dataVistoria && c.dataVistoria >= hoje)) return;
+    c.dataVistoria = hoje;
+    var el = document.querySelector('[data-c="dataVistoria"]');
+    if (el && document.activeElement !== el) el.value = hoje;
+  }
 
   // ------------------------------------------------------------------ interface: helpers
   var $ = function (id) { return document.getElementById(id); };
@@ -924,6 +933,7 @@
     } else {
       return;
     }
+    if (!t.dataset.c && t.dataset.marco == null) marcaVistoria(c);
     save();
     schedulePreview();
   }
@@ -1035,6 +1045,7 @@
       default:
         return;
     }
+    if (POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
     save();
     schedulePreview();
   }
@@ -1799,6 +1810,7 @@
     $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
   }
   var EDIT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract'];
+  var POINT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }
     prepareOld();
