@@ -65,7 +65,7 @@ button{cursor:pointer}
 
 /* ---------- layout ---------- */
 .layout{display:grid;grid-template-columns:minmax(380px,460px) minmax(0,1fr);gap:0;min-height:calc(100vh - 61px)}
-.layout.wide{grid-template-columns:0 minmax(0,1fr)}
+.layout.wide{grid-template-columns:minmax(0,1fr)}
 .layout.wide .editor{display:none}
 .editor{border-right:1px solid var(--line);background:var(--ground);padding:16px;display:flex;flex-direction:column;gap:14px;height:calc(100vh - 61px);overflow:auto;position:sticky;top:61px}
 .preview{padding:16px 24px 40px;min-width:0}
