@@ -9,6 +9,13 @@
  *   Banco.salvarCampos(codigo, autor, resumo, ops) -> {versao, conflitos} (só os campos alterados; fica o de quem alterou por último)
  *   Banco.salvar(codigo, autor, resumo, ops) -> nova versão
  *   Banco.codigosDefinidos(), Banco.definirCodigos(atual, equipe, responsavel), Banco.historico(n)
+ *
+ * Acesso por pessoa (desde a migração 03): cada entrada vira uma sessão ("tk_..."), usada no lugar do código.
+ *   Banco.entrarV2(codigo, nome, aparelho) -> {token, papel: criador|engenheiro|fiscal, nome, uid} | null
+ *   Banco.criarCriador(nome, codigo, aparelho), Banco.sessao(token), Banco.sair(token)
+ *   Banco.usuarios(cred), Banco.usuarioSalvar(cred, u), Banco.codigoGeralDesativar(cred, 'equipe'|'responsavel')
+ *   Banco.decidir(cred, ids, aprovar, motivo)      propostas dos fiscais
+ *   Banco.lixeira(cred), Banco.restaurarLixeira(cred, id), Banco.copiaDados(cred, id), Banco.restaurarCopia(cred, id)
  */
 (function () {
   'use strict';
@@ -54,8 +61,10 @@
         req('contratos?select=id,dados,ordem,meta,atualizado_em,atualizado_por&order=ordem.asc,id.asc'),
         req('pontos?select=contrato_id,id,dados,meta,atualizado_em,atualizado_por&order=contrato_id.asc,id.asc'),
         req('config?select=chave,valor'),
-        rpc('versao')
-      ]).then(function (r) { return { contratos: r[0] || [], pontos: r[1] || [], config: r[2] || [], versao: Number(r[3]) || 0 }; });
+        rpc('versao'),
+        req('propostas?select=id,contrato_id,ponto_id,ponto_nome,campos,autor_uid,autor_nome,atualizado_em&situacao=eq.pendente&order=id.asc')
+          .catch(function (e) { if (e && e.code === 'sem_rede') throw e; return []; })   // banco ainda sem propostas
+      ]).then(function (r) { return { contratos: r[0] || [], pontos: r[1] || [], config: r[2] || [], versao: Number(r[3]) || 0, propostas: r[4] || [] }; });
     },
     versao: function () { return rpc('versao').then(Number); },
     entrar: function (codigo) { return rpc('entrar', { p_codigo: codigo }); },
@@ -69,6 +78,21 @@
     salvar: function (codigo, autor, resumo, ops) {
       return rpc('salvar', { p_codigo: codigo, p_autor: autor || null, p_resumo: resumo || null, p_ops: ops }).then(Number);
     },
-    historico: function (n) { return req('historico?select=em,autor,papel,resumo,conflitos&order=id.desc&limit=' + (n || 40)); }
+    historico: function (n) { return req('historico?select=em,autor,papel,resumo,conflitos&order=id.desc&limit=' + (n || 40)); },
+
+    entrarV2: function (codigo, nome, aparelho) { return rpc('entrar_v2', { p_codigo: codigo, p_nome: nome || null, p_aparelho: aparelho || null }); },
+    criarCriador: function (nome, codigo, aparelho) { return rpc('criar_criador', { p_nome: nome, p_codigo: codigo, p_aparelho: aparelho || null }); },
+    sessao: function (cred) { return rpc('sessao', { p_cred: cred }); },
+    sair: function (token) { return rpc('sair', { p_token: token }); },
+    usuarios: function (cred) { return rpc('usuarios_listar', { p_cred: cred }); },
+    usuarioSalvar: function (cred, u) {
+      return rpc('usuario_salvar', { p_cred: cred, p_id: u.id || null, p_nome: u.nome, p_papel: u.papel, p_codigo: u.codigo || null, p_ativo: u.ativo !== false });
+    },
+    codigoGeralDesativar: function (cred, papel) { return rpc('codigo_geral_desativar', { p_cred: cred, p_papel: papel }); },
+    decidir: function (cred, ids, aprovar, motivo) { return rpc('decidir_propostas', { p_cred: cred, p_ids: ids, p_aprovar: !!aprovar, p_motivo: motivo || null }); },
+    lixeira: function (cred) { return rpc('lixeira_listar', { p_cred: cred }); },
+    restaurarLixeira: function (cred, id) { return rpc('restaurar_lixeira', { p_cred: cred, p_id: id }).then(Number); },
+    copiaDados: function (cred, id) { return rpc('copia_dados', { p_cred: cred, p_id: id }); },
+    restaurarCopia: function (cred, id) { return rpc('restaurar_copia', { p_cred: cred, p_id: id }).then(Number); }
   };
 })();

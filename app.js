@@ -553,7 +553,7 @@
   // (só avança; quem quiser pode corrigir à mão no formulário do contrato)
   function marcaVistoria(c) {
     var hoje = todayIso();
-    if (!c || (c.dataVistoria && c.dataVistoria >= hoje)) return;
+    if (!c || isFiscal() || (c.dataVistoria && c.dataVistoria >= hoje)) return;
     c.dataVistoria = hoje;
     var el = document.querySelector('[data-c="dataVistoria"]');
     if (el && document.activeElement !== el) el.value = hoje;
@@ -629,8 +629,10 @@
     pts.forEach(function (p) { h.push(pointCard(p)); });
     h.push('</div>');
     if (readOnly()) {
-      h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o código da equipe.</span>' +
-        '<button type="button" class="btn small primary" data-act="login">Entrar para editar</button></div>');
+      h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
+        '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
+    } else if (isFiscal()) {
+      h.unshift('<div class="ro-note fiscal-note"><span>Você entrou como <b>fiscal de campo</b>: mude o status e o % dos serviços. A mudança fica aguardando a aprovação de um engenheiro.</span></div>');
     }
     $('editor').innerHTML = h.join('');
     lockEditor();
@@ -642,7 +644,8 @@
       return '<span class="dot ' + st + '" title="' + esc(s.short + ': ' + STATUS[st].name) + '"></span>';
     }).join('');
     var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
-    return '<span class="pt-name">' + esc(p.nome || '?') + '</span><span class="pt-km">KM ' + km + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV;
+    var np = banco.on ? propsDo(active().id, p.id).length : 0;
+    return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span><span class="pt-km">KM ' + km + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV;
   }
 
   function pointCard(p) {
@@ -661,10 +664,13 @@
       h += '</div>';
 
       h += '<div class="section-title">Serviços</div>';
+      h += propHtml(active().id, p);
+      var prop = propServ(active().id, p.id);
       SERVICES.forEach(function (s) {
-        var sv = p.serv[s.key];
+        var sv = p.serv[s.key], pv = prop[s.key];
         var segs = STATUS_ORDER.map(function (k) {
-          return '<button type="button" class="' + k + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (sv.st === k) + '">' + STATUS[k].btn + '</button>';
+          var pend = pv && pv.st === k && sv.st !== k ? ' pend' : '';
+          return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (sv.st === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + STATUS[k].btn + '</button>';
         }).join('');
         var pctDisabled = (sv.st === 'OK' || sv.st === 'NA');
         h += '<div class="svc"><div class="svc-name">' + esc(s.short) + '</div><div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
@@ -906,6 +912,7 @@
   // ------------------------------------------------------------------ eventos do editor
   function onInput(e) {
     var t = e.target, c = active();
+    if (isFiscal() && !t.dataset.svcpct) return;
     if (t.dataset.c) {
       var k = t.dataset.c;
       if (t.dataset.num) c[k] = parseNum(t.value);
@@ -951,7 +958,9 @@
     if (!b) return;
     var act = b.dataset.act, c = active(), p;
     if (act === 'login') { openLogin(); return; }
-    if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o código da equipe.'); openLogin(); return; }
+    if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
+    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
+    if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     switch (act) {
       case 'toggle-contract':
         ui.contractOpen = !ui.contractOpen;
@@ -998,10 +1007,8 @@
         break;
       case 'del-point':
         p = findPoint(b.dataset.id);
-        if (!p || !confirm('Excluir o ponto ' + (p.nome || '') + '? Isso não pode ser desfeito (a não ser por um backup).')) return;
-        c.pontos = c.pontos.filter(function (x) { return x.id !== p.id; });
-        renderEditor();
-        break;
+        if (p) excluirPonto(c.id, p);
+        return;
       case 'add-dev':
         p = findPoint(b.dataset.id);
         if (!p) return;
@@ -1011,17 +1018,34 @@
       case 'del-dev':
         p = findPoint(b.dataset.id);
         if (!p) return;
-        p.disp.splice(Number(b.dataset.idx), 1);
-        rerenderPoint(p);
-        break;
+        var dv = p.disp[Number(b.dataset.idx)], pidDev = p.id, cidDev = c.id;
+        if (!dv) return;
+        confirmar({ titulo: 'Remover o dispositivo?', texto: (dv.desc || 'Dispositivo sem descrição') + (dv.km != null ? ' · KM ' + fmtKm(dv.km) : '') + ', do ponto ' + (p.nome || '') + '.', botao: 'Remover', perigo: true }).then(function (r) {
+          var cc = contractById(cidDev), pp = cc && cc.pontos.find(function (x) { return x.id === pidDev; });
+          if (!r || !pp) return;
+          var i = pp.disp.indexOf(dv);
+          if (i < 0) i = pp.disp.findIndex(function (x) { return same(x, dv); });
+          if (i < 0) return;
+          pp.disp.splice(i, 1);
+          if (cc === active()) rerenderPoint(pp);
+          afterEdit('del-dev', cc);
+        });
+        return;
       case 'add-marco':
         c.marcos.push({ nome: '', km: null });
         renderEditor();
         break;
       case 'del-marco':
-        c.marcos.splice(Number(b.dataset.idx), 1);
-        renderEditor();
-        break;
+        var mk = c.marcos[Number(b.dataset.idx)], cidMk = c.id;
+        if (!mk) return;
+        confirmar({ titulo: 'Remover o marco ' + (mk.nome || '') + '?', texto: 'Ele sai do diagrama' + (mk.km != null ? ' (KM ' + fmtKm(mk.km) + ')' : '') + '.', botao: 'Remover', perigo: true }).then(function (r) {
+          var cc = contractById(cidMk), i = cc ? cc.marcos.indexOf(mk) : -1;
+          if (!r || i < 0) return;
+          cc.marcos.splice(i, 1);
+          if (cc === active()) renderEditor();
+          afterEdit('del-marco', cc);
+        });
+        return;
       case 'new-contract':
         var ref = active();
         var nc = {
@@ -1037,17 +1061,81 @@
         break;
       case 'del-contract':
         if (state.contracts.length < 2) { toast('Este é o único contrato. Crie outro antes de excluir este.'); return; }
-        if (!confirm('Excluir o contrato ' + (c.lote || '') + ' ' + (c.numero || '') + ' com todos os pontos?')) return;
-        state.contracts = state.contracts.filter(function (x) { return x.id !== c.id; });
-        state.activeId = state.contracts[0].id;
-        renderAll();
-        break;
+        excluirContrato(c);
+        return;
       default:
         return;
     }
+    afterEdit(act, c);
+  }
+  function afterEdit(act, c) {
     if (POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
     save();
     schedulePreview();
+  }
+  function contractById(id) { return state.contracts.find(function (x) { return x.id === id; }) || null; }
+
+  // ---------------- exclusões: sempre com confirmação na própria página; o ponto ainda pode ser desfeito na hora
+  function excluirPonto(cid, p) {
+    var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
+    confirmar({
+      titulo: 'Excluir o ponto ' + (p.nome || '') + '?',
+      html: '<p>KM ' + esc(km) + ' · ' + esc(loteOf(cid)) + '.</p><p>' + (banco.on
+        ? 'O ponto sai do diagrama de todos. Fica 30 dias na lixeira (menu Dados › Lixeira e cópias), de onde um engenheiro ou o criador pode restaurar.'
+        : 'Neste aparelho não há lixeira: só dá para recuperar por um backup.') + '</p>',
+      botao: 'Excluir ponto', perigo: true
+    }).then(function (r) {
+      var c = contractById(cid);
+      if (!r || !c) return;
+      var copia = clone(p);
+      c.pontos = c.pontos.filter(function (x) { return x.id !== p.id; });
+      if (c === active()) renderEditor();
+      afterEdit('del-point', c);
+      offerUndo('Ponto ' + (p.nome || '') + ' excluído.', function () {
+        var cc = contractById(cid);
+        if (!cc) { toast('O contrato deste ponto não existe mais.'); return; }
+        if (cc.pontos.some(function (x) { return x.id === copia.id; })) return;
+        cc.pontos.push(clone(copia));
+        if (cc === active()) { ui.open = {}; ui.open[copia.id] = true; renderEditor(); scrollToPoint(copia.id); }
+        afterEdit('add-point', cc);
+        toast('Ponto ' + (copia.nome || '') + ' de volta.');
+      });
+    });
+  }
+  function excluirContrato(c) {
+    var nome = (c.lote || c.numero || 'Contrato').trim(), cid = c.id;
+    confirmar({
+      titulo: 'Excluir o contrato ' + nome + ' inteiro?',
+      html: '<p>Sai o contrato <b>' + esc([c.lote, c.numero].filter(Boolean).join(' · ')) + '</b> com os <b>' + c.pontos.length + ' pontos</b>, para todos.</p><p>' +
+        (banco.on ? 'Fica 30 dias na lixeira (menu Dados › Lixeira e cópias) e o banco guarda uma cópia antes de excluir.' : 'Neste aparelho só dá para recuperar por um backup.') + '</p>',
+      digitar: nome, botao: 'Excluir contrato', perigo: true
+    }).then(function (r) {
+      if (!r || !contractById(cid) || state.contracts.length < 2) return;
+      state.contracts = state.contracts.filter(function (x) { return x.id !== cid; });
+      if (state.activeId === cid) state.activeId = state.contracts[0].id;
+      ui.open = {};
+      renderAll();
+      afterEdit('del-contract', active());
+      toast('Contrato ' + nome + ' excluído.' + (banco.on ? ' Dá para restaurar pela lixeira.' : ''), 5000);
+    });
+  }
+  // barra "Desfazer" por alguns segundos depois de excluir
+  var undoTimer = null;
+  function offerUndo(msg, fn) {
+    var old = $('undoBar');
+    if (old) old.remove();
+    clearTimeout(undoTimer);
+    var bar = document.createElement('div');
+    bar.id = 'undoBar';
+    bar.className = 'share-ready';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = '<span></span><button type="button" class="btn primary">Desfazer</button><button type="button" class="btn" aria-label="Fechar">×</button>';
+    bar.querySelector('span').textContent = msg;
+    var b = bar.querySelectorAll('button');
+    b[0].addEventListener('click', function () { bar.remove(); fn(); });
+    b[1].addEventListener('click', function () { bar.remove(); });
+    (document.fullscreenElement || document.body).appendChild(bar);
+    undoTimer = setTimeout(function () { bar.remove(); }, 12000);
   }
 
   function scrollToPoint(id) {
@@ -1157,19 +1245,27 @@
       try {
         var s = JSON.parse(reader.result);
         if (!validState(s)) throw new Error('formato');
-        if (!confirm(banco.on
-          ? 'Substituir os dados do banco da equipe pelos do backup "' + file.name + '"? Todos vão passar a ver os dados do backup (a troca fica no histórico).'
-          : 'Substituir os dados atuais pelos do backup "' + file.name + '"?')) return;
+      } catch (e) {
+        toast('Esse arquivo não é um backup válido deste site.');
+        return;
+      }
+      var np = s.contracts.reduce(function (n, c) { return n + c.pontos.length; }, 0);
+      confirmar({
+        titulo: 'Trocar os dados pelos do backup?',
+        html: '<p>Arquivo <b>' + esc(file.name) + '</b>: ' + s.contracts.length + ' contrato(s) e ' + np + ' pontos.</p><p>' + (banco.on
+          ? 'Todos passam a ver os dados do backup. Antes da troca o banco guarda uma cópia de como está agora (menu Dados › Lixeira e cópias).'
+          : 'Os dados atuais deste aparelho serão substituídos.') + '</p>',
+        digitar: banco.on ? 'SUBSTITUIR' : null, botao: 'Trocar pelos do backup', perigo: true
+      }).then(function (r) {
+        if (!r) return;
         s = normalize(s);
         s.activeId = s.contracts.some(function (c) { return c.id === state.activeId; }) ? state.activeId : s.activeId;
         state = s;
         ui.open = {};
         save();
         renderAll();
-        toast(banco.on ? 'Backup carregado. Enviando ao banco da equipe…' : 'Backup carregado.');
-      } catch (e) {
-        toast('Esse arquivo não é um backup válido deste site.');
-      }
+        toast(banco.on ? 'Backup carregado. Enviando ao banco…' : 'Backup carregado.');
+      });
     };
     reader.readAsText(file);
   }
@@ -1188,13 +1284,18 @@
     }
     else if (act === 'print') printSheets();
     else if (act === 'reset') {
-      if (!confirm('Apagar as alterações deste navegador e voltar aos dados iniciais da planilha? Faça um backup antes, se precisar.')) return;
-      state = normalize(clone(window.UNIFILAR_SEED));
-      ui.open = {};
-      save();
-      renderAll();
-      toast('Dados iniciais restaurados.');
+      confirmar({ titulo: 'Voltar aos dados iniciais?', texto: 'Apaga as alterações deste navegador e volta aos dados da planilha. Faça um backup antes, se precisar.', digitar: 'APAGAR', botao: 'Voltar aos dados iniciais', perigo: true }).then(function (r) {
+        if (!r) return;
+        state = normalize(clone(window.UNIFILAR_SEED));
+        ui.open = {};
+        save();
+        renderAll();
+        toast('Dados iniciais restaurados.');
+      });
     }
+    else if (act === 'lixeira') openLixeira();
+    else if (act === 'usuarios') openUsuarios();
+    else if (act === 'aprovar') openAprov();
   }
 
   // ------------------------------------------------------------------ banco compartilhado (Supabase, banco.js)
@@ -1204,14 +1305,22 @@
   var LOGIN_KEY = 'diagrama-linear.acesso';         // {codigo, nome, papel} deste aparelho
   var NAME_KEY = 'diagrama-linear.nome';
   var OLD_KEY = 'diagrama-linear.antes-do-banco';   // o que estava só neste aparelho antes do banco da equipe
-  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false };
+  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false };
   var flushTimer = null;
 
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
-  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf }); }
+  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas }); }
   function readOnly() { return banco.on && !banco.login; }
-  function isResp() { return !!(banco.login && banco.login.papel === 'responsavel'); }
+  // papéis: criador (tudo), engenheiro (edita, aprova, lixeira) e fiscal de campo (só status dos serviços, com aprovação).
+  // Os códigos gerais antigos valem como criador ("responsavel") e engenheiro ("equipe").
+  var NIVEL = { criador: 3, responsavel: 3, engenheiro: 2, equipe: 2, fiscal: 1 };
+  var PAPEL_NOME = { criador: 'criador', responsavel: 'criador', engenheiro: 'engenheiro', equipe: 'engenheiro', fiscal: 'fiscal de campo' };
+  function nivel() { return banco.on && banco.login ? (NIVEL[banco.login.papel] || 0) : 0; }
+  function isResp() { return nivel() >= 3; }
+  function isEng() { return nivel() >= 2; }
+  function isFiscal() { return nivel() === 1; }
+  function papelNome(p) { return PAPEL_NOME[p] || 'equipe'; }
 
   function contractFields(c) { var o = {}; Object.keys(c).forEach(function (k) { if (k !== 'id' && k !== 'pontos') o[k] = c[k]; }); return o; }
   function pointFields(p) { var o = {}; Object.keys(p).forEach(function (k) { if (k !== 'id') o[k] = p[k]; }); return o; }
@@ -1495,6 +1604,13 @@
       banco.online = true;
       banco.at = new Date();
       banco.pend.splice(0, n);
+      if (res && res.propostas != null) {                            // fiscal: vira proposta, o banco não muda
+        if (res.propostas) toast('Enviado para aprovação de um engenheiro.', 4000);
+        keepSync();
+        if (banco.pend.length) scheduleFlush(300); else refresh();
+        syncStatus();
+        return;
+      }
       noteMeta(ops, conf);
       if (conf.length) { showConflicts(conf); refresh(); }          // o banco ficou com outro valor em algum campo
       else if (v === banco.versao + 1) { banco.versao = v; refreshLastLines(); }
@@ -1507,11 +1623,12 @@
       banco.sending = 0;
       var code = err && err.code;
       if (code === 'sem_rede') { banco.online = false; syncStatus(); return; }
-      if (code === 'codigo_invalido') { logout(true); toast('O código da equipe mudou. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
+      if (code === 'codigo_invalido') { logout(true); toast('Seu acesso mudou ou foi desativado. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
       if (code === 'muitas_tentativas') { toast('O banco bloqueou por muitas tentativas com código errado. Tente de novo em 10 minutos.', 7000); syncStatus(); return; }
       banco.pend.splice(0, n);   // o banco recusou os dados: descarta e volta ao que está lá
       keepSync();
-      toast('O banco recusou uma alteração (' + ((err && err.message) || 'erro') + '). Os dados foram recarregados.', 7000);
+      toast(code === 'so_status' ? 'Fiscal de campo só altera o status dos serviços. Os dados foram recarregados.'
+        : 'O banco recusou uma alteração (' + ((err && err.message) || 'erro') + '). Os dados foram recarregados.', 7000);
       refresh();
     });
   }
@@ -1549,6 +1666,7 @@
       r.config.forEach(function (x) { cfg[x.chave] = x.valor; });
       var logoMudou = !same(cfg.fotoLogo || null, banco.cfg.fotoLogo || null);
       banco.cfg = cfg;
+      banco.propostas = Array.isArray(r.propostas) ? r.propostas : [];
       if (r.contratos.length) {
         if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
         trackChanges();   // o que acabou de ser mudado aqui entra na fila antes de trocar o estado
@@ -1558,6 +1676,7 @@
         renderAll();
       }
       keepSync();
+      renderAprov();
       if (logoMudou && foto) foto.refreshTeam();
       if (driveQ) { driveQ.pump(); onDriveChange(); }
       checkOld();
@@ -1581,6 +1700,7 @@
     var el = $('saveState'), n = banco.pend.length, t, warn = false;
     if (banco.busy) t = 'Enviando ao banco…';
     else if (n && !banco.login) { t = n + (n === 1 ? ' alteração não enviada' : ' alterações não enviadas') + ': entre para enviar'; warn = true; }
+    else if (n && isFiscal()) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' mudança para enviar à aprovação' : ' mudanças para enviar à aprovação'); warn = banco.online === false; }
     else if (n) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' alteração aguardando' : ' alterações aguardando'); warn = banco.online === false; }
     else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
     else if (banco.at) t = (window.AMBIENTE && AMBIENTE.previa ? 'Banco de teste · ' : 'Banco da equipe · ') + hhmm(banco.at);
@@ -1591,20 +1711,31 @@
     el.classList.toggle('warn', warn);
   }
 
-  // ---------------- acesso: código da equipe (edita) e do responsável (também troca os códigos e a logo da equipe)
+  // ---------------- acesso: cada pessoa entra com o próprio código (criador, engenheiro ou fiscal de campo).
+  // A entrada vira uma sessão (token "tk_..." guardado em banco.login.codigo), que vale até a pessoa sair ou o criador
+  // trocar/desativar o acesso dela. Os códigos gerais antigos (equipe/responsável) ainda entram, pedindo o nome.
   function setLogin(l) {
     banco.login = l;
     lsPut(LOGIN_KEY, l);
     document.body.classList.toggle('ro', readOnly());
+    document.body.classList.toggle('fiscal', isFiscal());
     renderLoginBtn();
+    renderAprov();
     if (driveQ && l) { driveQ.resetCode(); driveQ.pump(); }
   }
   function renderLoginBtn() {
     var b = $('btnLogin');
-    if (!b) return;
-    b.hidden = !banco.on;
-    b.textContent = banco.login ? (banco.login.nome || 'Equipe') + ' · ' + (isResp() ? 'responsável' : 'equipe') : 'Entrar para editar';
-    b.classList.toggle('primary', !banco.login);
+    if (b) {
+      b.hidden = !banco.on;
+      b.textContent = banco.login ? (banco.login.nome || 'Equipe') + ' · ' + papelNome(banco.login.papel) : 'Entrar';
+      b.classList.toggle('primary', !banco.login);
+    }
+    // itens do menu Dados conforme o papel
+    var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp() };
+    Object.keys(show).forEach(function (k) {
+      var el = document.querySelector('#menuPop [data-act="' + k + '"]');
+      if (el) el.hidden = !show[k];
+    });
   }
   function logout(silent) {
     setLogin(null);
@@ -1612,12 +1743,39 @@
     syncStatus();
     if (!silent) toast('Você saiu. Este aparelho fica só para consulta.');
   }
-  function modal(html, onSubmit) {
+  function aparelho() {
+    var ua = navigator.userAgent;
+    return (isNativeApp() ? 'App ' : 'Site ') + (/iPhone|iPad/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : 'outro');
+  }
+  // ao abrir: confere se o acesso guardado neste aparelho ainda vale (o criador pode ter trocado o papel ou desativado)
+  function conferirAcesso() {
+    var l = banco.login;
+    if (!banco.on || !l) return Promise.resolve();
+    if (String(l.codigo || '').indexOf('tk_') !== 0) {
+      // entrou numa versão anterior, com o código geral: troca por uma sessão
+      return window.Banco.entrarV2(l.codigo, l.nome || lsGet(NAME_KEY) || null, aparelho()).then(function (r) {
+        if (r && r.token) setLogin({ codigo: r.token, nome: r.nome, papel: r.papel, uid: r.uid || null });
+        else { logout(true); toast('O código mudou. Entre de novo para editar.', 6000); }
+      }, function (err) {
+        if (err && err.code !== 'sem_rede' && err.code !== 'muitas_tentativas') { logout(true); toast('Entre de novo para editar.', 6000); }
+      });
+    }
+    return window.Banco.sessao(l.codigo).then(function (x) {
+      if (!x) { logout(true); toast('Seu acesso foi trocado ou desativado. Entre de novo.', 6000); return; }
+      if (x.papel !== l.papel || (x.nome && x.nome !== l.nome)) {
+        setLogin({ codigo: l.codigo, nome: x.nome || l.nome, papel: x.papel, uid: x.uid || l.uid || null });
+        renderAll();
+        toast('Seu acesso agora é de ' + papelNome(x.papel) + '.', 5000);
+      }
+    }, function () { /* sem sinal: confere depois */ });
+  }
+
+  function modal(html, onSubmit, cls) {
     closeModal();
     var m = document.createElement('div');
     m.className = 'modal';
     m.id = 'modal';
-    m.innerHTML = '<form class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle" novalidate>' + html + '</form>';
+    m.innerHTML = '<form class="modal-box' + (cls ? ' ' + cls : '') + '" role="dialog" aria-modal="true" aria-labelledby="modalTitle" novalidate>' + html + '</form>';
     (document.fullscreenElement || document.body).appendChild(m);
     var f = m.querySelector('form');
     f.addEventListener('submit', function (e) { e.preventDefault(); if (onSubmit) onSubmit(f); });
@@ -1626,7 +1784,7 @@
     f.addEventListener('change', function (e) {
       if (e.target.hasAttribute('data-showpw')) f.querySelectorAll('input[data-pw]').forEach(function (i) { i.type = e.target.checked ? 'text' : 'password'; });
     });
-    setTimeout(function () { var x = f.querySelector('input:not([type=checkbox]),button[type=submit],button'); if (x) x.focus(); }, 30);
+    setTimeout(function () { var x = f.querySelector('input:not([type=checkbox]):not([type=radio]),button[type=submit],button'); if (x) x.focus(); }, 30);
     return f;
   }
   function closeModal() { var m = $('modal'); if (m) m.remove(); }
@@ -1640,64 +1798,153 @@
   function errText(err) {
     var c = err && err.code;
     return c === 'sem_rede' ? 'Sem conexão com o banco. Tente quando tiver sinal.'
-      : c === 'codigo_invalido' ? 'Código errado.'
+      : c === 'codigo_invalido' ? 'Código errado ou acesso desativado.'
       : c === 'muitas_tentativas' ? 'Muitas tentativas erradas. Espere 10 minutos e tente de novo.'
-      : c === 'codigo_curto' ? 'O código da equipe precisa de pelo menos 6 caracteres e o do responsável, de 8.'
-      : c === 'codigos_iguais' ? 'Os dois códigos precisam ser diferentes.'
+      : c === 'codigo_curto' ? 'O código precisa de pelo menos 6 caracteres (o do criador, 8).'
+      : c === 'codigo_em_uso' ? 'Esse código já é de outra pessoa (ou é um código geral). Escolha outro.'
+      : c === 'nome_em_uso' ? 'Já existe um usuário com esse nome.'
+      : c === 'ultimo_criador' ? 'Precisa ficar pelo menos um criador ativo.'
+      : c === 'so_criador' ? 'Só o criador pode fazer isso.'
+      : c === 'sem_permissao' ? 'Seu acesso não permite isso.'
+      : c === 'contrato_excluido' ? 'O contrato deste ponto foi excluído: restaure o contrato primeiro.'
+      : c === 'ja_existe' ? 'Já existe um item com esse código. Nada foi mudado.'
+      : c === 'nao_encontrado' ? 'Não encontrei esse item (talvez já tenha sido restaurado).'
+      : c === 'ja_configurado' ? 'O banco já tem acesso configurado. Entre com o seu código.'
       : 'Não deu certo (' + ((err && err.message) || 'erro') + ').';
   }
-  function mField(id, label, pw, value) {
-    return '<div class="field"><label for="' + id + '">' + esc(label) + '</label><input id="' + id + '"' + (pw ? ' type="password" data-pw autocomplete="off"' : ' autocomplete="name"') +
+  function mField(id, label, pw, value, extra) {
+    return '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '"' + (pw ? ' type="password" data-pw autocomplete="off"' : ' autocomplete="' + (extra || 'name') + '"') +
       ' maxlength="' + (pw ? 200 : 60) + '" value="' + esc(value || '') + '"></div>';
   }
   var SHOWPW = '<label class="show-pw"><input type="checkbox" data-showpw> Mostrar o que digitei</label>';
   var MFOOT = '<p class="modal-err" role="alert" hidden></p><div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button>';
+
+  // confirmação dentro da página (o confirm() do sistema some no app e é fácil de tocar sem ler).
+  // o.digitar: texto que a pessoa precisa digitar para liberar o botão. o.campo: caixa de texto opcional (ex.: motivo).
+  // Devolve null (cancelou) ou {valor}.
+  function semAcento(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase(); }
+  function confirmar(o) {
+    return new Promise(function (resolve) {
+      var f = modal('<h2 id="modalTitle">' + esc(o.titulo) + '</h2>' + (o.html || (o.texto ? '<p>' + esc(o.texto) + '</p>' : '')) +
+        (o.campo ? '<div class="field"><label for="cfCampo">' + esc(o.campo) + '</label><input id="cfCampo" maxlength="300" autocomplete="off"></div>' : '') +
+        (o.digitar ? '<div class="field cf-dig"><label for="cfDig">Para confirmar, digite <b>' + esc(o.digitar) + '</b></label><input id="cfDig" autocomplete="off" autocorrect="off" spellcheck="false"></div>' : '') +
+        '<div class="modal-foot"><button type="button" class="btn" data-close>' + esc(o.cancelar || 'Cancelar') + '</button>' +
+        '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button></div>',
+      function (form) {
+        if (o.digitar && semAcento(form.querySelector('#cfDig').value) !== semAcento(o.digitar)) return;
+        var c = form.querySelector('#cfCampo');
+        var v = { valor: c ? c.value.trim() : '' };
+        closeModal();
+        resolve(v);
+      });
+      if (o.digitar) {
+        var inp = f.querySelector('#cfDig'), btn = f.querySelector('button[type=submit]');
+        inp.addEventListener('input', function () { btn.disabled = semAcento(inp.value) !== semAcento(o.digitar); });
+        setTimeout(function () { inp.focus(); }, 40);
+      }
+    });
+  }
+
   function openLogin() {
     if (banco.login) { openAccount(); return; }
-    modal('<h2 id="modalTitle">Entrar para editar</h2>' +
-      '<p>Os dados são de toda a equipe: com o código, o que você mudar aparece para todos (e fica no histórico com o seu nome).</p>' +
-      mField('lgNome', 'Seu nome', false, lsGet(NAME_KEY) || '') + mField('lgCod', 'Código da equipe', true) + SHOWPW +
+    window.Banco.codigosDefinidos().then(function (def) { if (def) loginModal(); else openPrimeiro(); }, function () { loginModal(); });
+  }
+  function loginModal() {
+    modal('<h2 id="modalTitle">Entrar</h2>' +
+      '<p>Use o código que o criador do sistema passou para você. O acesso fica guardado neste aparelho até você sair.</p>' +
+      mField('lgCod', 'Seu código', true) + SHOWPW +
+      '<div id="lgNomeBox" hidden>' + mField('lgNome', 'Seu nome', false, lsGet(NAME_KEY) || '') +
+      '<p class="hint">Esse é o código geral da equipe: o nome vai para o histórico.</p></div>' +
       MFOOT + '<button type="submit" class="btn primary">Entrar</button></div>',
     function (f) {
-      var n = f.querySelector('#lgNome').value.trim(), c = f.querySelector('#lgCod').value;
-      if (!n) { modalErr(f, 'Escreva seu nome.'); return; }
+      var c = f.querySelector('#lgCod').value, box = f.querySelector('#lgNomeBox'), n = f.querySelector('#lgNome').value.trim();
       if (!c) { modalErr(f, 'Digite o código.'); return; }
+      if (!box.hidden && !n) { modalErr(f, 'Escreva seu nome.'); return; }
       modalErr(f, '');
       busyBtn(f, true, 'Conferindo…');
-      window.Banco.entrar(c).then(function (papel) {
+      window.Banco.entrarV2(c, box.hidden ? null : n, aparelho()).then(function (r) {
         busyBtn(f, false);
-        if (!papel) { modalErr(f, 'Código errado.'); return; }
+        if (!r || !r.token) { modalErr(f, 'Código errado.'); return; }
+        if (!box.hidden) lsPut(NAME_KEY, n);
+        entrou(r);
+      }, function (err) {
+        busyBtn(f, false);
+        if (err && err.code === 'falta_nome') { box.hidden = false; modalErr(f, ''); f.querySelector('#lgNome').focus(); return; }
+        modalErr(f, errText(err));
+      });
+    });
+  }
+  function entrou(r) {
+    setLogin({ codigo: r.token, nome: r.nome, papel: r.papel, uid: r.uid || null });
+    closeModal();
+    renderAll();
+    toast(r.papel === 'fiscal'
+      ? 'Olá, ' + r.nome + '. Como fiscal de campo, você muda o status dos serviços e um engenheiro aprova.'
+      : 'Olá, ' + r.nome + ' (' + papelNome(r.papel) + ').', 5000);
+    if (location.hash === '#configurar') history.replaceState(null, '', location.pathname + location.search);
+    refresh(true).then(flush);
+  }
+  // banco novo, sem nenhum acesso: cria a conta do criador
+  function openPrimeiro() {
+    modal('<h2 id="modalTitle">Criar a conta do criador</h2>' +
+      '<p>Primeira vez neste banco. O <b>criador</b> pode tudo: cadastra as pessoas (engenheiros e fiscais de campo), aprova mudanças e restaura cópias. Guarde o código só com você.</p>' +
+      mField('pmNome', 'Seu nome', false, lsGet(NAME_KEY) || '') + mField('pmCod', 'Seu código (pelo menos 8 caracteres)', true) + mField('pmCod2', 'Repita o código', true) + SHOWPW +
+      MFOOT + '<button type="submit" class="btn primary">Criar e entrar</button></div>',
+    function (f) {
+      var n = f.querySelector('#pmNome').value.trim(), c = f.querySelector('#pmCod').value, c2 = f.querySelector('#pmCod2').value;
+      if (!n) { modalErr(f, 'Escreva seu nome.'); return; }
+      if (c.length < 8) { modalErr(f, 'O código do criador precisa de pelo menos 8 caracteres.'); return; }
+      if (c !== c2) { modalErr(f, 'Os dois códigos não são iguais.'); return; }
+      modalErr(f, '');
+      busyBtn(f, true, 'Criando…');
+      window.Banco.criarCriador(n, c, aparelho()).then(function (r) {
+        busyBtn(f, false);
         lsPut(NAME_KEY, n);
-        setLogin({ codigo: c, nome: n, papel: papel });
-        closeModal();
-        renderAll();
-        toast(papel === 'responsavel' ? 'Você entrou como responsável.' : 'Pronto, ' + n + ': o que você mudar vai para o banco da equipe.');
-        flush();
+        entrou(r);
+        toast('Conta criada. Agora cadastre as pessoas em Dados › Usuários e acessos.', 6000);
       }, function (err) { busyBtn(f, false); modalErr(f, errText(err)); });
     });
   }
+  // endereço #configurar: primeira vez cria o criador; depois, abre o cadastro de usuários (ou a entrada)
+  function openConfigurar() {
+    if (isResp()) { openUsuarios(); return; }
+    openLogin();
+  }
   function openAccount() {
+    var n = banco.propostas.length;
     var f = modal('<h2 id="modalTitle">' + esc(banco.login.nome || 'Equipe') + '</h2>' +
-      '<p>Este aparelho está editando o banco da equipe como <b>' + (isResp() ? 'responsável' : 'equipe') + '</b>.</p>' +
-      '<div class="modal-list"><button type="button" class="btn" data-acc="hist">Histórico de alterações</button>' +
-      (isResp() ? '<button type="button" class="btn" data-acc="codes">Trocar códigos</button>' : '') +
+      '<p>Este aparelho entrou como <b>' + esc(papelNome(banco.login.papel)) + '</b>.' + (isFiscal() ? ' Você muda o status dos serviços e um engenheiro aprova.' : '') + '</p>' +
+      '<div class="modal-list">' +
+      (isEng() ? '<button type="button" class="btn" data-acc="aprov">Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '') + '</button>' : '') +
+      (isResp() ? '<button type="button" class="btn" data-acc="users">Usuários e acessos</button>' : '') +
+      (isEng() ? '<button type="button" class="btn" data-acc="lixeira">Lixeira e cópias de segurança</button>' : '') +
+      '<button type="button" class="btn" data-acc="hist">Histórico de alterações</button>' +
       '<button type="button" class="btn danger" data-acc="sair">Sair deste aparelho</button></div>' +
       '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
     f.addEventListener('click', function (e) {
       var b = e.target.closest('[data-acc]');
       if (!b) return;
-      if (b.dataset.acc === 'hist') openHist();
-      else if (b.dataset.acc === 'codes') openCodes();
-      else if (b.dataset.acc === 'sair') {
-        if (banco.pend.length && !confirm('Há ' + banco.pend.length + ' alteração(ões) deste aparelho que ainda não subiram para o banco. Sair e descartar?')) return;
-        banco.pend = []; keepSync();
-        closeModal(); logout(); refresh(true);
+      var a = b.dataset.acc;
+      if (a === 'hist') openHist();
+      else if (a === 'users') openUsuarios();
+      else if (a === 'lixeira') openLixeira();
+      else if (a === 'aprov') openAprov();
+      else if (a === 'sair') {
+        var sair = function () {
+          var tok = banco.login && banco.login.codigo;
+          banco.pend = []; keepSync();
+          closeModal(); logout(); refresh(true);
+          if (tok && String(tok).indexOf('tk_') === 0) window.Banco.sair(tok).catch(function () { /* sem sinal: a sessão expira sozinha */ });
+        };
+        if (!banco.pend.length) { sair(); return; }
+        confirmar({ titulo: 'Sair e descartar?', texto: 'Há ' + banco.pend.length + ' alteração(ões) deste aparelho que ainda não subiram para o banco. Se sair agora, elas se perdem.', botao: 'Sair e descartar', perigo: true })
+          .then(function (r) { if (r) sair(); });
       }
     });
   }
   function openHist() {
-    var f = modal('<h2 id="modalTitle">Histórico de alterações</h2><div class="hist" aria-live="polite">Carregando…</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
-    window.Banco.historico(40).then(function (rows) {
+    var f = modal('<h2 id="modalTitle">Histórico de alterações</h2><div class="hist" aria-live="polite">Carregando…</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'wide');
+    window.Banco.historico(60).then(function (rows) {
       var el = f.querySelector('.hist');
       el.innerHTML = rows.length ? rows.map(function (r) {
         var d = new Date(r.em);
@@ -1707,39 +1954,281 @@
       }).join('') : '<p>Nada gravado ainda.</p>';
     }, function (err) { f.querySelector('.hist').textContent = errText(err); });
   }
-  // #configurar (primeira vez: cria os códigos) ou "Trocar códigos" (pede o código atual do responsável)
-  function openCodes() {
-    window.Banco.codigosDefinidos().then(function (def) {
-      modal('<h2 id="modalTitle">' + (def ? 'Trocar códigos' : 'Criar os códigos de acesso') + '</h2>' +
-        (def ? '<p>Precisa do código atual do responsável. Deixe em branco o que não quiser trocar. Quem usa o código antigo vai precisar entrar de novo.</p>'
-          : '<p>O <b>código do responsável</b> (pelo menos 8 caracteres) fica só com você: troca os códigos e a logo da equipe. O <b>código da equipe</b> (pelo menos 6) é o que você passa para quem vai editar.</p>' + mField('cdNome', 'Seu nome', false, lsGet(NAME_KEY) || '')) +
-        (def ? mField('cdAtual', 'Código atual do responsável', true) : '') +
-        mField('cdResp', def ? 'Novo código do responsável (opcional)' : 'Código do responsável', true) +
-        mField('cdEq', def ? 'Novo código da equipe (opcional)' : 'Código da equipe', true) + SHOWPW +
-        MFOOT + '<button type="submit" class="btn primary">Salvar códigos</button></div>',
-      function (f) {
-        var atual = def ? f.querySelector('#cdAtual').value : null, resp = f.querySelector('#cdResp').value, eq = f.querySelector('#cdEq').value;
-        var nome = def ? (banco.login && banco.login.nome) || lsGet(NAME_KEY) || '' : f.querySelector('#cdNome').value.trim();
-        if (!def && !nome) { modalErr(f, 'Escreva seu nome.'); return; }
-        if (def && !atual) { modalErr(f, 'Digite o código atual do responsável.'); return; }
-        if (!def && (!resp || !eq)) { modalErr(f, 'Crie os dois códigos.'); return; }
-        if (def && !resp && !eq) { modalErr(f, 'Digite pelo menos um código novo.'); return; }
-        if ((resp && resp.length < 8) || (eq && eq.length < 6)) { modalErr(f, errText({ code: 'codigo_curto' })); return; }
-        if (resp && eq && resp === eq) { modalErr(f, errText({ code: 'codigos_iguais' })); return; }
-        modalErr(f, '');
-        busyBtn(f, true, 'Salvando…');
-        window.Banco.definirCodigos(atual, eq || null, resp || null).then(function () {
-          busyBtn(f, false);
-          closeModal();
-          if (nome) lsPut(NAME_KEY, nome);
-          setLogin({ codigo: resp || atual, nome: nome, papel: 'responsavel' });
-          renderAll();
-          toast(def ? 'Códigos trocados.' : 'Códigos criados. Passe o código da equipe para quem vai editar.', 6000);
-          if (location.hash === '#configurar') history.replaceState(null, '', location.pathname + location.search);
-          flush();
-        }, function (err) { busyBtn(f, false); modalErr(f, errText(err)); });
+
+  // ---------------- usuários e acessos (só o criador)
+  var PAPEIS = [
+    { k: 'engenheiro', nome: 'Engenheiro', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira e vê as fotos de todos.' },
+    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Só muda o status e o % dos serviços (fica aguardando aprovação) e vê só as fotos que tirou.' },
+    { k: 'criador', nome: 'Criador', desc: 'Tudo, inclusive cadastrar pessoas e voltar os dados para uma cópia.' }
+  ];
+  function gerarCodigo() {
+    var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = new Uint32Array(8), s = '';
+    (window.crypto || window.msCrypto).getRandomValues(r);
+    for (var i = 0; i < 8; i++) s += A[r[i] % A.length];
+    return s.slice(0, 4) + '-' + s.slice(4);
+  }
+  function openUsuarios() {
+    if (!isResp()) { toast('Só o criador cadastra pessoas.'); return; }
+    var f = modal('<h2 id="modalTitle">Usuários e acessos</h2>' +
+      '<p>Cada pessoa entra com o próprio código. Desativar alguém tira o acesso de todos os aparelhos dela.</p>' +
+      '<div class="us" aria-live="polite">Carregando…</div>' +
+      '<p class="modal-err" role="alert" hidden></p>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button><button type="button" class="btn primary" data-us="novo">+ Nova pessoa</button></div>', null, 'wide');
+    var dados = null;
+    function carregar() {
+      window.Banco.usuarios(banco.login.codigo).then(function (r) {
+        dados = r;
+        var lista = r.usuarios || [], el = f.querySelector('.us');
+        var h = lista.length ? lista.map(function (u) {
+          var pp = PAPEIS.find(function (x) { return x.k === u.papel; }) || PAPEIS[0];
+          return '<div class="us-row' + (u.ativo ? '' : ' off') + '"><div class="us-txt"><b>' + esc(u.nome) + '</b> <span class="tag t-' + esc(u.papel) + '">' + esc(pp.nome) + '</span>' +
+            (u.ativo ? '' : ' <span class="tag t-off">desativado</span>') + (u.id === r.eu ? ' <span class="tag">você</span>' : '') +
+            '<small>' + (u.usado_em ? 'Último uso: ' + esc(fmtWhen(u.usado_em)) + ' · ' + u.aparelhos + (u.aparelhos === 1 ? ' aparelho' : ' aparelhos') : 'Ainda não entrou') + '</small></div>' +
+            '<button type="button" class="btn small" data-us="edit" data-id="' + esc(u.id) + '">Editar</button></div>';
+        }).join('') : '<p class="empty">Ninguém cadastrado ainda. Use “+ Nova pessoa”.</p>';
+        if (r.codigo_equipe || r.codigo_responsavel) {
+          h += '<div class="section-title">Códigos gerais (do sistema antigo)</div>' +
+            '<p class="hint">Ainda entram, pedindo o nome. Quando todos tiverem código próprio, desative.</p>' +
+            (r.codigo_equipe ? '<div class="us-row"><div class="us-txt"><b>Código geral da equipe</b><small>Entra como engenheiro</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="equipe">Desativar</button></div>' : '') +
+            (r.codigo_responsavel ? '<div class="us-row"><div class="us-txt"><b>Código geral do responsável</b><small>Entra como criador</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="responsavel">Desativar</button></div>' : '');
+        }
+        el.innerHTML = h;
+      }, function (err) { f.querySelector('.us').textContent = errText(err); });
+    }
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-us]');
+      if (!b) return;
+      if (b.dataset.us === 'novo') openUsuario(null);
+      else if (b.dataset.us === 'edit') openUsuario((dados.usuarios || []).find(function (u) { return u.id === b.dataset.id; }) || null);
+      else if (b.dataset.us === 'geral') {
+        var papel = b.dataset.papel;
+        confirmar({ titulo: 'Desativar o código geral ' + (papel === 'equipe' ? 'da equipe' : 'do responsável') + '?',
+          texto: 'Quem entrou com ele sai de todos os aparelhos e vai precisar de um código próprio. Não dá para reativar por aqui.',
+          digitar: 'DESATIVAR', botao: 'Desativar', perigo: true }).then(function (r) {
+          if (!r) { openUsuarios(); return; }
+          window.Banco.codigoGeralDesativar(banco.login.codigo, papel).then(function () { toast('Código geral desativado.'); openUsuarios(); },
+            function (err) { toast(errText(err), 6000); openUsuarios(); });
+        });
+      }
+    });
+    carregar();
+  }
+  function openUsuario(u) {
+    var novo = !u;
+    var radios = PAPEIS.map(function (x) {
+      var on = u ? u.papel === x.k : x.k === 'fiscal';
+      return '<label class="papel-op"><input type="radio" name="usPapel" value="' + x.k + '"' + (on ? ' checked' : '') + '><span><b>' + esc(x.nome) + '</b><small>' + esc(x.desc) + '</small></span></label>';
+    }).join('');
+    var f = modal('<h2 id="modalTitle">' + (novo ? 'Nova pessoa' : 'Editar ' + esc(u.nome)) + '</h2>' +
+      mField('usNome', 'Nome (aparece no histórico e nas fotos)', false, u ? u.nome : '', 'off') +
+      '<fieldset class="papeis"><legend>Acesso</legend>' + radios + '</fieldset>' +
+      '<div class="field"><label for="usCod">' + (novo ? 'Código de acesso (pelo menos 6 caracteres)' : 'Novo código (deixe em branco para manter o atual)') + '</label>' +
+      '<div class="cod-row"><input id="usCod" maxlength="200" autocomplete="off" autocorrect="off" spellcheck="false" value="' + (novo ? gerarCodigo() : '') + '"><button type="button" class="btn small" data-gerar>Gerar outro</button></div></div>' +
+      (novo ? '' : '<label class="show-pw"><input type="checkbox" id="usAtivo"' + (u.ativo ? ' checked' : '') + '> Acesso ativo</label>') +
+      MFOOT + '<button type="submit" class="btn primary">Salvar</button></div>',
+    function (form) {
+      var nome = form.querySelector('#usNome').value.trim(), papel = (form.querySelector('input[name=usPapel]:checked') || {}).value,
+        cod = form.querySelector('#usCod').value.trim(), ativo = novo ? true : form.querySelector('#usAtivo').checked;
+      if (!nome) { modalErr(form, 'Escreva o nome.'); return; }
+      if (novo && cod.length < 6) { modalErr(form, 'O código precisa de pelo menos 6 caracteres.'); return; }
+      if (!novo && cod && cod.length < 6) { modalErr(form, 'O código precisa de pelo menos 6 caracteres.'); return; }
+      modalErr(form, '');
+      busyBtn(form, true, 'Salvando…');
+      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo }).then(function () {
+        busyBtn(form, false);
+        if (u && u.id === (banco.login && banco.login.uid) && papel !== banco.login.papel) conferirAcesso();
+        if (cod) mostrarCodigo(nome, cod, novo);
+        else { toast('Salvo.'); openUsuarios(); }
+      }, function (err) { busyBtn(form, false); modalErr(form, errText(err)); });
+    });
+    f.querySelector('[data-gerar]').addEventListener('click', function () { f.querySelector('#usCod').value = gerarCodigo(); });
+  }
+  // o código só aparece agora: o banco guarda apenas a versão embaralhada
+  function mostrarCodigo(nome, cod, novo) {
+    var f = modal('<h2 id="modalTitle">' + (novo ? 'Pronto: passe o código para ' : 'Novo código de ') + esc(nome) + '</h2>' +
+      '<div class="cod-show" id="codShow">' + esc(cod) + '</div>' +
+      '<p>Ele aparece só agora. A pessoa entra no site ou no app em <b>Entrar</b> e digita esse código.' + (novo ? '' : ' Os aparelhos que usavam o código antigo vão pedir para entrar de novo.') + '</p>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-copiar>Copiar</button><button type="button" class="btn primary" data-close>Feito</button></div>');
+    f.querySelector('[data-copiar]').addEventListener('click', function () {
+      var t = 'Seu código de acesso ao Diagrama Linear BR-230: ' + cod;
+      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast('Código copiado.'); }, function () {
+        var r = document.createRange(); r.selectNodeContents(f.querySelector('#codShow'));
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        toast('Selecionado: copie com o menu do aparelho.');
       });
-    }, function (err) { toast(errText(err), 6000); });
+    });
+    f.closest('.modal').addEventListener('click', function (e) { if (e.target.closest('[data-close]')) setTimeout(openUsuarios, 0); });
+  }
+
+  // ---------------- lixeira e cópias automáticas (engenheiro ou criador)
+  function openLixeira() {
+    if (!isEng()) { toast('A lixeira e as cópias são para engenheiros e o criador.'); return; }
+    var f = modal('<h2 id="modalTitle">Lixeira e cópias de segurança</h2><div class="lx" aria-live="polite">Carregando…</div>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'wide');
+    var dados = null;
+    window.Banco.lixeira(banco.login.codigo).then(function (r) {
+      dados = r;
+      var lx = r.lixeira || [], cp = r.copias || [], h = '';
+      h += '<div class="section-title">Excluídos · ficam 30 dias</div>';
+      h += lx.length ? lx.map(function (x) {
+        var km = x.km && (x.km[0] != null || x.km[1] != null) ? ' · KM ' + fmtKm(x.km[0]) + ' – ' + fmtKm(x.km[1]) : '';
+        var titulo = x.tipo === 'ponto' ? 'Ponto ' + (x.nome || x.item_id) + ' · ' + (x.lote || 'contrato') + km : 'Contrato ' + (x.nome || x.item_id) + ' · ' + (x.pontos || 0) + ' pontos';
+        return '<div class="lx-row"><div class="lx-txt"><b>' + esc(titulo) + '</b><small>Excluído por ' + esc(x.apagado_por || '—') + ' em ' + esc(fmtWhen(x.apagado_em)) +
+          (x.tipo === 'ponto' && !x.contrato_existe ? ' · o contrato também foi excluído' : '') + '</small></div>' +
+          '<button type="button" class="btn small" data-lx="rest" data-id="' + x.id + '">Restaurar</button></div>';
+      }).join('') : '<p class="empty">Nada excluído nos últimos 30 dias.</p>';
+      h += '<div class="section-title">Cópias automáticas · ficam 7 dias</div>' +
+        '<p class="hint">O banco guarda uma cópia de tudo antes de cada exclusão, antes de muitas alterações juntas e a cada 6 horas de uso.</p>';
+      h += cp.length ? cp.map(function (x) {
+        return '<div class="lx-row"><div class="lx-txt"><b>' + esc(fmtWhen(x.em)) + '</b> · ' + x.contratos + ' contratos, ' + x.pontos + ' pontos<small>' + esc(x.motivo || '') + (x.autor ? ' · ' + esc(x.autor) : '') + '</small></div>' +
+          '<div class="lx-acts"><button type="button" class="btn small" data-lx="baixar" data-id="' + x.id + '">Baixar</button>' +
+          (r.pode_copia ? '<button type="button" class="btn small danger" data-lx="voltar" data-id="' + x.id + '">Voltar para esta</button>' : '') + '</div></div>';
+      }).join('') : '<p class="empty">Nenhuma cópia ainda: a primeira é feita na próxima alteração.</p>';
+      f.querySelector('.lx').innerHTML = h;
+    }, function (err) { f.querySelector('.lx').textContent = errText(err); });
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-lx]');
+      if (!b || !dados) return;
+      var id = Number(b.dataset.id);
+      if (b.dataset.lx === 'rest') {
+        var x = dados.lixeira.find(function (y) { return y.id === id; });
+        if (!x) return;
+        confirmar({ titulo: 'Restaurar ' + (x.tipo === 'ponto' ? 'o ponto ' : 'o contrato ') + (x.nome || '') + '?',
+          texto: x.tipo === 'ponto' ? 'Ele volta para ' + (x.lote || 'o contrato') + ' com os dados de quando foi excluído.' : 'Ele volta com os ' + (x.pontos || 0) + ' pontos que tinha.',
+          botao: 'Restaurar' }).then(function (r) {
+          if (!r) { openLixeira(); return; }
+          window.Banco.restaurarLixeira(banco.login.codigo, id).then(function () {
+            toast((x.tipo === 'ponto' ? 'Ponto ' : 'Contrato ') + (x.nome || '') + ' restaurado.', 5000);
+            if (x.tipo === 'contrato') state.activeId = x.item_id;
+            refresh(true);
+            openLixeira();
+          }, function (err) { toast(errText(err), 7000); openLixeira(); });
+        });
+      } else if (b.dataset.lx === 'baixar') {
+        var c = dados.copias.find(function (y) { return y.id === id; });
+        b.disabled = true;
+        window.Banco.copiaDados(banco.login.codigo, id).then(function (d) {
+          b.disabled = false;
+          var st = copiaParaEstado(d), dt = new Date(c.em);
+          var nome = 'copia-diagrama-linear-' + dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0') + '-' + String(dt.getHours()).padStart(2, '0') + 'h' + String(dt.getMinutes()).padStart(2, '0') + '.json';
+          saveBlob(nome, new Blob([JSON.stringify(st, null, 2)], { type: 'application/json' }), 'Cópia baixada: ' + nome);
+        }, function (err) { b.disabled = false; toast(errText(err), 6000); });
+      } else if (b.dataset.lx === 'voltar') {
+        var cc = dados.copias.find(function (y) { return y.id === id; });
+        confirmar({ titulo: 'Voltar TODOS os dados para ' + fmtWhen(cc.em) + '?',
+          html: '<p>Contratos e pontos voltam a ficar como estavam nessa hora, para todos (' + cc.contratos + ' contratos, ' + cc.pontos + ' pontos). O que foi feito depois some.</p>' +
+            '<p>Antes de voltar, o banco guarda uma cópia de agora: dá para desfazer pela mesma lista.</p>',
+          digitar: 'RESTAURAR', botao: 'Voltar para esta cópia', perigo: true }).then(function (r) {
+          if (!r) { openLixeira(); return; }
+          window.Banco.restaurarCopia(banco.login.codigo, id).then(function () {
+            banco.pend = []; keepSync();
+            toast('Dados de volta para ' + fmtWhen(cc.em) + '.', 6000);
+            refresh(true);
+          }, function (err) { toast(errText(err), 7000); });
+        });
+      }
+    });
+  }
+  // cópia do banco -> mesmo formato do "Salvar backup (.json)", que o "Abrir backup…" aceita
+  function copiaParaEstado(d) {
+    var byId = {}, s = { activeId: state.activeId, contracts: [] };
+    (d.contratos || []).forEach(function (row) { var c = clone(row.dados || {}); c.id = row.id; c.pontos = []; byId[c.id] = c; s.contracts.push(c); });
+    (d.pontos || []).forEach(function (row) { var c = byId[row.contrato_id]; if (!c) return; var p = clone(row.dados || {}); p.id = row.id; c.pontos.push(p); });
+    return s;
+  }
+
+  // ---------------- propostas dos fiscais (aguardando aprovação de engenheiro ou criador)
+  function propsDo(cid, pid) { return (banco.propostas || []).filter(function (x) { return x.contrato_id === cid && x.ponto_id === pid; }); }
+  // serviço -> valor proposto (a proposta mais nova vale)
+  function propServ(cid, pid) {
+    var o = {};
+    propsDo(cid, pid).forEach(function (x) {
+      Object.keys(x.campos || {}).forEach(function (k) { if (k.indexOf('serv.') === 0 && x.campos[k].v) o[k.slice(5)] = x.campos[k].v; });
+    });
+    return o;
+  }
+  function propCampos(x) {
+    return Object.keys(x.campos || {}).map(function (k) {
+      var a = x.campos[k].a;
+      return '<li><b>' + esc(fieldName(k)) + ':</b> ' + (a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, x.campos[k].v)) + '</b></li>';
+    }).join('');
+  }
+  function propHtml(cid, p) {
+    var list = propsDo(cid, p.id);
+    if (!list.length) return '';
+    return '<div class="props" role="group" aria-label="Mudanças aguardando aprovação">' + list.map(function (x) {
+      var minha = banco.login && ((x.autor_uid && x.autor_uid === banco.login.uid) || (!x.autor_uid && x.autor_nome === banco.login.nome));
+      return '<div class="prop"><div class="prop-txt"><span class="prop-tag">Aguardando aprovação</span> ' + (minha ? 'Sua mudança' : 'Mudança de <b>' + esc(x.autor_nome || 'fiscal') + '</b>') +
+        ' · ' + esc(fmtWhen(x.atualizado_em)) + '<ul>' + propCampos(x) + '</ul></div>' +
+        (isEng() ? '<div class="prop-acts"><button type="button" class="btn small primary" data-act="prop-ok" data-prop="' + x.id + '">Aprovar</button>' +
+          '<button type="button" class="btn small" data-act="prop-no" data-prop="' + x.id + '">Recusar</button></div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function initAprov() {
+    if ($('btnAprov')) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'btnAprov';
+    b.className = 'btn small aprov';
+    b.hidden = true;
+    b.addEventListener('click', openAprov);
+    var ss = $('saveState');
+    ss.parentNode.insertBefore(b, ss);
+    renderAprov();
+  }
+  function renderAprov() {
+    var b = $('btnAprov');
+    if (!b) return;
+    var all = banco.propostas || [], n = all.length;
+    if (isEng() && n) { b.hidden = false; b.textContent = 'Aprovar (' + n + ')'; b.title = n + ' mudança(s) de fiscais aguardando aprovação'; }
+    else if (isFiscal()) {
+      var minhas = all.filter(function (x) { return (x.autor_uid && x.autor_uid === banco.login.uid) || (!x.autor_uid && x.autor_nome === banco.login.nome); }).length;
+      b.hidden = !minhas;
+      b.textContent = minhas + (minhas === 1 ? ' aguardando aprovação' : ' aguardando aprovação');
+      b.title = 'Suas mudanças que ainda não foram aprovadas';
+    } else b.hidden = true;
+    var it = document.querySelector('#menuPop [data-act="aprovar"]');
+    if (it) it.textContent = 'Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '');
+  }
+  function openAprov() {
+    var all = banco.propostas || [];
+    if (isFiscal()) all = all.filter(function (x) { return (x.autor_uid && x.autor_uid === banco.login.uid) || (!x.autor_uid && x.autor_nome === banco.login.nome); });
+    var eng = isEng();
+    var lote = function (cid) { return loteOf(cid); };
+    var h = all.length ? all.map(function (x) {
+      return '<label class="ap-row">' + (eng ? '<input type="checkbox" value="' + x.id + '" checked>' : '') +
+        '<span><b>' + esc(lote(x.contrato_id) + ' · ' + (x.ponto_nome || x.ponto_id)) + '</b> · ' + esc(x.autor_nome || 'fiscal') + ' · ' + esc(fmtWhen(x.atualizado_em)) +
+        '<ul>' + propCampos(x) + '</ul></span></label>';
+    }).join('') : '<p class="empty">Nada aguardando aprovação.</p>';
+    var f = modal('<h2 id="modalTitle">' + (eng ? 'Mudanças dos fiscais' : 'Suas mudanças aguardando aprovação') + '</h2>' +
+      (eng && all.length ? '<p>Aprovar aplica a mudança no diagrama de todos, em nome de quem fez. Recusar descarta.</p><label class="show-pw"><input type="checkbox" data-todas checked> Marcar todas</label>' : '') +
+      '<div class="ap-list">' + h + '</div>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button>' +
+      (eng && all.length ? '<button type="button" class="btn" data-ap="no">Recusar marcadas</button><button type="button" class="btn primary" data-ap="ok">Aprovar marcadas</button>' : '') + '</div>', null, 'wide');
+    f.addEventListener('change', function (e) {
+      if (e.target.hasAttribute('data-todas')) f.querySelectorAll('.ap-row input').forEach(function (i) { i.checked = e.target.checked; });
+    });
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-ap]');
+      if (!b) return;
+      var ids = Array.prototype.map.call(f.querySelectorAll('.ap-row input:checked'), function (i) { return Number(i.value); });
+      if (!ids.length) { toast('Marque pelo menos uma.'); return; }
+      decidirPropostas(ids, b.dataset.ap === 'ok');
+    });
+  }
+  function decidirPropostas(ids, aprovar) {
+    if (!isEng()) { toast('Só engenheiro ou criador aprova.'); return; }
+    var go = function (motivo) {
+      window.Banco.decidir(banco.login.codigo, ids, aprovar, motivo).then(function (r) {
+        var n = (r && r.n) || 0;
+        toast(n ? (aprovar ? 'Aprovado' : 'Recusado') + (n > 1 ? ' (' + n + ')' : '') + '.' : 'Nada mudou: talvez outra pessoa já tenha decidido.', 4000);
+        closeModal();
+        refresh(true);
+      }, function (err) { toast(errText(err), 6000); });
+    };
+    if (aprovar) { go(null); return; }
+    confirmar({ titulo: ids.length > 1 ? 'Recusar ' + ids.length + ' mudanças?' : 'Recusar a mudança?', texto: 'O diagrama continua como está. Quem fez vê que foi recusada.', campo: 'Motivo (opcional)', botao: 'Recusar', perigo: true })
+      .then(function (r) { if (r) go(r.valor || null); });
   }
   // primeira abertura com o banco: o que estava só neste aparelho fica guardado à parte, com opção de baixar
   function prepareOld() {
@@ -1806,8 +2295,8 @@
   }
   // editor só para consulta enquanto ninguém entrou
   function lockEditor() {
-    if (!readOnly()) return;
-    $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
+    if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
+    else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
   var EDIT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract'];
   var POINT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
@@ -1821,24 +2310,22 @@
     }
     banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
     initDrive();
+    banco.propostas = s && Array.isArray(s.propostas) ? s.propostas : [];
     setLogin(lsGet(LOGIN_KEY));
     if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
+    initAprov();
     document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
     $('editor').addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
     window.addEventListener('online', function () { banco.online = true; flush(); poll(); });
     window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') poll(); });
-    window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openCodes(); });
+    window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openConfigurar(); });
     setInterval(poll, 20000);
     syncStatus();
     refresh().then(function () {
-      if (banco.login) window.Banco.entrar(banco.login.codigo).then(function (p) {   // o código pode ter sido trocado
-        if (!p) { logout(true); toast('O código da equipe mudou. Entre de novo para editar.', 6000); }
-        else if (p !== banco.login.papel) setLogin({ codigo: banco.login.codigo, nome: banco.login.nome, papel: p });
-      }, function () { /* sem sinal: confere depois */ });
-      flush();
-      if (location.hash === '#configurar') openCodes();
+      conferirAcesso().then(flush);
+      if (location.hash === '#configurar') openConfigurar();
     });
   }
 

@@ -59,6 +59,9 @@ button{cursor:pointer}
 .btn.ghost{border-color:transparent;background:transparent}
 .btn.danger{color:var(--danger);border-color:#F0C7C2}
 .btn.danger:hover{background:#FDF1EF}
+.btn.danger-solid{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn.danger-solid:hover{background:#912018}
+.btn.danger-solid[disabled],.btn.primary[disabled]{opacity:.45;cursor:not-allowed}
 .btn[disabled]{opacity:.6;cursor:progress}
 .btn svg{width:16px;height:16px}
 
@@ -175,6 +178,48 @@ button{cursor:pointer}
 body.ro [data-act="add-point"],body.ro [data-act="dup-point"],body.ro [data-act="del-point"],body.ro [data-act="add-dev"],body.ro [data-act="del-dev"],
 body.ro [data-act="add-marco"],body.ro [data-act="del-marco"],body.ro [data-act="del-contract"],body.ro [data-act="new-contract"]{display:none}
 body.ro .seg button{cursor:default}
+/* fiscal de campo: só os botões de status e o % dos serviços */
+body.fiscal [data-act="add-point"],body.fiscal [data-act="dup-point"],body.fiscal [data-act="del-point"],body.fiscal [data-act="add-dev"],body.fiscal [data-act="del-dev"],
+body.fiscal [data-act="add-marco"],body.fiscal [data-act="del-marco"],body.fiscal [data-act="del-contract"],body.fiscal [data-act="new-contract"]{display:none}
+.fiscal-note{border-color:#E8C77A;background:#FDF6E3}
+/* mudanças de fiscais aguardando aprovação */
+.seg button.pend{box-shadow:inset 0 0 0 2px #C98A00;background:repeating-linear-gradient(135deg,#FFF4D6 0 6px,#fff 6px 12px);color:#7A5200}
+.props{display:flex;flex-direction:column;gap:8px}
+.prop{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 12px;padding:9px 11px;border:1px solid #E8C77A;border-radius:8px;background:#FFFBEF;font-size:12.5px;color:var(--ink-2)}
+.prop-txt{flex:1 1 220px;min-width:0}
+.prop-txt ul,.ap-row ul{margin:4px 0 0;padding-left:18px}
+.prop-tag{display:inline-block;padding:1px 7px;border-radius:999px;background:#C98A00;color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.prop-acts{display:flex;gap:6px}
+.pt-prop{display:inline-block;width:8px;height:8px;margin-left:5px;border-radius:50%;background:#C98A00;vertical-align:middle}
+.btn.aprov{border-color:#E8C77A;background:#FFF4D6;color:#7A5200}
+.btn.aprov:hover{background:#FCEBBE}
+.ap-list{display:flex;flex-direction:column;gap:6px}
+.ap-row{display:flex;gap:10px;align-items:flex-start;padding:8px 2px;border-bottom:1px solid var(--line-2);font-size:13px}
+.ap-row input{margin-top:3px}
+/* listas da lixeira, cópias e usuários */
+.modal-box.wide{max-width:600px}
+.hint{font-size:12px;color:var(--ink-3);margin:0}
+.lx,.us{display:flex;flex-direction:column;gap:4px}
+.lx-row,.us-row{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+.lx-txt,.us-txt{flex:1 1 240px;min-width:0;overflow-wrap:anywhere}
+.lx-txt small,.us-txt small{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}
+.lx-acts{display:flex;gap:6px;flex-wrap:wrap}
+.us-row.off .us-txt{opacity:.6}
+.tag{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--ground);border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--ink-2)}
+.tag.t-criador{background:#E7EEF7;border-color:#AFC2DA;color:#1D4F91}
+.tag.t-engenheiro{background:#E6F4EC;border-color:#A9D6BC;color:#17633A}
+.tag.t-fiscal{background:#FFF4D6;border-color:#E8C77A;color:#7A5200}
+.tag.t-off{background:#FDF1EF;border-color:#F0C7C2;color:var(--danger)}
+.papeis{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.papeis legend{font-size:12px;color:var(--ink-3);font-weight:550;margin-bottom:4px}
+.papel-op{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;cursor:pointer}
+.papel-op:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.papel-op small{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}
+.papel-op input{margin-top:3px}
+.cod-row{display:flex;gap:6px}
+.cod-row input{flex:1;min-width:0;font-family:ui-monospace,Consolas,monospace;letter-spacing:.06em}
+.cod-show{font-family:ui-monospace,Consolas,monospace;font-size:26px;font-weight:700;letter-spacing:.12em;text-align:center;padding:14px;border:1px dashed var(--accent);border-radius:8px;background:var(--accent-soft);user-select:all}
+.cf-dig input{font-family:ui-monospace,Consolas,monospace}
 .field input:disabled,.field select:disabled,.field textarea:disabled{background:var(--ground);color:var(--ink-2);opacity:1}
 #btnLogin{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;line-height:22px}
 .modal{position:fixed;inset:0;z-index:3500;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) calc(16px + env(safe-area-inset-left,0px));background:rgba(23,32,28,.42)}
@@ -239,6 +284,9 @@ body.ro .seg button{cursor:default}
       <div class="menu-pop" id="menuPop" hidden>
         <button type="button" data-act="backup">Salvar backup (.json)</button>
         <button type="button" data-act="restore">Abrir backup…</button>
+        <button type="button" data-act="lixeira" hidden>Lixeira e cópias de segurança</button>
+        <button type="button" data-act="aprovar" hidden>Aprovar mudanças dos fiscais</button>
+        <button type="button" data-act="usuarios" hidden>Usuários e acessos</button>
         <hr>
         <button type="button" data-act="print">Imprimir ou salvar PDF pelo navegador</button>
         <hr>
