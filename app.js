@@ -1583,7 +1583,7 @@
     else if (n && !banco.login) { t = n + (n === 1 ? ' alteração não enviada' : ' alterações não enviadas') + ': entre para enviar'; warn = true; }
     else if (n) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' alteração aguardando' : ' alterações aguardando'); warn = banco.online === false; }
     else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
-    else if (banco.at) t = 'Banco da equipe · ' + hhmm(banco.at);
+    else if (banco.at) t = (window.AMBIENTE && AMBIENTE.previa ? 'Banco de teste · ' : 'Banco da equipe · ') + hhmm(banco.at);
     else t = 'Conectando ao banco…';
     var dq = driveQ && driveReady() ? driveQ.info() : null;
     if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo'; }

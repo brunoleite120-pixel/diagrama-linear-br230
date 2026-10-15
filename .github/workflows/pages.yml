@@ -1,0 +1,77 @@
+# Publica o site no GitHub Pages, em dois endereços:
+#   link oficial (equipe)  https://brunoleite120-pixel.github.io/diagrama-linear-br230/         <- ramo "producao"
+#   prévia (testes)        https://brunoleite120-pixel.github.io/diagrama-linear-br230/previa/  <- ramo "main"
+# A prévia usa o banco de teste (ambiente.js). Todo envio ao main atualiza só a prévia.
+# Para publicar no link oficial a versão que está na prévia:
+#   git push origin main:producao  e depois  gh workflow run pages.yml
+name: Site (oficial e prévia)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  montar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: producao
+          path: oficial
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: previa
+
+      - name: Juntar oficial e prévia
+        run: |
+          # data do último envio (horário de Belém) e o código curto do commit
+          versao() { echo "$(TZ=America/Belem git -C "$1" log -1 --format=%cd --date=format-local:'%d/%m/%Y %H:%M') · $(git -C "$1" rev-parse --short HEAD)"; }
+          copia() {
+            mkdir -p "$2"
+            rsync -a --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='node_modules' \
+              --exclude='package.json' --exclude='package-lock.json' --exclude='capacitor.config.json' "$1"/ "$2"/
+          }
+          copia oficial _site
+          rm -rf _site/previa
+          copia previa _site/previa
+
+          if [ -f _site/ambiente.js ]; then
+            sed -i "s|^  var VERSAO = 'dev';|  var VERSAO = '$(versao oficial)';|" _site/ambiente.js
+          fi
+
+          A=_site/previa/ambiente.js
+          sed -i "s|^  var NOME = 'oficial';|  var NOME = 'previa';|" "$A"
+          sed -i "s|^  var VERSAO = 'dev';|  var VERSAO = '$(versao previa)';|" "$A"
+          grep -q "var NOME = 'previa';" "$A" || { echo "A prévia ficou sem o ambiente de teste"; exit 1; }
+          # nome do app instalado pela prévia (tela de início), para não confundir com o oficial
+          sed -i 's|"name": "Diagrama Linear BR-230"|"name": "Prévia · Diagrama Linear BR-230"|; s|"short_name": "Diagrama 230"|"short_name": "Prévia 230"|' _site/previa/manifest.webmanifest
+
+          grep -h "var NOME\|var VERSAO" _site/ambiente.js _site/previa/ambiente.js 2>/dev/null || true
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: montar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

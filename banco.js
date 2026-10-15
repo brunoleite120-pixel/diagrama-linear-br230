@@ -13,8 +13,10 @@
 (function () {
   'use strict';
 
-  var BASE = 'https://gwuoxrljxuwtiavjrcup.supabase.co/rest/v1/';
-  var KEY = 'sb_publishable_B5a0XlObjcN96TklpN1CdA_2kkaUhOg';
+  // oficial ou banco de teste da prévia (ambiente.js)
+  var AMB = window.AMBIENTE || {};
+  var BASE = (AMB.supabaseUrl || 'https://gwuoxrljxuwtiavjrcup.supabase.co') + '/rest/v1/';
+  var KEY = AMB.supabaseKey || 'sb_publishable_B5a0XlObjcN96TklpN1CdA_2kkaUhOg';
 
   function req(path, body) {
     var o = { method: body ? 'POST' : 'GET', headers: { apikey: KEY, 'Content-Type': 'application/json' }, cache: 'no-store' };

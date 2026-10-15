@@ -1,5 +1,9 @@
 # Compila o app iOS num Mac do GitHub e envia ao TestFlight.
 # Rodar: aba Actions > "App iOS (TestFlight)" > Run workflow  (ou: gh workflow run ios.yml)
+# Do ramo main sai o app da PRÉVIA (banco de teste, selo laranja), para o grupo "Prévia" do TestFlight:
+#   gh workflow run ios.yml --ref main -f versao=1.1.0
+# Do ramo producao sai o app OFICIAL (banco da equipe), que depois é liberado para o grupo "Equipe":
+#   gh workflow run ios.yml --ref producao -f versao=1.1.0
 # Segredos do repositório (Settings > Secrets and variables > Actions), cadastrados pelo dono da conta Apple:
 #   APPLE_TEAM_ID   ID do time (developer.apple.com > Account > Membership)
 #   ASC_KEY_ID      ID da chave da App Store Connect API (acesso Admin)
@@ -42,11 +46,18 @@ jobs:
       - name: Arquivos do site para o app
         run: |
           mkdir -p www
-          cp index.html app.js foto.js mapa.js banco.js drive.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
+          cp index.html ambiente.js app.js foto.js mapa.js banco.js drive.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
           cp -R lib icons www/
           # no app: a página vai até a borda da tela (o CSS desvia do relógio e do recorte) e não dá zoom
           sed -i '' 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
           grep -q 'viewport-fit=cover' www/index.html || { echo "Não achei a linha do viewport em index.html"; exit 1; }
+          # ambiente: oficial só do ramo producao; de qualquer outro ramo sai a prévia (banco de teste)
+          if [ "$GITHUB_REF_NAME" = "producao" ]; then NOME=oficial; else NOME=previa; fi
+          sed -i '' "s|^  var NOME = 'oficial';|  var NOME = '$NOME';|" www/ambiente.js
+          sed -i '' "s|^  var VERSAO = 'dev';|  var VERSAO = '$VERSAO ($GITHUB_RUN_NUMBER) · ${GITHUB_SHA::7}';|" www/ambiente.js
+          grep -q "var NOME = '$NOME';" www/ambiente.js || { echo "Não consegui marcar o ambiente em ambiente.js"; exit 1; }
+          echo "Ambiente do app: $NOME"
+          echo "AMBIENTE=$NOME" >> "$GITHUB_ENV"
           # bibliotecas do PDF dentro do app (gera o PDF sem internet)
           cp node_modules/jspdf/dist/jspdf.umd.min.js node_modules/svg2pdf.js/dist/svg2pdf.umd.min.js www/lib/
 
@@ -61,7 +72,9 @@ jobs:
       - name: Ícone e permissões
         run: |
           PL=ios/App/App/Info.plist
-          plutil -replace CFBundleDisplayName -string "VIA-230" "$PL"
+          # nome na tela de início: a prévia aparece diferente do oficial
+          if [ "$AMBIENTE" = "oficial" ]; then NOME_APP="VIA-230"; else NOME_APP="VIA Prévia"; fi
+          plutil -replace CFBundleDisplayName -string "$NOME_APP" "$PL"
           # o app é claro: com o iPhone no modo escuro o relógio ficaria branco em cima da barra branca
           plutil -replace UIUserInterfaceStyle -string Light "$PL"
           plutil -replace NSLocationWhenInUseUsageDescription -string "O app usa a sua posição para mostrar o km da BR-230 no mapa e identificar o ponto da foto." "$PL"
