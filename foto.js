@@ -928,11 +928,17 @@
           st.date ? dateTxt(st.date) : '',
           desc
         ].filter(Boolean).join('\n');
-        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && (c.lote || lotName(c))) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], descricao: info };
+        var d = st.date && isFinite(st.date.getTime()) ? st.date : null;
+        // dados para as galerias do app (banco)
+        var meta = { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? lotName(c) : null,
+          km: st.km != null ? Math.round(st.km * 1000) / 1000 : null, lat: ll ? ll[0] : null, lng: ll ? ll[1] : null,
+          em: d ? d.toISOString() : null, desc: desc || null };
+        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && (c.lote || lotName(c))) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], descricao: info, meta: meta };
       });
     }
+    // a foto fica guardada no aparelho (galeria do app) mesmo sem o Drive configurado; o envio espera
     function toDrive(list, auto) {
-      if (!driveOn() || !list.length) return;
+      if (!opts.drive || !list.length) return;
       opts.drive.add(list).then(function () {
         if (!auto) notify(list.length === 1 ? 'Foto na fila para o Drive da equipe.' : list.length + ' fotos na fila para o Drive da equipe.');
         refreshDrive();

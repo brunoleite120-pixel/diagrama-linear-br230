@@ -693,7 +693,8 @@
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
-      h += '<div class="pt-foot"><button type="button" class="btn small" data-act="dup-point" data-id="' + id + '">Duplicar ponto</button><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir ponto</button></div>';
+      h += '<div class="pt-foot"><span class="pt-foot-l">' + (galeriaOn() ? '<button type="button" class="btn small" data-act="fotos-ponto" data-id="' + id + '">Fotos deste ponto</button>' : '') +
+        '<button type="button" class="btn small" data-act="dup-point" data-id="' + id + '">Duplicar ponto</button></span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir ponto</button></div>';
       h += '</div>';
     }
     return h + '</article>';
@@ -961,6 +962,7 @@
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
+    if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
     switch (act) {
       case 'toggle-contract':
         ui.contractOpen = !ui.contractOpen;
@@ -2273,14 +2275,41 @@
     if (i.erro) return fotos + ' esperando para o Drive (o Google recusou; tenta de novo sozinho).';
     return fotos + ' na fila para o Drive.';
   }
-  function onDriveChange() { syncStatus(); if (foto) foto.refreshDrive(); }
+  function onDriveChange() { syncStatus(); if (foto) foto.refreshDrive(); renderGaleriaBtn(); if (galeria) galeria.changed(); }
   function initDrive() {
     if (!banco.on || !window.DriveFotos || driveQ) return;
     driveQ = window.DriveFotos({
       getUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
       getLogin: function () { return banco.login; },
+      ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
+      registrar: function (cred, f, mini) { return window.Banco.fotoRegistrar(cred, f, mini); },
       onChange: onDriveChange
     });
+  }
+  // ---------------- galeria (galeria.js): fotos deste aparelho e da equipe, conforme o acesso
+  var galeria = null;
+  function galeriaOn() { return !!(banco.on && driveQ && window.Galeria); }
+  function abrirGaleria(f) {
+    if (!galeriaOn()) return;
+    if (!galeria) {
+      galeria = window.Galeria({
+        drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; },
+        driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
+        ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
+        contratos: function () { return state.contracts; },
+        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin
+      });
+    }
+    galeria.open(f);
+  }
+  // botão Galeria: mostra quantas fotos deste aparelho ainda esperam envio
+  function renderGaleriaBtn() {
+    var b = $('btnGaleria');
+    if (!b) return;
+    b.hidden = !galeriaOn();
+    var n = driveQ ? driveQ.info().n : 0, el = b.querySelector('.gl-pend');
+    if (el) { el.textContent = n; el.hidden = !n; }
+    b.title = n ? n + (n === 1 ? ' foto esperando envio' : ' fotos esperando envio') : 'Fotos deste aparelho e da equipe';
   }
   // logo da equipe no carimbo das fotos: vai direto ao banco (só o responsável)
   function saveTeamLogo(op) {
@@ -2310,6 +2339,8 @@
     }
     banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
     initDrive();
+    renderGaleriaBtn();
+    $('btnGaleria').addEventListener('click', function () { abrirGaleria(); });
     banco.propostas = s && Array.isArray(s.propostas) ? s.propostas : [];
     setLogin(lsGet(LOGIN_KEY));
     if (banco.conf.length) showConflicts();

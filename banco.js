@@ -16,6 +16,10 @@
  *   Banco.usuarios(cred), Banco.usuarioSalvar(cred, u), Banco.codigoGeralDesativar(cred, 'equipe'|'responsavel')
  *   Banco.decidir(cred, ids, aprovar, motivo)      propostas dos fiscais
  *   Banco.lixeira(cred), Banco.restaurarLixeira(cred, id), Banco.copiaDados(cred, id), Banco.restaurarCopia(cred, id)
+ *
+ * Fotos (migração 04; o arquivo inteiro fica no Drive, aqui só os dados e a miniatura):
+ *   Banco.fotoRegistrar(cred, foto, miniB64), Banco.fotosListar(cred, 'minhas'|'todas'|'relatorio'|'deletadas', limite, antes)
+ *   Banco.fotosMini(cred, ids) -> [{id, jpeg}]   Banco.fotoRelatorio(cred, ids, marcar) -> quantas
  */
 (function () {
   'use strict';
@@ -93,6 +97,13 @@
     lixeira: function (cred) { return rpc('lixeira_listar', { p_cred: cred }); },
     restaurarLixeira: function (cred, id) { return rpc('restaurar_lixeira', { p_cred: cred, p_id: id }).then(Number); },
     copiaDados: function (cred, id) { return rpc('copia_dados', { p_cred: cred, p_id: id }); },
-    restaurarCopia: function (cred, id) { return rpc('restaurar_copia', { p_cred: cred, p_id: id }).then(Number); }
+    restaurarCopia: function (cred, id) { return rpc('restaurar_copia', { p_cred: cred, p_id: id }).then(Number); },
+
+    fotoRegistrar: function (cred, foto, mini) { return rpc('foto_registrar', { p_cred: cred, p_foto: foto, p_mini: mini || null }); },
+    fotosListar: function (cred, escopo, limite, antes) {
+      return rpc('fotos_listar', { p_cred: cred, p_escopo: escopo, p_limite: limite || 300, p_antes: antes || null }).then(function (r) { return r || []; });
+    },
+    fotosMini: function (cred, ids) { return rpc('fotos_mini', { p_cred: cred, p_ids: ids }).then(function (r) { return r || []; }); },
+    fotoRelatorio: function (cred, ids, marcar) { return rpc('foto_relatorio', { p_cred: cred, p_ids: ids, p_marcar: !!marcar }).then(Number); }
   };
 })();

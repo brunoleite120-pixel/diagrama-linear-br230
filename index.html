@@ -166,6 +166,8 @@ button{cursor:pointer}
 .pct-in input:disabled{background:var(--ground);color:#9AA19D}
 .pct-in span{font-size:12px;color:var(--ink-3)}
 .pt-foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pt-foot-l{display:flex;gap:8px;flex-wrap:wrap}
+.gl-pend{min-width:18px;padding:0 5px;border-radius:999px;background:#B54708;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
 
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;box-shadow:var(--shadow);font-size:13px;max-width:min(560px,calc(100vw - 32px));z-index:4000;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
@@ -308,6 +310,10 @@ body.fiscal [data-act="add-marco"],body.fiscal [data-act="del-marco"],body.fisca
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
           Foto
         </button>
+        <button class="btn small" id="btnGaleria" type="button" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Galeria<span class="gl-pend" hidden></span>
+        </button>
         <button class="btn small" id="btnFull" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
           Tela cheia
@@ -337,6 +343,7 @@ body.fiscal [data-act="add-marco"],body.fiscal [data-act="del-marco"],body.fisca
 <script src="foto.js"></script>
 <script src="banco.js"></script>
 <script src="drive.js"></script>
+<script src="galeria.js"></script>
 <script src="app.js"></script>
 <script>
   // app instalado (iPhone: Compartilhar > Adicionar à Tela de Início): abre sem internet depois da primeira visita

@@ -46,7 +46,7 @@ jobs:
       - name: Arquivos do site para o app
         run: |
           mkdir -p www
-          cp index.html ambiente.js app.js foto.js mapa.js banco.js drive.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
+          cp index.html ambiente.js app.js foto.js mapa.js banco.js drive.js galeria.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
           cp -R lib icons www/
           # no app: a página vai até a borda da tela (o CSS desvia do relógio e do recorte) e não dá zoom
           sed -i '' 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
