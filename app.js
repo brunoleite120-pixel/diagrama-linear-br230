@@ -645,7 +645,7 @@
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
       nec,
       { k: 'MEDIDO (PREÇOS INICIAIS)', v: fmtBRLc(r.total), s: r.n + ' medições · ' + r.de + ' a ' + r.ate },
-      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'volta na etapa em até ' + an.janela + ' meses · juntas < 1 ano' }
+      { k: 'ALERTAS', v: String(r.alertas), s: r.pontesAlerta ? 'em ' + r.pontesAlerta + (r.pontesAlerta === 1 ? ' ponte' : ' pontes') : 'nenhuma ponte' }
     ];
     return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
@@ -681,7 +681,7 @@
       o.push(T(x, g.yMed + 11, 'MEDIÇÕES', { size: 7, bold: true }));
       if (ms.length) o.push(T(x, g.yMed + 21, fitText(ms[0].n + 'ª a ' + ms[ms.length - 1].n + 'ª (' + ms[0].mes + ' a ' + ms[ms.length - 1].mes + ')', w, 6.2), { size: 6.2, fill: gray }));
       o.push(T(x, g.yAl + 11.5, 'ALERTAS', { size: 7, bold: true }));
-      o.push(T(x + w, g.yAl + 11.5, 'até ' + an.janela + ' meses', { size: 6, fill: gray, anchor: 'end' }));
+      o.push(T(x + w, g.yAl + 11.5, 'para conferir', { size: 6, fill: gray, anchor: 'end' }));
     }
     o.push(T(x, g.yObs + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
     o.push(L(G.colLine, 106, G.colLine, g.obsEnd, { stroke: '#C9CECB', sw: 0.6 }));
@@ -769,7 +769,7 @@
         o.push(T(cx, g.yConc + 17.6, fitText(ett, bw - 4, ets), { size: r2(ets), fill: '#3B4540', anchor: 'middle' }));
       }
 
-      // faixa das medições: um quadradinho por medição (azul = houve serviço na ponte; vermelho = medição de um alerta alto)
+      // faixa das medições: um quadradinho por medição (azul = houve serviço na ponte; roxo = medição com alerta)
       var ms = an.medicoes || [], cols = 9, rows = Math.max(1, Math.ceil(ms.length / cols));
       var cw = (bw - 2) / cols, ch = (g.medH - 2) / rows, mx = {};
       (a && a.mx || []).forEach(function (n) { mx[n] = 1; });
@@ -780,17 +780,17 @@
       });
       // alertas
       o.push(R(bx, g.yAl, bw, g.alH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
-      var at = !a ? '-' : a.aa ? a.aa + (a.aa === 1 ? ' alto' : ' altos') + ' · ' + a.al + ' no total' : a.al ? a.al + ' · nenhum alto' : 'nenhum';
-      o.push(T(cx, g.yAl + 11, fitText(at, bw - 4, fitSize(at, bw - 4, 7.2, true, 4.4), true), { size: r2(fitSize(at, bw - 4, 7.2, true, 4.4)), bold: true, fill: a && a.aa ? ALERTA_TINTA : '#3B4540', anchor: 'middle' }));
+      var at = !a ? '-' : a.al ? a.al + (a.al === 1 ? ' alerta' : ' alertas') : 'nenhum';
+      o.push(T(cx, g.yAl + 11, fitText(at, bw - 4, fitSize(at, bw - 4, 7.2, true, 4.4), true), { size: r2(fitSize(at, bw - 4, 7.2, true, 4.4)), bold: true, fill: a && a.al ? ALERTA_TINTA : '#3B4540', anchor: 'middle' }));
     }
 
-    // observações do fiscal e, com a análise, os alertas altos da ponte
+    // observações do fiscal e, com a análise, os alertas da ponte
     var oh = g.obsEnd - g.yObs;
     o.push(R(bx, g.yObs, bw, oh, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
     o.push(T(bx + 5, g.yObs + 12, 'Observações gerais', { size: r2(fitSize('Observações gerais', bw - 10, 7, true, 4.2)), bold: true }));
     var k = clamp((bw - 10) / 89.6, 0.62, 1), fs = r2(7 * k), lh = 8.9 * k, maxLines = Math.floor((oh - 26) / lh);
     var lines = wrap(p.obs || '', bw - 10, fs).map(function (t) { return { t: t }; });
-    var altos = a ? (a.alertas || []).filter(function (x) { return x.sev === 'Alta'; }).sort(function (x, y) { return y.valor - x.valor; }) : [];
+    var altos = a ? (a.alertas || []).slice().sort(function (x, y) { return y.valor - x.valor; }) : [];
     if (altos.length) {
       if (lines.length) lines.push({ t: '' });
       lines.push({ t: 'Alertas das medições:', b: true, cor: ALERTA_TINTA });
@@ -855,16 +855,16 @@
     var yn = y + 26;
     if (an) {
       lx = x + 40;
-      item(function (xx, yy) { o.push(R(xx + 0.8, yy + 0.8, 13.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Grupo refeito (alerta alto)', y + 16);
+      item(function (xx, yy) { o.push(R(xx + 0.8, yy + 0.8, 13.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Grupo refeito (alerta)', y + 16);
       item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: '#2B5797' })); }, 'Medição com serviço', y + 16);
-      item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: ALERTA_COR })); }, 'Medição de alerta alto', y + 16);
+      item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: ALERTA_COR })); }, 'Medição com alerta', y + 16);
       yn = y + 38;
     }
     var notas = [
       'Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.',
       'KM pelo SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ' (DNIT); contr. = km do contrato (Anexo VI); ~ antes do km = km estimado, a conferir em campo.'
     ];
-    if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta alto = a ponte atendida de novo na mesma etapa em até ' + an.janela + ' meses (uma passagem = medições seguidas), ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
+    if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta = ponte atendida mais de uma vez na mesma etapa ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
     notas.forEach(function (t, i) { o.push(T(x, yn + i * 8.4, fitText(t, 598, 6.1), { size: 6.1, fill: gray })); });
 
     var bx = 640;
@@ -876,7 +876,7 @@
       var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Pontes com dano', String(rs.dn)]];
       if (an && an.resumo) {
         parts.push(['Medido', fmtBRLc(an.resumo.total)]);
-        parts.push(['Alertas altos', String(an.resumo.altos)]);
+        parts.push(['Alertas', String(an.resumo.alertas)]);
       }
       var px = bx + 10;
       parts.forEach(function (pt) {
@@ -1145,53 +1145,56 @@
     analise = { dados: x && x.dados && typeof x.dados === 'object' ? x.dados : {}, estado: {} };
     if (!isEng()) lsPut(AN_KEY, null);
   }
-  // Alerta da análise (geral, por ponte): a ponte atendida mais de uma vez na mesma etapa. Atendimento = medições
-  // seguidas com serviço na ponte (uma passagem pode atravessar o mês); o PTO prevê uma passagem por estrutura em cada
-  // etapa. Alto quando ela volta a ser atendida, na mesma etapa, em até 3, 6 ou 12 meses (escolha de cada engenheiro,
-  // guardada no aparelho); médio quando volta depois disso. Entre etapas não é alerta: cada etapa pode refazer o serviço
-  // (pintar tudo de novo). Exceção: juntas e pingadeiras refeitas em menos de 1 ano são alerta alto (deveriam durar mais).
-  // Os alertas por serviço da análise (repetição, juntas além do comprimento, garantia, estimado do Anexo VI) não aparecem.
-  var JAN_KEY = 'diagrama-linear.janela', JANELAS = [3, 6, 12];
-  var janela = (function () { var v = Number(lsGet(JAN_KEY)); return JANELAS.indexOf(v) >= 0 ? v : 6; })();
-  var anCache = { raw: null, jan: 0, view: null };
+  // Alerta da análise (por ponte): a ponte atendida mais de uma vez na mesma etapa. Passagem = medições seguidas com
+  // serviço na ponte (uma passagem pode atravessar o mês). O PTO prevê uma passagem por estrutura em cada etapa, então
+  // toda volta na mesma etapa é alerta para conferência; o intervalo até a volta e o valor medido depois da 1ª passagem
+  // aparecem como informação. Entre etapas não é alerta: cada etapa pode refazer o serviço (pintar tudo de novo).
+  // Exceção: juntas e pingadeiras refeitas em menos de 1 ano são alerta (deveriam durar mais), mesmo entre etapas.
+  // Os alertas por serviço da análise (repetição, juntas além do comprimento, garantia) não aparecem.
+  // A tela pode mostrar uma etapa só (seletor guardado no aparelho); o PDF mostra sempre todas.
+  var ETAPA_KEY = 'diagrama-linear.etapa-analise', EST_ETAPA = 1;   // o Anexo VI do edital estima só a 1ª etapa
+  var etapaSel = Number(lsGet(ETAPA_KEY)) || 0;                      // 0 = todas as etapas
+  lsPut('diagrama-linear.janela', null);                             // seletor antigo (3/6/12 meses)
+  var anCache = { raw: null, view: null };
   function anOf(c) {
     var raw = c && isOae(c) && isEng() ? analise.dados[c.id] || null : null;
     if (!raw) return null;
-    if (anCache.raw !== raw || anCache.jan !== janela) anCache = { raw: raw, jan: janela, view: anJanela(raw, janela) };
+    if (anCache.raw !== raw) anCache = { raw: raw, view: anCalc(raw) };
     return anCache.view;
   }
-  function anJanela(raw, J) {
-    var meds = (raw.medicoes || []).slice().sort(function (x, y) { return x.n - y.n; }), mes = {}, info = {};
-    meds.forEach(function (m) { info[m.n] = m; var r = String(m.ref || ''); if (/^\d{4}-\d{2}/.test(r)) mes[m.n] = Number(r.slice(0, 4)) * 12 + Number(r.slice(5, 7)); });
+  function anCalc(raw) {
+    var meds = (raw.medicoes || []).slice().sort(function (x, y) { return x.n - y.n; }), mes = {}, info = {}, etapas = [], porEtapa = {};
+    meds.forEach(function (m) {
+      info[m.n] = m;
+      var r = String(m.ref || ''); if (/^\d{4}-\d{2}/.test(r)) mes[m.n] = Number(r.slice(0, 4)) * 12 + Number(r.slice(5, 7));
+      if (!porEtapa[m.etapa]) { porEtapa[m.etapa] = { etapa: m.etapa, ns: [], de: m.mes, ate: m.mes, total: 0 }; etapas.push(porEtapa[m.etapa]); }
+      var e = porEtapa[m.etapa]; e.ns.push(m.n); e.ate = m.mes; e.total += Number(m.total) || 0;
+    });
     function medsDe(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
     function trecho(r) {
       var a0 = info[r[0]], a1 = info[r[r.length - 1]];
       return r.length === 1 ? r[0] + 'ª (' + (a0 && a0.mes || '') + ')' : r[0] + 'ª a ' + r[r.length - 1] + 'ª (' + (a0 && a0.mes || '') + ' a ' + (a1 && a1.mes || '') + ')';
     }
-    var pontes = {}, altos = 0, total = 0;
+    var pontes = {}, total = 0, comAlerta = 0;
     Object.keys(raw.pontes || {}).forEach(function (pid) {
-      var a = raw.pontes[pid], mx = {}, grupos = {}, als = [], porEt = {}, ets = [];
+      var a = raw.pontes[pid], mx = {}, grupos = {}, als = [], et = {};
       Object.keys(a.grupos || {}).forEach(function (k) { grupos[k] = Object.assign({}, a.grupos[k], { altos: 0 }); });
-      meds.forEach(function (m) {
-        if (!(Number(a.meses && a.meses[String(m.n)]) > 0)) return;
-        if (!porEt[m.etapa]) { porEt[m.etapa] = []; ets.push(m.etapa); }
-        porEt[m.etapa].push(m.n);
-      });
-      ets.forEach(function (et) {
-        var ns = porEt[et], at = [], gap = null, valor = 0;
+      etapas.forEach(function (e) {
+        var ns = e.ns.filter(function (n) { return Number(a.meses && a.meses[String(n)]) > 0; }), at = [], gap = null, v = 0, rep = 0;
         ns.forEach(function (n) { var u = at[at.length - 1]; if (u && n === u[u.length - 1] + 1) u.push(n); else at.push([n]); });
-        if (at.length < 2) return;
-        // a volta mais rápida: do fim de um atendimento ao começo do seguinte, em meses
+        ns.forEach(function (n) { v += Number(a.meses[String(n)]) || 0; });
+        at.slice(1).forEach(function (r) { r.forEach(function (n) { rep += Number(a.meses[String(n)]) || 0; }); });
+        // a volta mais rápida: do fim de uma passagem ao começo da seguinte, em meses
         for (var i = 1; i < at.length; i++) {
           var d = mes[at[i][0]] - mes[at[i - 1][at[i - 1].length - 1]];
           if (isFinite(d) && (gap == null || d < gap)) gap = d;
         }
-        ns.forEach(function (n) { valor += Number(a.meses[String(n)]) || 0; });
-        var sev = gap != null && gap <= J ? 'Alta' : 'Média';
-        als.push({ tipo: 'atendimentos', sev: sev, etapa: et, vezes: at.length, valor: valor, gap: gap, meds: ns.map(function (n) { return n + 'ª'; }).join(', '),
-          servico: 'Atendida ' + at.length + ' vezes na ' + et + 'ª etapa', tipoNome: 'mais de uma passagem na mesma etapa', trechos: at.map(trecho).join(' · '),
+        et[e.etapa] = { ns: ns, v: v, passagens: at, trechos: at.map(trecho), gap: gap, rep: rep };
+        if (at.length < 2) return;
+        var et_ = e.etapa;
+        als.push({ tipo: 'atendimentos', sev: 'Alta', etapa: et_, etapas: [et_], vezes: at.length, valor: v, rep: rep, gap: gap, meds: ns.map(function (n) { return n + 'ª'; }).join(', '),
+          servico: 'Atendida ' + at.length + ' vezes na ' + et_ + 'ª etapa', tipoNome: 'mais de uma passagem na mesma etapa', trechos: at.map(trecho).join(' · '),
           motivo: at.map(trecho).join(' · ') + '; o PTO prevê uma passagem por estrutura em cada etapa' });
-        if (sev !== 'Alta') return;
         ns.forEach(function (n) { mx[n] = 1; });
         // grupos com serviço medido em mais de uma passagem dessa etapa
         (a.servicos || []).forEach(function (s) {
@@ -1200,8 +1203,9 @@
           medsDe(s.meds).forEach(function (n) { at.forEach(function (r, j) { if (r.indexOf(n) >= 0) vis[j] = 1; }); });
           if (Object.keys(vis).length > 1) { grupos[s.g].altos++; grupos[s.g].alerta = grupos[s.g].alerta || 'medido em mais de uma passagem na etapa'; }
         });
+
       });
-      // juntas e pingadeiras deveriam durar mais: refeitas em menos de 1 ano é alerta alto, mesmo de uma etapa para outra
+      // juntas e pingadeiras deveriam durar mais: refeitas em menos de 1 ano é alerta, mesmo de uma etapa para outra
       var sj = (a.servicos || []).filter(function (s) { return s.g === 'juntas' && s.v > 0; }), nj = [];
       sj.forEach(function (s) { medsDe(s.meds).forEach(function (n) { if (nj.indexOf(n) < 0) nj.push(n); }); });
       nj.sort(function (x, y) { return x - y; });
@@ -1218,18 +1222,44 @@
       }
       if (volta.length) {
         var vj = sj.reduce(function (t, s) { return t + s.v; }, 0);
-        als.push({ tipo: 'juntas12', sev: 'Alta', valor: vj, gap: gj, meds: nj.map(function (n) { return n + 'ª'; }).join(', '),
+        var etJ = [];
+        volta.forEach(function (r) { r.forEach(function (n) { var e = info[n] && info[n].etapa; if (e != null && etJ.indexOf(e) < 0) etJ.push(e); }); });
+        als.push({ tipo: 'juntas12', sev: 'Alta', valor: vj, gap: gj, etapas: etJ, meds: nj.map(function (n) { return n + 'ª'; }).join(', '),
           servico: 'Juntas refeitas em menos de 1 ano', tipoNome: 'junta ou pingadeira medida de novo em menos de 12 meses',
           trechos: 'voltaram em ' + gj + (gj === 1 ? ' mês: ' : ' meses: ') + volta.map(trecho).join(' · '),
           motivo: 'juntas medidas na ' + volta.map(trecho).reduce(function (t, x, i, l) { return t + (i ? (i === l.length - 1 ? ' e na ' : ', na ') : '') + x; }, '') + ' (' + sj.map(function (s) { return s.nome; }).join(', ') + '); deveriam durar mais de um ano' });
         volta.forEach(function (r) { r.forEach(function (n) { mx[n] = 1; }); });
         if (grupos.juntas) { grupos.juntas.altos++; grupos.juntas.alerta = 'refeita em menos de 1 ano'; }
       }
-      var aa = als.filter(function (x) { return x.sev === 'Alta'; }).length;
-      altos += aa; total += als.length;
-      pontes[pid] = Object.assign({}, a, { alertas: als, aa: aa, al: als.length, grupos: grupos, mx: Object.keys(mx).map(Number).sort(function (x, y) { return x - y; }) });
+      if (als.length) comAlerta++;
+      total += als.length;
+      pontes[pid] = Object.assign({}, a, { alertas: als, aa: als.length, al: als.length, grupos: grupos, et: et, mx: Object.keys(mx).map(Number).sort(function (x, y) { return x - y; }) });
     });
-    return Object.assign({}, raw, { pontes: pontes, resumo: Object.assign({}, raw.resumo, { altos: altos, alertas: total }), janela: J });
+    return Object.assign({}, raw, { pontes: pontes, etapas: etapas, resumo: Object.assign({}, raw.resumo, { altos: total, alertas: total, pontesAlerta: comAlerta }) });
+  }
+  // etapa mostrada na tela (0 = todas), se existir nesta análise
+  function etapaDe(an) { return etapaSel && an && (an.etapas || []).some(function (e) { return e.etapa === etapaSel; }) ? etapaSel : 0; }
+  function etapaInfo(an, n) { var r = null; ((an && an.etapas) || []).forEach(function (e) { if (e.etapa === n) r = e; }); return r; }
+  // alertas da ponte que tocam a etapa (E = 0: todos)
+  function alertasEm(a, E) { return ((a && a.alertas) || []).filter(function (x) { return !E || (x.etapas || []).indexOf(E) >= 0; }); }
+  function pctTxt(v) { return (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('pt-BR') + '%'; }
+  function nomePonte(p) { return (p.nome || '?') + (p.codigo ? ' · ' + p.codigo : ''); }
+  // por etapa: pontes atendidas, as sem serviço, as atendidas mais de uma vez e o executado × estimado do Anexo VI
+  function coberturaEtapas(c, an) {
+    var r = {}, ps = sortedPoints(c);
+    (an.etapas || []).forEach(function (e) {
+      var x = { etapa: e.etapa, total: ps.length, atend: 0, falta: [], rep: [], v: 0, est: [] };
+      ps.forEach(function (p) {
+        var a = an.pontes ? an.pontes[p.id] : null, i = a && a.et ? a.et[e.etapa] : null;
+        if (!i || !i.ns.length) x.falta.push(p);
+        else { x.atend++; x.v += i.v; if (i.passagens.length > 1) x.rep.push({ p: p, i: i }); }
+        if (e.etapa === EST_ETAPA && a && a.est > 0) x.est.push({ p: p, est: a.est, v: i ? i.v : 0, pct: (i ? i.v : 0) / a.est * 100 });
+      });
+      x.rep.sort(function (u, w) { return w.i.rep - u.i.rep; });
+      x.est.sort(function (u, w) { return w.pct - u.pct; });
+      r[e.etapa] = x;
+    });
+    return r;
   }
   function carregarAnalise(c) {
     if (!c || !isOae(c) || !banco.on || !isEng() || !window.Banco || !window.Banco.analise) return;
@@ -1258,6 +1288,41 @@
   }
   function fmtIsoDate(iso) { return iso ? fmtDate(String(iso).slice(0, 10)) : ''; }
 
+  // no resumo: com "Todas", uma linha por etapa; com uma etapa, as pontes sem serviço, as atendidas mais de uma vez e
+  // (na 1ª etapa) o executado × estimado do Anexo VI. Tocar numa ponte abre o cartão dela.
+  function etapasHtml(an, cob, E) {
+    var h = '';
+    function pChip(p) { return '<button type="button" class="an-pchip" data-act="an-ir" data-id="' + esc(p.id) + '">' + esc(p.nome || p.codigo || '?') + (p.kmIni != null ? ' <small>km ' + esc(fmtKm(p.kmIni)) + '</small>' : '') + '</button>'; }
+    function estRow(y) {
+      return '<button type="button" class="an-prow" data-act="an-ir" data-id="' + esc(y.p.id) + '"><span><b>' + esc(nomePonte(y.p)) + '</b><small>executado ' + fmtBRL(y.v) + ' de ' + fmtBRL(y.est) + ' estimados' + (y.v > y.est ? ' · <span class="an-over">' + fmtBRL(y.v - y.est) + ' acima</span>' : '') + '</small></span>' +
+        '<span class="an-v"><b' + (y.pct > 100 ? ' class="an-over"' : '') + '>' + pctTxt(y.pct) + '</b></span></button>';
+    }
+    if (!E) {
+      h += '<div class="an-sec"><h4>Por etapa</h4>' + (an.etapas || []).map(function (e) {
+        var x = cob[e.etapa], acima = x.est.filter(function (y) { return y.pct > 100; }).length;
+        return '<button type="button" class="an-etrow" data-act="an-etapa" data-v="' + e.etapa + '"><span><b>' + e.etapa + 'ª etapa</b> · ' + esc(e.de + ' a ' + e.ate) + ' · ' + e.ns.length + ' medições · ' + fmtBRL(x.v) + ' nas pontes</span>' +
+          '<small>' + x.atend + ' de ' + x.total + ' pontes atendidas' + (x.falta.length ? ' · <span class="an-over">' + x.falta.length + ' sem serviço</span>' : '') +
+          ' · ' + (x.rep.length ? '<span class="an-over">' + x.rep.length + (x.rep.length === 1 ? ' atendida' : ' atendidas') + ' mais de uma vez</span>' : 'nenhuma atendida mais de uma vez') +
+          (x.est.length ? ' · ' + acima + (acima === 1 ? ' acima' : ' acima') + ' do estimado no Anexo VI' : '') + '</small></button>';
+      }).join('') + '</div>';
+      return h;
+    }
+    var x = cob[E];
+    h += '<div class="an-sec"><h4>Sem serviço nesta etapa (' + x.falta.length + ')</h4>' + (x.falta.length ? '<div class="an-pchips">' + x.falta.map(pChip).join('') + '</div>'
+      : '<div class="empty">Todas as ' + x.total + ' pontes tiveram serviço nesta etapa.</div>') + '</div>';
+    h += '<div class="an-sec"><h4>Atendidas mais de uma vez nesta etapa (' + x.rep.length + ')</h4>' + (x.rep.length ? x.rep.map(function (y) {
+      return '<button type="button" class="an-prow" data-act="an-ir" data-id="' + esc(y.p.id) + '"><span><b>' + esc(nomePonte(y.p)) + '</b><small>' + y.i.passagens.length + ' passagens: ' + esc(y.i.trechos.join(' · ')) +
+        (y.i.gap != null ? ' · voltou em ' + y.i.gap + (y.i.gap === 1 ? ' mês' : ' meses') : '') + '</small></span>' +
+        '<span class="an-v"><b>' + fmtBRL(y.i.rep) + '</b><small>depois da 1ª passagem</small></span></button>';
+    }).join('') : '<div class="empty">Nenhuma ponte atendida mais de uma vez nesta etapa.</div>') + '</div>';
+    if (x.est.length) {
+      var ac = x.est.filter(function (y) { return y.pct > 100; }), ou = x.est.filter(function (y) { return y.pct <= 100; });
+      var tv = x.est.reduce(function (t, y) { return t + y.v; }, 0), te = x.est.reduce(function (t, y) { return t + y.est; }, 0);
+      h += '<div class="an-sec"><h4>Executado × estimado no Anexo VI</h4><div class="an-line">' + ac.length + ' de ' + x.est.length + ' pontes passaram do estimado · executado ' + fmtBRL(tv) + ' de ' + fmtBRL(te) + ' estimados (' + pctTxt(tv / te * 100) + ')</div>' +
+        ac.map(estRow).join('') + (ou.length ? '<details class="an-mais"><summary>As outras ' + ou.length + ' pontes (até 100% do estimado)</summary>' + ou.map(estRow).join('') + '</details>' : '') + '</div>';
+    }
+    return h;
+  }
   function analiseResumoHtml(c) {
     if (!banco.on) return '';
     if (!isEng()) {
@@ -1269,22 +1334,29 @@
       var t = e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba ou voltar ao app.' : 'Nenhuma análise das medições cadastrada para este contrato.';
       return '<div class="an-note">' + esc(t) + '</div>';
     }
-    var r = an.resumo || {}, sobre = an.sobre || {};
+    var r = an.resumo || {}, sobre = an.sobre || {}, E = etapaDe(an), ei = etapaInfo(an, E), cob = coberturaEtapas(c, an), nAl = 0, pAl = 0;
+    c.pontos.forEach(function (p) { var k = alertasEm(an.pontes ? an.pontes[p.id] : null, E).length; nAl += k; if (k) pAl++; });
     var kp = [
-      ['Medido a preços iniciais', fmtBRL(r.total), r.n + ' medições · ' + r.de + ' a ' + r.ate],
-      ['Alertas altos', String(r.altos), 'de ' + r.alertas + ' alertas · ponte atendida de novo na mesma etapa em até ' + an.janela + ' meses, ou juntas refeitas em menos de 1 ano']
+      E ? ['Medido na ' + E + 'ª etapa', fmtBRL(ei.total || cob[E].v), ei.ns.length + ' medições · ' + ei.de + ' a ' + ei.ate + ' · ' + fmtBRL(cob[E].v) + ' nas pontes']
+        : ['Medido a preços iniciais', fmtBRL(r.total), r.n + ' medições · ' + r.de + ' a ' + r.ate],
+      ['Alertas para conferência', String(nAl), (pAl ? 'em ' + pAl + (pAl === 1 ? ' ponte · ' : ' pontes · ') : '') + 'ponte atendida mais de uma vez na mesma etapa, ou juntas refeitas em menos de 1 ano']
     ];
+    if (E) kp.push(['Pontes atendidas', cob[E].atend + ' de ' + cob[E].total, cob[E].falta.length ? cob[E].falta.length + ' sem serviço nesta etapa' : 'todas tiveram serviço nesta etapa']);
     var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' +
       (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros e o Administrador</span></div>';
-    h += '<div class="an-jan"><span id="anJanTit">Alerta alto quando a ponte volta a ser atendida, na mesma etapa, em até</span><div class="seg" role="group" aria-labelledby="anJanTit">' +
-      JANELAS.map(function (j) { return '<button type="button" data-act="janela" data-v="' + j + '" aria-pressed="' + (an.janela === j) + '">' + j + ' meses</button>'; }).join('') + '</div></div>';
+    var ets = an.etapas || [];
+    h += '<div class="an-jan"><span id="anEtTit">Mostrar</span><div class="seg an-etapas" role="group" aria-labelledby="anEtTit" style="grid-template-columns:repeat(' + (ets.length + 1) + ',minmax(0,1fr))">' +
+      '<button type="button" data-act="an-etapa" data-v="0" aria-pressed="' + !E + '">Todas<small>' + esc((r.de || '') + ' a ' + (r.ate || '')) + '</small></button>' +
+      ets.map(function (e) { return '<button type="button" data-act="an-etapa" data-v="' + e.etapa + '" aria-pressed="' + (E === e.etapa) + '">' + e.etapa + 'ª etapa<small>' + esc(e.de + ' a ' + e.ate) + '</small></button>'; }).join('') + '</div></div>';
     h += '<div class="an-kpis">' + kp.map(function (k) {
       return '<div class="an-kpi"><span>' + esc(k[0]) + '</span><b>' + esc(k[1]) + '</b><small>' + esc(k[2]) + '</small></div>';
     }).join('') + '</div>';
+    h += etapasHtml(an, cob, E);
     if (sobre.fonte) h += '<div class="an-src">Fonte: ' + esc(sobre.fonte) + '.</div>';
     // as notas de critérios que não valem mais na tela (garantia, carta das juntas, comprimento das juntas, vegetação) saem
-    var notas = [{ assunto: 'Alertas desta tela', texto: 'Alerta geral por ponte: atendida mais de uma vez na mesma etapa (uma passagem = medições seguidas); alto quando volta em até ' +
-      an.janela + ' meses. Juntas e pingadeiras refeitas em menos de 1 ano também são alerta alto, mesmo de uma etapa para outra. Entre etapas, o resto não é alerta: cada etapa pode refazer o serviço.' }]
+    var notas = [{ assunto: 'Alertas desta tela', texto: 'Alerta por ponte: atendida mais de uma vez na mesma etapa (uma passagem = medições seguidas com serviço); o PTO prevê uma passagem por estrutura em cada etapa. ' +
+      'Cada alerta mostra quando a ponte voltou e o valor medido depois da 1ª passagem. Juntas e pingadeiras refeitas em menos de 1 ano também são alerta, mesmo de uma etapa para outra. ' +
+      'Entre etapas, o resto não é alerta: cada etapa pode refazer o serviço. O estimado vem do Anexo VI do edital, que só traz a 1ª etapa. Indício a conferir.' }]
       .concat((an.notas || []).filter(function (n) { return !/^(garantia|carta|comprimento f|vegeta)/i.test(String(n.assunto || '')); }));
     if (notas.length) {
       h += '<details class="an-notas"><summary>Critérios dos alertas e ressalvas</summary><ol>' + notas.map(function (n) {
@@ -1304,7 +1376,7 @@
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
     var badge = (n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '') +
-      (a && a.aa ? '<b class="pt-al" title="' + a.aa + (a.aa === 1 ? ' alerta alto' : ' alertas altos') + ' na análise das medições">' + a.aa + '</b>' : '');
+      (function () { var k = alertasEm(a, etapaDe(an)).length; return k ? '<b class="pt-al" title="' + k + (k === 1 ? ' alerta' : ' alertas') + ' na análise das medições">' + k + '</b>' : ''; })();
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
       '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n)) + '">' + nt + '</span>' + ICON_CHEV;
   }
@@ -1330,7 +1402,7 @@
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
-        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + esc(medTxt(an, gi.ult)) : '') + (gi.altos ? ' · ' + esc(comMes(an, gi.alerta || 'alerta alto')) : '') + '</small>';
+        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + esc(medTxt(an, gi.ult)) : '') + (gi.altos ? ' · ' + esc(comMes(an, gi.alerta || 'alerta')) : '') + '</small>';
       });
 
       if (a) h += ponteAnaliseHtml(an, a, p.id);
@@ -1352,19 +1424,25 @@
   function abcHtml(an, a, med) {
     var mesDe = {}, k = String(med || ''), base = (a.servicos || []).filter(function (s) { return s.v > 0; });
     (an.medicoes || []).forEach(function (m) { mesDe[m.n] = m.mes; });
-    var temPor = base.some(function (s) { return s.por; }), sv = base;
+    var temPor = base.some(function (s) { return s.por; }), sv = base, E = med ? 0 : etapaDe(an), ei = E ? etapaInfo(an, E) : null, Ev = etapaDe(an);
     if (med) {
       sv = base.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(med) >= 0; }).map(function (s) {
         return temPor ? Object.assign({}, s, { q: s.por[k][0], v: s.por[k][1] }) : s;
       });
-    }
+    } else if (E) sv = noEscopo(base, ei.ns, temPor);
+    var comEst = E === EST_ETAPA && temPor;
     sv = sv.slice().sort(function (x, y) { return y.v - x.v; });
     var h = '';
     if (med) {
       h += '<div class="section-title">Serviços · Curva ABC · ' + med + 'ª medição' + (mesDe[med] ? ' (' + esc(mesDe[med]) + ')' : '') + '</div>';
       h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido nesta ponte na ' + medTxt(an, med) + '.' : 'Serviços medidos na ' + medTxt(an, med) + ', com o total de cada um nesta ponte.') +
-        '</span><button type="button" class="btn small" data-act="abc-todas">Todas as medições · ' + fmtBRL(a.tot) + '</button></div>';
+        '</span><button type="button" class="btn small" data-act="abc-todas">' + (Ev ? 'A ' + Ev + 'ª etapa inteira' : 'Todas as medições · ' + fmtBRL(a.tot)) + '</button></div>';
       if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + esc(medTxt(an, med)) + '.</div>';
+    } else if (E) {
+      h += '<div class="section-title">Serviços · Curva ABC · ' + E + 'ª etapa (' + esc(ei.de + ' a ' + ei.ate) + ')</div>';
+      h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido nesta ponte na ' + E + 'ª etapa' + (comEst ? ', com o estimado do Anexo VI.' : '.') : 'Serviços medidos na ' + E + 'ª etapa, com o total de cada um nesta ponte.') +
+        '</span><button type="button" class="btn small" data-act="an-etapa" data-v="0">Todas as medições · ' + fmtBRL(a.tot) + '</button></div>';
+      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + E + 'ª etapa.</div>';
     } else {
       if (!sv.length) return '';
       h += '<div class="section-title">Serviços · Curva ABC</div>';
@@ -1378,7 +1456,7 @@
     function pct(v) { return (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('pt-BR') + '%'; }
     function soma(l) { return l.reduce(function (t, x) { return t + x.pct; }, 0); }
     function meds(t) {
-      var ns = medsNums(t);
+      var ns = medsNums(t).filter(function (n) { return !E || ei.ns.indexOf(n) >= 0; });
       return ns.length ? '<span class="abc-meds">' + ns.map(function (n) {
         return '<i' + (n === med ? ' class="sel"' : '') + '>' + n + 'ª' + (mesDe[n] ? ' <small>(' + esc(mesDe[n]) + ')</small>' : '') + '</i>';
       }).join('') + '</span>' : '';
@@ -1389,14 +1467,44 @@
         '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span>' + meds(x.s.meds) +
         '<span class="abc-bar"><i style="width:' + Math.max(1.5, x.pct).toFixed(1) + '%"></i></span></div>' +
         '<div class="abc-v" title="' + pct(x.pct) + ' do valor · acumulado ' + pct(x.ac) + '"><b>' + fmtN(x.s.q) + ' <span class="abc-un">' + esc(x.s.un) + '</span></b>' +
-        '<small>' + fmtBRL(x.s.v) + ' · ' + pct(x.pct) + '</small></div></div>';
+        '<small>' + fmtBRL(x.s.v) + ' · ' + pct(x.pct) + '</small>' +
+        (comEst && x.s.est > 0 ? '<small' + (x.s.q > x.s.est ? ' class="an-over"' : '') + '>estimado ' + fmtN(x.s.est) + ' ' + esc(x.s.un) + '</small>' : '') + '</div></div>';
     }
     h += '<div class="abc-res">' + ['A', 'B', 'C'].filter(function (k) { return cls[k].length; }).map(function (k) {
       return '<span class="abc-tag ' + k.toLowerCase() + '"><b>' + k + '</b> ' + cls[k].length + (cls[k].length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls[k])) + '</span>';
     }).join('') + '</div>';
     h += '<div class="abc">' + cls.A.map(linha).join('') + cls.B.map(linha).join('');
     if (cls.C.length) h += '<details class="abc-mais"><summary>Classe C: ' + cls.C.length + (cls.C.length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls.C)) + ' do valor</summary>' + cls.C.map(linha).join('') + '</details>';
-    return h + '</div>';
+    h += '</div>';
+    if (!med && !E) h += compHtml(an, base, temPor);
+    return h;
+  }
+  // cada serviço somado nas medições ns (campo "por"); sem "por", os serviços medidos nelas, com o total de cada um
+  function noEscopo(base, ns, temPor) {
+    return base.map(function (s) {
+      if (!temPor) return medsNums(s.meds).some(function (n) { return ns.indexOf(n) >= 0; }) ? s : null;
+      var q = 0, v = 0, tem = false;
+      ns.forEach(function (n) { var p = s.por && s.por[String(n)]; if (p) { tem = true; q += Number(p[0]) || 0; v += Number(p[1]) || 0; } });
+      return tem ? Object.assign({}, s, { q: q, v: v }) : null;
+    }).filter(Boolean);
+  }
+  // serviços por etapa, lado a lado: quantidade (e valor) de cada serviço em cada etapa; marca os medidos em mais de uma
+  function compHtml(an, base, temPor) {
+    var ets = an.etapas || [];
+    if (!temPor || ets.length < 2) return '';
+    var rows = base.map(function (s) {
+      var cel = ets.map(function (e) { var x = noEscopo([s], e.ns, true)[0]; return x ? { q: x.q, v: x.v } : null; });
+      return { s: s, cel: cel, n: cel.filter(Boolean).length };
+    }).sort(function (x, y) { return y.s.v - x.s.v; });
+    var varias = rows.filter(function (r) { return r.n > 1; }).length;
+    return '<details class="an-comp"><summary>Serviços por etapa · ' + rows.length + (rows.length === 1 ? ' serviço' : ' serviços') + (varias ? ' · ' + varias + ' medidos em mais de uma etapa' : '') + '</summary>' +
+      '<div class="an-comp-t" style="grid-template-columns:minmax(0,1fr) repeat(' + ets.length + ',minmax(66px,auto))"><span class="h">Serviço</span>' +
+      ets.map(function (e) { return '<span class="h n">' + e.etapa + 'ª etapa</span>'; }).join('') +
+      rows.map(function (r) {
+        return '<span class="t">' + esc(r.s.nome) + (r.n > 1 ? ' <i class="an-rep">em ' + r.n + ' etapas</i>' : '') + '</span>' + r.cel.map(function (x) {
+          return '<span class="n">' + (x ? '<b>' + fmtN(x.q) + ' <small>' + esc(r.s.un) + '</small></b><small>' + fmtBRL(x.v) + '</small>' : '–') + '</span>';
+        }).join('');
+      }).join('') + '</div></details>';
   }
   function medsNums(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
   // medição citada sempre com o mês e o ano: "25ª (mar/26)" (os meses vêm da análise)
@@ -1410,23 +1518,40 @@
   function detTxt(med) { return med ? 'Toque de novo na barra da ' + medTxt(anOf(active()), med) + ' ou em “Todas as medições” para voltar ao total.' : DET0; }
   // topo de "Medições nesta ponte": "Todas as medições" com a soma, ou só os dados da medição escolhida no gráfico
   function topoHtml(an, a, med) {
-    var ms = an.medicoes || [], m = null, h = '', k = String(med || '');
+    var ms = an.medicoes || [], m = null, h = '', k = String(med || ''), E = etapaDe(an);
     ms.forEach(function (x) { if (x.n === med) m = x; });
     var v = m ? Number(a.meses[k]) || 0 : 0;
-    h += '<div class="an-esc"><button type="button" class="an-chip' + (m ? '' : ' on') + '" data-act="abc-todas" aria-pressed="' + !m + '">Todas as medições <b>' + fmtBRL(a.tot) + '</b></button>' +
+    h += '<div class="an-esc"><button type="button" class="an-chip' + (!m && !E ? ' on' : '') + '" data-act="an-etapa" data-v="0" aria-pressed="' + (!m && !E) + '">Todas <b>' + fmtBRL(a.tot) + '</b></button>' +
+      (an.etapas || []).map(function (e) {
+        var on = !m && E === e.etapa, i = a.et && a.et[e.etapa];
+        return '<button type="button" class="an-chip' + (on ? ' on' : '') + '" data-act="an-etapa" data-v="' + e.etapa + '" aria-pressed="' + on + '">' + e.etapa + 'ª etapa <b>' + fmtBRL(i ? i.v : 0) + '</b></button>';
+      }).join('') +
       (m ? '<span class="an-chip on">' + esc(medTxt(an, m.n)) + ' <b>' + fmtBRL(v) + '</b></span>' : '') + '</div>';
     if (m) {
       var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = sv.some(function (s) { return s.por; });
       var nsv = sv.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(m.n) >= 0; }).length;
       h += '<div class="an-line">' + (m.etapa ? esc(m.etapa) + 'ª etapa · ' : '') +
         (v ? nsv + (nsv === 1 ? ' serviço medido' : ' serviços medidos') + ' nesta ponte' : 'sem serviço nesta ponte') +
-        ((a.mx || []).indexOf(m.n) >= 0 ? ' · <span class="an-over">medição de alerta alto</span>' : '') + '</div>';
+        ((a.mx || []).indexOf(m.n) >= 0 ? ' · <span class="an-over">medição com alerta</span>' : '') + '</div>';
       return h;
     }
-    var et = medEtapas(an, a), ult = ms.filter(function (x) { return Number(a.meses[String(x.n)]) > 0; }).slice(-3).reverse();
-    if (et.length) h += '<div class="an-line">' + et.map(function (e) { return e.etapa + 'ª etapa: <b>' + fmtBRL(e.v) + '</b>'; }).join(' · ') + '</div>';
+    // executado × estimado do Anexo VI (só existe para a 1ª etapa)
+    var estL = '', i1 = a.et && a.et[EST_ETAPA];
+    if (a.est > 0 && (!E || E === EST_ETAPA)) {
+      var pc = (i1 ? i1.v : 0) / a.est * 100;
+      estL = '<div class="an-line">Anexo VI (' + EST_ETAPA + 'ª etapa): estimado <b>' + fmtBRL(a.est) + '</b> · executado ' + fmtBRL(i1 ? i1.v : 0) +
+        ' (<span' + (pc > 100 ? ' class="an-over"' : '') + '>' + pctTxt(pc) + '</span>)</div>';
+    }
+    if (E) {
+      var i = a.et && a.et[E], ei = etapaInfo(an, E);
+      if (!i || !i.ns.length) h += '<div class="an-line"><span class="an-over">Sem serviço nesta ponte na ' + E + 'ª etapa</span> (' + esc(ei.de + ' a ' + ei.ate) + ').</div>';
+      else h += '<div class="an-line">' + (i.passagens.length > 1 ? '<span class="an-over">' + i.passagens.length + ' passagens</span>' : '1 passagem') + ': ' + esc(i.trechos.join(' · ')) +
+        (i.passagens.length > 1 ? (i.gap != null ? ' · voltou em ' + i.gap + (i.gap === 1 ? ' mês' : ' meses') : '') + ' · <b>' + fmtBRL(i.rep) + '</b> depois da 1ª passagem' : '') + '</div>';
+      return h + estL;
+    }
+    var ult = ms.filter(function (x) { return Number(a.meses[String(x.n)]) > 0; }).slice(-3).reverse();
     if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (x) { return x.n + 'ª (' + esc(x.mes) + ') ' + fmtBRL(Number(a.meses[String(x.n)])); }).join(' · ') + '</div>';
-    return h;
+    return h + estL;
   }
   // troca o topo e a curva ABC da ponte aberta, pela medição escolhida no gráfico (ou todas)
   function abcTrocar(art) {
@@ -1438,7 +1563,7 @@
   }
   // medições da ponte (barras por medição), serviços pela curva ABC e alertas
   function ponteAnaliseHtml(an, a, pid) {
-    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = ui.medSel[pid] || null;
+    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = ui.medSel[pid] || null, E = etapaDe(an);
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
     // só o histórico: total, por etapa e as últimas medições com serviço (sem comparar com o estimado do Anexo VI)
@@ -1450,30 +1575,27 @@
     // cada barra é um botão: no celular não há "passar o mouse", então o toque mostra a medição embaixo do gráfico
     h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
-      var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição de alerta alto' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
-      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + '" data-act="med-bar" data-n="' + m.n + '" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
+      var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição com alerta' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
+      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + (E && m.etapa !== E ? ' fora' : '') + '" data-act="med-bar" data-n="' + m.n + '" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
     if (ms.length) {
       h += '<div class="an-axis"><span>' + esc(ms[0].mes) + '</span>' + (corte > 0 ? '<span>' + (ms[corte].etapa) + 'ª etapa a partir de ' + esc(ms[corte].mes) + '</span>' : '') + '<span>' + esc(ms[ms.length - 1].mes) + '</span></div>';
-      h += '<div class="an-leg"><span><i class="on"></i>com serviço</span><span><i class="al"></i>medição de alerta alto</span></div>';
+      h += '<div class="an-leg"><span><i class="on"></i>com serviço</span><span><i class="al"></i>medição com alerta</span></div>';
       h += '<div class="an-det' + (sel ? ' on' : '') + '" aria-live="polite">' + esc(detTxt(sel)) + '</div>';
     }
     h += '</div>';
 
     h += '<div class="abc-box">' + abcHtml(an, a, sel) + '</div>';
 
-    var al = (a.alertas || []).slice().sort(function (x, y) {
-      var o = { Alta: 0, 'Média': 1, Baixa: 2 };
-      return (o[x.sev] - o[y.sev]) || (y.valor - x.valor);
-    });
-    h += '<div class="section-title">Alertas da análise</div>';
-    if (!al.length) h += '<div class="empty">Nenhuma etapa com mais de uma passagem e nenhuma junta refeita em menos de 1 ano.</div>';
+    var al = alertasEm(a, E).slice().sort(function (x, y) { return (y.rep != null ? y.rep : y.valor) - (x.rep != null ? x.rep : x.valor); });
+    h += '<div class="section-title">Alertas da análise' + (E ? ' · ' + E + 'ª etapa' : '') + '</div>';
+    if (!al.length) h += '<div class="empty">' + (E ? 'Nenhuma volta nesta etapa e nenhuma junta refeita em menos de 1 ano.' : 'Nenhuma etapa com mais de uma passagem e nenhuma junta refeita em menos de 1 ano.') + '</div>';
     al.forEach(function (x) {
-      h += '<div class="an-al"><span class="an-sev ' + (x.sev === 'Alta' ? 'alta' : x.sev === 'Baixa' ? 'baixa' : 'media') + '">' + esc(x.sev) + '</span>' +
+      h += '<div class="an-al"><span class="an-sev alta">' + esc(x.tipo === 'atendimentos' ? x.etapa + 'ª etapa' : 'Juntas') + '</span>' +
         '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) +   // os trechos já vêm com os meses
         (x.gap != null ? ' · voltou em ' + x.gap + (x.gap === 1 ? ' mês' : ' meses') : '') + '</small></div>' +
-        '<span class="an-v">' + fmtBRL(x.valor) + '</span></div>';
+        '<span class="an-v">' + (x.tipo === 'atendimentos' ? '<b>' + fmtBRL(x.rep) + '</b><small>depois da 1ª passagem</small>' : '<b>' + fmtBRL(x.valor) + '</b><small>juntas medidas</small>') + '</span></div>';
     });
     return h;
   }
@@ -1780,9 +1902,21 @@
       abcTrocar(art);
       return;
     }
-    if (act === 'janela') {
-      var jv = Number(b.dataset.v);
-      if (JANELAS.indexOf(jv) >= 0 && jv !== janela) { janela = jv; lsPut(JAN_KEY, jv); renderEditor(); renderPreview(); }
+    // etapa mostrada na análise (resumo e cartões das pontes); o PDF não muda
+    if (act === 'an-etapa') {
+      var ev = Number(b.dataset.v) || 0;
+      ui.medSel = {};
+      if (ev !== etapaSel) { etapaSel = ev; lsPut(ETAPA_KEY, ev || null); }
+      renderEditor();
+      return;
+    }
+    // ponte citada no resumo da análise: abre o cartão dela
+    if (act === 'an-ir') {
+      var pidIr = b.dataset.id;
+      ui.open[pidIr] = true;
+      renderEditor();
+      var alvo = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(pidIr) : pidIr) + '"]');
+      if (alvo) { alvo.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); }
       return;
     }
     switch (act) {
