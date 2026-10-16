@@ -125,6 +125,7 @@
     verde: { name: 'Verde', hex: '#1E9E55' }
   };
   var STORE_KEY = 'unifilar-pontos-criticos.v1';
+  var PREVIA = !!(window.AMBIENTE && window.AMBIENTE.previa);
   var PAGE_W = 1190.55, PAGE_H = 841.89; // A3 paisagem em pontos
   var FONT = 'Helvetica, Arial, sans-serif';
   var LIBS = {
@@ -2581,6 +2582,7 @@
   function loginModal() {
     modal('<h2 id="modalTitle">Entrar</h2>' +
       '<p>Use o código que o Administrador do sistema passou para você. O acesso fica guardado neste aparelho até você sair.</p>' +
+      (PREVIA ? '<p class="hint">Esta é a <b>prévia</b>: usa o banco de teste, com códigos próprios. Os códigos do site oficial não valem aqui.</p>' : '') +
       mField('lgCod', 'Seu código', true) + SHOWPW +
       '<div id="lgNomeBox" hidden>' + mField('lgNome', 'Seu nome', false, lsGet(NAME_KEY) || '') +
       '<p class="hint">Esse é o código geral da equipe: o nome vai para o histórico.</p></div>' +
@@ -2593,7 +2595,7 @@
       busyBtn(f, true, 'Conferindo…');
       window.Banco.entrarV2(c, box.hidden ? null : n, aparelho()).then(function (r) {
         busyBtn(f, false);
-        if (!r || !r.token) { modalErr(f, 'Código errado.'); return; }
+        if (!r || !r.token) { modalErr(f, PREVIA ? 'Código errado para a prévia (o do site oficial não vale aqui).' : 'Código errado.'); return; }
         if (!box.hidden) lsPut(NAME_KEY, n);
         entrou(r);
       }, function (err) {
