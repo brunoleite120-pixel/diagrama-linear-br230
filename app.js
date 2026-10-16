@@ -974,8 +974,9 @@
 
   // ------------------------------------------------------------------ interface: abas
   function renderTabs() {
-    $('tabs').innerHTML = state.contracts.map(function (c) {
-      return '<button type="button" class="tab" data-tab="' + esc(c.id) + '" aria-current="' + (c.id === state.activeId) + '">' +
+    $('tabs').innerHTML = (window.VisaoGeral ? '<button type="button" class="tab tab-visao" data-act="visao" aria-current="' + visaoOn + '">' + ICON_VISAO + 'Visão geral</button>' : '') +
+      state.contracts.map(function (c) {
+      return '<button type="button" class="tab" data-tab="' + esc(c.id) + '" aria-current="' + (!visaoOn && c.id === state.activeId) + '">' +
         esc(c.lote || 'Contrato') + '<small>' + esc(c.numero || 'sem número') + '</small></button>';
     }).join('') + '<button type="button" class="tab add" data-act="new-contract">+ Contrato</button>';
   }
@@ -1795,6 +1796,7 @@
     return ' · ' + r.dn + (r.dn === 1 ? ' ponte com dano' : ' pontes com dano') + (r.exec ? ' · ' + r.exec + ' em execução' : '');
   }
   function renderPreview() {
+    if (visaoOn && visao && !$('visaoHost').hidden) { visao.render(); return; }
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
       mapa.render();
@@ -1817,8 +1819,58 @@
 
   function renderAll() {
     renderTabs();
+    if (mostraVisao()) { visao.render(); return; }
     renderEditor();
     renderPreview();
+    if (view === 'mapa' && mapa) mapa.show();
+  }
+
+  // ------------------------------------------------------------------ visão geral (visao.js)
+  // Todos os contratos numa rodovia só, em escala de km; só na tela. É a tela inicial: o app abre nela e, depois de
+  // escolher um contrato, fica nele até fechar o app ou tocar em "Visão geral" (sessionStorage).
+  var INICIO_KEY = 'diagrama-linear.no-contrato', visao = null;
+  var ICON_VISAO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 12h20"/><path d="M6 8v8"/><path d="M13 8v8"/><path d="M18 9.5v5"/></svg>';
+  var visaoOn = (function () { try { return sessionStorage.getItem(INICIO_KEY) !== '1'; } catch (e) { return true; } })();
+  function setVisao(on) {
+    visaoOn = !!on;
+    try { if (on) sessionStorage.removeItem(INICIO_KEY); else sessionStorage.setItem(INICIO_KEY, '1'); } catch (e) { /* sem armazenamento */ }
+  }
+  function ensureVisao() {
+    if (visao || !window.VisaoGeral) return visao;
+    visao = window.VisaoGeral({
+      host: $('visaoHost'), contratos: function () { return state.contracts; }, info: pointInfo, isOae: isOae,
+      temMapa: !!(window.MapaSNV && window.L && window.SNV_BR230), temFotos: galeriaOn,
+      onAbrir: function (c, p) { abrirDaVisao(c, p, false); },
+      onMapa: function (c, p) { abrirDaVisao(c, p, true); },
+      onFotos: function (c, p) { abrirGaleria({ cid: c.id, pid: p.id }); }
+    });
+    return visao;
+  }
+  function mostraVisao() {
+    var on = visaoOn && !!ensureVisao();
+    $('layout').hidden = on;
+    $('visaoHost').hidden = !on;
+    $('btnPdf').hidden = on;
+    return on;
+  }
+  // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
+  function abrirDaVisao(c, p, noMapa) {
+    setVisao(false);
+    if (analise.estado[c.id] === 'erro') delete analise.estado[c.id];
+    state.activeId = c.id;
+    ui.open = {};
+    if (p) ui.open[p.id] = true;
+    save();
+    renderAll();
+    if (noMapa) {
+      setView('mapa');
+      if (p && mapa && mapa.foco) setTimeout(function () { mapa.foco(p.id); }, 200);
+      var mh = $('mapHost');
+      if (mh) mh.scrollIntoView({ block: 'start' });
+    } else if (p) {
+      if (ui.wide) toggleWide(false);
+      scrollToPoint(p.id);
+    } else window.scrollTo(0, 0);
   }
 
   // ------------------------------------------------------------------ eventos do editor
@@ -1873,15 +1925,19 @@
     var tab = e.target.closest('[data-tab]');
     if (tab) {
       if (analise.estado[tab.dataset.tab] === 'erro') delete analise.estado[tab.dataset.tab];
+      var veioDaVisao = visaoOn;
+      setVisao(false);
       state.activeId = tab.dataset.tab;
       ui.open = {};
       save();
       renderAll();
+      if (veioDaVisao) window.scrollTo(0, 0);
       return;
     }
     var b = e.target.closest('[data-act]');
     if (!b) return;
     var act = b.dataset.act, c = active(), p;
+    if (act === 'visao') { setVisao(true); renderAll(); window.scrollTo(0, 0); return; }
     if (act === 'login') { openLogin(); return; }
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }

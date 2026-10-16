@@ -1091,6 +1091,8 @@
       isFull: function () { return isFull; },
       exportKml: exportKml,
       buildKml: buildKml,
+      // abre o ponto pelo id (vindo da visão geral)
+      foco: function (id) { for (var j = 0; j < pts.length; j++) if (pts[j].p.id === id) { focusPoint(j); return true; } return false; },
       ref: ref,
       map: map
         };
