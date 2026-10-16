@@ -584,7 +584,7 @@
       o.confirmar(apagar ? {
         titulo: 'Apagar do Drive ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar do Drive',
         html: '<p>' + (n === 1 ? 'A foto sai' : 'As fotos saem') + ' da galeria da equipe e ' + (n === 1 ? 'vai' : 'vão') + ' para a pasta <b>Deletados</b> do Drive. ' +
-          'Só o criador vê essa pasta e pode restaurar.</p>', digitar: n > 1 ? 'APAGAR' : null
+          'Só o Administrador vê essa pasta e pode restaurar.</p>', digitar: n > 1 ? 'APAGAR' : null
       } : {
         titulo: 'Restaurar ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', botao: 'Restaurar',
         html: '<p>' + (n === 1 ? 'Ela volta' : 'Elas voltam') + ' para a pasta original no Drive e para a galeria da equipe.</p>'

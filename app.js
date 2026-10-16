@@ -1216,7 +1216,7 @@
   function analiseResumoHtml(c) {
     if (!banco.on) return '';
     if (!isEng()) {
-      return '<div class="an-note">Os valores medidos e os alertas da análise das medições aparecem para engenheiros e para o criador.' +
+      return '<div class="an-note">Os valores medidos e os alertas da análise das medições aparecem para engenheiros e para o Administrador.' +
         (banco.login ? '' : ' Entre para ver.') + '</div>';
     }
     var an = anOf(c), e = analise.estado[c.id];
@@ -1232,7 +1232,7 @@
       ['Medido depois da garantia acionada', fmtBRL(r.garantia_valor), r.garantia_pontes + ' pontes (Carta ALT-002/2026)']
     ];
     var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' +
-      (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros e criador</span></div>';
+      (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros e o Administrador</span></div>';
     h += '<div class="an-jan"><span id="anJanTit">Alerta alto quando o mesmo serviço volta a ser medido na ponte em até</span><div class="seg" role="group" aria-labelledby="anJanTit">' +
       JANELAS.map(function (j) { return '<button type="button" data-act="janela" data-v="' + j + '" aria-pressed="' + (an.janela === j) + '">' + j + ' meses</button>'; }).join('') + '</div></div>';
     h += '<div class="an-kpis">' + kp.map(function (k) {
@@ -1287,7 +1287,7 @@
       });
 
       if (a) h += ponteAnaliseHtml(an, a);
-      else if (banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros e para o criador.</div>';
+      else if (banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros e para o Administrador.</div>';
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
@@ -1772,7 +1772,7 @@
     confirmar({
       titulo: 'Excluir o ponto ' + (p.nome || '') + '?',
       html: '<p>KM ' + esc(km) + ' · ' + esc(loteOf(cid)) + '.</p><p>' + (banco.on
-        ? 'O ponto sai do diagrama de todos. Fica 30 dias na lixeira (menu Dados › Lixeira e cópias), de onde um engenheiro ou o criador pode restaurar.'
+        ? 'O ponto sai do diagrama de todos. Fica 30 dias na lixeira (menu Dados › Lixeira e cópias), de onde um engenheiro ou o Administrador pode restaurar.'
         : 'Neste aparelho não há lixeira: só dá para recuperar por um backup.') + '</p>',
       botao: 'Excluir ponto', perigo: true
     }).then(function (r) {
@@ -1990,7 +1990,7 @@
     var act = b.dataset.act;
     if (act === 'backup') downloadBackup();
     else if (act === 'restore') {
-      if (banco.on && !isResp()) { toast('Só o responsável pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
+      if (banco.on && !isResp()) { toast('Só o Administrador pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
       $('fileInput').click();
     }
     else if (act === 'print') imprimir();
@@ -2026,7 +2026,7 @@
   // papéis: criador (tudo), engenheiro (edita, aprova, lixeira) e fiscal de campo (só status dos serviços, com aprovação).
   // Os códigos gerais antigos valem como criador ("responsavel") e engenheiro ("equipe").
   var NIVEL = { criador: 3, responsavel: 3, engenheiro: 2, equipe: 2, fiscal: 1 };
-  var PAPEL_NOME = { criador: 'criador', responsavel: 'criador', engenheiro: 'engenheiro', equipe: 'engenheiro', fiscal: 'fiscal de campo' };
+  var PAPEL_NOME = { criador: 'Administrador', responsavel: 'Administrador', engenheiro: 'engenheiro', equipe: 'engenheiro', fiscal: 'fiscal de campo' };
   function nivel() { return banco.on && banco.login ? (NIVEL[banco.login.papel] || 0) : 0; }
   function isResp() { return nivel() >= 3; }
   function isEng() { return nivel() >= 2; }
@@ -2528,11 +2528,11 @@
     return c === 'sem_rede' ? 'Sem conexão com o banco. Tente quando tiver sinal.'
       : c === 'codigo_invalido' ? 'Código errado ou acesso desativado.'
       : c === 'muitas_tentativas' ? 'Muitas tentativas erradas. Espere 10 minutos e tente de novo.'
-      : c === 'codigo_curto' ? 'O código precisa de pelo menos 6 caracteres (o do criador, 8).'
+      : c === 'codigo_curto' ? 'O código precisa de pelo menos 6 caracteres (o do Administrador, 8).'
       : c === 'codigo_em_uso' ? 'Esse código já é de outra pessoa (ou é um código geral). Escolha outro.'
       : c === 'nome_em_uso' ? 'Já existe um usuário com esse nome.'
-      : c === 'ultimo_criador' ? 'Precisa ficar pelo menos um criador ativo.'
-      : c === 'so_criador' ? 'Só o criador pode fazer isso.'
+      : c === 'ultimo_criador' ? 'Precisa ficar pelo menos um Administrador ativo.'
+      : c === 'so_criador' ? 'Só o Administrador pode fazer isso.'
       : c === 'sem_permissao' ? 'Seu acesso não permite isso.'
       : c === 'contrato_excluido' ? 'O contrato deste ponto foi excluído: restaure o contrato primeiro.'
       : c === 'ja_existe' ? 'Já existe um item com esse código. Nada foi mudado.'
@@ -2579,7 +2579,7 @@
   }
   function loginModal() {
     modal('<h2 id="modalTitle">Entrar</h2>' +
-      '<p>Use o código que o criador do sistema passou para você. O acesso fica guardado neste aparelho até você sair.</p>' +
+      '<p>Use o código que o Administrador do sistema passou para você. O acesso fica guardado neste aparelho até você sair.</p>' +
       mField('lgCod', 'Seu código', true) + SHOWPW +
       '<div id="lgNomeBox" hidden>' + mField('lgNome', 'Seu nome', false, lsGet(NAME_KEY) || '') +
       '<p class="hint">Esse é o código geral da equipe: o nome vai para o histórico.</p></div>' +
@@ -2614,14 +2614,14 @@
   }
   // banco novo, sem nenhum acesso: cria a conta do criador
   function openPrimeiro() {
-    modal('<h2 id="modalTitle">Criar a conta do criador</h2>' +
-      '<p>Primeira vez neste banco. O <b>criador</b> pode tudo: cadastra as pessoas (engenheiros e fiscais de campo), aprova mudanças e restaura cópias. Guarde o código só com você.</p>' +
+    modal('<h2 id="modalTitle">Criar a conta do Administrador</h2>' +
+      '<p>Primeira vez neste banco. O <b>Administrador</b> pode tudo: cadastra as pessoas (engenheiros e fiscais de campo), aprova mudanças e restaura cópias. Guarde o código só com você.</p>' +
       mField('pmNome', 'Seu nome', false, lsGet(NAME_KEY) || '') + mField('pmCod', 'Seu código (pelo menos 8 caracteres)', true) + mField('pmCod2', 'Repita o código', true) + SHOWPW +
       MFOOT + '<button type="submit" class="btn primary">Criar e entrar</button></div>',
     function (f) {
       var n = f.querySelector('#pmNome').value.trim(), c = f.querySelector('#pmCod').value, c2 = f.querySelector('#pmCod2').value;
       if (!n) { modalErr(f, 'Escreva seu nome.'); return; }
-      if (c.length < 8) { modalErr(f, 'O código do criador precisa de pelo menos 8 caracteres.'); return; }
+      if (c.length < 8) { modalErr(f, 'O código do Administrador precisa de pelo menos 8 caracteres.'); return; }
       if (c !== c2) { modalErr(f, 'Os dois códigos não são iguais.'); return; }
       modalErr(f, '');
       busyBtn(f, true, 'Criando…');
@@ -2687,7 +2687,7 @@
   var PAPEIS = [
     { k: 'engenheiro', nome: 'Engenheiro', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira e vê as fotos de todos.' },
     { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Só muda o status e o % dos serviços (fica aguardando aprovação) e vê só as fotos que tirou.' },
-    { k: 'criador', nome: 'Criador', desc: 'Tudo, inclusive cadastrar pessoas e voltar os dados para uma cópia.' }
+    { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas e voltar os dados para uma cópia.' }
   ];
   function gerarCodigo() {
     var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = new Uint32Array(8), s = '';
@@ -2696,7 +2696,7 @@
     return s.slice(0, 4) + '-' + s.slice(4);
   }
   function openUsuarios() {
-    if (!isResp()) { toast('Só o criador cadastra pessoas.'); return; }
+    if (!isResp()) { toast('Só o Administrador cadastra pessoas.'); return; }
     var f = modal('<h2 id="modalTitle">Usuários e acessos</h2>' +
       '<p>Cada pessoa entra com o próprio código. Desativar alguém tira o acesso de todos os aparelhos dela.</p>' +
       '<div class="us" aria-live="polite">Carregando…</div>' +
@@ -2718,7 +2718,7 @@
           h += '<div class="section-title">Códigos gerais (do sistema antigo)</div>' +
             '<p class="hint">Ainda entram, pedindo o nome. Quando todos tiverem código próprio, desative.</p>' +
             (r.codigo_equipe ? '<div class="us-row"><div class="us-txt"><b>Código geral da equipe</b><small>Entra como engenheiro</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="equipe">Desativar</button></div>' : '') +
-            (r.codigo_responsavel ? '<div class="us-row"><div class="us-txt"><b>Código geral do responsável</b><small>Entra como criador</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="responsavel">Desativar</button></div>' : '');
+            (r.codigo_responsavel ? '<div class="us-row"><div class="us-txt"><b>Código geral do responsável</b><small>Entra como Administrador</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="responsavel">Desativar</button></div>' : '');
         }
         el.innerHTML = h;
       }, function (err) { f.querySelector('.us').textContent = errText(err); });
@@ -2790,7 +2790,7 @@
 
   // ---------------- lixeira e cópias automáticas (engenheiro ou criador)
   function openLixeira() {
-    if (!isEng()) { toast('A lixeira e as cópias são para engenheiros e o criador.'); return; }
+    if (!isEng()) { toast('A lixeira e as cópias são para engenheiros e o Administrador.'); return; }
     var f = modal('<h2 id="modalTitle">Lixeira e cópias de segurança</h2><div class="lx" aria-live="polite">Carregando…</div>' +
       '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'wide');
     var dados = null;
@@ -2945,7 +2945,7 @@
     });
   }
   function decidirPropostas(ids, aprovar) {
-    if (!isEng()) { toast('Só engenheiro ou criador aprova.'); return; }
+    if (!isEng()) { toast('Só engenheiro ou Administrador aprova.'); return; }
     var go = function (motivo) {
       window.Banco.decidir(banco.login.codigo, ids, aprovar, motivo).then(function (r) {
         var n = (r && r.n) || 0;
@@ -2975,7 +2975,7 @@
     var bar = document.createElement('div');
     bar.className = 'share-ready';
     bar.setAttribute('role', 'status');
-    bar.innerHTML = '<span>Agora os dados vêm do banco da equipe. O que estava só neste aparelho foi guardado: se alguém editou aqui, baixe o backup e mande ao responsável.</span>' +
+    bar.innerHTML = '<span>Agora os dados vêm do banco da equipe. O que estava só neste aparelho foi guardado: se alguém editou aqui, baixe o backup e mande ao Administrador.</span>' +
       '<button type="button" class="btn primary">Baixar backup</button><button type="button" class="btn">Dispensar</button>';
     var b = bar.querySelectorAll('button');
     b[0].addEventListener('click', function () {
