@@ -14,15 +14,16 @@
     { key: 'oac', label: 'OAC / Drenagem', short: 'OAC / Drenagem' },
     { key: 'prelim', label: 'Sv. Preliminares', short: 'Sv. preliminares' }
   ];
-  // contrato de pontes (tipo 'oae', ex.: CT 424): um grupo de serviços por linha, uma coluna por ponte
+  // contrato de pontes (tipo 'oae', ex.: CT 424): um grupo de serviços por linha, uma coluna por ponte.
+  // un = unidade de quanto a ponte precisa (q = o que a quantidade mede); rotina não tem quantidade
   var OAE_SERVICES = [
-    { key: 'juntas', label: 'Juntas e aparelhos de apoio', short: 'Juntas e apoios' },
-    { key: 'concreto', label: 'Recuperação estrutural (concreto)', short: 'Concreto' },
-    { key: 'pintura', label: 'Proteção superficial (pintura)', short: 'Pintura' },
-    { key: 'drenagem', label: 'Drenagem da OAE', short: 'Drenagem' },
-    { key: 'rotina', label: 'Conservação de rotina (vegetação e limpeza)', short: 'Rotina' },
-    { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo' },
-    { key: 'acesso', label: 'Plataforma e apoio à execução', short: 'Plataforma / acesso' }
+    { key: 'juntas', label: 'Juntas e aparelhos de apoio', short: 'Juntas e apoios', un: 'm', q: 'metros de junta' },
+    { key: 'concreto', label: 'Recuperação estrutural (concreto)', short: 'Concreto', un: 'm²', q: 'área a recuperar' },
+    { key: 'pintura', label: 'Proteção superficial (pintura)', short: 'Pintura', un: '%', q: 'da ponte a pintar' },
+    { key: 'drenagem', label: 'Drenagem da OAE', short: 'Drenagem', un: 'un', q: 'drenos' },
+    { key: 'rotina', label: 'Conservação de rotina (vegetação e limpeza)', short: 'Rotina', un: null, q: '' },
+    { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'de guarda-corpo ou pista' },
+    { key: 'acesso', label: 'Plataforma e apoio à execução', short: 'Plataforma / acesso', un: 'm²', q: 'de plataforma' }
   ];
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
   function servicesOf(c) { return isOae(c) ? OAE_SERVICES : SERVICES; }
@@ -33,6 +34,72 @@
     NA: { tag: 'N/A', name: 'Não se aplica', btn: 'N/A', fill: 'none' }
   };
   var STATUS_ORDER = ['OK', 'A', 'P', 'NA'];
+  // pontes: serviço contínuo de conservação, então o status diz o que a ponte PRECISA (e quanto),
+  // e não o avanço de uma obra feita uma vez só, como nos pontos críticos
+  var OAE_STATUS = {
+    NV: { tag: 'SEM VISTORIA', name: 'Sem vistoria', fill: 'none' },
+    OK: { tag: 'OK', name: 'Em ordem', btn: 'OK', fill: '#1E9E55', ink: '#FFFFFF' },
+    PR: { tag: 'PRECISA', name: 'Precisa de manutenção', btn: 'Precisa', fill: '#F2A93B', ink: '#3D2800' },
+    UR: { tag: 'URGENTE', name: 'Urgente', btn: 'Urgente', fill: '#D93025', ink: '#FFFFFF' },
+    EX: { tag: 'EM EXECUÇÃO', name: 'Em execução', btn: 'Em exec.', fill: '#2B5797', ink: '#FFFFFF' },
+    NA: { tag: 'N/A', name: 'Não tem nesta ponte', btn: 'N/A', fill: 'none' }
+  };
+  var OAE_STATUS_ORDER = ['OK', 'PR', 'UR', 'EX', 'NA'];
+  var ALERTA_COR = '#7B3FA0', ALERTA_TINTA = '#5B2C8F';   // roxo = análise das medições (não confundir com urgente)
+  function oaeSt(sv) { return sv && OAE_STATUS[sv.st] ? sv.st : 'NV'; }
+  function comQtd(st) { return st === 'PR' || st === 'UR' || st === 'EX'; }
+  function fmtQtd(s, q) {
+    if (q == null || q === '' || !s.un || !isFinite(q)) return '';
+    return s.un === '%' ? fmtPct(Number(q)) : fmtN(Number(q)) + ' ' + s.un;
+  }
+  // resumo da ponte: grupos que precisam, urgentes, em execução, em ordem e sem vistoria (N/A não conta)
+  function oaeNec(p) {
+    var r = { prec: 0, urg: 0, exec: 0, ok: 0, nv: 0, aval: 0 };
+    OAE_SERVICES.forEach(function (s) {
+      var st = oaeSt(p.serv[s.key]);
+      if (st === 'NA') return;
+      r.aval++;
+      if (st === 'NV') r.nv++;
+      else if (st === 'OK') r.ok++;
+      else if (st === 'EX') r.exec++;
+      else { r.prec++; if (st === 'UR') r.urg++; }
+    });
+    return r;
+  }
+  function oaeNecTxt(n) {
+    if (n.prec) return n.prec + (n.prec === 1 ? ' precisa' : ' precisam') + (n.urg ? ' · ' + n.urg + (n.urg === 1 ? ' urgente' : ' urgentes') : '') + (n.exec ? ' · ' + n.exec + ' em exec.' : '');
+    if (n.exec) return n.exec + ' em execução';
+    if (!n.aval || n.nv === n.aval) return 'sem vistoria';
+    return 'em ordem' + (n.nv ? ' · ' + n.nv + ' sem vistoria' : '');
+  }
+  // contrato: pontes que precisam e, por grupo, quantas pontes e quanto (soma só das quantidades informadas)
+  function oaeResumo(c) {
+    var r = { prec: 0, urg: 0, exec: 0, nv: 0, grupos: {} };
+    OAE_SERVICES.forEach(function (s) { r.grupos[s.key] = { pontes: 0, urg: 0, q: 0, semQ: 0 }; });
+    c.pontos.forEach(function (p) {
+      var n = oaeNec(p);
+      if (n.prec) r.prec++;
+      if (n.urg) r.urg++;
+      if (n.exec) r.exec++;
+      if (!n.aval || n.nv === n.aval) r.nv++;
+      OAE_SERVICES.forEach(function (s) {
+        var sv = p.serv[s.key], st = oaeSt(sv), gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
+        if (st !== 'PR' && st !== 'UR') return;
+        gr.pontes++;
+        if (st === 'UR') gr.urg++;
+        if (s.un && s.un !== '%') { if (isFinite(q)) gr.q += q; else gr.semQ++; }
+      });
+    });
+    return r;
+  }
+  function oaeFaltaTxt(r) {
+    var asterisco = false, t = OAE_SERVICES.filter(function (s) { return r.grupos[s.key].pontes; }).map(function (s) {
+      var gr = r.grupos[s.key], q = s.un && s.un !== '%' && gr.q ? fmtN(gr.q) + ' ' + s.un + (gr.semQ ? '*' : '') + ' em ' : '';
+      if (q && gr.semQ) asterisco = true;
+      return s.short + ': ' + q + gr.pontes + (gr.pontes === 1 ? ' ponte' : ' pontes');
+    }).join(' · ');
+    return t ? t + (asterisco ? '  (* há pontes sem a quantidade)' : '') : '';
+  }
   var DEVICE_COLORS = {
     vermelho: { name: 'Vermelho', hex: '#E02424' },
     amarelo: { name: 'Amarelo', hex: '#E5B800' },
@@ -288,7 +355,7 @@
     } else if (oae) {
       // eixo da rodovia passando pelas pontes
       o.push(L(G.x0, go.yBand + go.bandH / 2, G.x0 + slot * n, go.yBand + go.bandH / 2, { stroke: '#9AA29E', sw: 0.8, dash: '7 4' }));
-      chunk.forEach(function (p, i) { drawPonte(o, p, gm.bx(i), gm.bw, an, go); });
+      chunk.forEach(function (p, i) { drawPonte(o, p, gm.bx(i), gm.bw, an, go, c); });
     } else {
       // pista entre os pontos (trechos sem intervenção)
       o.push(R(G.x0, G.yBand, slot * n, G.bandH, { fill: '#EDC9C9' }));
@@ -541,26 +608,27 @@
     return fmtBRL(n);
   }
   function oaeGeom(an) {
-    var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yConc: 243, concH: 20, yServ: 275, servH: 19, servStep: 23 };
+    var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yServ: 281, servH: 19, servStep: 23 };
     var after = g.yServ + OAE_SERVICES.length * g.servStep;
-    if (an) { g.yMed = after + 4; g.medH = 27; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
+    if (an) { g.yConc = after + 4; g.concH = 20; g.yMed = g.yConc + g.concH + 4; g.medH = 27; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
     else g.yObs = after + 6;
     g.obsEnd = G.yFoot - 12;
     return g;
   }
   function oaeExt(c) { return c.pontos.reduce(function (s, p) { return s + (Number(p.extensao) || 0); }, 0); }
   function oaeKpis(c, tot, an) {
-    var ext = oaeExt(c), r = an && an.resumo;
+    var ext = oaeExt(c), r = an && an.resumo, n = oaeResumo(c);
+    var nec = { k: 'PRECISAM DE MANUTENÇÃO', v: n.prec + (n.prec === 1 ? ' ponte' : ' pontes'), s: n.urg ? n.urg + ' com urgência' + (n.exec ? ' · ' + n.exec + ' em execução' : '') : n.exec ? n.exec + ' em execução' : '' };
     if (r) return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
+      nec,
       { k: 'MEDIDO (PREÇOS INICIAIS)', v: fmtBRLc(r.total), s: r.n + ' medições · ' + r.de + ' a ' + r.ate },
-      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'de ' + r.alertas + ' alertas' },
-      { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
+      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'de ' + r.alertas + ' alertas' }
     ];
     return [
-      { k: 'PONTES', v: String(tot.n), s: '' },
-      { k: 'EXTENSÃO DAS PONTES', v: fmt(ext, 0) + ' m', s: 'soma das pontes' },
-      { k: 'AVANÇO MÉDIO', v: fmtPct(tot.avg), s: 'média das pontes' },
+      { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
+      nec,
+      { k: 'SEM VISTORIA', v: n.nv + (n.nv === 1 ? ' ponte' : ' pontes'), s: 'de ' + tot.n },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
     ];
   }
@@ -576,13 +644,17 @@
     o.push(T(x, g.yBand + 24, 'PONTE', { size: 7, bold: true }));
     o.push(T(x, g.yBand + 35, 'nome e código', { size: 6.4, fill: gray }));
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
-    o.push(T(x, g.yConc + 13.5, an ? 'MEDIDO ÷ ESTIMADO' : 'CONCLUSÃO', { size: 7, bold: true }));
-    o.push(T(x, g.yServ - 4, 'SERVIÇOS', { size: 6, bold: true, fill: gray }));
+    o.push(T(x, g.yNec + 12, 'NECESSIDADE', { size: 7, bold: true }));
+    o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
+    o.push(T(x, g.yServ - 4, 'O QUE PRECISA (QUANTO)', { size: 6, bold: true, fill: gray }));
     OAE_SERVICES.forEach(function (s, i) {
-      o.push(T(x, g.yServ + i * g.servStep + 12.8, fitText(s.short, w, 7.2, true), { size: 7.2, bold: true }));
+      var y = g.yServ + i * g.servStep + 12.8, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
+      o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
+      if (s.un) o.push(T(x + w, y, s.un, { size: 6.4, fill: gray, anchor: 'end' }));
     });
     if (an) {
       var ms = an.medicoes || [];
+      o.push(T(x, g.yConc + 13.5, 'MEDIDO ÷ ESTIMADO', { size: 7, bold: true }));
       o.push(T(x, g.yMed + 11, 'MEDIÇÕES', { size: 7, bold: true }));
       if (ms.length) o.push(T(x, g.yMed + 21, fitText(ms[0].n + 'ª a ' + ms[ms.length - 1].n + 'ª (' + ms[0].mes + ' a ' + ms[ms.length - 1].mes + ')', w, 6.2), { size: 6.2, fill: gray }));
       o.push(T(x, g.yAl + 11.5, 'ALERTAS', { size: 7, bold: true }));
@@ -591,7 +663,7 @@
     o.push(L(G.colLine, 106, G.colLine, g.obsEnd, { stroke: '#C9CECB', sw: 0.6 }));
   }
 
-  function drawPonte(o, p, bx, bw, an, g) {
+  function drawPonte(o, p, bx, bw, an, g, c) {
     var cx = bx + bw / 2, a = an && an.pontes ? an.pontes[p.id] || null : null;
     o.push('<g data-pid="' + esc(p.id) + '">');
     var kmT = p.kmIni != null ? fmtKm(p.kmIni) : '-';
@@ -613,47 +685,47 @@
     var extTxt = p.extensao != null ? fmtN(p.extensao) + ' m' + (p.largura != null ? ' × ' + fmtN(p.largura) : '') : '-';
     o.push(T(cx, g.yExt + 12.4, extTxt, { size: r2(fitSize(extTxt, bw - 4, 8, true, 4.6)), bold: true, anchor: 'middle' }));
 
-    // medido ÷ estimado (com a análise) ou conclusão
-    o.push(R(bx, g.yConc, bw, g.concH, { fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }));
-    var pctTxt, over = false, frac;
-    if (an) {
-      var ratio = a && a.est > 0 ? a.tot / a.est : null;
-      over = ratio != null && ratio > 1.05;
-      frac = ratio != null ? Math.min(ratio, 1) : 0;
-      pctTxt = ratio != null ? fmtPct(ratio * 100) : (a && a.tot ? 'sem estimativa' : '-');
-    } else {
-      frac = pointPct(p) / 100;
-      pctTxt = fmtPct(pointPct(p));
+    // necessidade da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou
+    var nn = oaeNec(p), vis = c ? vistoriaPonte(c, p) : null;
+    var nf = nn.urg ? '#F6C9C4' : nn.prec ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
+    var ntx = oaeNecTxt(nn), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
+    o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: nn.urg ? '#8E1B12' : '#17201C', anchor: 'middle' }));
+    if (vis) {
+      var vt = 'vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : '');
+      o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
     }
-    if (frac > 0) o.push(R(bx + 0.6, g.yConc + 0.6, (bw - 1.2) * frac, g.concH - 1.2, { fill: over ? '#F0B4AE' : '#A9D5B8' }));
-    o.push(T(cx, g.yConc + 13.6, pctTxt, { size: r2(fitSize(pctTxt, bw - 4, 9.2, true, 5)), bold: true, fill: over ? '#B42318' : '#17201C', anchor: 'middle' }));
 
-    // grupos de serviço: cor = status do fiscal; "· 23ª" = última medição com o grupo; contorno vermelho = alerta alto
+    // grupos: cor = o que o fiscal marcou; quantidade = quanto a ponte precisa; contorno roxo = alerta alto nas medições
     OAE_SERVICES.forEach(function (s, i) {
-      var sv = p.serv[s.key] || { st: 'NA', pct: 0 }, y = g.yServ + i * g.servStep, st = STATUS[sv.st] || STATUS.NA;
-      var gi = a && a.grupos ? a.grupos[s.key] : null, suf = gi && gi.ult ? ' · ' + gi.ult + 'ª' : '';
-      if (sv.st === 'NA') {
-        o.push(R(bx, y, bw, g.servH, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
-        var nt = 'N/A' + suf;
-        o.push(T(cx, y + 12.8, fitText(nt, bw - 6, fitSize(nt, bw - 6, 7, true, 4.4), true), { size: r2(fitSize(nt, bw - 6, 7, true, 4.4)), bold: true, fill: '#7A817D', anchor: 'middle' }));
+      var sv = p.serv[s.key], k = oaeSt(sv), st = OAE_STATUS[k], y = g.yServ + i * g.servStep;
+      var gi = a && a.grupos ? a.grupos[s.key] : null;
+      if (st.fill === 'none') {
+        o.push(R(bx, y, bw, g.servH, { fill: k === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
+        var vz = fitSize(st.tag, bw - 6, 6.8, true, 4.4);
+        o.push(T(cx, y + 12.6, fitText(st.tag, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
       } else {
-        var label = st.tag;
-        if (sv.st === 'A') label = 'ATIVO · ' + fmtPct(svcPct(sv));
-        if (sv.st === 'P' && svcPct(sv) > 0) label = 'PARADO · ' + fmtPct(svcPct(sv));
-        label += suf;
+        var qt = comQtd(k) ? fmtQtd(s, sv.q) : '', label = st.tag + (qt ? ' · ' + qt : '');
         o.push(R(bx, y, bw, g.servH, { fill: st.fill, rx: 2 }));
         var ls = fitSize(label, bw - 6, 7.4, true, 4.4);
-        o.push(T(cx, y + 12.8, fitText(label, bw - 6, ls, true), { size: r2(ls), bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+        o.push(T(cx, y + 12.8, fitText(label, bw - 6, ls, true), { size: r2(ls), bold: true, fill: st.ink, anchor: 'middle' }));
       }
       if (gi && gi.altos) {
-        o.push(R(bx - 0.8, y - 0.8, bw + 1.6, g.servH + 1.6, { stroke: '#B42318', sw: 1.6, rx: 2.6 }));
+        o.push(R(bx - 0.8, y - 0.8, bw + 1.6, g.servH + 1.6, { stroke: ALERTA_COR, sw: 1.6, rx: 2.6 }));
         var bt = String(gi.altos), bwid = Math.max(10, textW(bt, 6, true) + 6);
-        o.push(R(bx + bw - bwid + 2, y - 4.5, bwid, 9, { fill: '#B42318', rx: 4.5 }));
+        o.push(R(bx + bw - bwid + 2, y - 4.5, bwid, 9, { fill: ALERTA_COR, rx: 4.5 }));
         o.push(T(bx + bw - bwid / 2 + 2, y + 2.2, bt, { size: 6, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
       }
     });
 
     if (an) {
+      // medido ÷ estimado (só para engenheiros e criador)
+      o.push(R(bx, g.yConc, bw, g.concH, { fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }));
+      var ratio = a && a.est > 0 ? a.tot / a.est : null, over = ratio != null && ratio > 1.05;
+      var frac = ratio != null ? Math.min(ratio, 1) : 0, pctTxt = ratio != null ? fmtPct(ratio * 100) : (a && a.tot ? 'sem estimativa' : '-');
+      if (frac > 0) o.push(R(bx + 0.6, g.yConc + 0.6, (bw - 1.2) * frac, g.concH - 1.2, { fill: over ? '#DCCBEE' : '#C9D6EA' }));
+      o.push(T(cx, g.yConc + 13.6, pctTxt, { size: r2(fitSize(pctTxt, bw - 4, 9.2, true, 5)), bold: true, fill: over ? ALERTA_TINTA : '#17201C', anchor: 'middle' }));
+
       // faixa das medições: um quadradinho por medição (azul = houve serviço na ponte; vermelho = medição de um alerta alto)
       var ms = an.medicoes || [], cols = 9, rows = Math.max(1, Math.ceil(ms.length / cols));
       var cw = (bw - 2) / cols, ch = (g.medH - 2) / rows, mx = {};
@@ -661,12 +733,12 @@
       o.push(R(bx, g.yMed, bw, g.medH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
       ms.forEach(function (m, k) {
         var on = a && a.meses && a.meses[String(m.n)], col = k % cols, row = Math.floor(k / cols);
-        o.push(R(bx + 1 + col * cw + 0.45, g.yMed + 1 + row * ch + 0.45, cw - 0.9, ch - 0.9, { fill: on ? (mx[m.n] ? '#D93025' : '#2B5797') : '#EEF0EF' }));
+        o.push(R(bx + 1 + col * cw + 0.45, g.yMed + 1 + row * ch + 0.45, cw - 0.9, ch - 0.9, { fill: on ? (mx[m.n] ? ALERTA_COR : '#2B5797') : '#EEF0EF' }));
       });
       // alertas
       o.push(R(bx, g.yAl, bw, g.alH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
       var at = !a ? '-' : a.aa ? a.aa + (a.aa === 1 ? ' alto' : ' altos') + ' · ' + a.al + ' no total' : a.al ? a.al + ' · nenhum alto' : 'nenhum';
-      o.push(T(cx, g.yAl + 11, fitText(at, bw - 4, fitSize(at, bw - 4, 7.2, true, 4.4), true), { size: r2(fitSize(at, bw - 4, 7.2, true, 4.4)), bold: true, fill: a && a.aa ? '#B42318' : '#3B4540', anchor: 'middle' }));
+      o.push(T(cx, g.yAl + 11, fitText(at, bw - 4, fitSize(at, bw - 4, 7.2, true, 4.4), true), { size: r2(fitSize(at, bw - 4, 7.2, true, 4.4)), bold: true, fill: a && a.aa ? ALERTA_TINTA : '#3B4540', anchor: 'middle' }));
     }
 
     // observações do fiscal e, com a análise, os alertas altos da ponte
@@ -678,9 +750,9 @@
     var altos = a ? (a.alertas || []).filter(function (x) { return x.sev === 'Alta'; }).sort(function (x, y) { return y.valor - x.valor; }) : [];
     if (altos.length) {
       if (lines.length) lines.push({ t: '' });
-      lines.push({ t: 'Alertas das medições:', b: true, cor: '#B42318' });
+      lines.push({ t: 'Alertas das medições:', b: true, cor: ALERTA_TINTA });
       altos.forEach(function (x) {
-        wrap('• ' + x.servico + ': ' + (ALERTA_TXT[x.tipo] || x.tipo) + ' (' + fmtBRL(x.valor) + '; ' + x.meds + ')', bw - 10, fs).forEach(function (t) { lines.push({ t: t, cor: '#7A2318' }); });
+        wrap('• ' + x.servico + ': ' + (ALERTA_TXT[x.tipo] || x.tipo) + ' (' + fmtBRL(x.valor) + (x.meds ? '; ' + x.meds : '') + ')', bw - 10, fs).forEach(function (t) { lines.push({ t: t, cor: '#4B2377' }); });
       });
     }
     if (lines.length > maxLines) {
@@ -696,41 +768,43 @@
     o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
     o.push(T(x, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
     var lx = x + 44;
-    ['OK', 'A', 'P', 'NA'].forEach(function (k) {
-      var st = STATUS[k], label = k === 'OK' ? 'Concluído (OK)' : k === 'A' ? 'Ativo' : k === 'P' ? 'Parado' : 'Não se aplica (N/A)';
-      if (k === 'NA') o.push(R(lx, y + 2, 16, 10, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
+    [['OK', 'Em ordem (OK)'], ['PR', 'Precisa de manutenção'], ['UR', 'Urgente'], ['EX', 'Em execução'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
+      var st = OAE_STATUS[it[0]];
+      if (st.fill === 'none') o.push(R(lx, y + 2, 16, 10, { fill: it[0] === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
       else o.push(R(lx, y + 2, 16, 10, { fill: st.fill, rx: 1.5 }));
-      o.push(T(lx + 20, y + 10, label, { size: 7 }));
-      lx += 20 + textW(label, 7) + 14;
+      o.push(T(lx + 20, y + 10, it[1], { size: 7 }));
+      lx += 20 + textW(it[1], 7) + 12;
     });
     if (an) {
       var y2 = y + 22;
       lx = x + 44;
       [
-        [function (xx) { o.push(R(xx, y2 + 2, 16, 10, { fill: '#F0B4AE' })); }, 'Medido acima do estimado'],
-        [function (xx) { o.push(R(xx + 0.8, y2 + 2.8, 14.4, 8.4, { stroke: '#B42318', sw: 1.6, rx: 1.5 })); }, 'Alerta alto no grupo'],
+        [function (xx) { o.push(R(xx, y2 + 2, 16, 10, { fill: '#DCCBEE' })); }, 'Medido acima do estimado'],
+        [function (xx) { o.push(R(xx + 0.8, y2 + 2.8, 14.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Alerta alto no grupo'],
         [function (xx) { o.push(R(xx + 4, y2 + 3, 8, 8, { fill: '#2B5797' })); }, 'Medição com serviço'],
-        [function (xx) { o.push(R(xx + 4, y2 + 3, 8, 8, { fill: '#D93025' })); }, 'Medição de alerta alto'],
+        [function (xx) { o.push(R(xx + 4, y2 + 3, 8, 8, { fill: ALERTA_COR })); }, 'Medição de alerta alto'],
         [function (xx) { o.push(R(xx, y2 + 5, 16, 4.2, { fill: '#E5B800' })); }, 'Garantia das juntas acionada']
       ].forEach(function (it) {
         it[0](lx);
         o.push(T(lx + 20, y2 + 10, it[1], { size: 7 }));
         lx += 20 + textW(it[1], 7) + 14;
       });
-      o.push(T(x, y + 46, 'Medido ÷ estimado: soma das medições na ponte sobre o estimado da 1ª etapa no Anexo VI, a preços iniciais. "· 23ª" = última medição com serviço do grupo.', { size: 6.4, fill: gray }));
+      o.push(T(x, y + 46, fitText('Quantidade = quanto a ponte precisa, na unidade do grupo. Em roxo, a análise das medições: medido ÷ estimado = soma das medições na ponte sobre o estimado da 1ª etapa no Anexo VI, a preços iniciais.', 590, 6.4), { size: 6.4, fill: gray }));
     } else {
-      o.push(T(x, y + 28, 'Conclusão da ponte = média dos grupos aplicáveis. N/A: grupo de serviço não aplicável nesta ponte.', { size: 6.6, fill: gray }));
+      o.push(T(x, y + 28, fitText('Serviço contínuo: cada grupo mostra o que a ponte precisa hoje e quanto (m de junta, m² de concreto, % da ponte a pintar, drenos, m de guarda-corpo ou pista, m² de plataforma).', 590, 6.6), { size: 6.6, fill: gray }));
     }
 
     var bx = 640;
     if (pageIdx === pageCount - 1) {
-      o.push(R(bx, y, G.x1 - bx, 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
+      var rs = oaeResumo(c), falta = oaeFaltaTxt(rs);
+      o.push(R(bx, y, G.x1 - bx, falta ? 46 : 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(bx + 10, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
-      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m']];
+      if (falta) o.push(T(bx + 10, y + 39, fitText('Precisam: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
+      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Precisam de manutenção', String(rs.prec)]];
       if (an && an.resumo) {
         parts.push(['Medido', fmtBRLc(an.resumo.total)]);
         parts.push(['Alertas altos', String(an.resumo.altos)]);
-      } else parts.push(['Avanço médio', fmtPct(tot.avg)]);
+      }
       var px = bx + 10;
       parts.forEach(function (pt) {
         var lbl = pt[0] + ': ';
@@ -759,7 +833,7 @@
       c.pontos.forEach(function (p) {
         p.id = p.id || uid('pt');
         p.serv = p.serv || {};
-        list.forEach(function (k) { if (!p.serv[k.key]) p.serv[k.key] = { st: 'NA', pct: 0 }; });
+        list.forEach(function (k) { if (!p.serv[k.key]) p.serv[k.key] = isOae(c) ? { st: 'NV' } : { st: 'NA', pct: 0 }; });
         p.disp = Array.isArray(p.disp) ? p.disp : [];
       });
     });
@@ -873,7 +947,7 @@
     var pts = sortedPoints(c), oae = isOae(c);
     if (oae) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
     h.push('<div class="points-head"><h2>' + (oae ? 'Pontes' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ Ponte' : '+ Ponto') + '</button></div>');
-    h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para ver os serviços' + (anOf(c) ? ', as medições e os alertas.' : '.') :
+    h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o que ela precisa' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
       'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
     h.push('<div class="pt-list" id="ptList">');
     pts.forEach(function (p) { h.push(pointCard(p)); });
@@ -882,7 +956,7 @@
       h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
         '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
     } else if (isFiscal()) {
-      h.unshift('<div class="ro-note fiscal-note"><span>Você entrou como <b>fiscal de campo</b>: mude o status e o % dos serviços. A mudança fica aguardando a aprovação de um engenheiro.</span></div>');
+      h.unshift('<div class="ro-note fiscal-note"><span>Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o que cada ponte precisa, quanto e onde' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.</span></div>');
     }
     $('editor').innerHTML = h.join('');
     lockEditor();
@@ -900,15 +974,27 @@
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span><span class="pt-km">KM ' + km + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV;
   }
 
-  // botões de status (OK, Ativo, Parado, N/A) e % de cada serviço do ponto
+  // botões de status de cada serviço. Pontos críticos (obra feita uma vez): OK, Ativo, Parado, N/A e o % executado.
+  // Pontes (serviço contínuo): o que a ponte precisa (OK, Precisa, Urgente, Em execução, N/A), quanto e onde
   function servHtml(p, list, extra) {
-    var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id);
+    var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), oae = list === OAE_SERVICES;
     list.forEach(function (s) {
-      var sv = p.serv[s.key] || { st: 'NA', pct: 0 }, pv = prop[s.key];
-      var segs = STATUS_ORDER.map(function (k) {
-        var pend = pv && pv.st === k && sv.st !== k ? ' pend' : '';
-        return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (sv.st === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + STATUS[k].btn + '</button>';
+      var sv = p.serv[s.key] || (oae ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = oae ? oaeSt(sv) : sv.st;
+      var segs = (oae ? OAE_STATUS_ORDER : STATUS_ORDER).map(function (k) {
+        var pend = pv && pv.st === k && cur !== k ? ' pend' : '';
+        return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (oae ? OAE_STATUS : STATUS)[k].btn + '</button>';
       }).join('');
+      if (oae) {
+        var on = comQtd(cur);
+        h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q) + '</small>' : '') +
+          (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + (extra ? extra(s) : '') + '</div>' +
+          '<div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
+          (s.un ? '<div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (on && sv.q != null ? esc(sv.q) : '') + '"' +
+            (on ? ' placeholder="quanto?"' : ' disabled') + ' aria-label="' + esc(s.short + ': ' + s.q + ' (' + s.un + ')') + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
+          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' : '') +
+          '</div>';
+        return;
+      }
       var pctDisabled = (sv.st === 'OK' || sv.st === 'NA');
       h += '<div class="svc"><div class="svc-name">' + esc(s.short) + (extra ? extra(s) : '') + '</div><div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
         '<div class="pct-in"><input type="number" min="0" max="100" step="1" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (pctDisabled ? (sv.st === 'OK' ? 100 : '') : (Number(sv.pct) || 0)) + '"' + (pctDisabled ? ' disabled' : '') + ' aria-label="Percentual executado de ' + esc(s.short) + '"><span>%</span></div></div>';
@@ -1040,14 +1126,16 @@
 
   function ponteHead(p, c) {
     var dots = OAE_SERVICES.map(function (s) {
-      var st = (p.serv[s.key] || {}).st || 'NA';
-      return '<span class="dot ' + st + '" title="' + esc(s.short + ': ' + STATUS[st].name) + '"></span>';
+      var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
+      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + OAE_STATUS[k].name + (qt ? ' · ' + qt : '')) + '"></span>';
     }).join('');
+    var n = oaeNec(p), nc = n.urg ? 'urg' : n.prec ? 'prec' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok';
+    var nt = n.urg ? n.urg + ' urg.' : n.prec ? n.prec + ' prec.' : n.exec ? 'exec.' : nc === 'nv' ? '–' : 'OK';
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
     var badge = a && a.aa ? '<b class="pt-al" title="' + a.aa + (a.aa === 1 ? ' alerta alto' : ' alertas altos') + ' na análise das medições">' + a.aa + '</b>' : '';
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p, c)) + '</span>' + ICON_CHEV;
+      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n)) + '">' + nt + '</span>' + ICON_CHEV;
   }
 
   function ponteCard(p, c) {
@@ -1065,7 +1153,8 @@
       h += field('Largura (m)', 'data-p="largura" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtN(p.largura));
       h += '</div>';
 
-      h += '<div class="section-title">Serviços</div>';
+      var vis = vistoriaPonte(c, p);
+      h += '<div class="section-title">O que a ponte precisa' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
@@ -1171,6 +1260,16 @@
   var NO_STATUS = { name: 'Sem atividade', fill: '#7A8580' };
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
+    if (isOae(ownerOf(p))) {
+      var n = oaeNec(p), k = n.urg ? 'UR' : n.prec ? 'PR' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null;
+      return {
+        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: oaeNecTxt(n),
+        servs: OAE_SERVICES.filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
+          var sv = p.serv[s.key], x = oaeSt(sv), qt = comQtd(x) ? fmtQtd(s, sv.q) : '';
+          return { label: s.label, color: OAE_STATUS[x].fill, text: OAE_STATUS[x].name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.n ? ' · ' + sv.n : '') };
+        })
+      };
+    }
     var list = servicesOf(ownerOf(p));
     var pct = pointPct(p), sts = list.map(function (k) { return (p.serv[k.key] || {}).st; });
     var key = pct >= 100 ? 'OK' : sts.indexOf('P') >= 0 ? 'P' : sts.indexOf('A') >= 0 ? 'A' : null;
@@ -1310,11 +1409,16 @@
     if (isMap && ensureMap()) { mapa.render(); mapa.show(); }
     renderPreview();
   }
+  function metaSituacao(c, tot) {
+    if (!isOae(c)) return ' · avanço médio ' + fmtPct(tot.avg);
+    var r = oaeResumo(c);
+    return ' · ' + r.prec + (r.prec === 1 ? ' precisa' : ' precisam') + ' de manutenção' + (r.urg ? ' (' + r.urg + ' com urgência)' : '');
+  }
   function renderPreview() {
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
       mapa.render();
-      $('previewMeta').textContent = 'Mapa pelo SNV/DNIT ' + window.SNV_BR230.versao + ' · ' + tot.n + ' pontos · avanço médio ' + fmtPct(tot.avg);
+      $('previewMeta').textContent = 'Mapa pelo SNV/DNIT ' + window.SNV_BR230.versao + ' · ' + tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
       return;
     }
     var sheets = renderSheets(c);
@@ -1322,7 +1426,7 @@
     $('pages').innerHTML = sheets.map(function (svg, i) {
       return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + '</div>';
     }).join('');
-    $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + tot.n + (isOae(c) ? ' pontes' : ' pontos') + ' · avanço médio ' + fmtPct(tot.avg);
+    $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
     if (viewer && viewer.isOpen()) viewer.update(sheets);
   }
 
@@ -1356,7 +1460,15 @@
     } else if (t.dataset.svcpct) {
       var p2 = findPoint(t.dataset.id);
       if (!p2) return;
-      p2.serv[t.dataset.svcpct].pct = clamp(Number(t.value) || 0, 0, 100);
+      var sv2 = p2.serv[t.dataset.svcpct];
+      if (!sv2) return;
+      if (isOae(c)) {
+        if (t.dataset.nota) { if (t.value.trim()) sv2.n = t.value; else delete sv2.n; }
+        else {
+          var so = OAE_SERVICES.find(function (x) { return x.key === t.dataset.svcpct; }), q = parseNum(t.value);
+          if (q == null) delete sv2.q; else sv2.q = so && so.un === '%' ? clamp(q, 0, 100) : Math.max(0, q);
+        }
+      } else sv2.pct = clamp(Number(t.value) || 0, 0, 100);
       refreshPointHead(p2);
     } else if (t.dataset.dev != null && t.dataset.df) {
       var p3 = findPoint(t.dataset.id);
@@ -1405,7 +1517,12 @@
         p = findPoint(b.dataset.id);
         if (!p) return;
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
-        if (st === 'OK') sv.pct = 100;
+        if (!sv) return;
+        if (isOae(c)) {
+          // ponte: a quantidade e o "onde" só valem enquanto precisa ou está em execução
+          delete sv.pct;
+          if (!comQtd(st)) { delete sv.q; delete sv.n; }
+        } else if (st === 'OK') sv.pct = 100;
         else if (st === 'NA') sv.pct = 0;
         else if (sv.st === 'OK' || sv.st === 'NA') sv.pct = st === 'A' ? 50 : 0;
         sv.st = st;
@@ -1416,7 +1533,7 @@
         var base = last && last.kmFim != null ? Math.round((last.kmFim + 1) * 100) / 100 : null;
         var serv = {};
         if (isOae(c)) {
-          OAE_SERVICES.forEach(function (s) { serv[s.key] = { st: 'NA', pct: 0 }; });
+          OAE_SERVICES.forEach(function (s) { serv[s.key] = { st: 'NV' }; });
           p = { id: uid('pt'), nome: 'Nova ponte', codigo: 'OAE ' + String(c.pontos.length + 1).padStart(2, '0'), kmIni: null, kmFim: null, extensao: null, largura: null, municipio: '', serv: serv, disp: [], obs: '' };
         } else {
           SERVICES.forEach(function (s) { serv[s.key] = { st: 'P', pct: 0 }; });
@@ -1941,6 +2058,15 @@
     });
     return { por: best.por, em: best.em, campos: campos };
   }
+  function vistoriaPonte(c, p) {
+    var x = banco.on && banco.meta[metaKey(c.id, p.id)], best = null;
+    if (!x) return null;
+    OAE_SERVICES.forEach(function (s) {
+      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em);
+      if (isFinite(t) && oaeSt(p.serv[s.key]) !== 'NV' && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
+    });
+    return best;
+  }
   function fmtWhen(iso, secs) {
     var d = new Date(iso);
     if (!isFinite(d)) return '';
@@ -1980,6 +2106,11 @@
   function fmtValue(campo, v) {
     if (v == null || v === '') return '(vazio)';
     if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
+      var so = OAE_SERVICES.find(function (x) { return x.key === campo.slice(5); });
+      if (so) {
+        var k = OAE_STATUS[v.st] ? v.st : 'NV', qt = comQtd(k) ? fmtQtd(so, v.q) : '';
+        return OAE_STATUS[k].name + (qt ? ' ' + qt : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
+      }
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
       return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
     }
