@@ -645,7 +645,7 @@
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
       nec,
       { k: 'MEDIDO (PREÇOS INICIAIS)', v: fmtBRLc(r.total), s: r.n + ' medições · ' + r.de + ' a ' + r.ate },
-      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'retrabalho em até ' + an.janela + ' meses' }
+      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'volta na etapa em até ' + an.janela + ' meses · juntas < 1 ano' }
     ];
     return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
@@ -698,9 +698,8 @@
       o.push(T(cx, g.yKm - 9, fitText(kc, bw - 4, 5.8), { size: 5.8, fill: '#5C6661', anchor: 'middle' }));
     }
 
-    // bloco da ponte: código grande e nome; faixa amarela = garantia das juntas acionada
+    // bloco da ponte: código grande e nome
     o.push(R(bx, g.yBand, bw, g.bandH, { fill: '#D6DAD8', stroke: '#7D8581', sw: 0.7, cls: 'blk' }));
-    if (a && a.gar) o.push(R(bx + 0.4, g.yBand + 0.4, bw - 0.8, 4.2, { fill: '#E5B800' }));
     // o nome é a identificação principal; o código (OAE nn) vem pequeno em cima
     if (p.codigo) o.push(T(cx, g.yBand + 13, fitText(p.codigo, bw - 6, 6.8, true), { size: 6.8, bold: true, fill: '#5C6661', anchor: 'middle' }));
     var nome = p.nome || '?', maior = nome.split(/\s+/).reduce(function (m, w) { return textW(w, 13, true) > textW(m, 13, true) ? w : m; }, '');
@@ -796,7 +795,7 @@
       if (lines.length) lines.push({ t: '' });
       lines.push({ t: 'Alertas das medições:', b: true, cor: ALERTA_TINTA });
       altos.forEach(function (x) {
-        wrap('• ' + x.servico + ': ' + (ALERTA_TXT[x.tipo] || x.tipo) + ' (' + fmtBRL(x.valor) + (x.meds ? '; ' + x.meds : '') + ')', bw - 10, fs).forEach(function (t) { lines.push({ t: t, cor: '#4B2377' }); });
+        wrap('• ' + x.servico + ': ' + (x.trechos || ALERTA_TXT[x.tipo] || x.tipo) + ' (' + fmtBRL(x.valor) + ')', bw - 10, fs).forEach(function (t) { lines.push({ t: t, cor: '#4B2377' }); });
       });
     }
     if (lines.length > maxLines) {
@@ -856,17 +855,16 @@
     var yn = y + 26;
     if (an) {
       lx = x + 40;
-      item(function (xx, yy) { o.push(R(xx + 0.8, yy + 0.8, 13.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Alerta alto no grupo', y + 16);
+      item(function (xx, yy) { o.push(R(xx + 0.8, yy + 0.8, 13.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Grupo refeito (alerta alto)', y + 16);
       item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: '#2B5797' })); }, 'Medição com serviço', y + 16);
       item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: ALERTA_COR })); }, 'Medição de alerta alto', y + 16);
-      item(function (xx, yy) { o.push(R(xx, yy + 3, 15, 4.2, { fill: '#E5B800' })); }, 'Garantia das juntas acionada', y + 16);
       yn = y + 38;
     }
     var notas = [
       'Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.',
       'KM pelo SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ' (DNIT); contr. = km do contrato (Anexo VI); ~ antes do km = km estimado, a conferir em campo.'
     ];
-    if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta alto = o mesmo serviço medido de novo na ponte em até ' + an.janela + ' meses, ou medido depois da garantia acionada. Indício a conferir.');
+    if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta alto = a ponte atendida de novo na mesma etapa em até ' + an.janela + ' meses (uma passagem = medições seguidas), ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
     notas.forEach(function (t, i) { o.push(T(x, yn + i * 8.4, fitText(t, 598, 6.1), { size: 6.1, fill: gray })); });
 
     var bx = 640;
@@ -1147,12 +1145,15 @@
     analise = { dados: x && x.dados && typeof x.dados === 'object' ? x.dados : {}, estado: {} };
     if (!isEng()) lsPut(AN_KEY, null);
   }
-  // janela do retrabalho (escolha de cada engenheiro, guardada no aparelho): o mesmo serviço medido de novo na ponte
-  // em até 3, 6 ou 12 meses é alerta alto; medido depois da garantia acionada continua alto. A comparação com o estimado
-  // do Anexo VI ("acima do estimado") sai da tela: não diferenciava as pontes.
+  // Alerta da análise (geral, por ponte): a ponte atendida mais de uma vez na mesma etapa. Atendimento = medições
+  // seguidas com serviço na ponte (uma passagem pode atravessar o mês); o PTO prevê uma passagem por estrutura em cada
+  // etapa. Alto quando ela volta a ser atendida, na mesma etapa, em até 3, 6 ou 12 meses (escolha de cada engenheiro,
+  // guardada no aparelho); médio quando volta depois disso. Entre etapas não é alerta: cada etapa pode refazer o serviço
+  // (pintar tudo de novo). Exceção: juntas e pingadeiras refeitas em menos de 1 ano são alerta alto (deveriam durar mais).
+  // Os alertas por serviço da análise (repetição, juntas além do comprimento, garantia, estimado do Anexo VI) não aparecem.
   var JAN_KEY = 'diagrama-linear.janela', JANELAS = [3, 6, 12];
   var janela = (function () { var v = Number(lsGet(JAN_KEY)); return JANELAS.indexOf(v) >= 0 ? v : 6; })();
-  var AL_JANELA = { etapa: 1, garantia5: 1, junta: 1, vegetacao: 1 }, anCache = { raw: null, jan: 0, view: null };
+  var anCache = { raw: null, jan: 0, view: null };
   function anOf(c) {
     var raw = c && isOae(c) && isEng() ? analise.dados[c.id] || null : null;
     if (!raw) return null;
@@ -1160,30 +1161,71 @@
     return anCache.view;
   }
   function anJanela(raw, J) {
-    var mes = {};
-    (raw.medicoes || []).forEach(function (m) { var r = String(m.ref || ''); if (/^\d{4}-\d{2}/.test(r)) mes[m.n] = Number(r.slice(0, 4)) * 12 + Number(r.slice(5, 7)); });
+    var meds = (raw.medicoes || []).slice().sort(function (x, y) { return x.n - y.n; }), mes = {}, info = {};
+    meds.forEach(function (m) { info[m.n] = m; var r = String(m.ref || ''); if (/^\d{4}-\d{2}/.test(r)) mes[m.n] = Number(r.slice(0, 4)) * 12 + Number(r.slice(5, 7)); });
     function medsDe(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
-    // menor intervalo, em meses, entre duas medições do mesmo serviço na ponte
-    function gap(t) {
-      var ms = medsDe(t).map(function (n) { return mes[n]; }).filter(function (v, i, arr) { return v != null && arr.indexOf(v) === i; }).sort(function (a, b) { return a - b; }), g = null;
-      for (var i = 1; i < ms.length; i++) if (g == null || ms[i] - ms[i - 1] < g) g = ms[i] - ms[i - 1];
-      return g;
+    function trecho(r) {
+      var a0 = info[r[0]], a1 = info[r[r.length - 1]];
+      return r.length === 1 ? r[0] + 'ª (' + (a0 && a0.mes || '') + ')' : r[0] + 'ª a ' + r[r.length - 1] + 'ª (' + (a0 && a0.mes || '') + ' a ' + (a1 && a1.mes || '') + ')';
     }
     var pontes = {}, altos = 0, total = 0;
     Object.keys(raw.pontes || {}).forEach(function (pid) {
-      var a = raw.pontes[pid], mx = {}, grupos = {}, aa = 0;
+      var a = raw.pontes[pid], mx = {}, grupos = {}, als = [], porEt = {}, ets = [];
       Object.keys(a.grupos || {}).forEach(function (k) { grupos[k] = Object.assign({}, a.grupos[k], { altos: 0 }); });
-      var als = (a.alertas || []).filter(function (x) { return x.tipo !== 'acima' && x.tipo !== 'sem_estimativa'; }).map(function (x) {
-        var y = Object.assign({}, x);
-        if (AL_JANELA[x.tipo]) { y.gap = gap(x.meds); y.sev = y.gap != null && y.gap <= J ? 'Alta' : 'Média'; }
-        return y;
+      meds.forEach(function (m) {
+        if (!(Number(a.meses && a.meses[String(m.n)]) > 0)) return;
+        if (!porEt[m.etapa]) { porEt[m.etapa] = []; ets.push(m.etapa); }
+        porEt[m.etapa].push(m.n);
       });
-      als.forEach(function (y) {
-        if (y.sev !== 'Alta') return;
-        aa++;
-        medsDe(y.meds).forEach(function (n) { mx[n] = 1; });
-        if (y.g && grupos[y.g]) grupos[y.g].altos++;
+      ets.forEach(function (et) {
+        var ns = porEt[et], at = [], gap = null, valor = 0;
+        ns.forEach(function (n) { var u = at[at.length - 1]; if (u && n === u[u.length - 1] + 1) u.push(n); else at.push([n]); });
+        if (at.length < 2) return;
+        // a volta mais rápida: do fim de um atendimento ao começo do seguinte, em meses
+        for (var i = 1; i < at.length; i++) {
+          var d = mes[at[i][0]] - mes[at[i - 1][at[i - 1].length - 1]];
+          if (isFinite(d) && (gap == null || d < gap)) gap = d;
+        }
+        ns.forEach(function (n) { valor += Number(a.meses[String(n)]) || 0; });
+        var sev = gap != null && gap <= J ? 'Alta' : 'Média';
+        als.push({ tipo: 'atendimentos', sev: sev, etapa: et, vezes: at.length, valor: valor, gap: gap, meds: ns.map(function (n) { return n + 'ª'; }).join(', '),
+          servico: 'Atendida ' + at.length + ' vezes na ' + et + 'ª etapa', tipoNome: 'mais de uma passagem na mesma etapa', trechos: at.map(trecho).join(' · '),
+          motivo: at.map(trecho).join(' · ') + '; o PTO prevê uma passagem por estrutura em cada etapa' });
+        if (sev !== 'Alta') return;
+        ns.forEach(function (n) { mx[n] = 1; });
+        // grupos com serviço medido em mais de uma passagem dessa etapa
+        (a.servicos || []).forEach(function (s) {
+          if (!s.g || !grupos[s.g]) return;
+          var vis = {};
+          medsDe(s.meds).forEach(function (n) { at.forEach(function (r, j) { if (r.indexOf(n) >= 0) vis[j] = 1; }); });
+          if (Object.keys(vis).length > 1) { grupos[s.g].altos++; grupos[s.g].alerta = grupos[s.g].alerta || 'medido em mais de uma passagem na etapa'; }
+        });
       });
+      // juntas e pingadeiras deveriam durar mais: refeitas em menos de 1 ano é alerta alto, mesmo de uma etapa para outra
+      var sj = (a.servicos || []).filter(function (s) { return s.g === 'juntas' && s.v > 0; }), nj = [];
+      sj.forEach(function (s) { medsDe(s.meds).forEach(function (n) { if (nj.indexOf(n) < 0) nj.push(n); }); });
+      nj.sort(function (x, y) { return x - y; });
+      var pj = [];
+      nj.forEach(function (n) { var u = pj[pj.length - 1]; if (u && n === u[u.length - 1] + 1) u.push(n); else pj.push([n]); });
+      var volta = [], gj = null;
+      for (var j = 1; j < pj.length; j++) {
+        var dj = mes[pj[j][0]] - mes[pj[j - 1][pj[j - 1].length - 1]];
+        if (isFinite(dj) && dj < 12) {
+          if (volta.indexOf(pj[j - 1]) < 0) volta.push(pj[j - 1]);
+          volta.push(pj[j]);
+          if (gj == null || dj < gj) gj = dj;
+        }
+      }
+      if (volta.length) {
+        var vj = sj.reduce(function (t, s) { return t + s.v; }, 0);
+        als.push({ tipo: 'juntas12', sev: 'Alta', valor: vj, gap: gj, meds: nj.map(function (n) { return n + 'ª'; }).join(', '),
+          servico: 'Juntas refeitas em menos de 1 ano', tipoNome: 'junta ou pingadeira medida de novo em menos de 12 meses',
+          trechos: 'voltaram em ' + gj + (gj === 1 ? ' mês: ' : ' meses: ') + volta.map(trecho).join(' · '),
+          motivo: 'juntas medidas na ' + volta.map(trecho).reduce(function (t, x, i, l) { return t + (i ? (i === l.length - 1 ? ' e na ' : ', na ') : '') + x; }, '') + ' (' + sj.map(function (s) { return s.nome; }).join(', ') + '); deveriam durar mais de um ano' });
+        volta.forEach(function (r) { r.forEach(function (n) { mx[n] = 1; }); });
+        if (grupos.juntas) { grupos.juntas.altos++; grupos.juntas.alerta = 'refeita em menos de 1 ano'; }
+      }
+      var aa = als.filter(function (x) { return x.sev === 'Alta'; }).length;
       altos += aa; total += als.length;
       pontes[pid] = Object.assign({}, a, { alertas: als, aa: aa, al: als.length, grupos: grupos, mx: Object.keys(mx).map(Number).sort(function (x, y) { return x - y; }) });
     });
@@ -1230,20 +1272,22 @@
     var r = an.resumo || {}, sobre = an.sobre || {};
     var kp = [
       ['Medido a preços iniciais', fmtBRL(r.total), r.n + ' medições · ' + r.de + ' a ' + r.ate],
-      ['Alertas altos', String(r.altos), 'de ' + r.alertas + ' alertas · retrabalho em até ' + an.janela + ' meses'],
-      ['Berços além do comprimento das juntas', fmtBRL(r.juntas_valor), r.juntas_pontes + ' pontes'],
-      ['Medido depois da garantia acionada', fmtBRL(r.garantia_valor), r.garantia_pontes + ' pontes (Carta ALT-002/2026)']
+      ['Alertas altos', String(r.altos), 'de ' + r.alertas + ' alertas · ponte atendida de novo na mesma etapa em até ' + an.janela + ' meses, ou juntas refeitas em menos de 1 ano']
     ];
     var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' +
       (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros e o Administrador</span></div>';
-    h += '<div class="an-jan"><span id="anJanTit">Alerta alto quando o mesmo serviço volta a ser medido na ponte em até</span><div class="seg" role="group" aria-labelledby="anJanTit">' +
+    h += '<div class="an-jan"><span id="anJanTit">Alerta alto quando a ponte volta a ser atendida, na mesma etapa, em até</span><div class="seg" role="group" aria-labelledby="anJanTit">' +
       JANELAS.map(function (j) { return '<button type="button" data-act="janela" data-v="' + j + '" aria-pressed="' + (an.janela === j) + '">' + j + ' meses</button>'; }).join('') + '</div></div>';
     h += '<div class="an-kpis">' + kp.map(function (k) {
       return '<div class="an-kpi"><span>' + esc(k[0]) + '</span><b>' + esc(k[1]) + '</b><small>' + esc(k[2]) + '</small></div>';
     }).join('') + '</div>';
     if (sobre.fonte) h += '<div class="an-src">Fonte: ' + esc(sobre.fonte) + '.</div>';
-    if (an.notas && an.notas.length) {
-      h += '<details class="an-notas"><summary>Critérios dos alertas e ressalvas</summary><ol>' + an.notas.map(function (n) {
+    // as notas de critérios que não valem mais na tela (garantia, carta das juntas, comprimento das juntas, vegetação) saem
+    var notas = [{ assunto: 'Alertas desta tela', texto: 'Alerta geral por ponte: atendida mais de uma vez na mesma etapa (uma passagem = medições seguidas); alto quando volta em até ' +
+      an.janela + ' meses. Juntas e pingadeiras refeitas em menos de 1 ano também são alerta alto, mesmo de uma etapa para outra. Entre etapas, o resto não é alerta: cada etapa pode refazer o serviço.' }]
+      .concat((an.notas || []).filter(function (n) { return !/^(garantia|carta|comprimento f|vegeta)/i.test(String(n.assunto || '')); }));
+    if (notas.length) {
+      h += '<details class="an-notas"><summary>Critérios dos alertas e ressalvas</summary><ol>' + notas.map(function (n) {
         return '<li><b>' + esc(n.assunto) + '.</b> ' + esc(n.texto) + '</li>';
       }).join('') + '</ol></details>';
     }
@@ -1286,7 +1330,7 @@
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
-        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + gi.ult + 'ª' : '') + (gi.altos ? ' · ' + gi.altos + (gi.altos === 1 ? ' alerta alto' : ' alertas altos') : '') + '</small>';
+        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + gi.ult + 'ª' : '') + (gi.altos ? ' · ' + (gi.alerta || 'alerta alto') : '') + '</small>';
       });
 
       if (a) h += ponteAnaliseHtml(an, a);
@@ -1301,7 +1345,40 @@
     return h + '</article>';
   }
 
-  // medições da ponte (barras por medição), serviços mais caros e alertas
+  // curva ABC dos serviços medidos na ponte: A = os que somam os primeiros 80% do valor, B = até 95%, C = o resto.
+  // A em destaque; C fica recolhido. Cada serviço mostra em quais medições foi medido nesta ponte.
+  function abcHtml(an, a) {
+    var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }).sort(function (x, y) { return y.v - x.v; });
+    if (!sv.length) return '';
+    var tot = sv.reduce(function (t, s) { return t + s.v; }, 0), acum = 0, cls = { A: [], B: [], C: [] }, mesDe = {};
+    (an.medicoes || []).forEach(function (m) { mesDe[m.n] = m.mes; });
+    sv.forEach(function (s) {
+      var k = acum / tot < 0.8 ? 'A' : acum / tot < 0.95 ? 'B' : 'C';
+      acum += s.v;
+      cls[k].push({ s: s, pct: s.v / tot * 100, ac: acum / tot * 100, k: k });
+    });
+    function pct(v) { return (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('pt-BR') + '%'; }
+    function soma(l) { return l.reduce(function (t, x) { return t + x.pct; }, 0); }
+    function meds(t) {
+      var ns = [];
+      String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); });
+      return ns.length ? '<span class="abc-meds">' + ns.map(function (n) { return '<i>' + n + 'ª' + (mesDe[n] ? ' <small>' + esc(mesDe[n]) + '</small>' : '') + '</i>'; }).join('') + '</span>' : '';
+    }
+    function linha(x) {
+      return '<div class="abc-r ' + x.k.toLowerCase() + '"><span class="abc-c" aria-label="classe ' + x.k + '">' + x.k + '</span>' +
+        '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span><small>' + fmtN(x.s.q) + ' ' + esc(x.s.un) + ' medidos nesta ponte</small>' + meds(x.s.meds) +
+        '<span class="abc-bar"><i style="width:' + Math.max(1.5, x.pct).toFixed(1) + '%"></i></span></div>' +
+        '<div class="abc-v"><b>' + fmtBRL(x.s.v) + '</b><small>' + pct(x.pct) + ' · acum. ' + pct(x.ac) + '</small></div></div>';
+    }
+    var h = '<div class="section-title">Serviços · Curva ABC</div>';
+    h += '<div class="abc-res">' + ['A', 'B', 'C'].filter(function (k) { return cls[k].length; }).map(function (k) {
+      return '<span class="abc-tag ' + k.toLowerCase() + '"><b>' + k + '</b> ' + cls[k].length + (cls[k].length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls[k])) + '</span>';
+    }).join('') + '</div>';
+    h += '<div class="abc">' + cls.A.map(linha).join('') + cls.B.map(linha).join('');
+    if (cls.C.length) h += '<details class="abc-mais"><summary>Classe C: ' + cls.C.length + (cls.C.length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls.C)) + ' do valor</summary>' + cls.C.map(linha).join('') + '</details>';
+    return h + '</div>';
+  }
+  // medições da ponte (barras por medição), serviços pela curva ABC e alertas
   function ponteAnaliseHtml(an, a) {
     var ms = an.medicoes || [], mx = {}, max = 0, h = '';
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
@@ -1310,7 +1387,7 @@
     var ult = ms.filter(function (m) { return Number(a.meses[String(m.n)]) > 0; }).slice(-3).reverse();
     h += '<div class="section-title">Medições nesta ponte</div>';
     h += '<div class="an-line">Medido: <b>' + fmtBRL(a.tot) + '</b>' + medEtapas(an, a).map(function (e) { return ' · ' + e.etapa + 'ª etapa: <b>' + fmtBRL(e.v) + '</b>'; }).join('') +
-      (a.gar ? ' · <span class="an-gar">garantia das juntas acionada (Carta ALT-002/2026)</span>' : '') + '</div>';
+      '</div>';
     if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (m) { return m.n + 'ª (' + esc(m.mes) + ') ' + fmtBRL(Number(a.meses[String(m.n)])); }).join(' · ') + '</div>';
     var corte = -1;
     ms.forEach(function (m, i) { if (corte < 0 && i > 0 && m.etapa !== ms[i - 1].etapa) corte = i; });
@@ -1328,28 +1405,18 @@
     }
     h += '</div>';
 
-    var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }).slice(0, 8);
-    if (sv.length) {
-      h += '<div class="section-title">Serviços mais caros</div><div class="an-table" role="table">';
-      h += '<div class="an-tr an-th" role="row"><span role="columnheader">Serviço</span><span role="columnheader">Medido</span><span role="columnheader">Valor</span></div>';
-      sv.forEach(function (s) {
-        h += '<div class="an-tr" role="row"><span role="cell">' + esc(s.nome) + (s.meds ? '<small>' + esc(s.meds) + '</small>' : '') + '</span>' +
-          '<span role="cell">' + fmtN(s.q) + ' ' + esc(s.un) + '</span>' +
-          '<span role="cell">' + fmtBRL(s.v) + '</span></div>';
-      });
-      h += '</div>';
-    }
+    h += abcHtml(an, a);
 
     var al = (a.alertas || []).slice().sort(function (x, y) {
       var o = { Alta: 0, 'Média': 1, Baixa: 2 };
       return (o[x.sev] - o[y.sev]) || (y.valor - x.valor);
     });
     h += '<div class="section-title">Alertas da análise</div>';
-    if (!al.length) h += '<div class="empty">Nenhum serviço repetido nesta ponte.</div>';
+    if (!al.length) h += '<div class="empty">Nenhuma etapa com mais de uma passagem e nenhuma junta refeita em menos de 1 ano.</div>';
     al.forEach(function (x) {
       h += '<div class="an-al"><span class="an-sev ' + (x.sev === 'Alta' ? 'alta' : x.sev === 'Baixa' ? 'baixa' : 'media') + '">' + esc(x.sev) + '</span>' +
-        '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) + (x.meds ? ' (' + esc(x.meds) + ')' : '') +
-        (x.gap != null ? ' · menor intervalo entre medições: ' + x.gap + (x.gap === 1 ? ' mês' : ' meses') : '') + '</small></div>' +
+        '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) +
+        (x.gap != null ? ' · voltou em ' + x.gap + (x.gap === 1 ? ' mês' : ' meses') : '') + '</small></div>' +
         '<span class="an-v">' + fmtBRL(x.valor) + '</span></div>';
     });
     return h;
