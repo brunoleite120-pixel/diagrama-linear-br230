@@ -1,0 +1,119 @@
+# Compila o app Android (VIA-230) num Linux do GitHub e entrega o .apk assinado como arquivo da execução.
+# Do ramo main sai o app da PRÉVIA (banco de teste, selo laranja):
+#   gh workflow run android.yml --ref main -f versao=1.1.0
+# Do ramo producao sai o app OFICIAL (banco da equipe):
+#   gh workflow run android.yml --ref producao -f versao=1.1.0
+# Baixar o .apk: gh run download <número da execução> -n VIA-230-android
+# Segredos do repositório (a chave fica guardada fora do repositório, na pasta assinatura-android do projeto):
+#   ANDROID_KS_B64   a chave via230.p12 em base64
+#   ANDROID_KS_PASS  a senha da chave
+# Sem a MESMA chave, o Android não instala a versão nova por cima da antiga (teria de desinstalar e perder os dados do app).
+name: App Android (APK)
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão mostrada no Android, por exemplo 1.1.0"
+        required: false
+        default: 1.0.0
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      VERSAO: ${{ github.event.inputs.versao || '1.0.0' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Dependências
+        run: npm install --no-audit --no-fund
+
+      - name: Arquivos do site para o app
+        run: |
+          mkdir -p www
+          # tudo o que a página carrega (scripts do index.html), mais o manifest, as bibliotecas e os ícones
+          cp index.html manifest.webmanifest www/
+          for f in $(grep -o '<script src="[^"]*"' index.html | sed 's/^<script src="//; s/"$//'); do
+            case "$f" in lib/*) ;; *) cp "$f" www/ ;; esac
+          done
+          cp -R lib icons www/
+          rm -rf www/icons/android
+          # no app: a página vai até a borda da tela e não dá zoom
+          sed -i 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
+          grep -q 'viewport-fit=cover' www/index.html || { echo "Não achei a linha do viewport em index.html"; exit 1; }
+          # ambiente: oficial só do ramo producao; de qualquer outro ramo sai a prévia (banco de teste)
+          if [ "$GITHUB_REF_NAME" = "producao" ]; then NOME=oficial; else NOME=previa; fi
+          sed -i "s|^  var NOME = 'oficial';|  var NOME = '$NOME';|" www/ambiente.js
+          sed -i "s|^  var VERSAO = 'dev';|  var VERSAO = '$VERSAO ($GITHUB_RUN_NUMBER) · ${GITHUB_SHA::7}';|" www/ambiente.js
+          grep -q "var NOME = '$NOME';" www/ambiente.js || { echo "Não consegui marcar o ambiente em ambiente.js"; exit 1; }
+          echo "Ambiente do app: $NOME"
+          echo "AMBIENTE=$NOME" >> "$GITHUB_ENV"
+          # bibliotecas do PDF dentro do app (gera o PDF sem internet)
+          cp node_modules/jspdf/dist/jspdf.umd.min.js node_modules/svg2pdf.js/dist/svg2pdf.umd.min.js www/lib/
+          for f in $(grep -o '<script src="[^"]*"' www/index.html | sed 's/^<script src="//; s/"$//'); do
+            [ -f "www/$f" ] || { echo "Falta no app: $f"; exit 1; }
+          done
+
+      - name: Projeto Android (Capacitor)
+        run: |
+          npx cap add android
+          npx cap sync android
+          M=android/app/src/main/AndroidManifest.xml
+          # GPS (mapa e km da foto) e câmera (Câmera com GPS); nenhum dos dois é obrigatório no aparelho
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>|' "$M"
+          grep -q ACCESS_FINE_LOCATION "$M" || { echo "Não consegui pôr as permissões no AndroidManifest"; exit 1; }
+          # ícone VIA-230 (adaptativo: frente + fundo azul; e os antigos, quadrado e redondo)
+          cp -R icons/android/res/. android/app/src/main/res/
+          # nome na tela de início
+          grep -q '<string name="app_name">VIA-230</string>' android/app/src/main/res/values/strings.xml || sed -i 's|<string name="app_name">[^<]*</string>|<string name="app_name">VIA-230</string>|' android/app/src/main/res/values/strings.xml
+          grep '<string name="app_name">' android/app/src/main/res/values/strings.xml
+          # versão: o número da compilação é o número da execução (cada .apk novo instala por cima do anterior)
+          G=android/app/build.gradle
+          sed -i "s/versionCode 1$/versionCode $GITHUB_RUN_NUMBER/; s/versionName \"1.0\"/versionName \"$VERSAO\"/" "$G"
+          grep -E "versionCode|versionName" "$G"
+
+      - name: Compilar
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Assinar
+        env:
+          KS_B64: ${{ secrets.ANDROID_KS_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KS_PASS }}
+        run: |
+          [ -n "$KS_B64" ] && [ -n "$KS_PASS" ] || { echo "Faltam os segredos ANDROID_KS_B64 e ANDROID_KS_PASS"; exit 1; }
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT"
+          IN=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          [ -f "$IN" ] || { ls -R android/app/build/outputs/apk; exit 1; }
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/via230.p12"
+          "$BT/zipalign" -p -f 4 "$IN" "$RUNNER_TEMP/alinhado.apk"
+          if [ "$AMBIENTE" = "oficial" ]; then SUF=""; else SUF="-previa"; fi
+          OUT="VIA-230$SUF-$VERSAO-$GITHUB_RUN_NUMBER.apk"
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/via230.p12" --ks-type PKCS12 --ks-key-alias via230 --ks-pass env:KS_PASS --key-pass env:KS_PASS --out "$OUT" "$RUNNER_TEMP/alinhado.apk"
+          rm -f "$RUNNER_TEMP/via230.p12"
+          "$BT/apksigner" verify --print-certs "$OUT" | grep -i "SHA-256"
+          ls -la "$OUT"
+          echo "APK=$OUT" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VIA-230-android
+          path: ${{ env.APK }}
+          retention-days: 30

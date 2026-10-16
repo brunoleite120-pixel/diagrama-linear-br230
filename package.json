@@ -2,8 +2,9 @@
   "name": "diagrama-230",
   "version": "1.0.0",
   "private": true,
-  "description": "App iOS do Diagrama Linear BR-230: o mesmo site, empacotado com o Capacitor e compilado pelo GitHub Actions.",
+  "description": "Apps iOS e Android do Diagrama Linear BR-230 (VIA-230): o mesmo site, empacotado com o Capacitor e compilado pelo GitHub Actions.",
   "dependencies": {
+    "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/filesystem": "^7.0.0",
     "@capacitor/ios": "^7.0.0",
