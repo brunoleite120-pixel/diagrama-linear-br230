@@ -10,6 +10,7 @@
  * As fotos ficam separadas por contrato (fila de contratos no alto). Na foto aberta ou em várias selecionadas, "Contrato e ponto"
  * corrige o contrato e o ponto (ou ponte): no aparelho e, se já foi enviada, no banco (migração 06). Quem tirou corrige as dele;
  * engenheiro e Administrador, qualquer uma. Foto sem ponto não entra no relatório.
+ * O Administrador traz para a galeria as fotos que estão no Drive e não no banco ("Trazer fotos do Drive", em Todas).
  *
  *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar });
  *   g.open({ cid, pid })   abre (opcional: já filtrada num ponto)      g.changed()   a fila do aparelho mudou
@@ -433,7 +434,8 @@
       }[aba];
       var semP = aba === 'relatorio' ? lista.filter(function (x) { return !x.pid; }).length : 0;
       if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
-      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' +
+      var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' : '';
+      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' + trazer +
         (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
     }
     function selBtn() {
@@ -849,6 +851,130 @@
           : /fotos_mover|PGRST202/.test(cd || '') ? 'O banco ainda não tem esta correção.' : 'Não foi possível corrigir (' + (cd || 'erro') + ').', 6000);
       });
     }
+    // ---------------------------------------------------------------- fotos do Drive que não estão na galeria (Administrador)
+    // O script do Drive lista as fotos da pasta do ambiente (na prévia, antes copia as do Drive oficial). Contrato, ponto, km,
+    // posição, data e quem tirou vêm do texto que o app grava em cada arquivo; faltando, da pasta e do nome do arquivo.
+    function deArquivo(f) {
+      var cs = contratos(), r = { autor: '', idApp: '', km: null, lat: null, lng: null, em: null, cid: '', pnome: '', desc: [] }, m;
+      String(f.descricao || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (l) {
+        if ((m = /^(?:Tirada|Enviada) por (.+?)(?: \([^)]*\))?$/.exec(l))) r.autor = m[1];
+        else if ((m = /^ID (\S+)$/.exec(l))) r.idApp = m[1];
+        else if (/^(Cópia do oficial|Pasta original|Apagada por) /.test(l) || l === 'Sem ponto') return;
+        else if ((m = /^Ponto (.+)$/.exec(l))) r.pnome = m[1];
+        else if ((m = /^BR\s[^-]*-\s*(\d+(?:,\d+)?)/.exec(l))) r.km = Number(m[1].replace(',', '.'));
+        else if ((m = /^(-?\d+,\d+)\/(-?\d+,\d+)$/.exec(l))) { r.lat = Number(m[1].replace(',', '.')); r.lng = Number(m[2].replace(',', '.')); }
+        else if ((m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(l))) r.em = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).toISOString();
+        else {
+          var c1 = cs.find(function (x) { return nomeContrato(x.id) === l || x.lote === l; });
+          if (c1 && !r.cid) r.cid = c1.id; else r.desc.push(l);
+        }
+      });
+      var ps = (f.pastas || []).slice(), n = String(f.nome || '');
+      if (ps[0] === 'Fotos por pessoa') { if (!r.autor && ps[1]) r.autor = ps[1]; ps = ps.slice(2); }
+      if (!r.cid && ps[0]) { var c2 = cs.find(function (x) { return x.lote === ps[0] || nomeContrato(x.id) === ps[0]; }); if (c2) r.cid = c2.id; }
+      if (!r.pnome && ps[1] && ps[1] !== 'Sem ponto') r.pnome = ps[1];
+      // nome do arquivo: "Foto BR-230-PA km 822+720 P13 2026-06-23 12h09 (2).jpg"
+      if (r.km == null && (m = /km (\d+)\+(\d{3})/.exec(n))) r.km = Number(m[1]) + Number(m[2]) / 1000;
+      if (!r.em && (m = /(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})/.exec(n))) r.em = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString();
+      if (!r.cid && r.km != null) {
+        var c3 = cs.find(function (x) { var t = trecho(x); return t && r.km >= t[0] - 0.05 && r.km <= t[1] + 0.05; });
+        if (c3) r.cid = c3.id;
+      }
+      var c = cs.find(function (x) { return x.id === r.cid; }), p = null;
+      if (c) {
+        p = r.pnome ? (c.pontos || []).find(function (x) { return x.nome === r.pnome; }) : null;
+        if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= 0.05) p = pp.p; }
+      }
+      return { id: r.idApp && r.idApp.length >= 4 ? r.idApp.slice(0, 80) : 'drv_' + f.id, drive_id: f.id, drive_url: f.url || null, nome_arquivo: n || 'foto.jpg',
+        tamanho: f.tamanho || null, autor_nome: r.autor || 'Sem nome', contrato_id: c ? c.id : null, ponto_id: p ? p.id : null, ponto_nome: p ? p.nome : null,
+        lote: c ? nomeContrato(c.id) : null, km: r.km != null ? Math.round(r.km * 1000) / 1000 : null, lat: r.lat, lng: r.lng,
+        tirada_em: r.em || f.criado || null, descricao: r.desc.join('\n') || null, enviada_em: f.criado || null };
+    }
+    // miniatura feita aqui (~360 px), quando o Drive ainda não tem a dele
+    function reduzir(blob) {
+      return new Promise(function (resolve) {
+        var u = URL.createObjectURL(blob), img = new Image();
+        img.onload = function () {
+          URL.revokeObjectURL(u);
+          var k = Math.min(1, 360 / Math.max(img.width, img.height)), cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k));
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/jpeg', 0.62).split(',')[1]);
+        };
+        img.onerror = function () { URL.revokeObjectURL(u); resolve(null); };
+        img.src = u;
+      });
+    }
+    function trazerDoDrive() {
+      var l = login(), url = o.driveUrl ? o.driveUrl() : null, amb = o.ambiente || 'oficial', previa = amb === 'previa';
+      if (!l || !url || ocupado || !o.drive || !o.drive.post) return;
+      cancelar = false;
+      ocupado = previa ? 'Copiando as fotos do Drive oficial e procurando as que faltam…' : 'Procurando no Drive as fotos que faltam…';
+      renderBar();
+      Promise.all([
+        o.drive.post(url, { acao: 'drive_listar', ambiente: amb, codigo: l.codigo, copiarOficial: previa }),
+        o.Banco.fotosListar(l.codigo, 'todas', 1000),
+        o.Banco.fotosListar(l.codigo, 'deletadas', 1000).catch(function () { return []; })
+      ]).then(function (r) {
+        var res = r[0], ja = {};
+        if (!res || !res.ok) throw { code: (res && res.erro) || 'erro' };
+        r[1].concat(r[2]).forEach(function (f) { if (f.drive_id) ja[f.drive_id] = 1; ja['id:' + f.id] = 1; });
+        var novos = [], ids = {};
+        (res.fotos || []).forEach(function (f) {
+          if (ja[f.id]) return;
+          var foto = deArquivo(f);
+          if (ja['id:' + foto.id] || ids[foto.id]) return;   // o mesmo envio repetido
+          ids[foto.id] = 1;
+          novos.push({ f: f, foto: foto });
+        });
+        ocupado = null; renderBar();
+        var cop = res.copiadas ? ' ' + plural(res.copiadas, 'foto foi copiada', 'fotos foram copiadas') + ' do Drive oficial para a pasta da prévia (o oficial não muda).' : '';
+        if (!novos.length) { o.toast('Todas as fotos do Drive já estão na galeria.' + cop, 6000); return; }
+        var por = {}, ordem = [];
+        novos.forEach(function (x) { var k = x.foto.contrato_id ? curto(x.foto.contrato_id) : 'Sem contrato'; if (!por[k]) { por[k] = 0; ordem.push(k); } por[k]++; });
+        var semP = novos.filter(function (x) { return !x.foto.ponto_id; }).length;
+        return o.confirmar({ titulo: 'Trazer ' + plural(novos.length, 'foto', 'fotos') + ' do Drive?', botao: 'Trazer para a galeria',
+          html: '<p>Estão no Drive e ainda não aparecem na galeria: ' + ordem.map(function (k) { return '<b>' + esc(k) + '</b> ' + por[k]; }).join(' · ') + '.</p>' +
+            (semP ? '<p>' + plural(semP, 'fica sem ponto', 'ficam sem ponto') + ': dá para definir depois em <b>Contrato e ponto</b>.</p>' : '') +
+            '<p>Contrato, ponto, km, data e quem tirou vêm do texto de cada arquivo no Drive.' + cop + '</p>'
+        }).then(function (ok) { if (ok) importar(novos); });
+      }).catch(function (e) {
+        ocupado = null; renderBar();
+        var c = e && (e.code || e.erro);
+        o.toast(c === 'so_criador' ? 'Só o Administrador traz fotos do Drive.' : c === 'acao_invalida' ? 'O script do Drive ainda é a versão antiga (precisa da versão 3).'
+          : c === 'sem_rede' || !c ? 'Sem conexão com o Drive.' : 'Não foi possível ler o Drive (' + c + ').', 7000);
+      });
+    }
+    function importar(novos) {
+      var l = login(), url = o.driveUrl(), amb = o.ambiente || 'oficial', feitas = 0, falhas = 0;
+      cancelar = false;
+      function lote(ini) {
+        if (cancelar || ini >= novos.length) return Promise.resolve();
+        var parte = novos.slice(ini, ini + 20);
+        ocupado = 'Trazendo ' + (ini + 1) + ' de ' + novos.length + '…'; renderBar();
+        return o.drive.post(url, { acao: 'drive_minis', ambiente: amb, codigo: l.codigo, ids: parte.map(function (x) { return x.f.id; }) }).catch(function () { return null; }).then(function (rm) {
+          var mm = {}, cadeia = Promise.resolve();
+          ((rm && rm.minis) || []).forEach(function (m) { if (m.jpeg) mm[m.id] = m.jpeg; });
+          parte.forEach(function (x, k) {
+            cadeia = cadeia.then(function () {
+              if (cancelar) return;
+              ocupado = 'Trazendo ' + (ini + k + 1) + ' de ' + novos.length + '…'; renderBar();
+              var pm = mm[x.f.id] ? Promise.resolve(mm[x.f.id]) : o.drive.post(url, { acao: 'drive_baixar', ambiente: amb, codigo: l.codigo, driveId: x.f.id }).then(function (r) {
+                return r && r.ok ? reduzir(b64Blob(r.dados, r.mime)) : null;
+              }, function () { return null; });
+              return pm.then(function (mini) { return o.Banco.fotoImportar(l.codigo, x.foto, mini); }).then(function (r) { if (r && r.nova) feitas++; }, function () { falhas++; });
+            });
+          });
+          return cadeia;
+        }).then(function () { return lote(ini + 20); });
+      }
+      lote(0).then(function () {
+        ocupado = null;
+        o.toast((feitas ? plural(feitas, 'foto do Drive entrou', 'fotos do Drive entraram') + ' na galeria.' : 'Nenhuma foto nova.') +
+          (falhas ? ' ' + plural(falhas, 'não entrou', 'não entraram') + ' (tente de novo).' : '') + (cancelar ? ' (parado)' : ''), 7000);
+        carregar();
+      });
+    }
     function fazer(k, ls) {
       if (k === 'baixar') baixar(ls);
       else if (k === 'por-rel') relatorio(ls, true);
@@ -910,6 +1036,7 @@
       else if (g === 'prox' && ver < lista.length - 1) abrir(ver + 1);
       else if (g === 'grande') carregarGrande();
       else if (g === 'ver-sem') { filtro.pid = SEM; render(); }
+      else if (g === 'drive-trazer') trazerDoDrive();
       else if (g === 'mv-fechar') fecharMover();
       else if (g === 'mv-usar') { var sp = q('#glMvP'); if (sp && mv && mv.sug) { sp.value = mv.sug.id; sugestao(); } }
       else if (g === 'mv-salvar') salvarMover();
