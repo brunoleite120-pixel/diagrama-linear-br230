@@ -1994,6 +1994,7 @@
       $('fileInput').click();
     }
     else if (act === 'print') imprimir();
+    else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: active().id });
     else if (act === 'reset') {
       confirmar({ titulo: 'Voltar aos dados iniciais?', texto: 'Apaga as alterações deste navegador e volta aos dados da planilha. Faça um backup antes, se precisar.', digitar: 'APAGAR', botao: 'Voltar aos dados iniciais', perigo: true }).then(function (r) {
         if (!r) return;
@@ -2178,7 +2179,7 @@
     orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
-    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir'
+    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)', logoExecutora: 'logo da executora'
   };
   function fieldName(k) {
     if (k.indexOf('serv.') === 0) { var s = SERVICES.concat(OAE_SERVICES).find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
@@ -2459,7 +2460,7 @@
       b.classList.toggle('primary', !banco.login);
     }
     // itens do menu Dados conforme o papel
-    var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp() };
+    var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn() };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
@@ -3023,10 +3024,51 @@
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         contratos: function () { return state.contracts; },
-        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin
+        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
+        relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });
     }
     galeria.open(f);
+  }
+  // ---------------- relatório fotográfico em PDF (relatorio.js), no modelo do DNIT: uma folha por ponto ou ponte
+  var relFoto = null;
+  function relatorioPdf(a) {
+    if (!relFoto) {
+      relFoto = window.RelatorioFoto({
+        contratos: function () { return state.contracts; }, ativo: active, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae,
+        ensureLibs: ensureLibs, saveBlob: saveBlob, toast: toast, modal: modal, closeModal: closeModal,
+        podeEditar: function () { return !readOnly() && !isFiscal(); }, salvarContrato: salvarCamposContrato, logoSupervisora: window.UNIFILAR_LOGO || null
+      });
+    }
+    relFoto.abrir(a);
+  }
+  // texto inicial da descrição: situação de cada serviço (lotes) ou estado de cada grupo na vistoria (pontes) e a observação
+  function descRelatorio(c, p) {
+    var partes;
+    if (isOae(c)) {
+      partes = OAE_SERVICES.map(function (s) {
+        var sv = p.serv[s.key], k = oaeSt(sv);
+        if (k === 'NV' || k === 'NA') return '';
+        var qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
+        return s.short + ': ' + oaeStOf(s, k).name.toLowerCase() + (qt ? ' ' + qt : '') + (comQtd(k) && sv.n ? ' (' + sv.n + ')' : '') +
+          (comQtd(k) && sv.pri ? ', prioridade' : '') + (comQtd(k) && sv.ci ? ', conclusão informada pela executora' : '');
+      });
+    } else {
+      partes = SERVICES.map(function (s) {
+        var sv = p.serv[s.key];
+        if (!sv || sv.st === 'NA' || !STATUS[sv.st]) return '';
+        return s.label + ': ' + STATUS[sv.st].name.toLowerCase() + (sv.st === 'OK' ? '' : ', ' + fmtPct(svcPct(sv)));
+      });
+    }
+    var t = partes.filter(Boolean).join('; ');
+    return (t ? t + '.' : '') + (p.obs ? (t ? '\n' : '') + String(p.obs).trim() : '');
+  }
+  // campos do contrato alterados pelo relatório (local e logo da executora): sobem ao banco como qualquer edição
+  function salvarCamposContrato(cid, campos) {
+    var c = contractById(cid);
+    if (!c || readOnly() || isFiscal()) return;
+    Object.keys(campos).forEach(function (k) { if (campos[k] == null) delete c[k]; else c[k] = campos[k]; });
+    save();
   }
   // botão Galeria: mostra quantas fotos deste aparelho ainda esperam envio
   function renderGaleriaBtn() {

@@ -3,7 +3,7 @@
  *   Neste aparelho  tudo o que está guardado aqui, com a situação do envio (na fila, enviada)
  *   Minhas          as que eu enviei, de qualquer aparelho
  *   Todas           as de toda a equipe, por pessoa (engenheiro e criador)
- *   Relatório       as marcadas com ★ para o relatório fotográfico (engenheiro e criador)
+ *   Relatório       as marcadas com ★ para o relatório fotográfico, que sai em PDF (relatorio.js) (engenheiro e Administrador)
  *   Deletados       as apagadas do Drive por engenheiros (só o criador; dá para restaurar)
  * A galeria mostra só a miniatura leve; a foto inteira vem do aparelho (se estiver aqui) ou do Drive ao abrir ou baixar.
  *
@@ -364,7 +364,8 @@
         relatorio: 'Fotos escolhidas para o relatório fotográfico.',
         deletadas: 'Apagadas do Drive por engenheiros. Ficam na pasta Deletados até você restaurar.'
       }[aba];
-      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' + selBtn();
+      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' +
+        (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
     }
     function selBtn() {
       if (!lista.length) return '';
@@ -650,6 +651,7 @@
         render();
       }
       else if (g === 'baixar-tudo') baixar(lista.slice());
+      else if (g === 'rel-pdf') o.relatorioPdf({ itens: itens.slice(), arquivo: arquivo, cid: filtro.cid });
       else if (g === 'enviar') { if (o.drive) o.drive.pump(); setTimeout(render, 300); }
       else if (g === 'limpar') {
         var env = Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'enviada'; });
