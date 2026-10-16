@@ -116,6 +116,10 @@
     fotoImportar: function (cred, foto, mini) { return rpc('foto_importar', { p_cred: cred, p_foto: foto, p_mini: mini || null }); },
     fotosMover: function (cred, ids, cid, pid) { return rpc('fotos_mover', { p_cred: cred, p_ids: ids, p_contrato: cid, p_ponto: pid || null }); },
 
-    analise: function (cred, cid) { return rpc('analise_ler', { p_cred: cred, p_contrato: cid }); }
+    analise: function (cred, cid) { return rpc('analise_ler', { p_cred: cred, p_contrato: cid }); },
+    // marca "medido sem execução" (uso interno): med = nº da medição, ou null para tirar
+    analiseMarcar: function (cred, cid, pid, grupo, med) {
+      return rpc('analise_marcar', { p_cred: cred, p_contrato: cid, p_ponte: pid, p_grupo: grupo, p_medicao: med == null ? null : Number(med) });
+    }
   };
 })();

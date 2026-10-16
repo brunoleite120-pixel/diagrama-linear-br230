@@ -76,7 +76,7 @@ button{cursor:pointer}
 .menu-pop .danger{color:var(--danger)}
 
 /* ---------- layout ---------- */
-.layout{display:grid;grid-template-columns:minmax(380px,460px) minmax(0,1fr);gap:0;min-height:calc(100vh - 61px)}
+.layout{display:grid;grid-template-columns:minmax(380px,460px) minmax(0,1fr);gap:0;min-height:calc(100vh - var(--topbar-h,61px))}
 .layout.wide{grid-template-columns:minmax(0,1fr)}
 @media (max-width:700px){
   .tabs{flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
@@ -94,6 +94,8 @@ button{cursor:pointer}
 .vg-head p{margin:2px 0 0;font-size:13px;color:var(--ink-2)}
 .vg-tot{font-size:12.5px;color:var(--ink-3)}
 .vg-tot b{color:var(--danger)}
+/* texto só para leitor de tela (aviso do cartão aberto, #vgAviso) */
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .vg-box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-sizing:border-box}
 .vg-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
 .vg-ct{display:grid;gap:7px;min-width:0;align-content:start}
@@ -149,6 +151,7 @@ button{cursor:pointer}
 .vg-loc{height:46px}
 .vg-loc .vg-trk span{position:absolute;white-space:nowrap;font-size:11.5px;color:var(--ink-2)}
 .vg-loc .vg-trk i{position:absolute;width:1px;background:#9AA39E}
+.vg-loc .vg-trk span.vg-loc-ponta{color:var(--ink-3);font-weight:600}
 .vg-rod{height:18px;align-items:center}
 .vg-asf{display:block;height:14px;border-radius:3px;background:#4A524E;position:relative;overflow:hidden}
 .vg-asf::after{content:"";position:absolute;left:0;right:0;top:6px;height:2px;background:repeating-linear-gradient(90deg,#E9C46A 0 10px,transparent 10px 20px)}
@@ -163,7 +166,9 @@ button{cursor:pointer}
 .vg-mk.simb{top:27px;width:14px;height:14px;margin-left:-7px;border-radius:2px;transform:rotate(45deg)}
 .vg-mk.pino{top:26px;width:16px;height:16px;margin-left:-8px;border-radius:50%}
 .vg-mk.grupo{top:21px;width:26px;height:26px;margin-left:-13px;border-radius:50%;background:var(--panel);border:2px solid #3B4540;color:var(--ink);font-size:11.5px;font-weight:700;line-height:22px;text-align:center;box-shadow:none}
-.vg-mk.sel{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink);z-index:2}
+.vg-mk.sel{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--ink)}
+/* a barra escolhida não sobe: senão cobre a curta de mesmo início (visao.js põe a longa antes) */
+.vg-mk.sel:not(.barra){z-index:2}
 .vg-mk:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .vg-eixo{height:30px}
 .vg-eixo .vg-trk i{position:absolute;top:0;width:1px;height:6px;background:#9AA39E}
@@ -239,8 +244,13 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg-card::before{content:"";justify-self:center;width:40px;height:4px;border-radius:2px;background:#C9D0CC}
   .vg-acoes .btn{flex:1 1 0;justify-content:center;min-height:44px}
 }
+/* dedo: botões dos cartões e "Serviços" maiores (o toque perto de um marcador é tratado em visao.js, perto()) */
+@media (pointer:coarse){
+  .vg-ct-a .btn{min-height:40px}
+  .vg-mais summary{min-height:40px;padding:10px 0}
+}
 .layout.wide .editor{display:none}
-.editor{border-right:1px solid var(--line);background:var(--ground);padding:16px;display:flex;flex-direction:column;gap:14px;height:calc(100vh - 61px);overflow:auto;position:sticky;top:61px}
+.editor{border-right:1px solid var(--line);background:var(--ground);padding:16px;display:flex;flex-direction:column;gap:14px;height:calc(100vh - var(--topbar-h,61px));overflow:auto;position:sticky;top:var(--topbar-h,61px)}
 .preview{padding:16px 24px 40px;min-width:0}
 .preview-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
 .preview-bar .meta{font-size:13px;color:var(--ink-3)}
@@ -341,6 +351,10 @@ button.vg-tr.sel{background:var(--accent-soft)}
 .marca.ci[aria-pressed="true"]{background:#E6F4EC;border-color:var(--ok);color:#14663A}
 .marca.ci[aria-pressed="true"] i{background:#fff}
 .marca.pend{box-shadow:inset 0 0 0 2px #C98A00}
+.marca.mne i{color:#2A1414}
+.marca.mne[aria-pressed="true"]{background:#2A1414;border-color:#2A1414;color:#fff}
+.marca.mne[aria-pressed="true"] i{background:#fff;border-color:#fff;color:#2A1414}
+.svc-rest{display:inline-block;margin-left:4px;padding:1px 6px;border:1px solid #8CCBA6;border-radius:4px;background:#DDF1E5;color:#0F5A31;font-size:11px;font-weight:700;white-space:nowrap;vertical-align:1px}
 body.ro .marca{cursor:default}
 .svc-un,.svc-nv{font-size:11px;font-weight:500;color:var(--ink-3)}
 .svc-nv{font-style:italic}
@@ -650,6 +664,7 @@ span.an-chip{cursor:default}
 </main>
 
 <main class="visao" id="visaoHost" aria-label="Visão geral de todos os contratos" hidden></main>
+<div id="vgAviso" class="sr-only" aria-live="polite"></div>
 
 <div id="pdfHost" aria-hidden="true"></div>
 <div id="printArea" aria-hidden="true"></div>

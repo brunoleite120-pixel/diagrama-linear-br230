@@ -57,6 +57,10 @@
     ci: { name: 'Conclusão informada', title: 'A contratada informou que concluiu; fica como observado até a supervisão conferir' }
   };
   var ALERTA_COR = '#7B3FA0', ALERTA_TINTA = '#5B2C8F';   // roxo = análise das medições (separada do estado da ponte)
+  // ✕ = medido sem execução: marca interna da supervisão sobre a medição. Não fica nos pontos (leitura pública):
+  // vem com a análise (só engenheiro e criador) e só aparece na folha com a análise e no cartão de quem vê a análise
+  var MNE_COR = '#2A1414';
+  function mneOf(an, pid, g) { var m = an && an.marcas && an.marcas[pid]; return m && m[g] && m[g].med ? m[g] : null; }
   function oaeSt(sv) {
     var st = sv && sv.st;
     if (st === 'PR' || st === 'UR') return 'DN';   // nomes da primeira versão desta tela
@@ -633,10 +637,12 @@
     if (Math.abs(n) >= 1e4) return 'R$ ' + fmt(n / 1e3, 0) + ' mil';
     return fmtBRL(n);
   }
+  // com a análise, a linha do estado da ponte sai e cada grupo mostra a última restauração (células mais altas, duas linhas)
   function oaeGeom(an) {
     var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yServ: 281, servH: 19, servStep: 23 };
+    if (an) { g.yNec = null; g.yServ = 257; g.servH = 22; g.servStep = 26; }
     var after = g.yServ + OAE_SERVICES.length * g.servStep;
-    if (an) { g.yConc = after + 4; g.concH = 21; g.yMed = g.yConc + g.concH + 4; g.medH = 27; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
+    if (an) { g.yConc = after + 4; g.concH = 21; g.yMed = g.yConc + g.concH + 4; g.medH = 30; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
     else g.yObs = after + 6;
     g.obsEnd = G.yFoot - 12;
     return g;
@@ -670,11 +676,14 @@
     o.push(T(x, g.yBand + 24, 'PONTE', { size: 7, bold: true }));
     o.push(T(x, g.yBand + 35, 'nome e código', { size: 6.4, fill: gray }));
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
-    o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
-    o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
-    o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
+    if (an) o.push(T(x, g.yServ - 5, 'ÚLTIMA RESTAURAÇÃO', { size: 6.6, bold: true, fill: '#146C3B' }));
+    else {
+      o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
+      o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
+      o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
+    }
     OAE_SERVICES.forEach(function (s, i) {
-      var y = g.yServ + i * g.servStep + 12.8, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
+      var y = g.yServ + i * g.servStep + g.servH / 2 + 3.3, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
       o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
       if (s.un) o.push(T(x + w, y, s.un, { size: 6.4, fill: gray, anchor: 'end' }));
     });
@@ -717,22 +726,26 @@
     var extTxt = p.extensao != null ? fmtN(p.extensao) + ' m' + (p.largura != null ? ' × ' + fmtN(p.largura) : '') : '-';
     o.push(T(cx, g.yExt + 12.4, extTxt, { size: r2(fitSize(extTxt, bw - 4, 8, true, 4.6)), bold: true, anchor: 'middle' }));
 
-    // estado da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou
-    var nn = oaeNec(p), vis = c ? vistoriaPonte(c, p) : null;
-    var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
-    var ntx = oaeNecTxt(nn), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
-    o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
-    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
-    if (vis) {
-      var vt = 'vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : '');
-      o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
+    // estado da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou (só na folha da vistoria)
+    if (g.yNec != null) {
+      var nn = oaeNec(p), vis = c ? vistoriaPonte(c, p) : null;
+      var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
+      var ntx = oaeNecTxt(nn), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
+      o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
+      o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
+      if (vis) {
+        var vt = 'vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : '');
+        o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
+      }
     }
 
-    // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições
+    // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições.
+    // Com a análise, a célula mostra a última restauração e, por cima, o que a vistoria viu depois (celRest)
     OAE_SERVICES.forEach(function (s, i) {
       var sv = p.serv[s.key], k = oaeSt(sv), st = oaeStOf(s, k), y = g.yServ + i * g.servStep;
       var gi = a && a.grupos ? a.grupos[s.key] : null;
-      if (st.fill === 'none') {
+      if (an) celRest(o, an, a, p, s, sv, k, bx, y, bw, g.servH);
+      else if (st.fill === 'none') {
         o.push(R(bx, y, bw, g.servH, { fill: k === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
         var vz = fitSize(st.tag, bw - 6, 6.8, true, 4.4);
         o.push(T(cx, y + 12.6, fitText(st.tag, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
@@ -778,9 +791,13 @@
       var cw = (bw - 2) / cols, ch = (g.medH - 2) / rows, mx = {};
       (a && a.mx || []).forEach(function (n) { mx[n] = 1; });
       o.push(R(bx, g.yMed, bw, g.medH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
+      // o nº de cada medição, pequeno, dentro do quadradinho (some se a coluna for estreita demais)
+      var nfs = r2(Math.min(ch * 0.62, (cw - 1.2) / 1.15, 5.6));
       ms.forEach(function (m, k) {
         var on = a && a.meses && a.meses[String(m.n)], col = k % cols, row = Math.floor(k / cols);
-        o.push(R(bx + 1 + col * cw + 0.45, g.yMed + 1 + row * ch + 0.45, cw - 0.9, ch - 0.9, { fill: on ? (mx[m.n] ? ALERTA_COR : '#2B5797') : '#EEF0EF' }));
+        var qx = bx + 1 + col * cw + 0.45, qy = g.yMed + 1 + row * ch + 0.45;
+        o.push(R(qx, qy, cw - 0.9, ch - 0.9, { fill: on ? (mx[m.n] ? ALERTA_COR : '#2B5797') : '#EEF0EF' }));
+        if (nfs >= 3) o.push(T(qx + (cw - 0.9) / 2, qy + (ch - 0.9) / 2 + nfs * 0.36, String(m.n), { size: nfs, bold: !!on, fill: on ? '#FFFFFF' : '#8E9792', anchor: 'middle' }));
       });
       // alertas
       o.push(R(bx, g.yAl, bw, g.alH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
@@ -818,6 +835,61 @@
     o.push('<circle cx="' + r2(x) + '" cy="' + r2(y) + '" r="4.6" fill="#FFFFFF" stroke="#1E9E55" stroke-width="1"/>');
     o.push('<path d="M' + r2(x - 2.3) + ' ' + r2(y + 0.1) + ' L' + r2(x - 0.6) + ' ' + r2(y + 1.9) + ' L' + r2(x + 2.4) + ' ' + r2(y - 1.8) + '" fill="none" stroke="#1E9E55" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>');
   }
+  // ✕ = medido sem execução (marca interna, só na folha com a análise)
+  function marcaMne(o, x, y) {
+    o.push('<circle cx="' + r2(x) + '" cy="' + r2(y) + '" r="4.6" fill="' + MNE_COR + '" stroke="#FFFFFF" stroke-width="0.8"/>');
+    o.push('<path d="M' + r2(x - 1.9) + ' ' + r2(y - 1.9) + ' L' + r2(x + 1.9) + ' ' + r2(y + 1.9) + ' M' + r2(x + 1.9) + ' ' + r2(y - 1.9) + ' L' + r2(x - 1.9) + ' ' + r2(y + 1.9) + '" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linecap="round"/>');
+  }
+  // folha com a análise: a célula do grupo mostra a última restauração (mês · nº da última medição com serviço do
+  // grupo na ponte). Se a vistoria marcou dano observado ou em execução, a cor passa a ser a do estado e a
+  // quantidade estimada vai embaixo da data. Marcas no canto: prioridade, conclusão informada e medido sem execução
+  function celRest(o, an, a, p, s, sv, k, bx, y, bw, h) {
+    var gi = a && a.grupos ? a.grupos[s.key] : null, ult = gi && gi.ult ? Number(gi.ult) : 0, cx = bx + bw / 2;
+    var mm = ult ? mesMed(an, ult) : '', data = ult ? (mm ? mm + ' · ' : '') + ult + 'ª' : '';
+    var l1 = '', l2 = '', fill = null, ink = '#FFFFFF';
+    if (comQtd(k)) {
+      var stk = oaeStOf(s, k), qt = fmtQtd(s, sv.q);
+      fill = stk.fill; ink = stk.ink;
+      l1 = data || 'sem restauração';
+      // em coluna estreita, só a estimativa (o azul já diz em execução), para o número não sair cortado
+      if (k === 'EX') { l2 = 'em execução' + (qt ? ' · ' + qt : ''); if (qt && textW(l2, 4, true) > bw - 6) l2 = qt; }
+      else l2 = qt ? qt + (s.un === '%' ? ' com dano' : ' danificados') : stk.name.toLowerCase();
+    } else if (ult) { fill = '#1E9E55'; l1 = data; }
+    if (fill) {
+      o.push(R(bx, y, bw, h, { fill: fill, rx: 2 }));
+      if (l2) {
+        // o tamanho é medido com 0,3 pt de folga (o arredondamento não corta texto que cabe); as linhas ficam abaixo das marcas do canto
+        var s1 = fitSize(l1, bw - 6.3, 7.6, true, 4.2), s2 = fitSize(l2, bw - 6.3, 6.2, true, 4);
+        o.push(T(cx, y + h / 2 + 0.6, fitText(l1, bw - 6, s1, true), { size: r2(s1), bold: true, fill: ink, anchor: 'middle' }));
+        o.push(T(cx, y + h / 2 + 8.8, fitText(l2, bw - 6, s2, true), { size: r2(s2), bold: true, fill: ink, anchor: 'middle' }));
+      } else {
+        var s0 = fitSize(l1, bw - 6.3, 8.2, true, 4.2);
+        o.push(T(cx, y + h / 2 + s0 * 0.36, fitText(l1, bw - 6, s0, true), { size: r2(s0), bold: true, fill: ink, anchor: 'middle' }));
+      }
+    } else {
+      var tg = k === 'NA' ? 'NÃO TEM (N/A)' : 'SEM RESTAURAÇÃO', vz = fitSize(tg, bw - 6.3, 6.6, true, 4.2);
+      o.push(R(bx, y, bw, h, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
+      o.push(T(cx, y + h / 2 + vz * 0.36, fitText(tg, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
+    }
+    var mk = 0;
+    if (comQtd(k) && sv.pri) marcaPri(o, bx + 3.5 + 10 * mk++, y + 0.5);
+    if (comQtd(k) && sv.ci) marcaCi(o, bx + 3.5 + 10 * mk++, y + 0.5);
+    // ✕ de uma medição que não é a da data mostrada (análise carregada depois com medições novas): o nº vai ao lado
+    var mkM = mneOf(an, p.id, s.key);
+    if (mkM) {
+      var xm = bx + 3.5 + 10 * mk++;
+      marcaMne(o, xm, y + 0.5);
+      // o nº vai numa pílula branca (legível sobre qualquer cor); fica de fora se encostar no número do alerta
+      if (Number(mkM.med) !== ult) {
+        var tm = mkM.med + 'ª', pw = textW(tm, 5, true) + 2.4, lim = bx + bw - 1;
+        if (gi && gi.altos) lim = bx + bw - Math.max(10, textW(String(gi.altos), 6, true) + 6) + 1;
+        if (xm + 4.4 + pw <= lim) {
+          o.push(R(xm + 4.4, y - 2.6, pw, 6.4, { fill: '#FFFFFF', stroke: MNE_COR, sw: 0.5, rx: 3.2 }));
+          o.push(T(xm + 4.4 + pw / 2, y + 2.2, tm, { size: 5, bold: true, fill: MNE_COR, anchor: 'middle' }));
+        }
+      }
+    }
+  }
   // valor medido na ponte em cada etapa do contrato
   function medEtapas(an, a) {
     var r = {}, ord = [];
@@ -847,8 +919,10 @@
       o.push(T(lx + 19, yy + 8, txt, { size: fs }));
       lx += 19 + textW(txt, fs) + 10;
     }
-    [['OK', 'Sem dano aparente'], ['DN', 'Dano observado'], ['EX', 'Em execução'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
-      var st = OAE_STATUS[it[0]];
+    // com a análise: a célula é a última restauração; laranja/azul = o que a vistoria marcou
+    (an ? [['REST', 'Restaurado (mês · nº)'], ['DN', 'Dano observado'], ['EX', 'Em execução'], ['SR', 'Sem restauração']]
+      : [['OK', 'Sem dano aparente'], ['DN', 'Dano observado'], ['EX', 'Em execução'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']]).forEach(function (it) {
+      var st = it[0] === 'REST' ? { fill: '#1E9E55' } : it[0] === 'SR' ? { fill: 'none' } : OAE_STATUS[it[0]];
       item(function (xx, yy) {
         if (st.fill === 'none') o.push(R(xx, yy, 15, 10, { fill: it[0] === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
         else o.push(R(xx, yy, 15, 10, { fill: st.fill, rx: 1.5 }));
@@ -862,10 +936,12 @@
       item(function (xx, yy) { o.push(R(xx + 0.8, yy + 0.8, 13.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Grupo refeito (alerta)', y + 16);
       item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: '#2B5797' })); }, 'Medição com serviço', y + 16);
       item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: ALERTA_COR })); }, 'Medição com alerta', y + 16);
+      item(function (xx, yy) { marcaMne(o, xx + 7.5, yy + 5); }, 'Medido sem execução', y + 16);
       yn = y + 38;
     }
     var notas = [
-      'Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.',
+      an ? 'Cada grupo mostra a última medição com o serviço na ponte (mês · nº). Se a vistoria marcou dano ou execução, a cor é a do estado e a estimativa (~) vai embaixo.'
+        : 'Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.',
       'KM pelo SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ' (DNIT); contr. = km do contrato (Anexo VI); ~ antes do km = km estimado, a conferir em campo.'
     ];
     if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta = ponte atendida mais de uma vez na mesma etapa ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
@@ -1067,7 +1143,8 @@
   // botões de status de cada serviço. Pontos críticos (obra feita uma vez): OK, Ativo, Parado, N/A e o % executado.
   // Pontes (serviço contínuo): estado na vistoria (sem dano aparente, dano observado, em execução, N/A), estimativa do
   // dano, onde, e as marcas de prioridade e de conclusão informada
-  function servHtml(p, list, extra) {
+  // mais(s, estado): botões a mais na linha das marcas (pontes, quem vê a análise: medido sem execução)
+  function servHtml(p, list, extra, mais) {
     var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), oae = list === OAE_SERVICES;
     list.forEach(function (s) {
       var sv = p.serv[s.key] || (oae ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = oae ? oaeSt(sv) : sv.st;
@@ -1076,18 +1153,18 @@
         return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (oae ? oaeStOf(s, k) : STATUS[k]).btn + '</button>';
       }).join('');
       if (oae) {
-        var on = comQtd(cur);
+        var on = comQtd(cur), mx = mais ? mais(s, cur) : '';
         h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q + ' (estimativa)') + '</small>' : '') +
           (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + (extra ? extra(s) : '') + '</div>' +
           '<div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
           (s.un ? '<div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (on && sv.q != null ? esc(sv.q) : '') + '"' +
             (on ? ' placeholder="estimativa"' : ' disabled') + ' aria-label="' + esc(s.short + ': estimativa, ' + s.q) + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
-          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' +
-            '<div class="svc-marcas">' + Object.keys(OAE_MARCAS).map(function (m) {
+          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' : '') +
+          (on || mx ? '<div class="svc-marcas">' + (on ? Object.keys(OAE_MARCAS).map(function (m) {
               var pm = pv && comQtd(pv.st) && !!pv[m] !== !!sv[m] ? ' pend' : '';
               return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
                 '<i aria-hidden="true">' + (m === 'pri' ? '!' : '✓') + '</i>' + esc(OAE_MARCAS[m].name) + '</button>';
-            }).join('') + '</div>' : '') +
+            }).join('') : '') + mx + '</div>' : '') +
           '</div>';
         return;
       }
@@ -1172,7 +1249,7 @@
   var ETAPA_KEY = 'diagrama-linear.etapa-analise', EST_ETAPA = 1;   // o Anexo VI do edital estima só a 1ª etapa
   var etapaSel = Number(lsGet(ETAPA_KEY)) || 0;                      // 0 = todas as etapas
   lsPut('diagrama-linear.janela', null);                             // seletor antigo (3/6/12 meses)
-  var anCache = { raw: null, view: null };
+  var anCache = { raw: null, view: null }, mnePend = {}, anLido = {};   // anLido[cid]: quando a análise (e as marcas) foi lida do banco
   function anOf(c) {
     var raw = c && isOae(c) && isEng() ? analise.dados[c.id] || null : null;
     if (!raw) return null;
@@ -1289,18 +1366,23 @@
       if (r && r.dados && typeof r.dados === 'object') {
         analise.dados[cid] = r.dados;
         analise.dados[cid].sobre = { fonte: r.fonte || '', em: r.em || null, por: r.por || '' };
+        // medido sem execução; sem o campo, o banco ainda não tem a migração 07 e a marca não aparece
+        if (r.marcas && typeof r.marcas === 'object' && !Array.isArray(r.marcas)) analise.dados[cid].marcas = r.marcas;
+        else delete analise.dados[cid].marcas;
         analise.estado[cid] = 'ok';
+        anLido[cid] = Date.now();
       } else {
         delete analise.dados[cid];
         analise.estado[cid] = 'vazia';
       }
       lsPut(AN_KEY, { dados: analise.dados });
-      if (!visaoOn && active() && active().id === cid) { renderEditor(); renderPreview(); }
+      // digitando no cartão: só a folha agora; o cartão é refeito quando a pessoa sair do campo
+      if (!visaoOn && active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; renderPreview(); }
     }, function (err) {
       analise.estado[cid] = 'erro';
       // sessão encerrada ou papel trocado em outro aparelho: reconfere o acesso (que tira a análise deste aparelho)
       if (err && (err.code === 'codigo_invalido' || err.code === 'sem_permissao')) { conferirAcesso(); return; }
-      if (active() && active().id === cid) renderEditor();
+      if (active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; }
     });
   }
   function fmtIsoDate(iso) { return iso ? fmtDate(String(iso).slice(0, 10)) : ''; }
@@ -1416,10 +1498,21 @@
 
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
+      // com a análise: a última restauração do grupo (verde) e o alerta; o estado continua sendo o da vistoria
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
-        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + esc(medTxt(an, gi.ult)) : '') + (gi.altos ? ' · ' + esc(comMes(an, gi.alerta || 'alerta')) : '') + '</small>';
+        var mm = gi.ult ? mesMed(an, gi.ult) : '';
+        return (gi.ult ? ' <span class="svc-rest" title="Última medição com este serviço nesta ponte">restaurado ' + esc((mm ? mm + ' · ' : '') + gi.ult + 'ª') + '</span>' : '') +
+          (gi.altos ? '<small class="svc-med al">' + esc(comMes(an, gi.alerta || 'alerta')) + '</small>' : '');
+      }, function (s, cur) {
+        // medido sem execução: marca interna, gravada à parte (Banco.analiseMarcar), só para quem vê a análise.
+        // Aparece com dano observado ou em execução (junto das outras marcas) ou se já estiver marcada
+        var gi = a && a.grupos ? a.grupos[s.key] : null, mk = mneOf(an, p.id, s.key), med = mk ? mk.med : gi && gi.ult;
+        if (!a || !an.marcas || !med || (!mk && !comQtd(cur))) return '';
+        return '<button type="button" class="marca mne" data-act="an-mne" data-id="' + id + '" data-svc="' + s.key + '" data-med="' + esc(med) + '" aria-pressed="' + !!mk + '"' +
+          ' title="' + esc('Uso interno: a ' + med + 'ª medição pagou este serviço, mas a vistoria não achou o serviço feito. Só aparece na folha com a análise.' + (mk && mk.por ? ' Marcado por ' + mk.por + '.' : '')) + '">' +
+          '<i aria-hidden="true">✕</i>Medido sem execução · ' + esc(med) + 'ª</button>';
       });
 
       if (a) h += ponteAnaliseHtml(an, a, p.id);
@@ -1813,7 +1906,7 @@
     return ' · ' + r.dn + (r.dn === 1 ? ' ponte com dano' : ' pontes com dano') + (r.exec ? ' · ' + r.exec + ' em execução' : '');
   }
   function renderPreview() {
-    if (visaoOn && visao && !$('visaoHost').hidden) { visao.render(); return; }
+    if (visaoOn && visao && !$('visaoHost').hidden) { if (!desenhaVisao()) renderAll(); return; }
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
       mapa.render();
@@ -1836,13 +1929,7 @@
 
   function renderAll() {
     renderTabs();
-    if (mostraVisao()) {
-      try { visao.render(); return; } catch (e) {
-        // um dado estranho não pode impedir a abertura: mostra o contrato
-        console.error(e);
-        visaoOn = false; mostraVisao(); renderTabs();
-      }
-    }
+    if (mostraVisao() && desenhaVisao()) return;
     renderEditor();
     // o mapa criado (ou girado) com o layout escondido ficou com tamanho zero: mede de novo antes de desenhar
     if (view === 'mapa') { if (mapa) mapa.invalidate(); else ensureMap(); }
@@ -1867,9 +1954,19 @@
       temMapa: !!(window.MapaSNV && window.L && window.SNV_BR230), temFotos: galeriaOn,
       onAbrir: function (c, p) { abrirDaVisao(c, p, false); },
       onMapa: function (c, p) { abrirDaVisao(c, p, true); },
-      onFotos: function (c, p) { abrirGaleria({ cid: c.id, pid: p.id }); }
+      onFotos: function (c, p) { abrirGaleria({ cid: c.id, pid: p.id }); },
+      // erro num evento da visão (clique, busca, arrasto): mostra o contrato
+      onErro: function (e) { console.error(e); visaoOn = false; renderAll(); }
     });
     return visao;
+  }
+  // um dado estranho não pode impedir a abertura nem travar a tela: se a visão falha, mostra o contrato
+  function desenhaVisao() {
+    try { visao.render(); return true; } catch (e) {
+      console.error(e);
+      visaoOn = false; mostraVisao(); renderTabs();
+      return false;
+    }
   }
   function mostraVisao() {
     var vh = $('visaoHost'), on = visaoOn && !!vh && !!ensureVisao();
@@ -1890,6 +1987,7 @@
     if (p) ui.open[p.id] = true;
     save();
     renderAll();
+    syncTopbar();   // o PDF voltou à barra, que pode ter mudado de altura: mede antes de rolar (o observer só avisa depois)
     if (noMapa) {
       setView('mapa');
       if (p && mapa && mapa.foco) setTimeout(function () { mapa.foco(p.id); }, 200);
@@ -1992,6 +2090,46 @@
       ui.medSel = {};
       if (ev !== etapaSel) { etapaSel = ev; lsPut(ETAPA_KEY, ev || null); }
       renderEditor();
+      return;
+    }
+    // medido sem execução (uso interno): grava à parte, direto no banco (precisa de conexão); a tela muda na hora
+    // e volta atrás se o banco recusar. Sem 'marcas' na análise, o banco ainda não tem a migração 07
+    if (act === 'an-mne') {
+      var rawM = c && analise.dados[c.id], pidM = b.dataset.id, gM = b.dataset.svc, medM = Number(b.dataset.med) || null;
+      if (!rawM || !rawM.marcas || typeof rawM.marcas !== 'object' || !isEng() || !banco.on || !banco.login || !window.Banco || !window.Banco.analiseMarcar) return;
+      var cidM = c.id, chM = cidM + '|' + pidM + '|' + gM, credM = banco.login.codigo;
+      if (mnePend[chM]) { toast('Aguarde: a marca anterior ainda está sendo gravada.'); return; }
+      if (analise.estado[cidM] === 'carregando') { toast('Aguarde: a análise está sendo atualizada.'); return; }
+      // vale o que a pessoa viu no botão; se a análise mudou desde então, só refaz o cartão
+      var antes = rawM.marcas[pidM] && rawM.marcas[pidM][gM] ? rawM.marcas[pidM][gM] : null, quer = b.getAttribute('aria-pressed') !== 'true';
+      if (!!antes === quer) { var p0 = findPoint(pidM); if (p0) rerenderPoint(p0); return; }
+      var novo = quer ? medM : null;
+      if (!antes && !medM) return;
+      // aplica na análise atual (pode ter sido lida de novo no meio), da mesma sessão; tela = refazer o cartão e a folha
+      var poeM = function (v, tela) {
+        var raw = banco.login && banco.login.codigo === credM ? analise.dados[cidM] : null, mks = raw && raw.marcas;
+        if (!mks || typeof mks !== 'object') return;
+        if (v) (mks[pidM] = mks[pidM] || {})[gM] = v;
+        else if (mks[pidM]) { delete mks[pidM][gM]; if (!Object.keys(mks[pidM]).length) delete mks[pidM]; }
+        anCache = { raw: null, view: null };
+        lsPut(AN_KEY, { dados: analise.dados });
+        if (tela && !visaoOn && active() && active().id === cidM) { var pp = findPoint(pidM); if (pp) rerenderPoint(pp); renderPreview(); }
+      };
+      var mAgora = function () { var raw = analise.dados[cidM], m = raw && raw.marcas && raw.marcas[pidM]; return m && m[gM] ? m[gM] : null; };
+      poeM(novo ? { med: novo, por: banco.login.nome || '', em: new Date().toISOString() } : null, true);
+      mnePend[chM] = 1;
+      window.Banco.analiseMarcar(credM, cidM, pidM, gM, novo).then(function (r) {
+        delete mnePend[chM];
+        // gravou: confirma sem refazer a tela (não derruba o que a pessoa está digitando), a não ser que a tela
+        // esteja diferente (a análise foi lida de novo antes de a gravação valer)
+        var v = novo ? (r && r.med ? r : { med: novo, por: banco.login && banco.login.nome || '', em: new Date().toISOString() }) : null;
+        poeM(v, !!mAgora() !== !!novo);
+      }, function (err) {
+        delete mnePend[chM];
+        poeM(antes, true);
+        toast(err && err.code === 'sem_rede' ? 'Sem conexão: a marca não foi gravada.' : 'Não foi possível gravar a marca (' + ((err && err.code) || 'erro') + ').', 5000);
+        if (err && (err.code === 'codigo_invalido' || err.code === 'sem_permissao')) conferirAcesso();
+      });
       return;
     }
     // ponte citada no resumo da análise: abre o cartão dela
@@ -2367,7 +2505,8 @@
       $('fileInput').click();
     }
     else if (act === 'print') { if (visaoOn) { toast('Abra um contrato para imprimir o diagrama dele.'); return; } imprimir(); }
-    else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: active().id });
+    // na visão o contrato ativo está escondido: o relatório começa em "Todos"
+    else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: visaoOn ? '' : active().id });
     else if (act === 'reset') {
       confirmar({ titulo: 'Voltar aos dados iniciais?', texto: 'Apaga as alterações deste navegador e volta aos dados da planilha. Faça um backup antes, se precisar.', digitar: 'APAGAR', botao: 'Voltar aos dados iniciais', perigo: true }).then(function (r) {
         if (!r) return;
@@ -3482,7 +3621,8 @@
         drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; },
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
-        contratos: function () { return state.contracts; }, ativo: function () { var c = active(); return c ? c.id : ''; },
+        // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
+        contratos: function () { return state.contracts; }, ativo: function () { var c = active(); return c && !visaoOn ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });
@@ -3494,7 +3634,7 @@
   function relatorioPdf(a) {
     if (!relFoto) {
       relFoto = window.RelatorioFoto({
-        contratos: function () { return state.contracts; }, ativo: active, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae,
+        contratos: function () { return state.contracts; }, ativo: function () { return visaoOn ? null : active(); }, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae,
         ensureLibs: ensureLibs, saveBlob: saveBlob, toast: toast, modal: modal, closeModal: closeModal,
         podeEditar: function () { return !readOnly() && !isFiscal(); }, salvarContrato: salvarCamposContrato, logoSupervisora: window.UNIFILAR_LOGO || null
       });
@@ -3587,9 +3727,20 @@
         conferirAcesso();   // quem tem a análise no aparelho: confere se ainda é engenheiro ou criador
         var ca = active();
         if (ca && analise.estado[ca.id] === 'erro') { delete analise.estado[ca.id]; renderEditor(); }
+        // as marcas "medido sem execução" de outras pessoas chegam com a análise: lê de novo ao voltar ao app,
+        // no máximo a cada 10 min e sem marca sendo gravada
+        else if (ca && isOae(ca) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length) {
+          delete analise.estado[ca.id]; carregarAnalise(ca);
+        }
       }
     });
-    setInterval(function () { if (document.visibilityState === 'visible' && isEng()) conferirAcesso(); }, 300000);
+    setInterval(function () {
+      if (document.visibilityState !== 'visible' || !isEng()) return;
+      conferirAcesso();
+      // marcas gravadas em outro aparelho: relê a análise da ponte aberta a cada 10 min (não no meio de uma gravação ou digitação)
+      var ca = active();
+      if (ca && !visaoOn && isOae(ca) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length && !typing()) { delete analise.estado[ca.id]; carregarAnalise(ca); }
+    }, 300000);
     window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openConfigurar(); });
     setInterval(poll, 20000);
     syncStatus();
@@ -3629,7 +3780,7 @@
     $('viewMapa').addEventListener('click', function () { setView('mapa'); });
     if (!window.MapaSNV || !window.L || !window.SNV_BR230) $('viewMapa').closest('.view-sw').hidden = true;
     if (window.TelaCheia) {
-      viewer = window.TelaCheia({ pageW: PAGE_W, pageH: PAGE_H, getSheets: function () { return renderSheets(active()); } });
+      viewer = window.TelaCheia({ pageW: PAGE_W, pageH: PAGE_H, getSheets: function () { var c = active(); return renderSheets(c, isOae(c) && !!anOf(c) && folhaVistoria); } });
       $('btnFull').addEventListener('click', function () { if (view === 'mapa' && mapa) mapa.openFull(); else viewer.open(); });
     } else {
       $('btnFull').hidden = true;

@@ -47,24 +47,31 @@
     // mais: <details> "Serviços" do cartão (null = padrão do aparelho); tudo: a janela cobre a rodovia inteira
     var host = o.host, st = { k0: null, k1: null, sel: null, off: {}, q: '', mais: null };
     var W = 0, F = [0, 100], raf = 0, ptrs = {}, gesto = null, semClique = 0, cacheIt = null, ultW = 0;
+    // grupoDe: item → data-fid do grupo que o contém no último desenho (ao fechar o cartão, o foco volta a ele);
+    // ptrTipo/toque: o clique veio do dedo ou da caneta (o foco não volta ao campo de busca: o teclado virtual reabriria);
+    // avisado: o #vgAviso tem texto (o render() só o limpa quando há o que limpar, e não a cada quadro do arrasto)
+    var grupoDe = {}, ptrTipo = '', toque = false, avisado = false;
 
     function cel() { return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches); }
     // a lista do último desenho: achar(), a busca e os cliques usam a mesma, sem recalcular a situação de cada ponto
     function itens() {
       if (cacheIt) return cacheIt;
-      var out = [], semKm = 0, fora = 0;
+      var out = [], semKm = 0, fora = 0, foraC = 0;
       o.contratos().forEach(function (c) {
         var oae = o.isOae(c);
+        // km do contrato fora da rodovia: não entra na faixa (faixaDe), mas entra no aviso
+        if ([c.kmIni, c.kmFim].some(function (v) { var n = num(v); return n != null && !noKm(n); })) foraC++;
         c.pontos.forEach(function (p) {
           var km = num(p.kmIni), kf = num(p.kmFim);
           if (km == null) { semKm++; return; }
           if (!noKm(km)) { fora++; return; }
-          if (kf == null || kf < km || !noKm(kf)) kf = km;
+          if (kf != null && !noKm(kf)) { fora++; kf = null; }   // km final fora da rodovia: avisa e desenha só no km inicial
+          if (kf == null || kf < km) kf = km;
           var inf = o.info(p);
           out.push({ c: c, p: p, oae: oae, km: km, kf: kf, key: c.id + ':' + p.id, st: inf.status, cor: inf.color, inf: inf, fk: (oae ? 'o:' : 'c:') + inf.status });
         });
       });
-      return (cacheIt = { lista: out, semKm: semKm, fora: fora });
+      return (cacheIt = { lista: out, semKm: semKm, fora: fora, foraC: foraC });
     }
     function faixaDe(c, its) {
       var a = num(c.kmIni), b = num(c.kmFim);
@@ -92,12 +99,17 @@
       return [a, b];
     }
     function ir(a, b) { var r = lim(a, b); st.k0 = r[0]; st.k1 = r[1]; render(); }
-    function agenda() { if (!raf) raf = requestAnimationFrame(function () { raf = 0; render(); }); }
+    // um desenho por quadro no arrasto, na pinça e na roda; os dados não mudam no gesto: reaproveita a lista (itens)
+    function agenda() { if (!raf) raf = requestAnimationFrame(seguro(function () { raf = 0; render(false, true); })); }
+    // erro num evento da visão (dado estranho): volta a busca e o cartão ao padrão e o app mostra o contrato, como no renderAll
+    function seguro(f) {
+      return function (e) { try { return f(e); } catch (er) { if (!o.onErro) throw er; st.q = ''; st.sel = null; o.onErro(er); } };
+    }
     function achar(key) { var r = null; itens().lista.forEach(function (x) { if (x.key === key) r = x; }); return r; }
     function trk() { return host.querySelector('.vg-trk'); }
 
-    function render(medido) {
-      if (!medido) cacheIt = null;
+    function render(medido, gesto) {
+      if (!medido && !gesto) cacheIt = null;
       var mob = cel(), d = itens(), its = d.lista;
       ultW = host.clientWidth;
       if (!W) W = Math.max(200, host.clientWidth - (mob ? 24 + 26 + 46 : 40 + 34 + 168 + (st.sel ? 420 : 0)));
@@ -113,11 +125,12 @@
       if (st.sel && !sel) st.sel = null;
       var h = '';
 
-      // título
+      // título; o aviso de km fora da rodovia junta pontos (km inicial ou final) e limites de contrato
       var rod = String((cs[0] && cs[0].rodovia) || 'BR-230/PA');
+      var ruins = [d.fora ? d.fora + (d.fora === 1 ? ' item' : ' itens') : '', d.foraC ? d.foraC + (d.foraC === 1 ? ' contrato' : ' contratos') : ''].filter(Boolean).join(' e ');
       h += '<div class="vg-head"><div><h2>' + esc(rod) + ' · todos os contratos</h2><p>Em escala de km. Só na tela: o PDF oficial continua dentro de cada contrato.</p></div>' +
         '<span class="vg-tot">' + its.length + (its.length === 1 ? ' item' : ' itens') + ' no desenho' + (d.semKm ? ' · <b>' + d.semKm + ' sem km</b> (não aparecem)' : ' · nenhum sem km') +
-        (d.fora ? ' · <b>' + d.fora + ' com km fora da rodovia</b> (confira a vírgula)' : '') + '</span></div>';
+        (ruins ? ' · <b>' + ruins + ' com km fora da rodovia</b> (confira a vírgula)' : '') + '</span></div>';
 
       // resumo por contrato
       h += '<section class="vg-cards" aria-label="Resumo por contrato">' + cs.map(function (c) {
@@ -131,7 +144,7 @@
           (f ? '<div class="vg-ct-t">km ' + nf(f[0], 1) + ' – ' + nf(f[1], 1) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
           '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' ponte' : ' pontes') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de pontes' : ' km de atuação') + '</span></div>' +
           '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' +
-          '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
+          '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';
       }).join('') + '</section>';
 
@@ -153,18 +166,18 @@
       // passo da régua pela distância entre marcas: no máximo uma a cada 60–70 px, qualquer que seja a faixa
       var alvoT = R * (mob ? 60 : 70) / W, step = [1, 2, 5, 10, 20, 50, 100, 200, 500].filter(function (t) { return t >= alvoT; })[0] || Math.pow(10, Math.ceil(Math.log10(alvoT))), ticks = [];
       for (var t = Math.ceil(k0 / step) * step; t <= k1; t += step) ticks.push(t);
-      var presets = [['Tudo', F[0], F[1]]];
+      var presets = [['Tudo', F[0], F[1], 'tudo']];
       // um botão por contrato, menos o que já ocupa quase a rodovia inteira (igual a "Tudo")
       cs.forEach(function (c) {
         var f = faixaDe(c, its);
-        if (f && f[1] - f[0] < FR * 0.85) { var pd = Math.max((f[1] - f[0]) * 0.03, 0.5); presets.push([c.lote || curto(c), f[0] - pd, f[1] + pd]); }
+        if (f && f[1] - f[0] < FR * 0.85) { var pd = Math.max((f[1] - f[0]) * 0.03, 0.5); presets.push([c.lote || curto(c), f[0] - pd, f[1] + pd, c.id]); }
       });
       var eq = function (a, b) { return Math.abs(a - k0) < R * 0.004 + 0.05 && Math.abs(b - k1) < R * 0.004 + 0.05; }, marcado = false;
-      h += '<div class="vg-meio"><section class="vg-box vg-diag" aria-label="Diagrama em escala"><div class="vg-bar">' +
+      h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' +
         '<div class="vg-pre" role="group" aria-label="Enquadrar">' + presets.map(function (p) {
           var r = lim(p[1], p[2]), on = !marcado && eq(r[0], r[1]);
           if (on) marcado = true;
-          return '<button type="button" data-vg="ir" data-a="' + p[1] + '" data-b="' + p[2] + '" aria-pressed="' + on + '">' + esc(p[0]) + '</button>';
+          return '<button type="button" data-vg="ir" data-fid="pre:' + esc(p[3]) + '" data-a="' + p[1] + '" data-b="' + p[2] + '" aria-pressed="' + on + '">' + esc(p[0]) + '</button>';
         }).join('') + '</div>' +
         '<div class="vg-zoom" role="group" aria-label="Zoom"><button type="button" class="lado" data-vg="esq" aria-label="Para a esquerda">‹</button><button type="button" data-vg="menos" aria-label="Afastar">−</button>' +
         '<button type="button" data-vg="mais" aria-label="Aproximar">+</button><button type="button" class="lado" data-vg="dir" aria-label="Para a direita">›</button></div>' +
@@ -179,16 +192,25 @@
       }).join('') + '<span class="vg-jan" style="left:' + pc(XF(k0)) + ';width:' + pc(R / FR * 100) + '"></span></button>';
 
       h += '<div class="vg-plot">';
-      // localidades do SNV, em duas linhas para não encavalar
-      var r0 = -1e9, r1 = -1e9, loc = '';
-      LOCAIS.forEach(function (l) {
-        if (l[1] < k0 || l[1] > k1) return;
-        var x = P(l[1]), w = l[0].length * (mob ? 5.8 : 6.4) + 10, row = -1;
-        if (x - w / 2 < 0 || x + w / 2 > W) return;
-        if (x - w / 2 >= r0) { row = 0; r0 = x + w / 2; } else if (x - w / 2 >= r1) { row = 1; r1 = x + w / 2; }
+      // localidades do SNV, em duas linhas para não encavalar. Perto da borda o nome encosta nela (em vez de sumir);
+      // as cidades das pontas (Novo Repartimento e Rurópolis), fora da tela, ficam na borda com a seta do sentido
+      // as pontas na tela entram primeiro, para não perderem o lugar para as do meio; as setas das pontas fora da tela, por último
+      var ocup = [[], []], loc = '', nL = LOCAIS.length, dentro = function (i) { return LOCAIS[i][1] >= k0 && LOCAIS[i][1] <= k1; };
+      var ordem = [0, nL - 1].filter(dentro).concat(LOCAIS.map(function (l, i) { return i; }).slice(1, -1), [0, nL - 1].filter(function (i) { return !dentro(i); }));
+      ordem.forEach(function (i) {
+        var l = LOCAIS[i], ponta = i === 0 ? -1 : i === LOCAIS.length - 1 ? 1 : 0, fora = l[1] < k0 || l[1] > k1;
+        if (fora && !(ponta === -1 && l[1] < k0) && !(ponta === 1 && l[1] > k1)) return;
+        var nome = fora ? (ponta < 0 ? '← ' + l[0] : l[0] + ' →') : l[0];
+        var x = fora ? (ponta < 0 ? 0 : W) : P(l[1]), w = nome.length * (mob ? 5.8 : 6.4) + 10, a = x - w / 2, tr = 'translateX(-50%)', lx = x;
+        if (a < 0) { lx = Math.max(0, x - 4); a = lx; tr = 'none'; }
+        else if (x + w / 2 > W) { lx = Math.min(W, x + 4); a = lx - w; tr = 'translateX(-100%)'; }
+        if (a < 0 || a + w > W) return;
+        var livre = function (r) { return ocup[r].every(function (q) { return a + w <= q[0] || a >= q[1]; }); };
+        var row = livre(0) ? 0 : livre(1) ? 1 : -1;
         if (row < 0) return;
-        loc += '<span style="left:' + pc(X(l[1])) + ';top:' + (row ? 15 : 0) + 'px;transform:translateX(-50%)">' + esc(l[0]) + '</span>' +
-          '<i style="left:' + pc(X(l[1])) + ';top:' + (row ? 32 : 17) + 'px;bottom:0"></i>';
+        ocup[row].push([a, a + w]);
+        loc += '<span' + (fora ? ' class="vg-loc-ponta"' : '') + ' style="left:' + pc(lx / W * 100) + ';top:' + (row ? 15 : 0) + 'px;transform:' + tr + '">' + esc(nome) + '</span>' +
+          (fora ? '' : '<i style="left:' + pc(X(l[1])) + ';top:' + (row ? 32 : 17) + 'px;bottom:0"></i>');
       });
       h += '<div class="vg-row vg-loc"><div class="vg-lab vg-lab-s">Localidades (SNV)</div><div class="vg-trk">' + loc + '</div></div>';
       h += '<div class="vg-row vg-rod"><div class="vg-lab"><b>' + esc(rod.split('/')[0]) + '</b></div><div class="vg-trk"><span class="vg-asf"></span></div></div>';
@@ -196,6 +218,7 @@
       var enc = mob ? 16 : 14;   // símbolos mais perto que isso (px) viram um círculo com a quantidade
       // um grupo que nem no zoom máximo se separa (itens no mesmo km): o toque passa pelos itens um a um
       function preso(g) { return R <= MIN_KM * 1.001 || (g.b - g.a) / MIN_KM * W < enc; }
+      grupoDe = {};
       cs.forEach(function (c) {
         // por km; no mesmo km, a barra mais longa antes, para a curta ficar por cima e continuar visível
         var oae = o.isOae(c), xs = vis.filter(function (x) { return x.c === c; }).sort(function (a, b) { return a.km - b.km || (b.kf - b.km) - (a.kf - a.km); });
@@ -222,21 +245,23 @@
             var km = k0 + g.soma / g.xs.length / W * R, pior = null, n = g.xs.length, nome = oae ? ' pontes' : ' pontos';
             g.xs.forEach(function (y) { if (!pior || (PESO[y.st] || 0) > (PESO[pior.st] || 0)) pior = y; });
             var estilo = ' style="left:' + pc(X(km)) + ';border-color:' + ((PESO[pior.st] || 0) >= 2 ? pior.cor : '#3B4540') + '"';
+            var fidG = (preso(g) ? 'gp:' : 'ga:') + x.key;
+            g.xs.forEach(function (y) { grupoDe[y.key] = fidG; });
             if (preso(g)) {
               // escolhe o próximo depois do que está aberto (na ordem por km), e volta ao primeiro no fim
               var iSel = -1, idx = function (y) { return xs.indexOf(y); };
               xs.forEach(function (y, i) { if (y.key === st.sel) iSel = i; });
               var dentro = g.xs.some(function (y) { return y.key === st.sel; });
               var prox = g.xs.filter(function (y) { return idx(y) > iSel; })[0] || g.xs[0], tipG = n + nome + ' no km ' + nf(g.a, 2) + ': toque para ver um a um (também na lista abaixo)';
-              mk += '<button type="button" class="vg-mk grupo' + (dentro ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(prox.key) + '"' + estilo + ' title="' + esc(tipG) + '" aria-label="' + esc(tipG) + '">' + n + '</button>';
+              mk += '<button type="button" class="vg-mk grupo' + (dentro ? ' sel' : '') + '" data-vg="sel" data-fid="gp:' + esc(g.xs[0].key) + '" data-key="' + esc(prox.key) + '"' + estilo + ' title="' + esc(tipG) + '" aria-label="' + esc(tipG) + '">' + n + '</button>';
               return;
             }
             // o toque aproxima pelo menos à metade da tela, centrado no grupo
             var pad = Math.max((g.b - g.a) * 0.4, 1), alvo = Math.min(g.b - g.a + 2 * pad, R / 2), meio = (g.a + g.b) / 2, tipA = n + nome + ' entre km ' + nf(g.a, 1) + ' e ' + nf(g.b, 1) + ': toque para aproximar';
-            mk += '<button type="button" class="vg-mk grupo" data-vg="ir" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
+            mk += '<button type="button" class="vg-mk grupo" data-vg="ir" data-fid="ga:' + esc(g.xs[0].key) + '" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
             return;
           }
-          var mid = (x.km + x.kf) / 2, nome = x.p.nome || x.p.codigo || '?', lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
+          var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || '?'), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
           if (cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
           var tip = (x.oae ? nome + (x.p.codigo ? ' · ' + x.p.codigo : '') : nome) + ' · km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + (g.t === 'barra' ? ' a ' + nf(x.kf, 2) : '') + ' · ' + x.st;
           mk += '<button type="button" class="vg-mk ' + g.t + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" style="left:' + pc(X(g.t === 'barra' ? x.km : mid)) +
@@ -286,23 +311,28 @@
         ord.slice(0, max).map(function (x) {
           var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = (x.p.kmConferir ? '~' : '') + nf(x.km, 2);
           var sit = '<i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (!x.oae && x.inf.pctText ? ' · ' + esc(x.inf.pctText) : '');
-          if (mob) return '<button type="button" class="vg-tr m' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '"><span><b>' + esc((x.c.lote || '') + ' · ' + nome) + '</b><small class="s">' + sit + '</small></span><span class="n">km ' + km + '</span></button>';
-          return '<button type="button" class="vg-tr' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '"><span>' + esc(x.c.lote || '') + '</span><span><b>' + esc(nome) + '</b></span>' +
+          if (mob) return '<button type="button" class="vg-tr m' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span><b>' + esc((x.c.lote || '') + ' · ' + nome) + '</b><small class="s">' + sit + '</small></span><span class="n">km ' + km + '</span></button>';
+          return '<button type="button" class="vg-tr' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span>' + esc(x.c.lote || '') + '</span><span><b>' + esc(nome) + '</b></span>' +
             '<span class="n">' + km + '</span><span class="n">' + (x.oae ? (Number(x.p.extensao) ? nf(x.p.extensao, 1) + ' m' : '–') : nf(x.kf - x.km, 2) + ' km') + '</span><span class="s">' + sit + '</span></button>';
         }).join('') + '</div>' + (ord.length > max ? '<span class="vg-resto">e mais ' + (ord.length - max) + ' no trecho da tela; aproxime para ver menos</span>' : '') + '</section>';
 
-      // o redesenho troca tudo: guarda o foco (busca ou botão) e a rolagem do cartão do mesmo ponto
-      var ae = document.activeElement, foco = null;
+      // o redesenho troca tudo: guarda o foco (busca ou botão) e a rolagem do cartão do mesmo ponto.
+      // data-fid é a identidade de botões repetidos (presets, "Ver no desenho", grupos, linhas da lista); se o controle
+      // some (resultado da busca, grupo que aproximou, ×), o foco vai para a busca ou para o desenho. Depois do toque
+      // de dedo num resultado, vai para o desenho: o campo de busca focado no toque reabriria o teclado (Android)
+      var ae = document.activeElement, foco = null, dv = ae && ae.dataset || {};
       if (ae && ae !== host && host.contains(ae)) {
-        if (ae.id) foco = { q: '#' + ae.id };
-        else if (ae.dataset && ae.dataset.vg) foco = { q: '[data-vg="' + ae.dataset.vg + '"]' + (ae.dataset.key ? '[data-key="' + cssEsc(ae.dataset.key) + '"]' : ae.dataset.fk ? '[data-fk="' + cssEsc(ae.dataset.fk) + '"]' : ae.dataset.cid ? '[data-cid="' + cssEsc(ae.dataset.cid) + '"]' : '') };
-        if (foco && ae.id === 'vgBusca') { foco.s = ae.selectionStart; foco.e = ae.selectionEnd; }
+        foco = { q: dv.fid ? '[data-fid="' + cssEsc(dv.fid) + '"]' : ae.id ? '#' + ae.id : ae.tagName === 'SUMMARY' ? '.vg-mais summary' :
+          dv.vg ? '[data-vg="' + dv.vg + '"]' + (dv.key ? '[data-key="' + cssEsc(dv.key) + '"]' : dv.fk ? '[data-fk="' + cssEsc(dv.fk) + '"]' : dv.cid ? '[data-cid="' + cssEsc(dv.cid) + '"]' : '') : null,
+          alt: ae.closest && ae.closest('.vg-res') && !toque ? '#vgBusca' : '.vg-diag' };
+        if (ae.id === 'vgBusca') { foco.s = ae.selectionStart; foco.e = ae.selectionEnd; }
       }
       var cd0 = host.querySelector('.vg-card'), topo0 = cd0 && sel && cd0.dataset.key === sel.key ? cd0.scrollTop : 0;
       host.innerHTML = '<div class="vg' + (sel ? ' com-card' : '') + '">' + h + '</div>';
+      if (!sel) avisa('');   // cartão fechado (×, Esc, ponto que sumiu): o "Cartão aberto." não fica para trás
       if (topo0) { var cd1 = host.querySelector('.vg-card'); if (cd1) cd1.scrollTop = topo0; }
       if (foco) {
-        var fn = host.querySelector(foco.q);
+        var fn = (foco.q && host.querySelector(foco.q)) || host.querySelector(foco.alt);
         if (fn) { try { fn.focus({ preventScroll: true }); if (foco.s != null) fn.setSelectionRange(foco.s, foco.e); } catch (e) { /* navegador antigo */ } }
       }
       // a largura real da faixa decide trecho, símbolo e grupo: se mudou (cartão aberto, tela girada), desenha de novo
@@ -311,6 +341,13 @@
       folga();
     }
     function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
+    // leitor de tela: o aviso fica fora do host, que é trocado a cada desenho (index.html #vgAviso); '' limpa
+    function avisa(t) {
+      if (!t && !avisado) return;
+      var av = document.getElementById('vgAviso');
+      avisado = !!t;
+      if (av) av.textContent = t;
+    }
     // no celular o cartão é uma folha presa embaixo: o fim da página ganha a altura dela, para nada ficar escondido
     function folga() {
       var vg = host.firstChild, cd = host.querySelector('.vg-card');
@@ -331,11 +368,18 @@
       // nome: cada palavra em qualquer ordem ("Lote 02 P1", "315 P1"); o nome igual ao digitado vem primeiro
       // ordem: nome igual a um termo (2) e termo que é parte do lote ou o nº curto do contrato (1) valem mais
       var ql = q.toLowerCase(), termos = ql.split(/\s+/).filter(Boolean), max = 6;
+      // "lote 02" ou "lote 2" filtra pelo número do lote (o "02" do nº do contrato não traz o outro lote); os outros
+      // termos continuam livres. Se nenhum contrato tem esse lote, vale como texto comum
+      var lm = /(?:^|\s)lote\s*0*(\d+)(?=\s|$)/.exec(ql), nl = lm ? Number(lm[1]) : null;
+      var nLote = function (c) { var m = /\d+/.exec(String(c.lote || '')); return m ? Number(m[0]) : null; };
+      if (nl != null && itens().lista.some(function (x) { return nLote(x.c) === nl; })) termos = ql.replace(lm[0], ' ').split(/\s+/).filter(Boolean); else nl = null;
+      // String(): nome, código ou lote numérico (backup, banco) não pode quebrar a busca
       function nota(x) {
-        var nome = (x.p.nome || '').toLowerCase(), cod = (x.p.codigo || '').toLowerCase(), lote = (x.c.lote || '').toLowerCase().split(/\s+/), ct = curto(x.c);
+        var nome = String(x.p.nome || '').toLowerCase(), cod = String(x.p.codigo || '').toLowerCase(), lote = String(x.c.lote || '').toLowerCase().split(/\s+/), ct = curto(x.c);
         return termos.reduce(function (t, w) { return t + (w === nome || w === cod || ql === nome || ql === cod ? 2 : lote.indexOf(w) >= 0 || w === ct ? 1 : 0); }, 0);
       }
       var ach = itens().lista.filter(function (x) {
+        if (nl != null && nLote(x.c) !== nl) return false;
         var s = ((x.p.nome || '') + ' ' + (x.p.codigo || '') + ' ' + (x.c.lote || '') + ' ' + (x.c.numero || '')).toLowerCase();
         return termos.every(function (w) { return s.indexOf(w) >= 0; });
       }).map(function (x) { return { x: x, n: nota(x) }; }).sort(function (a, b) { return b.n - a.n || a.x.km - b.x.km; }).map(function (r) { return r.x; });
@@ -351,7 +395,21 @@
       if (st.sel !== x.key) st.mais = null;
       st.sel = x.key;
       render();
+      avisa(String(x.p.nome || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
       if (cel()) enquadrar();
+    }
+    // fecha o cartão. Com o foco no cartão, solto na página ou no marcador do próprio ponto, ele vai ao marcador do ponto
+    // (ou ao grupo que o contém, ou à linha da lista; senão, ao desenho). Num controle de fora do cartão (busca, filtro,
+    // enquadrar, grupo, outro marcador), fica onde está: o render() o devolve ao mesmo controle
+    function fechar() {
+      var k = st.sel, ae = document.activeElement;
+      var mover = !ae || ae === document.body || (host.contains(ae) && !!ae.closest && (!!ae.closest('.vg-card') || (ae.classList.contains('vg-mk') && ae.dataset.key === k)));
+      st.sel = null; st.mais = null; render();
+      if (!mover || !k) return;
+      var q = '[data-vg="sel"][data-key="' + cssEsc(k) + '"]';
+      // no grupo do mesmo km, o data-key é o próximo item, não o que estava aberto: acha o grupo pelo grupoDe do desenho
+      var m = host.querySelector('.vg-mk' + q) || (grupoDe[k] && host.querySelector('[data-fid="' + cssEsc(grupoDe[k]) + '"]')) || host.querySelector(q) || host.querySelector('.vg-diag');
+      if (m) { try { m.focus({ preventScroll: true }); } catch (e) { /* navegador antigo */ } }
     }
     // celular: mostra o desenho entre a barra do topo (fixa) e a folha do cartão; se o marcador já está à vista, não rola
     function enquadrar() {
@@ -369,10 +427,32 @@
       if (Math.abs(dy) > 2) window.scrollBy({ top: dy, behavior: 'smooth' });
     }
 
-    host.addEventListener('click', function (e) {
-      var b = e.target.closest('[data-vg]');
+    // dedo (pointer: coarse): um toque até 12 px de um marcador conta nele, sem mudar o desenho em escala.
+    // O toque no corpo de um marcador nem chega aqui; entre vizinhos, ganha o mais perto
+    function perto(e) {
+      var tk = e.target.closest('.vg-lane .vg-trk'), m0 = null, d0 = 12;
+      if (!tk || !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return null;
+      Array.prototype.forEach.call(tk.querySelectorAll('.vg-mk'), function (mk) {
+        var r = mk.getBoundingClientRect(), dd = Math.max(r.left - e.clientX, e.clientX - r.right, r.top - e.clientY, e.clientY - r.bottom);
+        if (dd < d0) { d0 = dd; m0 = mk; }
+      });
+      return m0;
+    }
+    host.addEventListener('click', seguro(function (e) {
+      var b = e.target.closest('[data-vg]') || perto(e);
       if (!b || Date.now() < semClique) return;
-      var a = b.dataset.vg, R = st.k1 - st.k0, m = (st.k0 + st.k1) / 2, x;
+      // Enter ou Espaço (o clique do teclado não tem "detail") abrindo o cartão: o foco entra nele, no ×
+      var a = b.dataset.vg, R = st.k1 - st.k0, m = (st.k0 + st.k1) / 2, x, tecl = e.detail === 0 && !st.sel;
+      // dedo ou caneta (o tipo vem no clique, senão do pointerdown; sem nenhum dos dois, pela tela de toque): vale
+      // para os render() deste clique
+      var tipo = e.pointerType || ptrTipo || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches ? 'touch' : '');
+      toque = e.detail !== 0 && /touch|pen/.test(tipo);
+      // no computador o cartão fica no fluxo, acima da lista: rola só o necessário para o × ficar à vista
+      // (o html{scroll-padding-top} desconta a barra do topo); no celular a folha é fixa e o enquadrar() cuida do desenho
+      var focoX = function () {
+        var bx = tecl && host.querySelector('.vg-card .vg-x'), cd = bx && host.querySelector('.vg-card');
+        if (bx) { try { bx.focus({ preventScroll: true }); if (!cel() && cd.scrollIntoView) cd.scrollIntoView({ block: 'nearest' }); } catch (er) { /* navegador antigo */ } }
+      };
       if (a === 'ir') { ir(Number(b.dataset.a), Number(b.dataset.b)); if (cel() && b.closest('.vg-ct')) enquadrar(); }   // dos cartões, lá embaixo
       else if (a === 'tudo') { st.k0 = null; render(); }
       else if (a === 'mais') ir(m - R / 4, m + R / 4);
@@ -380,36 +460,39 @@
       else if (a === 'esq') ir(st.k0 - R * 0.4, st.k1 - R * 0.4);
       else if (a === 'dir') ir(st.k0 + R * 0.4, st.k1 + R * 0.4);
       else if (a === 'chip') { st.off[b.dataset.fk] = !st.off[b.dataset.fk]; render(); }
-      else if (a === 'fechar') { st.sel = null; st.mais = null; render(); }
-      else if (a === 'sel') { x = achar(b.dataset.key); if (x) { if (st.sel === x.key && b.classList.contains('vg-mk')) { st.sel = null; st.mais = null; render(); } else mostrar(x); } }
+      else if (a === 'fechar') fechar();
+      // o grupo no mesmo km passa pelos itens um a um: o foco fica nele
+      else if (a === 'sel') { x = achar(b.dataset.key); if (x) { if (st.sel === x.key && b.classList.contains('vg-mk')) fechar(); else { mostrar(x); if (!b.classList.contains('grupo')) focoX(); } } }
       else if (a === 'km') { var k = Number(b.dataset.km), d = Math.min(6, (F[1] - F[0]) / 2); st.q = ''; ir(k - d, k + d); if (cel()) enquadrar(); }
       else if (a === 'achar') {
         x = achar(b.dataset.key);
-        if (x) { var pd = Math.max(2, (x.kf - x.km) * 3), r = lim(x.km - pd, x.kf + pd); st.q = ''; st.k0 = r[0]; st.k1 = r[1]; mostrar(x); }
+        // o achado aparece no desenho mesmo com a situação dele desligada nos filtros: religa aquele filtro
+        if (x) { var pd = Math.max(2, (x.kf - x.km) * 3), r = lim(x.km - pd, x.kf + pd); st.q = ''; st.k0 = r[0]; st.k1 = r[1]; delete st.off[x.fk]; mostrar(x); focoX(); }
       } else if (a === 'abrir' || a === 'mapa' || a === 'fotos') {
         x = st.sel ? achar(st.sel) : null;
         if (x) (a === 'abrir' ? o.onAbrir : a === 'mapa' ? o.onMapa : o.onFotos)(x.c, x.p);
       } else if (a === 'ct') {
         o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onAbrir(c, null); });
       }
-    });
+      toque = false;
+    }));
     // busca: atualiza só a lista de resultados, para não perder o foco do campo
-    host.addEventListener('input', function (e) {
+    host.addEventListener('input', seguro(function (e) {
       if (e.target.id !== 'vgBusca') return;
       st.q = e.target.value;
       var r = host.querySelector('#vgRes');
       if (r) r.innerHTML = resultados();
-    });
+    }));
     host.addEventListener('keydown', function (e) {
       if (e.target.id === 'vgBusca' && e.key === 'Enter') { var f = host.querySelector('#vgRes button'); if (f) { e.preventDefault(); f.click(); } }
     });
     // Esc fecha o cartão, com o foco na visão ou solto na página (depois de um redesenho)
-    document.addEventListener('keydown', function (e) {
+    document.addEventListener('keydown', seguro(function (e) {
       if (e.key !== 'Escape' || !st.sel || !host.offsetParent) return;
       var a = document.activeElement;
       if (a && a !== document.body && !host.contains(a)) return;
-      st.sel = null; st.mais = null; render();
-    });
+      fechar();
+    }));
     // abrir ou fechar "Serviços" vale para os redesenhos seguintes do mesmo ponto ('toggle' não sobe: captura)
     host.addEventListener('toggle', function (e) {
       if (e.target.classList && e.target.classList.contains('vg-mais')) { st.mais = e.target.open; folga(); }
@@ -418,6 +501,7 @@
     function kmEm(clientX) { var tk = trk(), r = tk ? tk.getBoundingClientRect() : null; return r ? st.k0 + (clientX - r.left) / r.width * (st.k1 - st.k0) : (st.k0 + st.k1) / 2; }
     function fracEm(clientX) { var tk = trk(), r = tk ? tk.getBoundingClientRect() : null; return r ? (clientX - r.left) / r.width : 0.5; }
     host.addEventListener('pointerdown', function (e) {
+      ptrTipo = e.pointerType || '';   // para o clique que vem depois (nem todo navegador põe o tipo no clique)
       if (!e.target.closest('.vg-plot') || (e.pointerType === 'mouse' && e.button !== 0)) return;
       // primeiro dedo de um gesto novo: esquece dedos que ficaram sem pointerup (senão um dedo vira "pinça")
       if (e.isPrimary) { ptrs = {}; gesto = null; }
@@ -478,8 +562,10 @@
     var rt = 0;
     window.addEventListener('resize', function () {
       clearTimeout(rt);
-      rt = setTimeout(function () { var w = host.clientWidth; if (host.offsetParent && w && w !== ultW) render(); else folga(); }, 120);
+      rt = setTimeout(seguro(function () { var w = host.clientWidth; if (host.offsetParent && w && w !== ultW) render(); else folga(); }), 120);
     });
+    // saiu da visão (o app esconde o host: contrato, mapa, abas do topo): o aviso do cartão não fica para trás na página
+    if (window.MutationObserver) new window.MutationObserver(function () { if (host.hidden) avisa(''); }).observe(host, { attributes: true, attributeFilter: ['hidden'] });
 
     return { render: render };
   }
