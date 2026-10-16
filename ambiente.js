@@ -69,7 +69,7 @@
   if (previa) {
     document.title = 'PRÉVIA · ' + document.title;
     var m = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-    if (m) m.setAttribute('content', 'Prévia 230');
+    if (m) m.setAttribute('content', 'VIA Prévia');
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', marcar);
   else marcar();
