@@ -1085,8 +1085,10 @@
       }
       lsPut(AN_KEY, { dados: analise.dados });
       if (active() && active().id === cid) { renderEditor(); renderPreview(); }
-    }, function () {
+    }, function (err) {
       analise.estado[cid] = 'erro';
+      // sessão encerrada ou papel trocado em outro aparelho: reconfere o acesso (que tira a análise deste aparelho)
+      if (err && (err.code === 'codigo_invalido' || err.code === 'sem_permissao')) { conferirAcesso(); return; }
       if (active() && active().id === cid) renderEditor();
     });
   }
@@ -2914,7 +2916,12 @@
     $('editor').addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
     window.addEventListener('online', function () { banco.online = true; flush(); poll(); });
     window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') poll(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      poll();
+      if (isEng()) conferirAcesso();   // quem tem a análise no aparelho: confere se ainda é engenheiro ou criador
+    });
+    setInterval(function () { if (document.visibilityState === 'visible' && isEng()) conferirAcesso(); }, 300000);
     window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openConfigurar(); });
     setInterval(poll, 20000);
     syncStatus();
