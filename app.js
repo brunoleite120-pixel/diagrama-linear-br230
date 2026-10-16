@@ -2179,7 +2179,7 @@
     orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
-    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)', logoExecutora: 'logo da executora'
+    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)'
   };
   function fieldName(k) {
     if (k.indexOf('serv.') === 0) { var s = SERVICES.concat(OAE_SERVICES).find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }

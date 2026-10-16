@@ -2,7 +2,7 @@
  * Relatório fotográfico em PDF (A4), no modelo do DNIT usado pela supervisão: uma folha por ponto, com o cabeçalho do
  * DNIT, executora e supervisora, objeto, local, as fotos marcadas com ★ no período escolhido e a descrição.
  *   Lotes (pontos críticos, obra pontual): até 6 fotos por ponto (2 × 2 até 4 fotos; 2 × 3 com 5 ou 6; acima de 6 vão as 6 primeiras).
- *   Pontes (contrato 'oae', serviço contínuo): 6 fotos por folha; com mais, a ponte continua na folha seguinte.
+ *   Pontes (contrato 'oae', serviço contínuo): até 6 fotos por folha; com mais, a ponte segue em folhas equilibradas (8 → 4 + 4).
  * O período é uma semana, um mês ou datas livres. A descrição vem preenchida pelo app (situação do ponto e observação)
  * e pode ser ajustada antes de gerar; o texto ajustado fica guardado neste aparelho para a próxima vez.
  *
@@ -69,23 +69,6 @@
       im.src = u;
     });
   }
-  // logo escolhida pela pessoa: reduzida e guardada em PNG no contrato
-  function logoDeArquivo(file) {
-    return new Promise(function (res, rej) {
-      var u = URL.createObjectURL(file), im = new Image();
-      im.onload = function () {
-        var k = Math.min(1, 600 / im.naturalWidth, 240 / im.naturalHeight), cv = document.createElement('canvas');
-        cv.width = Math.max(1, Math.round(im.naturalWidth * k)); cv.height = Math.max(1, Math.round(im.naturalHeight * k));
-        var g = cv.getContext('2d');
-        g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, cv.width, cv.height);
-        g.drawImage(im, 0, 0, cv.width, cv.height);
-        URL.revokeObjectURL(u);
-        res({ src: cv.toDataURL('image/png'), w: cv.width, h: cv.height });
-      };
-      im.onerror = function () { URL.revokeObjectURL(u); rej(new Error('imagem')); };
-      im.src = u;
-    });
-  }
   function tipoImg(src) { return /^data:image\/png/.test(src) ? 'PNG' : 'JPEG'; }
 
   // ---------------------------------------------------------------- folha
@@ -142,12 +125,10 @@
       barra(y, 12, 'EMPRESA EXECUTORA:', X0, W / 2);
       barra(y, 12, 'EMPRESA SUPERVISORA:', MID, W / 2);
       y += 12;
-      // logos, nomes e contratos
+      // executora só pelo nome; supervisora com a logo; depois nomes e contratos
       var yl = y;
-      if (!img(P.logoExec, X0 + W / 4, y + 21, W / 2 - 60, 32, P.logoExec && P.logoExec.alias)) {
-        var s0 = caber(P.executora, W / 2 - 20, 12, 7, true);
-        doc.text(P.executora, X0 + W / 4, y + 21 + s0 * 0.35, { align: 'center' });
-      }
+      var s0 = caber(P.executora, W / 2 - 20, 12, 7, true);
+      doc.text(P.executora, X0 + W / 4, y + 21 + s0 * 0.35, { align: 'center' });
       img(P.logoSup, MID + W / 4, y + 21, W / 2 - 60, 30, 'lg-sup');
       y += 42;
       hline(y);
@@ -253,8 +234,6 @@
     '.rf-datas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}',
     '.rf-datas input{min-height:34px;border:1px solid var(--line);border-radius:6px;padding:4px 8px}',
     '.rf-sel{width:100%;min-height:36px;border:1px solid var(--line);border-radius:6px;padding:4px 8px;background:#fff;font-size:13.5px}',
-    '.rf-logo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}',
-    '.rf-logo img{max-height:34px;max-width:160px;border:1px solid var(--line);border-radius:4px;background:#fff;padding:2px}',
     '.rf-resumo{font-size:13px;color:var(--ink-2)}',
     '.rf-resumo b{color:var(--ink)}',
     '.rf-aviso{font-size:12.5px;color:#9A5B00}',
@@ -268,11 +247,6 @@
 
   window.RelatorioFoto = function (o) {
     var LG = window.RELATORIO_LOGOS || {};
-    function logoExec(c) {
-      if (c.logoExecutora && c.logoExecutora.src) return { src: c.logoExecutora.src, w: c.logoExecutora.w, h: c.logoExecutora.h, alias: 'lg-ex-' + c.id };
-      var n = String(c.executora || '').toUpperCase(), x = (LG.executoras || []).find(function (e) { return n.indexOf(e.nome) >= 0; });
-      return x ? { src: x.logo.src, w: x.logo.w, h: x.logo.h, alias: 'lg-ex-' + x.nome } : null;
-    }
     // "Nº 01" dos pontos emergenciais: o número do nome (P1 → 01) ou a ordem no contrato
     function numero(c, p, i) { var m = /(\d+)/.exec(p.nome || ''); return pad2(m ? Number(m[1]) : i + 1); }
     function titulo(c, p, num) {
@@ -344,11 +318,8 @@
       var G = null;
       function corpo() {
         G = grupos();
-        var c = G.c, folhas = G.pts.reduce(function (s, x) { return s + x.folhas; }, 0), L = logoExec(c), pode = o.podeEditar();
+        var c = G.c, folhas = G.pts.reduce(function (s, x) { return s + x.folhas; }, 0), pode = o.podeEditar();
         var h = '<div class="field"><label for="rfLocal">Local (vai no cabeçalho de todas as folhas)</label><input id="rfLocal" maxlength="160" value="' + esc(localPadrao(c)) + '"' + (pode ? '' : ' disabled') + '></div>';
-        h += '<div class="rf-logo"><span>Logo da executora:</span>' + (L ? '<img alt="" src="' + esc(L.src) + '">' : '<i>sem logo (vai o nome)</i>') +
-          (pode ? '<button type="button" class="btn small" data-rf="logo">' + (c.logoExecutora ? 'Trocar' : 'Escolher imagem') + '</button>' +
-            (c.logoExecutora ? '<button type="button" class="btn small" data-rf="logo-tirar">Tirar</button>' : '') : '') + '</div>';
         if (!G.total) {
           h += '<div class="rf-resumo">Nenhuma foto marcada com ★ ' + (S.modo === 'semana' ? 'nesta semana' : S.modo === 'mes' ? 'neste mês' : 'neste período') + ' para este contrato.</div>';
           return h;
@@ -385,7 +356,7 @@
           return '<option value="' + esc(c.id) + '"' + (c.id === S.cid ? ' selected' : '') + '>' + esc([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ')) + '</option>';
         }).join('') + '</select></div>' +
         '<fieldset class="rf-per"><legend>Período das fotos (marcadas com ★ na galeria)</legend><div id="rfPer"></div></fieldset>' +
-        '<div id="rfCorpo" style="display:grid;gap:10px"></div><input type="file" id="rfLogoArq" accept="image/*" hidden>' +
+        '<div id="rfCorpo" style="display:grid;gap:10px"></div>' +
         '<p class="modal-err" role="alert" hidden></p><div class="modal-foot" id="rfFoot"></div>', gerar, 'rf-modal');
 
       function desenhar(soCorpo) {
@@ -401,8 +372,6 @@
         if (!b || S.gerando) return;
         var k = b.getAttribute('data-rf');
         if (k === 'modo') { S.modo = b.getAttribute('data-v'); desenhar(); }
-        else if (k === 'logo') f.querySelector('#rfLogoArq').click();
-        else if (k === 'logo-tirar') { o.salvarContrato(S.cid, { logoExecutora: null }); desenhar(true); }
         else if (k === 'auto') {
           var x = G.pts[Number(b.getAttribute('data-i'))];
           if (!x) return;
@@ -419,14 +388,6 @@
         else if (k === 'mes') { S.iMes = Number(t.value); desenhar(true); }
         else if (k === 'de' || k === 'ate') { if (t.value) S[k] = t.value; desenhar(true); }
         else if (t.id === 'rfLocal') { var v = t.value.trim(); o.salvarContrato(S.cid, { localRelatorio: v || null }); }
-        else if (t.id === 'rfLogoArq' && t.files && t.files[0]) {
-          logoDeArquivo(t.files[0]).then(function (L) {
-            if (L.src.length > 400000) { o.toast('Imagem grande demais para logo. Use uma menor.'); return; }
-            o.salvarContrato(S.cid, { logoExecutora: L });
-            desenhar(true);
-          }, function () { o.toast('Não consegui ler essa imagem.'); });
-          t.value = '';
-        }
       });
       f.addEventListener('input', function (e) {
         var t = e.target;
@@ -472,7 +433,7 @@
               return seq.then(function () {
                 if (ip > 0) doc.addPage('a4', 'portrait');
                 folha({
-                  logos: LG, logoExec: logoExec(c), logoSup: o.logoSupervisora,
+                  logos: LG, logoSup: o.logoSupervisora,
                   executora: String(c.executora || '-').toUpperCase(), supervisora: String(c.supervisora || '-').toUpperCase(),
                   contrato: c.numero || '', ctSupervisao: c.ctSupervisao || '', objeto: c.objeto || '', local: localPadrao(c),
                   titulo: pg.x.titulo + (pg.partes > 1 ? ' – FOLHA ' + pg.parte + '/' + pg.partes : ''),
