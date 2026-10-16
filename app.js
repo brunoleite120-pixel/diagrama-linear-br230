@@ -1362,8 +1362,8 @@
     var h = '';
     if (med) {
       h += '<div class="section-title">Serviços · Curva ABC · ' + med + 'ª medição' + (mesDe[med] ? ' (' + esc(mesDe[med]) + ')' : '') + '</div>';
-      h += '<div class="abc-filtro"><span>' + (temPor ? 'Quantidade e valor medidos nesta ponte na ' + med + 'ª.' : 'Serviços medidos na ' + med + 'ª, com o total de cada um nesta ponte.') +
-        '</span><button type="button" class="btn small" data-act="abc-todas">Ver todas as medições</button></div>';
+      h += '<div class="abc-filtro"><span>' + (temPor ? 'Só o que foi medido nesta ponte na ' + med + 'ª.' : 'Serviços medidos na ' + med + 'ª, com o total de cada um nesta ponte.') +
+        '</span><button type="button" class="btn small" data-act="abc-todas">Todas as medições · ' + fmtBRL(a.tot) + '</button></div>';
       if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + med + 'ª.</div>';
     } else {
       if (!sv.length) return '';
@@ -1383,12 +1383,13 @@
         return '<i' + (n === med ? ' class="sel"' : '') + '>' + n + 'ª' + (mesDe[n] ? ' <small>' + esc(mesDe[n]) + '</small>' : '') + '</i>';
       }).join('') + '</span>' : '';
     }
+    // à direita, a quantidade medida em destaque e o valor pequeno embaixo (a classe A/B/C continua sendo pelo valor)
     function linha(x) {
-      var onde = med && temPor ? ' medidos na ' + med + 'ª' : ' medidos nesta ponte';
       return '<div class="abc-r ' + x.k.toLowerCase() + '"><span class="abc-c" aria-label="classe ' + x.k + '">' + x.k + '</span>' +
-        '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span><small>' + fmtN(x.s.q) + ' ' + esc(x.s.un) + onde + '</small>' + meds(x.s.meds) +
+        '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span>' + meds(x.s.meds) +
         '<span class="abc-bar"><i style="width:' + Math.max(1.5, x.pct).toFixed(1) + '%"></i></span></div>' +
-        '<div class="abc-v"><b>' + fmtBRL(x.s.v) + '</b><small>' + pct(x.pct) + ' · acum. ' + pct(x.ac) + '</small></div></div>';
+        '<div class="abc-v" title="' + pct(x.pct) + ' do valor · acumulado ' + pct(x.ac) + '"><b>' + fmtN(x.s.q) + ' <span class="abc-un">' + esc(x.s.un) + '</span></b>' +
+        '<small>' + fmtBRL(x.s.v) + ' · ' + pct(x.pct) + '</small></div></div>';
     }
     h += '<div class="abc-res">' + ['A', 'B', 'C'].filter(function (k) { return cls[k].length; }).map(function (k) {
       return '<span class="abc-tag ' + k.toLowerCase() + '"><b>' + k + '</b> ' + cls[k].length + (cls[k].length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls[k])) + '</span>';
@@ -1398,37 +1399,58 @@
     return h + '</div>';
   }
   function medsNums(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
-  var DET0 = 'Toque numa barra para ver a medição e os serviços dela.';
-  // troca só a curva ABC da ponte aberta, pela medição escolhida no gráfico (ou todas)
+  var DET0 = 'Toque numa barra para ver só aquela medição.';
+  function detTxt(med) { return med ? 'Toque de novo na barra da ' + med + 'ª ou em “Todas as medições” para voltar ao total.' : DET0; }
+  // topo de "Medições nesta ponte": "Todas as medições" com a soma, ou só os dados da medição escolhida no gráfico
+  function topoHtml(an, a, med) {
+    var ms = an.medicoes || [], m = null, h = '', k = String(med || '');
+    ms.forEach(function (x) { if (x.n === med) m = x; });
+    var v = m ? Number(a.meses[k]) || 0 : 0;
+    h += '<div class="an-esc"><button type="button" class="an-chip' + (m ? '' : ' on') + '" data-act="abc-todas" aria-pressed="' + !m + '">Todas as medições <b>' + fmtBRL(a.tot) + '</b></button>' +
+      (m ? '<span class="an-chip on">' + m.n + 'ª medição <b>' + fmtBRL(v) + '</b></span>' : '') + '</div>';
+    if (m) {
+      var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = sv.some(function (s) { return s.por; });
+      var nsv = sv.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(m.n) >= 0; }).length;
+      h += '<div class="an-line">' + esc(m.mes) + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + ' · ' +
+        (v ? nsv + (nsv === 1 ? ' serviço medido' : ' serviços medidos') + ' nesta ponte' : 'sem serviço nesta ponte') +
+        ((a.mx || []).indexOf(m.n) >= 0 ? ' · <span class="an-over">medição de alerta alto</span>' : '') + '</div>';
+      return h;
+    }
+    var et = medEtapas(an, a), ult = ms.filter(function (x) { return Number(a.meses[String(x.n)]) > 0; }).slice(-3).reverse();
+    if (et.length) h += '<div class="an-line">' + et.map(function (e) { return e.etapa + 'ª etapa: <b>' + fmtBRL(e.v) + '</b>'; }).join(' · ') + '</div>';
+    if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (x) { return x.n + 'ª (' + esc(x.mes) + ') ' + fmtBRL(Number(a.meses[String(x.n)])); }).join(' · ') + '</div>';
+    return h;
+  }
+  // troca o topo e a curva ABC da ponte aberta, pela medição escolhida no gráfico (ou todas)
   function abcTrocar(art) {
-    var pid = art && art.dataset.id, an = anOf(active()), a = an && an.pontes ? an.pontes[pid] : null, box = art && art.querySelector('.abc-box');
-    if (a && box) box.innerHTML = abcHtml(an, a, ui.medSel[pid]);
+    var pid = art && art.dataset.id, an = anOf(active()), a = an && an.pontes ? an.pontes[pid] : null;
+    if (!a) return;
+    var box = art.querySelector('.abc-box'), topo = art.querySelector('.an-topo');
+    if (box) box.innerHTML = abcHtml(an, a, ui.medSel[pid]);
+    if (topo) topo.innerHTML = topoHtml(an, a, ui.medSel[pid]);
   }
   // medições da ponte (barras por medição), serviços pela curva ABC e alertas
   function ponteAnaliseHtml(an, a, pid) {
-    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = ui.medSel[pid] || null, tipSel = '';
+    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = ui.medSel[pid] || null;
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
     // só o histórico: total, por etapa e as últimas medições com serviço (sem comparar com o estimado do Anexo VI)
-    var ult = ms.filter(function (m) { return Number(a.meses[String(m.n)]) > 0; }).slice(-3).reverse();
+    if (sel && !ms.some(function (m) { return m.n === sel; })) sel = null;
     h += '<div class="section-title">Medições nesta ponte</div>';
-    h += '<div class="an-line">Medido: <b>' + fmtBRL(a.tot) + '</b>' + medEtapas(an, a).map(function (e) { return ' · ' + e.etapa + 'ª etapa: <b>' + fmtBRL(e.v) + '</b>'; }).join('') +
-      '</div>';
-    if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (m) { return m.n + 'ª (' + esc(m.mes) + ') ' + fmtBRL(Number(a.meses[String(m.n)])); }).join(' · ') + '</div>';
+    h += '<div class="an-topo">' + topoHtml(an, a, sel) + '</div>';
     var corte = -1;
     ms.forEach(function (m, i) { if (corte < 0 && i > 0 && m.etapa !== ms[i - 1].etapa) corte = i; });
     // cada barra é um botão: no celular não há "passar o mouse", então o toque mostra a medição embaixo do gráfico
     h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
       var tip = m.n + 'ª medição · ' + m.mes + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição de alerta alto' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
-      if (m.n === sel) tipSel = tip;
       return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + '" data-act="med-bar" data-n="' + m.n + '" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
     if (ms.length) {
       h += '<div class="an-axis"><span>' + esc(ms[0].mes) + '</span>' + (corte > 0 ? '<span>' + (ms[corte].etapa) + 'ª etapa a partir de ' + esc(ms[corte].mes) + '</span>' : '') + '<span>' + esc(ms[ms.length - 1].mes) + '</span></div>';
       h += '<div class="an-leg"><span><i class="on"></i>com serviço</span><span><i class="al"></i>medição de alerta alto</span></div>';
-      h += '<div class="an-det' + (tipSel ? ' on' : '') + '" aria-live="polite">' + esc(tipSel || DET0) + '</div>';
+      h += '<div class="an-det' + (sel ? ' on' : '') + '" aria-live="polite">' + esc(detTxt(sel)) + '</div>';
     }
     h += '</div>';
 
@@ -1736,7 +1758,7 @@
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
-    // barra do gráfico: escolhe a medição (a curva ABC passa a ser só dela); tocar de novo, ou "Ver todas", volta a todas
+    // barra do gráfico: escolhe a medição (o topo e a curva ABC passam a ser só dela); tocar de novo, ou "Todas as medições", volta a todas
     if (act === 'med-bar' || act === 'abc-todas') {
       var art = b.closest('article.pt'), gr = art && art.querySelector('.an-graf'), det = gr && gr.querySelector('.an-det');
       if (!art || !gr) return;
@@ -1746,9 +1768,8 @@
       gr.querySelectorAll('.an-bar').forEach(function (x) {
         var on = n != null && Number(x.dataset.n) === n;
         x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on));
-        if (on && det) { det.textContent = x.dataset.tip; det.classList.add('on'); }
       });
-      if (!n && det) { det.textContent = DET0; det.classList.remove('on'); }
+      if (det) { det.textContent = detTxt(n); det.classList.toggle('on', !!n); }
       abcTrocar(art);
       return;
     }
