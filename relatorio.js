@@ -1,8 +1,10 @@
 /*
- * Relatório fotográfico em PDF (A4), no modelo do DNIT usado pela supervisão: uma folha por ponto, com o cabeçalho do
- * DNIT, executora e supervisora, objeto, local, as fotos marcadas com ★ no período escolhido e a descrição.
+ * Relatório fotográfico em PDF (A4), no modelo do DNIT usado pela supervisão: cabeçalho do DNIT, executora e supervisora,
+ * objeto, local, as fotos marcadas com ★ no período escolhido e a descrição.
  *   Lotes (pontos críticos, obra pontual): até 6 fotos por ponto (2 × 2 até 4 fotos; 2 × 3 com 5 ou 6; acima de 6 vão as 6 primeiras).
  *   Pontes (contrato 'oae', serviço contínuo): até 6 fotos por folha; com mais, a ponte segue em folhas equilibradas (8 → 4 + 4).
+ *   Folhas: "juntar" (padrão) põe pontos com poucas fotos na mesma folha, até 6 fotos, cada foto com o nome do ponto/ponte;
+ *   "uma por ponto" deixa cada ponto na sua folha, mesmo com uma foto só.
  * O período é uma semana, um mês ou datas livres. A descrição vem preenchida pelo app (situação do ponto e observação)
  * e pode ser ajustada antes de gerar; o texto ajustado fica guardado neste aparelho para a próxima vez.
  *
@@ -17,7 +19,7 @@
   var AZUL = [0, 32, 96];   // azul das barras do modelo
   var CAB = ['MINISTÉRIO DOS TRANSPORTES', 'DEPARTAMENTO NACIONAL DE INFRAESTRUTURA DE TRANSPORTES', 'SUPERINTENDÊNCIA REGIONAL DO ESTADO DO PARÁ', 'UNIDADE LOCAL DE ALTAMIRA/PA'];
   var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-  var DESC_KEY = 'diagrama-linear.rel-desc';
+  var DESC_KEY = 'diagrama-linear.rel-desc', FOLHAS_KEY = 'diagrama-linear.rel-folhas';
   var FOTO_MAX = 1400;   // lado maior da foto no PDF (px): nítida na folha e o arquivo não fica pesado
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -86,6 +88,7 @@
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       var s = caber(t, w - 8, 8, 6, true);
+      while (t.length > 4 && doc.getTextWidth(t) > w - 8) t = t.slice(0, -2).replace(/\s+$/, '') + '…';
       doc.text(t, x + w / 2, y + h / 2 + s * 0.35, { align: 'center' });
       doc.setTextColor(0, 0, 0);
     }
@@ -167,9 +170,16 @@
       // descrição: mede antes, para as fotos ocuparem o resto da folha
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      var dl = [];
-      String(P.desc || '').split('\n').forEach(function (par) { dl = dl.concat(doc.splitTextToSize(par, W - LBL - 14)); });
-      if (dl.length > 10) { dl = dl.slice(0, 10); dl[9] = dl[9].replace(/.{0,2}$/, '') + '…'; }
+      var dl = [], maxL = 10;
+      function cortar(ls, n) { if (ls.length > n) { ls = ls.slice(0, n); ls[n - 1] = ls[n - 1].replace(/.{0,2}$/, '') + '…'; } return ls; }
+      if (Array.isArray(P.desc)) {   // folha com vários pontos: um parágrafo por ponto, cada um com a sua parte das linhas
+        maxL = 12;
+        var porPar = Math.max(2, Math.floor(maxL / P.desc.length));
+        P.desc.forEach(function (par) { dl = dl.concat(cortar(doc.splitTextToSize(par, W - LBL - 14), porPar)); });
+      } else {
+        String(P.desc || '').split('\n').forEach(function (par) { dl = dl.concat(doc.splitTextToSize(par, W - LBL - 14)); });
+      }
+      dl = cortar(dl, maxL);
       var hDesc = Math.max(30, dl.length * 10 + 12), hRod = 48, yRod = PH - 30 - hRod, yDesc = yRod - hDesc - 13;
 
       // fotos: 1 ou 2 na largura toda; 2 × 2 até 4; 2 × 3 com 5 ou 6
@@ -178,7 +188,7 @@
       for (var r = 0; r < rows; r++) {
         for (var c = 0; c < cols; c++) {
           var k = r * cols + c, fx = X0 + c * cw, fy = y + r * ch;
-          if (k < nF) barra(fy, 11, 'FOTO ' + pad2(P.numIni + k), fx, cw);
+          if (k < nF) barra(fy, 11, P.legendas ? P.legendas[k] : 'FOTO ' + pad2(P.numIni + k), fx, cw);
           var f = P.fotos[k], bx = fx + 5, by = fy + 11 + 5, bw = cw - 10, bh = ch - 11 - 10;
           if (f && f.src) {
             var ff = fit(f.w, f.h, bw, bh);
@@ -230,7 +240,9 @@
     '.rf-per{border:0;margin:0;padding:0;display:grid;gap:8px}',
     '.rf-per legend{font-size:12.5px;font-weight:600;color:var(--ink-2);padding:0;margin-bottom:6px}',
     '.rf-per .seg{grid-template-columns:repeat(3,minmax(0,1fr))}',
-    '.rf-per .seg button[aria-pressed="true"]{background:var(--accent);color:#fff}',
+    '.rf-per .seg button[aria-pressed="true"],.rf-folhas button[aria-pressed="true"]{background:var(--accent);color:#fff}',
+    '.rf-folhas{grid-template-columns:repeat(2,minmax(0,1fr))}',
+    '.rf-folhas button{white-space:normal;line-height:1.2;padding:4px 6px;min-height:36px}',
     '.rf-datas{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}',
     '.rf-datas input{min-height:34px;border:1px solid var(--line);border-radius:6px;padding:4px 8px}',
     '.rf-sel{width:100%;min-height:36px;border:1px solid var(--line);border-radius:6px;padding:4px 8px;background:#fff;font-size:13.5px}',
@@ -257,6 +269,11 @@
       }
       return 'PONTO EMERGENCIAL Nº ' + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) + (p.kmFim != null && p.kmFim !== p.kmIni ? ' A ' + fmtKm(p.kmFim) : '') : '');
     }
+    // nome curto, para a legenda de cada foto quando a folha junta vários pontos
+    function curto(c, p, num) {
+      if (o.ehOae(c)) return p.nome ? 'PONTE ' + String(p.nome).toUpperCase() : String(p.codigo || p.id).toUpperCase();
+      return 'PONTO Nº ' + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) : '');
+    }
     function localPadrao(c) {
       return c.localRelatorio || [c.rodovia || 'BR-230/PA', [c.origem, c.destino].filter(Boolean).join(' – ')].filter(Boolean).join(': ') +
         (c.kmIni != null && c.kmFim != null ? ' (km ' + fmtKm(c.kmIni) + ' a ' + fmtKm(c.kmFim) + ')' : '');
@@ -269,7 +286,8 @@
       var S = {
         cid: (a.cid && cs.some(function (c) { return c.id === a.cid; })) ? a.cid : (com.some(function (c) { return c.id === (atv && atv.id); }) ? atv.id : (com[0] || atv || cs[0] || {}).id),
         modo: 'semana', sem: semanas(12), mes: meses(12), iSem: 0, iMes: 0,
-        de: iso(new Date(Date.now() - 14 * 864e5)), ate: iso(new Date()), gerando: false, parar: false
+        de: iso(new Date(Date.now() - 14 * 864e5)), ate: iso(new Date()), gerando: false, parar: false,
+        folhas: lsGet(FOLHAS_KEY) === 'ponto' ? 'ponto' : 'juntar'
       };
       // começa na semana mais recente que tem foto
       var ultima = a.itens.filter(function (it) { return it.cid === S.cid; }).map(function (it) { return diaDe(it.em); }).sort().pop();
@@ -310,15 +328,32 @@
           fs.sort(function (x, y) { return String(x.em || '').localeCompare(String(y.em || '')); });
           var num = numero(c, p, i), k = chave(c, p, per), auto = o.descricao(c, p);
           lista.push({ p: p, num: num, fotos: oae ? fs : fs.slice(0, 6), corte: oae ? 0 : Math.max(0, fs.length - 6), titulo: titulo(c, p, num), auto: auto,
-            desc: textos[k] != null ? textos[k] : auto, chave: k, folhas: oae ? Math.ceil(fs.length / 6) : 1 });
+            curto: curto(c, p, num), desc: textos[k] != null ? textos[k] : auto, chave: k, folhas: oae ? Math.ceil(fs.length / 6) : 1 });
         });
         return { c: c, per: per, oae: oae, pts: lista, sem: sem, total: total };
+      }
+      // as folhas do PDF: cada ponto em pedaços de até 6 fotos (ponte com mais de 6: folhas equilibradas, 8 → 4 + 4, 13 → 5 + 4 + 4);
+      // no modo "juntar", pedaços que cabem juntos (até 6 fotos) dividem a folha, na ordem dos pontos
+      function folhasDoPdf() {
+        var plano = [];
+        G.pts.forEach(function (x) {
+          var blocos = [], i = 0, nf = G.oae ? x.folhas : 1;
+          for (var j = 0; j < nf; j++) { var q = Math.ceil((x.fotos.length - i) / (nf - j)); blocos.push(x.fotos.slice(i, i + q)); i += q; }
+          var ini = 1;
+          blocos.forEach(function (bl, j) {
+            var pd = { x: x, fotos: bl, numIni: ini, parte: j + 1, partes: blocos.length }, ult = plano[plano.length - 1];
+            ini += bl.length;
+            if (S.folhas === 'juntar' && blocos.length === 1 && ult && !ult.dividida && ult.n + bl.length <= 6) { ult.itens.push(pd); ult.n += bl.length; }
+            else plano.push({ itens: [pd], n: bl.length, dividida: blocos.length > 1 });
+          });
+        });
+        return plano;
       }
 
       var G = null;
       function corpo() {
         G = grupos();
-        var c = G.c, folhas = G.pts.reduce(function (s, x) { return s + x.folhas; }, 0), pode = o.podeEditar();
+        var c = G.c, folhas = folhasDoPdf().length, pode = o.podeEditar();
         var h = '<div class="field"><label for="rfLocal">Local (vai no cabeçalho de todas as folhas)</label><input id="rfLocal" maxlength="160" value="' + esc(localPadrao(c)) + '"' + (pode ? '' : ' disabled') + '></div>';
         if (!G.total) {
           h += '<div class="rf-resumo">Nenhuma foto marcada com ★ ' + (S.modo === 'semana' ? 'nesta semana' : S.modo === 'mes' ? 'neste mês' : 'neste período') + ' para este contrato.</div>';
@@ -326,6 +361,11 @@
         }
         h += '<div class="rf-resumo"><b>' + plural(G.pts.length, G.oae ? 'ponte' : 'ponto', G.oae ? 'pontes' : 'pontos') + '</b> · ' +
           plural(G.pts.reduce(function (s, x) { return s + x.fotos.length; }, 0), 'foto', 'fotos') + ' · <b>' + plural(folhas, 'folha', 'folhas') + '</b> A4</div>';
+        if (G.pts.length > 1) {
+          h += '<div class="seg rf-folhas" role="group" aria-label="Folhas">' + [['juntar', 'Juntar ' + (G.oae ? 'pontes' : 'pontos') + ' (até 6 fotos por folha)'], ['ponto', 'Uma folha por ' + (G.oae ? 'ponte' : 'ponto')]].map(function (m) {
+            return '<button type="button" data-rf="folhas" data-v="' + m[0] + '" aria-pressed="' + (S.folhas === m[0]) + '">' + m[1] + '</button>';
+          }).join('') + '</div>';
+        }
         var cortes = G.pts.filter(function (x) { return x.corte; });
         if (cortes.length) h += '<div class="rf-aviso">' + esc(cortes.map(function (x) { return x.p.nome; }).join(', ')) + ': mais de 6 fotos marcadas; vão as 6 primeiras (desmarque as que não quer na galeria).</div>';
         if (G.sem) h += '<div class="rf-aviso">' + plural(G.sem, 'foto marcada não está ligada a', 'fotos marcadas não estão ligadas a') + ' nenhum ponto e ' + (G.sem === 1 ? 'fica' : 'ficam') + ' de fora.</div>';
@@ -346,7 +386,7 @@
         return h;
       }
       function rodape() {
-        var n = G ? G.pts.reduce(function (s, x) { return s + x.folhas; }, 0) : 0;
+        var n = G && G.pts.length ? folhasDoPdf().length : 0;
         return '<button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary"' + (n && !S.gerando ? '' : ' disabled') + '>' +
           (S.gerando ? esc(S.gerando) : 'Gerar PDF' + (n ? ' (' + plural(n, 'folha', 'folhas') + ')' : '')) + '</button>';
       }
@@ -372,6 +412,7 @@
         if (!b || S.gerando) return;
         var k = b.getAttribute('data-rf');
         if (k === 'modo') { S.modo = b.getAttribute('data-v'); desenhar(); }
+        else if (k === 'folhas') { S.folhas = b.getAttribute('data-v'); lsPut(FOLHAS_KEY, S.folhas); desenhar(true); }
         else if (k === 'auto') {
           var x = G.pts[Number(b.getAttribute('data-i'))];
           if (!x) return;
@@ -401,15 +442,8 @@
 
       function gerar() {
         if (S.gerando || !G || !G.pts.length) return;
-        var c = G.c, per = G.per, plano = [], nFotos = 0;
-        G.pts.forEach(function (x) {
-          // ponte com mais de 6 fotos: folhas equilibradas (8 → 4 + 4, 13 → 5 + 4 + 4), nunca mais de 6 por folha
-          var blocos = [], i = 0, nf = x.folhas;
-          for (var j = 0; j < nf; j++) { var q = Math.ceil((x.fotos.length - i) / (nf - j)); blocos.push(x.fotos.slice(i, i + q)); i += q; }
-          if (!G.oae) blocos = [x.fotos.slice(0, 6)];
-          var ini = 1;
-          blocos.forEach(function (bl, j) { plano.push({ x: x, fotos: bl, numIni: ini, parte: j + 1, partes: blocos.length }); ini += bl.length; nFotos += bl.length; });
-        });
+        var c = G.c, per = G.per, plano = folhasDoPdf(), nFotos = plano.reduce(function (s, pg) { return s + pg.n; }, 0);
+        plano.forEach(function (pg) { pg.fotos = [].concat.apply([], pg.itens.map(function (pd) { return pd.fotos; })); });
         S.gerando = 'Preparando…'; S.parar = false;
         foot();
         var feitas = 0, falhas = 0;
@@ -427,17 +461,25 @@
                   feitas++;
                   S.gerando = 'Foto ' + feitas + ' de ' + nFotos + '…';
                   foot();
-                  return a.arquivo(it).then(paraJpeg).then(function (im) { im.alias = 'ft-' + it.id; imgs.push(im); }, function () { falhas++; imgs.push(null); });
+                  // o Drive às vezes falha numa chamada solta: tenta mais uma vez antes de deixar a foto em branco
+                  return a.arquivo(it).catch(function () { return a.arquivo(it); }).then(paraJpeg).then(function (im) { im.alias = 'ft-' + it.id; imgs.push(im); }, function () { falhas++; imgs.push(null); });
                 });
               });
               return seq.then(function () {
                 if (ip > 0) doc.addPage('a4', 'portrait');
+                var um = pg.itens[0], varios = pg.itens.length > 1, legendas = null;
+                if (varios) {
+                  legendas = [];
+                  pg.itens.forEach(function (pd) { pd.fotos.forEach(function () { legendas.push('FOTO ' + pad2(legendas.length + 1) + ' – ' + pd.x.curto); }); });
+                }
                 folha({
                   logos: LG, logoSup: o.logoSupervisora,
                   executora: String(c.executora || '-').toUpperCase(), supervisora: String(c.supervisora || '-').toUpperCase(),
                   contrato: c.numero || '', ctSupervisao: c.ctSupervisao || '', objeto: c.objeto || '', local: localPadrao(c),
-                  titulo: pg.x.titulo + (pg.partes > 1 ? ' – FOLHA ' + pg.parte + '/' + pg.partes : ''),
-                  periodo: perTxt(per), fotos: imgs, numIni: pg.numIni, rotDesc: 'Serviço:', desc: pg.x.desc,
+                  titulo: varios ? (G.oae ? 'PONTES: ' : 'PONTOS EMERGENCIAIS: ') + pg.itens.map(function (pd) { return G.oae ? pd.x.curto.replace(/^PONTE /, '') : 'Nº ' + pd.x.num; }).join(' · ')
+                    : um.x.titulo + (um.partes > 1 ? ' – FOLHA ' + um.parte + '/' + um.partes : ''),
+                  periodo: perTxt(per), fotos: imgs, numIni: um.numIni, legendas: legendas, rotDesc: 'Serviço:',
+                  desc: varios ? pg.itens.filter(function (pd) { return String(pd.x.desc || '').trim(); }).map(function (pd) { return pd.x.curto + ': ' + String(pd.x.desc).trim().replace(/\s*\n+\s*/g, ' '); }) : um.x.desc,
                   pag: ip + 1, tot: plano.length, gerado: gerado
                 });
               });

@@ -905,19 +905,40 @@
         img.src = u;
       });
     }
+    // o script do Drive às vezes devolve uma página de erro do Google numa chamada solta: tenta de novo até 2 vezes
+    function postDrive(url, corpo, n) {
+      n = n == null ? 2 : n;
+      return o.drive.post(url, corpo).then(function (r) {
+        return r && r.erro === 'resposta_invalida' && n > 0 ? postDrive(url, corpo, n - 1) : r;
+      });
+    }
     function trazerDoDrive() {
       var l = login(), url = o.driveUrl ? o.driveUrl() : null, amb = o.ambiente || 'oficial', previa = amb === 'previa';
       if (!l || !url || ocupado || !o.drive || !o.drive.post) return;
       cancelar = false;
-      ocupado = previa ? 'Copiando as fotos do Drive oficial e procurando as que faltam…' : 'Procurando no Drive as fotos que faltam…';
-      renderBar();
-      Promise.all([
-        o.drive.post(url, { acao: 'drive_listar', ambiente: amb, codigo: l.codigo, copiarOficial: previa }),
-        o.Banco.fotosListar(l.codigo, 'todas', 1000),
-        o.Banco.fotosListar(l.codigo, 'deletadas', 1000).catch(function () { return []; })
-      ]).then(function (r) {
+      var copiadas = 0, voltas = 0;
+      // na prévia: primeiro as cópias das fotos do Drive oficial, em partes de ~25 s (o script diz quantas faltam)
+      function copiar() {
+        if (!previa || cancelar) return Promise.resolve();
+        ocupado = 'Copiando as fotos do Drive oficial para a prévia' + (copiadas ? ' (' + copiadas + ' até agora)' : '') + '…'; renderBar();
+        return postDrive(url, { acao: 'drive_copiar', ambiente: amb, codigo: l.codigo }).then(function (r) {
+          if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
+          copiadas += r.copiadas || 0;
+          if (r.faltam !== 0 && ++voltas < 40) return copiar();
+        });
+      }
+      copiar().then(function () {
+        if (cancelar) throw { code: 'parado' };
+        ocupado = 'Procurando no Drive as fotos que faltam na galeria…'; renderBar();
+        return Promise.all([
+          postDrive(url, { acao: 'drive_listar', ambiente: amb, codigo: l.codigo }),
+          o.Banco.fotosListar(l.codigo, 'todas', 1000),
+          o.Banco.fotosListar(l.codigo, 'deletadas', 1000).catch(function () { return []; })
+        ]);
+      }).then(function (r) {
         var res = r[0], ja = {};
         if (!res || !res.ok) throw { code: (res && res.erro) || 'erro' };
+        res.copiadas = copiadas;
         r[1].concat(r[2]).forEach(function (f) { if (f.drive_id) ja[f.drive_id] = 1; ja['id:' + f.id] = 1; });
         var novos = [], ids = {};
         (res.fotos || []).forEach(function (f) {
@@ -941,7 +962,9 @@
       }).catch(function (e) {
         ocupado = null; renderBar();
         var c = e && (e.code || e.erro);
+        if (c === 'parado') { o.toast('Parado. Toque de novo para continuar de onde parou.', 5000); return; }
         o.toast(c === 'so_criador' ? 'Só o Administrador traz fotos do Drive.' : c === 'acao_invalida' ? 'O script do Drive ainda é a versão antiga (precisa da versão 3).'
+          : (e && e.name === 'AbortError') || c === 20 ? 'O Drive demorou demais. Toque de novo: continua de onde parou.'
           : c === 'sem_rede' || !c ? 'Sem conexão com o Drive.' : 'Não foi possível ler o Drive (' + c + ').', 7000);
       });
     }
@@ -950,23 +973,24 @@
       cancelar = false;
       function lote(ini) {
         if (cancelar || ini >= novos.length) return Promise.resolve();
-        var parte = novos.slice(ini, ini + 20);
+        var parte = novos.slice(ini, ini + 10);
         ocupado = 'Trazendo ' + (ini + 1) + ' de ' + novos.length + '…'; renderBar();
-        return o.drive.post(url, { acao: 'drive_minis', ambiente: amb, codigo: l.codigo, ids: parte.map(function (x) { return x.f.id; }) }).catch(function () { return null; }).then(function (rm) {
+        return postDrive(url, { acao: 'drive_minis', ambiente: amb, codigo: l.codigo, ids: parte.map(function (x) { return x.f.id; }) }).catch(function () { return null; }).then(function (rm) {
           var mm = {}, cadeia = Promise.resolve();
           ((rm && rm.minis) || []).forEach(function (m) { if (m.jpeg) mm[m.id] = m.jpeg; });
           parte.forEach(function (x, k) {
             cadeia = cadeia.then(function () {
               if (cancelar) return;
               ocupado = 'Trazendo ' + (ini + k + 1) + ' de ' + novos.length + '…'; renderBar();
-              var pm = mm[x.f.id] ? Promise.resolve(mm[x.f.id]) : o.drive.post(url, { acao: 'drive_baixar', ambiente: amb, codigo: l.codigo, driveId: x.f.id }).then(function (r) {
+              // a "miniatura" do Drive vem grande (~1600 px): reduz aqui para ~360 px, como as do app
+              var pm = mm[x.f.id] ? reduzir(b64Blob(mm[x.f.id], 'image/jpeg')) : postDrive(url, { acao: 'drive_baixar', ambiente: amb, codigo: l.codigo, driveId: x.f.id }).then(function (r) {
                 return r && r.ok ? reduzir(b64Blob(r.dados, r.mime)) : null;
               }, function () { return null; });
               return pm.then(function (mini) { return o.Banco.fotoImportar(l.codigo, x.foto, mini); }).then(function (r) { if (r && r.nova) feitas++; }, function () { falhas++; });
             });
           });
           return cadeia;
-        }).then(function () { return lote(ini + 20); });
+        }).then(function () { return lote(ini + 10); });
       }
       lote(0).then(function () {
         ocupado = null;
