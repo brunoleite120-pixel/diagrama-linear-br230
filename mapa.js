@@ -582,7 +582,11 @@
       q('.mp-legend').hidden = !items.length;
     }
 
+    // enquadrar com o mapa escondido (tamanho zero) dá zoom 19 no lugar errado: fica pendente até ele aparecer
+    var fitPend = false;
     function fit() {
+      var z = map.getSize();
+      fitPend = !z.x || !z.y;
       if (bounds) map.fitBounds(bounds, { animate: false, paddingTopLeft: [10, 90], paddingBottomRight: [10, 70] });
       else map.fitBounds(Lf.latLngBounds(full), { animate: false });
     }
@@ -1084,7 +1088,7 @@
 
     return {
       render: render,
-      show: function () { setTimeout(function () { map.invalidateSize(); if (!bounds) fit(); }, 30); },
+      show: function () { setTimeout(function () { map.invalidateSize(); if (!bounds || fitPend) fit(); }, 30); },
       invalidate: function () { map.invalidateSize(); },
       openFull: openFull,
       closeFull: closeFull,

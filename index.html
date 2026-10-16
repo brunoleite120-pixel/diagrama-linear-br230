@@ -14,6 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="VIA-230">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>
+html{scroll-padding-top:calc(var(--topbar-h,0px) + 8px)}
 :root{
   --ground:#F1F3F1; --panel:#FFFFFF; --ink:#17201C; --ink-2:#3B4540; --ink-3:#5C6661;
   --line:#D5DAD6; --line-2:#E6E9E6; --accent:#1D4F91; --accent-ink:#FFFFFF; --accent-soft:#E7EEF7;
@@ -78,7 +79,7 @@ button{cursor:pointer}
 .layout{display:grid;grid-template-columns:minmax(380px,460px) minmax(0,1fr);gap:0;min-height:calc(100vh - 61px)}
 .layout.wide{grid-template-columns:minmax(0,1fr)}
 @media (max-width:700px){
-  .tabs{flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .tabs{flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
   .tabs::-webkit-scrollbar{display:none}
   .tab{flex:none}
 }
@@ -208,7 +209,7 @@ button.vg-tr.sel{background:var(--accent-soft)}
 @media (max-width:700px){
   .visao{padding:12px 12px calc(28px + env(safe-area-inset-bottom,0px))}
   .vg{gap:12px}
-  .vg.com-card{padding-bottom:260px}
+  .vg.com-card{padding-bottom:260px}   /* reserva até o JS medir a folha (visao.js folga) */
   .vg-head h2{font-size:18px}
   .vg-meio{order:1}
   .vg-cards{order:2;grid-template-columns:minmax(0,1fr);gap:8px}
@@ -233,7 +234,7 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg-busca input{font-size:16px;min-height:44px}
   .vg-chip{min-height:38px}
   .vg-leg{font-size:11.5px}
-  .vg-card{position:fixed;left:0;right:0;bottom:0;max-width:none;max-height:58vh;overflow-y:auto;z-index:40;border-radius:16px 16px 0 0;border-bottom:0;gap:10px;
+  .vg-card{position:fixed;left:0;right:0;bottom:0;max-width:none;max-height:min(58vh,calc(100vh - var(--topbar-h,170px) - 16px));overflow-y:auto;overscroll-behavior:contain;z-index:15;border-radius:16px 16px 0 0;border-bottom:0;gap:10px;
     padding:10px 16px calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 24px rgba(23,32,28,.18)}
   .vg-card::before{content:"";justify-self:center;width:40px;height:4px;border-radius:2px;background:#C9D0CC}
   .vg-acoes .btn{flex:1 1 0;justify-content:center;min-height:44px}

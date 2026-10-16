@@ -164,9 +164,12 @@
     var n = Number(t);
     return isFinite(n) ? n : null;
   }
+  // um Intl.NumberFormat por número de casas (toLocaleString cria um a cada chamada)
+  var FMT = {};
   function fmt(n, dec) {
     if (n == null || !isFinite(n)) return '';
-    return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    var f = FMT[dec] || (FMT[dec] = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec }));
+    return f.format(Number(n));
   }
   function fmtKm(n) { return n == null ? '' : fmt(n, 2); }
   function fmtPct(n) {
@@ -621,7 +624,8 @@
     etapa: 'repetido na mesma etapa', garantia5: 'repetido dentro da garantia de 5 anos', vegetacao: 'vegetação refeita antes do intervalo',
     acima: 'acima do estimado do Anexo VI', sem_estimativa: 'sem estimativa no Anexo VI'
   };
-  function fmtN(n) { return n == null || !isFinite(n) ? '' : Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); }
+  var FMT_N = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+  function fmtN(n) { return n == null || !isFinite(n) ? '' : FMT_N.format(Number(n)); }
   function fmtBRL(n) { return n == null || !isFinite(n) ? '-' : 'R$ ' + fmt(Math.round(n), 0); }
   function fmtBRLc(n) {
     if (n == null || !isFinite(n)) return '-';
@@ -974,11 +978,23 @@
 
   // ------------------------------------------------------------------ interface: abas
   function renderTabs() {
-    $('tabs').innerHTML = (window.VisaoGeral ? '<button type="button" class="tab tab-visao" data-act="visao" aria-current="' + visaoOn + '">' + ICON_VISAO + 'Visão geral</button>' : '') +
+    var nav = $('tabs');
+    nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-current="' + visaoOn + '">' + ICON_VISAO + 'Visão geral</button>' : '') +
       state.contracts.map(function (c) {
       return '<button type="button" class="tab" data-tab="' + esc(c.id) + '" aria-current="' + (!visaoOn && c.id === state.activeId) + '">' +
         esc(c.lote || 'Contrato') + '<small>' + esc(c.numero || 'sem número') + '</small></button>';
     }).join('') + '<button type="button" class="tab add" data-act="new-contract">+ Contrato</button>';
+    // celular: as abas rolam para o lado; a aba aberta fica à vista
+    var at = nav.querySelector('[aria-current="true"]');
+    if (at && nav.scrollWidth > nav.clientWidth) {
+      var rn = nav.getBoundingClientRect(), ra = at.getBoundingClientRect();
+      if (ra.left < rn.left || ra.right > rn.right) nav.scrollLeft += ra.left - rn.left - 16;
+    }
+  }
+  // a barra do topo é fixa: as rolagens até um elemento (ponto, mapa, desenho) param logo abaixo dela
+  function syncTopbar() {
+    var tb = document.querySelector('.topbar');
+    if (tb) document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
   }
 
   // ------------------------------------------------------------------ interface: editor
@@ -1279,7 +1295,7 @@
         analise.estado[cid] = 'vazia';
       }
       lsPut(AN_KEY, { dados: analise.dados });
-      if (active() && active().id === cid) { renderEditor(); renderPreview(); }
+      if (!visaoOn && active() && active().id === cid) { renderEditor(); renderPreview(); }
     }, function (err) {
       analise.estado[cid] = 'erro';
       // sessão encerrada ou papel trocado em outro aparelho: reconfere o acesso (que tira a análise deste aparelho)
@@ -1658,7 +1674,8 @@
       color: st.fill, status: st.name, pctText: fmtPct(pct),
       servs: list.filter(function (k) { var s = p.serv[k.key]; return s && s.st !== 'NA'; }).map(function (k) {
         var s = p.serv[k.key];
-        return { label: k.label, color: STATUS[s.st].fill, text: STATUS[s.st].name + (s.st === 'OK' ? '' : ' · ' + fmtPct(svcPct(s))) };
+        var S = STATUS[s.st] || STATUS.NA;
+        return { label: k.label, color: S.fill, text: S.name + (s.st === 'OK' ? '' : ' · ' + fmtPct(svcPct(s))) };
       })
     };
   }
@@ -1787,7 +1804,7 @@
     $('selPages').closest('label').hidden = isMap;
     $('folhaSw').classList.toggle('so-diagrama', isMap);
     $('btnWide').textContent = ui.wide ? 'Mostrar editor' : (isMap ? 'Ampliar mapa' : 'Ampliar diagrama');
-    if (isMap && ensureMap()) { mapa.render(); mapa.show(); }
+    if (isMap && !$('layout').hidden && ensureMap()) { mapa.render(); mapa.show(); }
     renderPreview();
   }
   function metaSituacao(c, tot) {
@@ -1819,8 +1836,16 @@
 
   function renderAll() {
     renderTabs();
-    if (mostraVisao()) { visao.render(); return; }
+    if (mostraVisao()) {
+      try { visao.render(); return; } catch (e) {
+        // um dado estranho não pode impedir a abertura: mostra o contrato
+        console.error(e);
+        visaoOn = false; mostraVisao(); renderTabs();
+      }
+    }
     renderEditor();
+    // o mapa criado (ou girado) com o layout escondido ficou com tamanho zero: mede de novo antes de desenhar
+    if (view === 'mapa') { if (mapa) mapa.invalidate(); else ensureMap(); }
     renderPreview();
     if (view === 'mapa' && mapa) mapa.show();
   }
@@ -1836,7 +1861,7 @@
     try { if (on) sessionStorage.removeItem(INICIO_KEY); else sessionStorage.setItem(INICIO_KEY, '1'); } catch (e) { /* sem armazenamento */ }
   }
   function ensureVisao() {
-    if (visao || !window.VisaoGeral) return visao;
+    if (visao || !window.VisaoGeral || !$('visaoHost')) return visao;
     visao = window.VisaoGeral({
       host: $('visaoHost'), contratos: function () { return state.contracts; }, info: pointInfo, isOae: isOae,
       temMapa: !!(window.MapaSNV && window.L && window.SNV_BR230), temFotos: galeriaOn,
@@ -1847,10 +1872,13 @@
     return visao;
   }
   function mostraVisao() {
-    var on = visaoOn && !!ensureVisao();
+    var vh = $('visaoHost'), on = visaoOn && !!vh && !!ensureVisao();
     $('layout').hidden = on;
-    $('visaoHost').hidden = !on;
+    if (vh) vh.hidden = !on;
     $('btnPdf').hidden = on;
+    // na visão não há contrato na tela: imprimir pegaria o contrato escondido
+    var pr = document.querySelector('#menuPop [data-act="print"]');
+    if (pr) pr.hidden = on;
     return on;
   }
   // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
@@ -1972,7 +2000,7 @@
       ui.open[pidIr] = true;
       renderEditor();
       var alvo = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(pidIr) : pidIr) + '"]');
-      if (alvo) { alvo.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90); }
+      if (alvo) alvo.scrollIntoView({ block: 'start' });
       return;
     }
     switch (act) {
@@ -2090,7 +2118,10 @@
         state.contracts.push(nc);
         state.activeId = nc.id;
         ui.contractOpen = true; ui.open = {};
+        var ncVisao = visaoOn;
+        setVisao(false);
         renderAll();
+        if (ncVisao) window.scrollTo(0, 0);
         break;
       case 'del-contract':
         if (state.contracts.length < 2) { toast('Este é o único contrato. Crie outro antes de excluir este.'); return; }
@@ -2335,7 +2366,7 @@
       if (banco.on && !isResp()) { toast('Só o Administrador pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
       $('fileInput').click();
     }
-    else if (act === 'print') imprimir();
+    else if (act === 'print') { if (visaoOn) { toast('Abra um contrato para imprimir o diagrama dele.'); return; } imprimir(); }
     else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: active().id });
     else if (act === 'reset') {
       confirmar({ titulo: 'Voltar aos dados iniciais?', texto: 'Apaga as alterações deste navegador e volta aos dados da planilha. Faça um backup antes, se precisar.', digitar: 'APAGAR', botao: 'Voltar aos dados iniciais', perigo: true }).then(function (r) {
@@ -2785,7 +2816,7 @@
   }
   function typing() {
     var a = document.activeElement;
-    return !!(a && a.closest && a.closest('#editor') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+    return !!(a && a.closest && a.closest('#editor, #visaoHost') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
   }
   function fromServer(r) {
     var s = { activeId: state ? state.activeId : null, contracts: [] }, byId = {};
@@ -3543,7 +3574,10 @@
     $('btnLogin').addEventListener('click', openLogin);
     initAprov();
     document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
-    $('editor').addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
+    ['editor', 'visaoHost'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
+    });
     window.addEventListener('online', function () { banco.online = true; banco.espera = 0; flush(); poll(); });
     window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
     document.addEventListener('visibilitychange', function () {
@@ -3613,6 +3647,11 @@
       e.target.value = '';
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    if (!window.VisaoGeral || !$('visaoHost')) visaoOn = false;
+    syncTopbar();
+    var tbar = document.querySelector('.topbar');
+    if (window.ResizeObserver && tbar) new ResizeObserver(syncTopbar).observe(tbar);
+    else window.addEventListener('resize', syncTopbar);
     initBanco();
     renderAll();
     if (view === 'mapa') setView('mapa');
