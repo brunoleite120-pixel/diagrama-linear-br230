@@ -1070,7 +1070,7 @@
   function carregarAnalise(c) {
     if (!c || !isOae(c) || !banco.on || !isEng() || !window.Banco || !window.Banco.analise) return;
     var e = analise.estado[c.id];
-    if (e === 'carregando' || e === 'ok' || e === 'vazia') return;
+    if (e === 'carregando' || e === 'ok' || e === 'vazia' || e === 'erro') return;   // erro: só de novo ao trocar de aba ou voltar ao app
     analise.estado[c.id] = 'carregando';
     var cred = banco.login.codigo, cid = c.id;
     window.Banco.analise(cred, cid).then(function (r) {
@@ -1102,7 +1102,7 @@
     }
     var an = anOf(c), e = analise.estado[c.id];
     if (!an) {
-      var t = e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba.' : 'Nenhuma análise das medições cadastrada para este contrato.';
+      var t = e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba ou voltar ao app.' : 'Nenhuma análise das medições cadastrada para este contrato.';
       return '<div class="an-note">' + esc(t) + '</div>';
     }
     var r = an.resumo || {}, sobre = an.sobre || {};
@@ -2919,7 +2919,11 @@
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
       poll();
-      if (isEng()) conferirAcesso();   // quem tem a análise no aparelho: confere se ainda é engenheiro ou criador
+      if (isEng()) {
+        conferirAcesso();   // quem tem a análise no aparelho: confere se ainda é engenheiro ou criador
+        var ca = active();
+        if (ca && analise.estado[ca.id] === 'erro') { delete analise.estado[ca.id]; renderEditor(); }
+      }
     });
     setInterval(function () { if (document.visibilityState === 'visible' && isEng()) conferirAcesso(); }, 300000);
     window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openConfigurar(); });
