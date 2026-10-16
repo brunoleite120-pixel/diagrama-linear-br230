@@ -138,10 +138,11 @@
     { k: 'relatorio', t: 'Relatório', nivel: 2 },
     { k: 'deletadas', t: 'Deletados', nivel: 3 }
   ];
-  var AGRUPAR = { mes: 'Por mês', pessoa: 'Por pessoa', ponto: 'Por ponto' };
+  // agrupar: por mês ou por pessoa (escolha só para engenheiro e Administrador; o fiscal só vê as fotos dele, por mês)
+  var AGRUPAR = { mes: 'Por mês', pessoa: 'Por pessoa' };
   var MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   function mesLongo(k) { var p = k.split('-'); return MESES_NOME[+p[1] - 1] + ' de ' + p[0]; }
-  function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : aba === 'relatorio' ? 'ponto' : 'mes'; }
+  function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : 'mes'; }
 
   window.Galeria = function (o) {
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
@@ -151,6 +152,7 @@
 
     function login() { return o.getLogin ? o.getLogin() : null; }
     function nv() { return o.nivel ? o.nivel() : 0; }
+    function modo() { return nv() >= 2 ? agrupar || agruparPadrao(aba) : 'mes'; }
     function abasVisiveis() { return ABAS.filter(function (a) { return a.nivel === 0 || (login() && nv() >= a.nivel); }); }
     function q(s) { return root.querySelector(s); }
     function msgErro(e) {
@@ -302,8 +304,8 @@
       if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
       var mm = Object.keys(ms).sort().reverse().map(function (k) { return [k, mesNome(k)]; });
       if (mm.length > 1 || filtro.mes) h += '<select data-f="mes" aria-label="Mês">' + opcoes(filtro.mes, 'Todos os meses', mm) + '</select>';
-      if (itens.length) {
-        var g = agrupar || agruparPadrao(aba);
+      if (itens.length && nv() >= 2) {
+        var g = modo();
         h += '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).map(function (k) {
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>';
@@ -311,9 +313,9 @@
       return h;
     }
     function grupos() {
-      var g = agrupar || agruparPadrao(aba), mapa = {}, ordem = [];
+      var g = modo(), mapa = {}, ordem = [];
       lista.forEach(function (it, i) {
-        var k = g === 'pessoa' ? it.autor || 'Sem nome' : g === 'ponto' ? [it.cid ? nomeContrato(it.cid, it) : '', it.pnome || 'Sem ponto'].filter(Boolean).join(' · ') : (mesKey(it.em) ? mesLongo(mesKey(it.em)) : 'Sem data');
+        var k = g === 'pessoa' ? it.autor || 'Sem nome' : (mesKey(it.em) ? mesLongo(mesKey(it.em)) : 'Sem data');
         if (!mapa[k]) { mapa[k] = []; ordem.push(k); }
         mapa[k].push(i);
       });
@@ -333,9 +335,9 @@
     }
     function tile(it, i) {
       var m = miniDe(it), cap = [it.pnome, kmTxt(it.km)].filter(Boolean).join(' · ') || hora(it.em);
-      if ((aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && (agrupar || agruparPadrao(aba)) !== 'pessoa') cap = (it.autor ? it.autor.split(' ')[0] + ' · ' : '') + cap;
+      if ((aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa') cap = (it.autor ? it.autor.split(' ')[0] + ' · ' : '') + cap;
       // por mês o grupo não diz o dia: vai na legenda da foto
-      if ((agrupar || agruparPadrao(aba)) === 'mes' && it.em && cap.indexOf(dia(it.em)) < 0) cap = dia(it.em).slice(0, 5) + ' · ' + cap;
+      if (modo() === 'mes' && it.em && cap.indexOf(dia(it.em)) < 0) cap = dia(it.em).slice(0, 5) + ' · ' + cap;
       return '<button type="button" class="gl-t" data-i="' + i + '" data-id="' + esc(it.id) + '"' + (m ? '' : ' data-falta') +
         (selecionando ? ' aria-pressed="' + !!sel[it.id] + '"' : '') + ' aria-label="' + esc(cap + ', ' + hora(it.em)) + '">' +
         (m ? '<img alt="" src="' + esc(m) + '">' : '<img alt="">') + badge(it) +
@@ -352,13 +354,14 @@
         var t = '<b>' + plural(all.length, 'foto guardada', 'fotos guardadas') + '</b> neste aparelho' + (bytes ? ' · ' + tam(bytes) : '');
         if (pend) {
           t += ' · <span class="gl-warn">' + plural(pend, 'esperando envio', 'esperando envio') + '</span>';
-          if (!login()) t += ' (entre com o seu código para enviar)';
+          if (!login()) t += ' (só vão para o Drive depois que você entrar com o seu código)';
           else if (inf.busy) t += ' (enviando…)';
           else if (inf.erro === 'rede' || navigator.onLine === false) t += ' (sem sinal; envia sozinho depois)';
           else if (!(o.driveUrl && o.driveUrl())) t += ' (envio ao Drive não configurado)';
         } else if (all.length) t += ' · todas já foram enviadas';
         var b = '';
         if (pend && login() && !inf.busy) b += '<button type="button" class="btn small" data-g="enviar">Enviar agora</button>';
+        if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         if (env) b += '<button type="button" class="btn small" data-g="limpar">Liberar espaço (' + env + ')</button>';
         return '<span class="gl-txt">' + t + '</span>' + b + selBtn();
       }
