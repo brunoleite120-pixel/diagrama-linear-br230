@@ -15,15 +15,19 @@
     { key: 'prelim', label: 'Sv. Preliminares', short: 'Sv. preliminares' }
   ];
   // contrato de pontes (tipo 'oae', ex.: CT 424): um grupo de serviços por linha, uma coluna por ponte.
-  // un = unidade da estimativa do dano feita pela supervisão (q = o que ela mede); rotina não tem quantidade
+  // un = unidade da estimativa do dano feita pela supervisão (q = o que ela mede); rotina não tem quantidade.
+  // nomes: rótulos próprios da linha (rotina fala de vegetação ou sujeira, não de dano). Plataforma e jato d'água
+  // são meio de execução: ficam só na análise das medições, sem linha na vistoria
   var OAE_SERVICES = [
-    { key: 'juntas', label: 'Juntas e aparelhos de apoio', short: 'Juntas e apoios', un: 'm', q: 'm de junta danificada' },
-    { key: 'concreto', label: 'Recuperação estrutural (concreto)', short: 'Concreto', un: 'm²', q: 'm² de concreto danificado' },
-    { key: 'pintura', label: 'Proteção superficial (pintura)', short: 'Pintura', un: '%', q: '% da pintura danificada' },
-    { key: 'drenagem', label: 'Drenagem da OAE', short: 'Drenagem', un: 'un', q: 'nº de drenos danificados' },
-    { key: 'rotina', label: 'Conservação de rotina (vegetação e limpeza)', short: 'Rotina', un: null, q: '' },
-    { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'm de guarda-corpo ou pista danificados' },
-    { key: 'acesso', label: 'Plataforma e apoio à execução', short: 'Plataforma / acesso', un: 'm²', q: 'm² de plataforma' }
+    { key: 'juntas', label: 'Juntas de dilatação', short: 'Juntas', un: 'm', q: 'm de junta com dano' },
+    { key: 'apoios', label: 'Aparelhos de apoio', short: 'Aparelhos de apoio', un: 'un', q: 'nº de aparelhos com dano' },
+    { key: 'concreto', label: 'Recuperação estrutural (concreto)', short: 'Concreto', un: 'm²', q: 'm² de concreto com dano' },
+    { key: 'pintura', label: 'Proteção superficial (pintura)', short: 'Pintura', un: '%', q: '% da pintura com dano' },
+    { key: 'drenagem', label: 'Drenagem da OAE', short: 'Drenagem', un: 'un', q: 'nº de drenos com dano' },
+    { key: 'rotina', label: 'Conservação de rotina (vegetação e limpeza)', short: 'Rotina', un: null, q: '', nomes: {
+      OK: { tag: 'SEM VEGETAÇÃO/SUJEIRA APARENTE', name: 'Sem vegetação/sujeira aparente', btn: 'Sem vegetação/sujeira aparente' },
+      DN: { tag: 'VEGETAÇÃO OU SUJEIRA OBSERVADA', name: 'Vegetação ou sujeira observada', btn: 'Vegetação ou sujeira observada' } } },
+    { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'm de guarda-corpo ou pista com dano' }
   ];
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
   function servicesOf(c) { return isOae(c) ? OAE_SERVICES : SERVICES; }
@@ -34,16 +38,24 @@
     NA: { tag: 'N/A', name: 'Não se aplica', btn: 'N/A', fill: 'none' }
   };
   var STATUS_ORDER = ['OK', 'A', 'P', 'NA'];
-  // pontes: serviço contínuo de conservação. O estado é o que a supervisão viu na vistoria (OK, danificado,
-  // executando) com a ESTIMATIVA do dano, e não o avanço de uma obra feita uma vez só, como nos pontos críticos
+  // pontes: serviço contínuo de conservação. O estado é o que a supervisão viu na vistoria (sem dano aparente,
+  // dano observado, em execução) com a ESTIMATIVA do dano, e não o avanço de uma obra feita uma vez só, como nos pontos críticos
   var OAE_STATUS = {
     NV: { tag: 'SEM VISTORIA', name: 'Sem vistoria', fill: 'none' },
-    OK: { tag: 'OK', name: 'OK', btn: 'OK', fill: '#1E9E55', ink: '#FFFFFF' },
-    DN: { tag: 'DANIFICADO', name: 'Danificado', btn: 'Danificado', fill: '#F2A93B', ink: '#3D2800' },
-    EX: { tag: 'EXECUTANDO', name: 'Executando', btn: 'Executando', fill: '#2B5797', ink: '#FFFFFF' },
+    OK: { tag: 'SEM DANO APARENTE', name: 'Sem dano aparente', btn: 'Sem dano aparente', fill: '#1E9E55', ink: '#FFFFFF' },
+    DN: { tag: 'DANO OBSERVADO', name: 'Dano observado', btn: 'Dano observado', fill: '#F2A93B', ink: '#3D2800' },
+    EX: { tag: 'EM EXECUÇÃO', name: 'Em execução', btn: 'Em execução', fill: '#2B5797', ink: '#FFFFFF' },
     NA: { tag: 'N/A', name: 'Não tem nesta ponte', btn: 'N/A', fill: 'none' }
   };
   var OAE_STATUS_ORDER = ['OK', 'DN', 'EX', 'NA'];
+  // estado do grupo com os nomes da linha (rotina: vegetação ou sujeira)
+  function oaeStOf(s, k) { var o = s && s.nomes && s.nomes[k]; return o ? Object.assign({}, OAE_STATUS[k], o) : OAE_STATUS[k]; }
+  // marcas do grupo, só com dano observado ou em execução: prioridade da supervisão e conclusão informada pela
+  // contratada (o estado continua o observado até a supervisão conferir e marcar)
+  var OAE_MARCAS = {
+    pri: { name: 'Prioridade', title: 'Prioridade da supervisão' },
+    ci: { name: 'Conclusão informada', title: 'A contratada informou que concluiu; fica como observado até a supervisão conferir' }
+  };
   var ALERTA_COR = '#7B3FA0', ALERTA_TINTA = '#5B2C8F';   // roxo = análise das medições (separada do estado da ponte)
   function oaeSt(sv) {
     var st = sv && sv.st;
@@ -56,34 +68,37 @@
     if (q == null || q === '' || !s.un || !isFinite(q)) return '';
     return '~' + (s.un === '%' ? fmtPct(Number(q)) : fmtN(Number(q)) + ' ' + s.un);
   }
-  // resumo da ponte: grupos danificados, executando, OK e sem vistoria (N/A não conta)
+  // resumo da ponte: grupos com dano, em execução, sem dano e sem vistoria (N/A não conta); marcas de prioridade e conclusão informada
   function oaeNec(p) {
-    var r = { dn: 0, exec: 0, ok: 0, nv: 0, aval: 0 };
+    var r = { dn: 0, exec: 0, ok: 0, nv: 0, aval: 0, pri: 0, ci: 0 };
     OAE_SERVICES.forEach(function (s) {
-      var st = oaeSt(p.serv[s.key]);
+      var sv = p.serv[s.key], st = oaeSt(sv);
       if (st === 'NA') return;
       r.aval++;
       if (st === 'NV') r.nv++;
       else if (st === 'OK') r.ok++;
       else if (st === 'EX') r.exec++;
       else r.dn++;
+      if (comQtd(st) && sv.pri) r.pri++;
+      if (comQtd(st) && sv.ci) r.ci++;
     });
     return r;
   }
   function oaeNecTxt(n) {
-    if (n.dn) return n.dn + (n.dn === 1 ? ' danificado' : ' danificados') + (n.exec ? ' · ' + n.exec + ' executando' : '');
-    if (n.exec) return n.exec + ' executando';
+    if (n.dn) return 'dano em ' + n.dn + (n.dn === 1 ? ' grupo' : ' grupos') + (n.exec ? ' · ' + n.exec + ' em execução' : '');
+    if (n.exec) return n.exec + (n.exec === 1 ? ' grupo' : ' grupos') + ' em execução';
     if (!n.aval || n.nv === n.aval) return 'sem vistoria';
-    return n.nv ? 'OK · ' + n.nv + ' sem vistoria' : 'tudo OK';
+    return n.nv ? 'sem dano aparente · ' + n.nv + ' sem vistoria' : 'sem dano aparente';
   }
   // contrato: pontes com dano e, por grupo, quantas pontes e quanto (soma só das estimativas informadas)
   function oaeResumo(c) {
-    var r = { dn: 0, exec: 0, nv: 0, grupos: {} };
+    var r = { dn: 0, exec: 0, nv: 0, pri: 0, grupos: {} };
     OAE_SERVICES.forEach(function (s) { r.grupos[s.key] = { pontes: 0, q: 0, semQ: 0 }; });
     c.pontos.forEach(function (p) {
       var n = oaeNec(p);
       if (n.dn) r.dn++;
       if (n.exec) r.exec++;
+      if (n.pri) r.pri++;
       if (!n.aval || n.nv === n.aval) r.nv++;
       OAE_SERVICES.forEach(function (s) {
         var sv = p.serv[s.key], gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
@@ -332,20 +347,22 @@
   }
 
   // ------------------------------------------------------------------ desenho da folha
-  function renderSheets(c) {
+  // semAnalise: folha só com a vistoria, mesmo para quem vê a análise das medições (PDF e impressão perguntam)
+  function renderSheets(c, semAnalise) {
     var pg = paginate(c), tot = totals(c), marcos = placeMarcos(c, pg);
     return pg.chunks.map(function (chunk, i) {
-      return renderSheet(c, chunk, i, pg.chunks.length, pg.slots, tot, marcos.filter(function (m) { return m.pageIdx === i; }));
+      return renderSheet(c, chunk, i, pg.chunks.length, pg.slots, tot, marcos.filter(function (m) { return m.pageIdx === i; }), semAnalise);
     });
   }
 
-  function renderSheet(c, chunk, pageIdx, pageCount, slots, tot, marcos) {
+  function renderSheet(c, chunk, pageIdx, pageCount, slots, tot, marcos, semAnalise) {
     var o = [];
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
 
-    var oae = isOae(c), an = oae ? anOf(c) : null, go = oae ? oaeGeom(an) : null;
+    var oae = isOae(c), an = oae && !semAnalise ? anOf(c) : null, go = oae ? oaeGeom(an) : null;
+    if (an) drawUsoInterno(o);
     drawHeader(o, c, tot, an);
     if (oae) drawLabelsOae(o, c, an, go); else drawLabels(o, c);
 
@@ -594,8 +611,8 @@
 
   // ------------------------------------------------------------------ folha de pontes (contrato tipo 'oae')
   // Cada coluna é uma ponte, em ordem de km. As linhas de status são as dos lotes (OK, Ativo, Parado, N/A), que o fiscal muda.
-  // Com a análise das medições carregada (só engenheiro e criador), entram também o medido ÷ estimado, a última medição
-  // de cada grupo, os alertas e a faixa das medições.
+  // Com a análise das medições carregada (só engenheiro e criador), entram também o medido na ponte (por etapa), a faixa
+  // das medições e os alertas. A folha com a análise é de uso interno (aviso no topo).
   var ALERTA_TXT = {
     junta: 'junta feita de novo (além do comprimento físico)', garantia: 'medido depois da garantia acionada',
     etapa: 'repetido na mesma etapa', garantia5: 'repetido dentro da garantia de 5 anos', vegetacao: 'vegetação refeita antes do intervalo',
@@ -612,7 +629,7 @@
   function oaeGeom(an) {
     var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yServ: 281, servH: 19, servStep: 23 };
     var after = g.yServ + OAE_SERVICES.length * g.servStep;
-    if (an) { g.yConc = after + 4; g.concH = 20; g.yMed = g.yConc + g.concH + 4; g.medH = 27; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
+    if (an) { g.yConc = after + 4; g.concH = 21; g.yMed = g.yConc + g.concH + 4; g.medH = 27; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
     else g.yObs = after + 6;
     g.obsEnd = G.yFoot - 12;
     return g;
@@ -620,12 +637,12 @@
   function oaeExt(c) { return c.pontos.reduce(function (s, p) { return s + (Number(p.extensao) || 0); }, 0); }
   function oaeKpis(c, tot, an) {
     var ext = oaeExt(c), r = an && an.resumo, n = oaeResumo(c);
-    var nec = { k: 'PONTES COM DANOS', v: n.dn + (n.dn === 1 ? ' ponte' : ' pontes'), s: n.exec ? n.exec + (n.exec === 1 ? ' executando' : ' executando') : 'estimativa da supervisão' };
+    var nec = { k: 'PONTES COM DANO', v: n.dn + (n.dn === 1 ? ' ponte' : ' pontes'), s: n.pri ? n.pri + (n.pri === 1 ? ' com prioridade' : ' com prioridade') : n.exec ? n.exec + ' em execução' : 'observado na vistoria' };
     if (r) return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
       nec,
       { k: 'MEDIDO (PREÇOS INICIAIS)', v: fmtBRLc(r.total), s: r.n + ' medições · ' + r.de + ' a ' + r.ate },
-      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'de ' + r.alertas + ' alertas' }
+      { k: 'ALERTAS ALTOS', v: String(r.altos), s: 'retrabalho em até ' + an.janela + ' meses' }
     ];
     return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
@@ -648,7 +665,7 @@
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
     o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
     o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
-    o.push(T(x, g.yServ - 4, 'DANO ESTIMADO', { size: 6, bold: true, fill: gray }));
+    o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
     OAE_SERVICES.forEach(function (s, i) {
       var y = g.yServ + i * g.servStep + 12.8, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
       o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
@@ -656,10 +673,12 @@
     });
     if (an) {
       var ms = an.medicoes || [];
-      o.push(T(x, g.yConc + 13.5, 'MEDIDO ÷ ESTIMADO', { size: 7, bold: true }));
+      o.push(T(x, g.yConc + 9.5, 'MEDIDO NA PONTE', { size: 7, bold: true }));
+      o.push(T(x, g.yConc + 18, 'por etapa, preços iniciais', { size: 6, fill: gray }));
       o.push(T(x, g.yMed + 11, 'MEDIÇÕES', { size: 7, bold: true }));
       if (ms.length) o.push(T(x, g.yMed + 21, fitText(ms[0].n + 'ª a ' + ms[ms.length - 1].n + 'ª (' + ms[0].mes + ' a ' + ms[ms.length - 1].mes + ')', w, 6.2), { size: 6.2, fill: gray }));
       o.push(T(x, g.yAl + 11.5, 'ALERTAS', { size: 7, bold: true }));
+      o.push(T(x + w, g.yAl + 11.5, 'até ' + an.janela + ' meses', { size: 6, fill: gray, anchor: 'end' }));
     }
     o.push(T(x, g.yObs + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
     o.push(L(G.colLine, 106, G.colLine, g.obsEnd, { stroke: '#C9CECB', sw: 0.6 }));
@@ -668,8 +687,13 @@
   function drawPonte(o, p, bx, bw, an, g, c) {
     var cx = bx + bw / 2, a = an && an.pontes ? an.pontes[p.id] || null : null;
     o.push('<g data-pid="' + esc(p.id) + '">');
-    var kmT = p.kmIni != null ? fmtKm(p.kmIni) : '-';
+    // km pelo SNV em vigor (o do mapa e da foto); "~" = estimado, a conferir em campo; em cima, pequeno, o km do contrato
+    var kmT = p.kmIni != null ? (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '-';
     o.push(T(cx, g.yKm, kmT, { size: r2(fitSize(kmT, bw - 4, 7.6, true, 5)), bold: true, anchor: 'middle' }));
+    if (p.kmContrato != null && p.kmContrato !== p.kmIni) {
+      var kc = 'contr. ' + fmtKm(p.kmContrato);
+      o.push(T(cx, g.yKm - 9, fitText(kc, bw - 4, 5.8), { size: 5.8, fill: '#5C6661', anchor: 'middle' }));
+    }
 
     // bloco da ponte: código grande e nome; faixa amarela = garantia das juntas acionada
     o.push(R(bx, g.yBand, bw, g.bandH, { fill: '#D6DAD8', stroke: '#7D8581', sw: 0.7, cls: 'blk' }));
@@ -700,7 +724,7 @@
 
     // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições
     OAE_SERVICES.forEach(function (s, i) {
-      var sv = p.serv[s.key], k = oaeSt(sv), st = OAE_STATUS[k], y = g.yServ + i * g.servStep;
+      var sv = p.serv[s.key], k = oaeSt(sv), st = oaeStOf(s, k), y = g.yServ + i * g.servStep;
       var gi = a && a.grupos ? a.grupos[s.key] : null;
       if (st.fill === 'none') {
         o.push(R(bx, y, bw, g.servH, { fill: k === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
@@ -710,7 +734,20 @@
         var qt = comQtd(k) ? fmtQtd(s, sv.q) : '', label = st.tag + (qt ? ' · ' + qt : '');
         o.push(R(bx, y, bw, g.servH, { fill: st.fill, rx: 2 }));
         var ls = fitSize(label, bw - 6, 7.4, true, 4.4);
-        o.push(T(cx, y + 12.8, fitText(label, bw - 6, ls, true), { size: r2(ls), bold: true, fill: st.ink, anchor: 'middle' }));
+        if (ls >= 6) o.push(T(cx, y + 12.8, fitText(label, bw - 6, ls, true), { size: r2(ls), bold: true, fill: st.ink, anchor: 'middle' }));
+        else {
+          // não cabe numa linha: estado em cima e estimativa embaixo (ou o nome em duas linhas)
+          var l2 = qt ? [st.tag, qt] : wrap(st.tag, bw - 6, 6, true);
+          if (l2.length > 2) l2 = [l2[0], l2.slice(1).join(' ')];
+          var s2 = Math.min.apply(null, l2.map(function (t) { return fitSize(t, bw - 6, 6.2, true, 4.2); }));
+          l2.forEach(function (t, j) {
+            o.push(T(cx, y + (l2.length > 1 ? 8.3 + j * 7.4 : 12.6), fitText(t, bw - 6, s2, true), { size: r2(s2), bold: true, fill: st.ink, anchor: 'middle' }));
+          });
+        }
+        // marcas no canto: "!" = prioridade; visto = conclusão informada pela contratada (a supervisão ainda confere)
+        var mk = 0;
+        if (comQtd(k) && sv.pri) marcaPri(o, bx + 3.5 + 10 * mk++, y + 0.5);
+        if (comQtd(k) && sv.ci) marcaCi(o, bx + 3.5 + 10 * mk++, y + 0.5);
       }
       if (gi && gi.altos) {
         o.push(R(bx - 0.8, y - 0.8, bw + 1.6, g.servH + 1.6, { stroke: ALERTA_COR, sw: 1.6, rx: 2.6 }));
@@ -721,12 +758,14 @@
     });
 
     if (an) {
-      // medido ÷ estimado (só para engenheiros e criador)
-      o.push(R(bx, g.yConc, bw, g.concH, { fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }));
-      var ratio = a && a.est > 0 ? a.tot / a.est : null, over = ratio != null && ratio > 1.05;
-      var frac = ratio != null ? Math.min(ratio, 1) : 0, pctTxt = ratio != null ? fmtPct(ratio * 100) : (a && a.tot ? 'sem estimativa' : '-');
-      if (frac > 0) o.push(R(bx + 0.6, g.yConc + 0.6, (bw - 1.2) * frac, g.concH - 1.2, { fill: over ? '#DCCBEE' : '#C9D6EA' }));
-      o.push(T(cx, g.yConc + 13.6, pctTxt, { size: r2(fitSize(pctTxt, bw - 4, 9.2, true, 5)), bold: true, fill: over ? ALERTA_TINTA : '#17201C', anchor: 'middle' }));
+      // medido na ponte, a preços iniciais, e por etapa: só o histórico, sem comparar com o estimado do Anexo VI
+      o.push(R(bx, g.yConc, bw, g.concH, { fill: '#F4F6F5', stroke: '#7D8581', sw: 0.6 }));
+      var mt = a && a.tot ? fmtBRLc(a.tot) : '-', et = a ? medEtapas(an, a) : [];
+      o.push(T(cx, g.yConc + (et.length > 1 ? 9.4 : 13.6), mt, { size: r2(fitSize(mt, bw - 4, 8.4, true, 5)), bold: true, anchor: 'middle' }));
+      if (et.length > 1) {
+        var ett = et.map(function (e) { return e.etapa + 'ª ' + fmtBRLc(e.v); }).join(' · '), ets = fitSize(ett, bw - 4, 5.8, false, 4.2);
+        o.push(T(cx, g.yConc + 17.6, fitText(ett, bw - 4, ets), { size: r2(ets), fill: '#3B4540', anchor: 'middle' }));
+      }
 
       // faixa das medições: um quadradinho por medição (azul = houve serviço na ponte; vermelho = medição de um alerta alto)
       var ms = an.medicoes || [], cols = 9, rows = Math.max(1, Math.ceil(ms.length / cols));
@@ -765,36 +804,67 @@
     o.push('</g>');
   }
 
+  function marcaPri(o, x, y) {
+    o.push('<circle cx="' + r2(x) + '" cy="' + r2(y) + '" r="4.6" fill="#B42318" stroke="#FFFFFF" stroke-width="0.8"/>');
+    o.push(T(x, y + 2.3, '!', { size: 6.6, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+  }
+  function marcaCi(o, x, y) {
+    o.push('<circle cx="' + r2(x) + '" cy="' + r2(y) + '" r="4.6" fill="#FFFFFF" stroke="#1E9E55" stroke-width="1"/>');
+    o.push('<path d="M' + r2(x - 2.3) + ' ' + r2(y + 0.1) + ' L' + r2(x - 0.6) + ' ' + r2(y + 1.9) + ' L' + r2(x + 2.4) + ' ' + r2(y - 1.8) + '" fill="none" stroke="#1E9E55" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>');
+  }
+  // valor medido na ponte em cada etapa do contrato
+  function medEtapas(an, a) {
+    var r = {}, ord = [];
+    (an.medicoes || []).forEach(function (m) {
+      var v = Number(a.meses && a.meses[String(m.n)]) || 0;
+      if (!v) return;
+      if (!r[m.etapa]) { r[m.etapa] = { etapa: m.etapa, v: 0 }; ord.push(r[m.etapa]); }
+      r[m.etapa].v += v;
+    });
+    return ord;
+  }
+  // aviso no topo da folha com a análise das medições (uso interno)
+  function drawUsoInterno(o) {
+    var t = 'USO INTERNO – ANÁLISE PRELIMINAR DAS MEDIÇÕES', w = textW(t, 7.6, true) + 24, x = (PAGE_W - w) / 2;
+    o.push(R(x, 12, w, 15, { fill: ALERTA_COR, rx: 3 }));
+    o.push(T(PAGE_W / 2, 22.6, t, { size: 7.6, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+  }
+
   function drawFooterOae(o, c, tot, pageIdx, pageCount, an) {
     var y = G.yFoot, x = G.labelX, gray = '#5C6661';
     o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
     o.push(T(x, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
-    var lx = x + 44;
-    [['OK', 'OK'], ['DN', 'Danificado'], ['EX', 'Executando'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
-      var st = OAE_STATUS[it[0]];
-      if (st.fill === 'none') o.push(R(lx, y + 2, 16, 10, { fill: it[0] === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
-      else o.push(R(lx, y + 2, 16, 10, { fill: st.fill, rx: 1.5 }));
-      o.push(T(lx + 20, y + 10, it[1], { size: 7 }));
-      lx += 20 + textW(it[1], 7) + 12;
-    });
-    if (an) {
-      var y2 = y + 22;
-      lx = x + 44;
-      [
-        [function (xx) { o.push(R(xx, y2 + 2, 16, 10, { fill: '#DCCBEE' })); }, 'Medido acima do estimado'],
-        [function (xx) { o.push(R(xx + 0.8, y2 + 2.8, 14.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Alerta alto no grupo'],
-        [function (xx) { o.push(R(xx + 4, y2 + 3, 8, 8, { fill: '#2B5797' })); }, 'Medição com serviço'],
-        [function (xx) { o.push(R(xx + 4, y2 + 3, 8, 8, { fill: ALERTA_COR })); }, 'Medição de alerta alto'],
-        [function (xx) { o.push(R(xx, y2 + 5, 16, 4.2, { fill: '#E5B800' })); }, 'Garantia das juntas acionada']
-      ].forEach(function (it) {
-        it[0](lx);
-        o.push(T(lx + 20, y2 + 10, it[1], { size: 7 }));
-        lx += 20 + textW(it[1], 7) + 14;
-      });
-      o.push(T(x, y + 46, fitText('~ = estimativa do dano feita pela supervisão na vistoria. Em roxo, a análise das medições: medido ÷ estimado = soma das medições na ponte sobre o estimado da 1ª etapa no Anexo VI, a preços iniciais.', 590, 6.4), { size: 6.4, fill: gray }));
-    } else {
-      o.push(T(x, y + 28, fitText('Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão (m de junta, m² de concreto, % da pintura, drenos, m de guarda-corpo ou pista, m² de plataforma).', 590, 6.6), { size: 6.6, fill: gray }));
+    // 1ª linha: estados e marcas; 2ª linha (com a análise): a legenda em roxo. Tudo à esquerda do quadro do total (x < 630)
+    var lx = x + 40, fs = 6.8;
+    function item(desenho, txt, yy) {
+      desenho(lx, yy);
+      o.push(T(lx + 19, yy + 8, txt, { size: fs }));
+      lx += 19 + textW(txt, fs) + 10;
     }
+    [['OK', 'Sem dano aparente'], ['DN', 'Dano observado'], ['EX', 'Em execução'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
+      var st = OAE_STATUS[it[0]];
+      item(function (xx, yy) {
+        if (st.fill === 'none') o.push(R(xx, yy, 15, 10, { fill: it[0] === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
+        else o.push(R(xx, yy, 15, 10, { fill: st.fill, rx: 1.5 }));
+      }, it[1], y + 2);
+    });
+    item(function (xx, yy) { marcaPri(o, xx + 7.5, yy + 5); }, 'Prioridade', y + 2);
+    item(function (xx, yy) { marcaCi(o, xx + 7.5, yy + 5); }, 'Conclusão informada', y + 2);
+    var yn = y + 26;
+    if (an) {
+      lx = x + 40;
+      item(function (xx, yy) { o.push(R(xx + 0.8, yy + 0.8, 13.4, 8.4, { stroke: ALERTA_COR, sw: 1.6, rx: 1.5 })); }, 'Alerta alto no grupo', y + 16);
+      item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: '#2B5797' })); }, 'Medição com serviço', y + 16);
+      item(function (xx, yy) { o.push(R(xx + 3.5, yy + 1, 8, 8, { fill: ALERTA_COR })); }, 'Medição de alerta alto', y + 16);
+      item(function (xx, yy) { o.push(R(xx, yy + 3, 15, 4.2, { fill: '#E5B800' })); }, 'Garantia das juntas acionada', y + 16);
+      yn = y + 38;
+    }
+    var notas = [
+      'Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.',
+      'KM pelo SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ' (DNIT); contr. = km do contrato (Anexo VI); ~ antes do km = km estimado, a conferir em campo.'
+    ];
+    if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta alto = o mesmo serviço medido de novo na ponte em até ' + an.janela + ' meses, ou medido depois da garantia acionada. Indício a conferir.');
+    notas.forEach(function (t, i) { o.push(T(x, yn + i * 8.4, fitText(t, 598, 6.1), { size: 6.1, fill: gray })); });
 
     var bx = 640;
     if (pageIdx === pageCount - 1) {
@@ -802,7 +872,7 @@
       o.push(R(bx, y, G.x1 - bx, falta ? 46 : 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(bx + 10, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
       if (falta) o.push(T(bx + 10, y + 39, fitText('Danos estimados: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
-      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Pontes com danos', String(rs.dn)]];
+      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Pontes com dano', String(rs.dn)]];
       if (an && an.resumo) {
         parts.push(['Medido', fmtBRLc(an.resumo.total)]);
         parts.push(['Alertas altos', String(an.resumo.altos)]);
@@ -977,14 +1047,15 @@
   }
 
   // botões de status de cada serviço. Pontos críticos (obra feita uma vez): OK, Ativo, Parado, N/A e o % executado.
-  // Pontes (serviço contínuo): estado na vistoria (OK, Danificado, Executando, N/A), estimativa do dano e onde
+  // Pontes (serviço contínuo): estado na vistoria (sem dano aparente, dano observado, em execução, N/A), estimativa do
+  // dano, onde, e as marcas de prioridade e de conclusão informada
   function servHtml(p, list, extra) {
     var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), oae = list === OAE_SERVICES;
     list.forEach(function (s) {
       var sv = p.serv[s.key] || (oae ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = oae ? oaeSt(sv) : sv.st;
       var segs = (oae ? OAE_STATUS_ORDER : STATUS_ORDER).map(function (k) {
         var pend = pv && pv.st === k && cur !== k ? ' pend' : '';
-        return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (oae ? OAE_STATUS : STATUS)[k].btn + '</button>';
+        return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (oae ? oaeStOf(s, k) : STATUS[k]).btn + '</button>';
       }).join('');
       if (oae) {
         var on = comQtd(cur);
@@ -993,7 +1064,12 @@
           '<div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
           (s.un ? '<div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (on && sv.q != null ? esc(sv.q) : '') + '"' +
             (on ? ' placeholder="estimativa"' : ' disabled') + ' aria-label="' + esc(s.short + ': estimativa, ' + s.q) + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
-          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' : '') +
+          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' +
+            '<div class="svc-marcas">' + Object.keys(OAE_MARCAS).map(function (m) {
+              var pm = pv && comQtd(pv.st) && !!pv[m] !== !!sv[m] ? ' pend' : '';
+              return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
+                '<i aria-hidden="true">' + (m === 'pri' ? '!' : '✓') + '</i>' + esc(OAE_MARCAS[m].name) + '</button>';
+            }).join('') + '</div>' : '') +
           '</div>';
         return;
       }
@@ -1068,7 +1144,48 @@
     analise = { dados: x && x.dados && typeof x.dados === 'object' ? x.dados : {}, estado: {} };
     if (!isEng()) lsPut(AN_KEY, null);
   }
-  function anOf(c) { return c && isOae(c) && isEng() ? analise.dados[c.id] || null : null; }
+  // janela do retrabalho (escolha de cada engenheiro, guardada no aparelho): o mesmo serviço medido de novo na ponte
+  // em até 3, 6 ou 12 meses é alerta alto; medido depois da garantia acionada continua alto. A comparação com o estimado
+  // do Anexo VI ("acima do estimado") sai da tela: não diferenciava as pontes.
+  var JAN_KEY = 'diagrama-linear.janela', JANELAS = [3, 6, 12];
+  var janela = (function () { var v = Number(lsGet(JAN_KEY)); return JANELAS.indexOf(v) >= 0 ? v : 6; })();
+  var AL_JANELA = { etapa: 1, garantia5: 1, junta: 1, vegetacao: 1 }, anCache = { raw: null, jan: 0, view: null };
+  function anOf(c) {
+    var raw = c && isOae(c) && isEng() ? analise.dados[c.id] || null : null;
+    if (!raw) return null;
+    if (anCache.raw !== raw || anCache.jan !== janela) anCache = { raw: raw, jan: janela, view: anJanela(raw, janela) };
+    return anCache.view;
+  }
+  function anJanela(raw, J) {
+    var mes = {};
+    (raw.medicoes || []).forEach(function (m) { var r = String(m.ref || ''); if (/^\d{4}-\d{2}/.test(r)) mes[m.n] = Number(r.slice(0, 4)) * 12 + Number(r.slice(5, 7)); });
+    function medsDe(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
+    // menor intervalo, em meses, entre duas medições do mesmo serviço na ponte
+    function gap(t) {
+      var ms = medsDe(t).map(function (n) { return mes[n]; }).filter(function (v, i, arr) { return v != null && arr.indexOf(v) === i; }).sort(function (a, b) { return a - b; }), g = null;
+      for (var i = 1; i < ms.length; i++) if (g == null || ms[i] - ms[i - 1] < g) g = ms[i] - ms[i - 1];
+      return g;
+    }
+    var pontes = {}, altos = 0, total = 0;
+    Object.keys(raw.pontes || {}).forEach(function (pid) {
+      var a = raw.pontes[pid], mx = {}, grupos = {}, aa = 0;
+      Object.keys(a.grupos || {}).forEach(function (k) { grupos[k] = Object.assign({}, a.grupos[k], { altos: 0 }); });
+      var als = (a.alertas || []).filter(function (x) { return x.tipo !== 'acima' && x.tipo !== 'sem_estimativa'; }).map(function (x) {
+        var y = Object.assign({}, x);
+        if (AL_JANELA[x.tipo]) { y.gap = gap(x.meds); y.sev = y.gap != null && y.gap <= J ? 'Alta' : 'Média'; }
+        return y;
+      });
+      als.forEach(function (y) {
+        if (y.sev !== 'Alta') return;
+        aa++;
+        medsDe(y.meds).forEach(function (n) { mx[n] = 1; });
+        if (y.g && grupos[y.g]) grupos[y.g].altos++;
+      });
+      altos += aa; total += als.length;
+      pontes[pid] = Object.assign({}, a, { alertas: als, aa: aa, al: als.length, grupos: grupos, mx: Object.keys(mx).map(Number).sort(function (x, y) { return x - y; }) });
+    });
+    return Object.assign({}, raw, { pontes: pontes, resumo: Object.assign({}, raw.resumo, { altos: altos, alertas: total }), janela: J });
+  }
   function carregarAnalise(c) {
     if (!c || !isOae(c) || !banco.on || !isEng() || !window.Banco || !window.Banco.analise) return;
     var e = analise.estado[c.id];
@@ -1099,7 +1216,7 @@
   function analiseResumoHtml(c) {
     if (!banco.on) return '';
     if (!isEng()) {
-      return '<div class="an-note">Os valores medidos, a comparação com o estimado e os alertas da análise das medições aparecem para engenheiros e para o criador.' +
+      return '<div class="an-note">Os valores medidos e os alertas da análise das medições aparecem para engenheiros e para o criador.' +
         (banco.login ? '' : ' Entre para ver.') + '</div>';
     }
     var an = anOf(c), e = analise.estado[c.id];
@@ -1110,12 +1227,14 @@
     var r = an.resumo || {}, sobre = an.sobre || {};
     var kp = [
       ['Medido a preços iniciais', fmtBRL(r.total), r.n + ' medições · ' + r.de + ' a ' + r.ate],
-      ['Alertas altos', String(r.altos), 'de ' + r.alertas + ' alertas'],
+      ['Alertas altos', String(r.altos), 'de ' + r.alertas + ' alertas · retrabalho em até ' + an.janela + ' meses'],
       ['Berços além do comprimento das juntas', fmtBRL(r.juntas_valor), r.juntas_pontes + ' pontes'],
       ['Medido depois da garantia acionada', fmtBRL(r.garantia_valor), r.garantia_pontes + ' pontes (Carta ALT-002/2026)']
     ];
     var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' +
       (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros e criador</span></div>';
+    h += '<div class="an-jan"><span id="anJanTit">Alerta alto quando o mesmo serviço volta a ser medido na ponte em até</span><div class="seg" role="group" aria-labelledby="anJanTit">' +
+      JANELAS.map(function (j) { return '<button type="button" data-act="janela" data-v="' + j + '" aria-pressed="' + (an.janela === j) + '">' + j + ' meses</button>'; }).join('') + '</div></div>';
     h += '<div class="an-kpis">' + kp.map(function (k) {
       return '<div class="an-kpi"><span>' + esc(k[0]) + '</span><b>' + esc(k[1]) + '</b><small>' + esc(k[2]) + '</small></div>';
     }).join('') + '</div>';
@@ -1131,15 +1250,16 @@
   function ponteHead(p, c) {
     var dots = OAE_SERVICES.map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
-      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + OAE_STATUS[k].name + (qt ? ' · ' + qt : '')) + '"></span>';
+      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
     }).join('');
     var n = oaeNec(p), nc = n.dn ? 'dn' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok';
-    var nt = n.dn ? n.dn + ' dan.' : n.exec ? 'exec.' : nc === 'nv' ? '–' : 'OK';
+    var nt = n.dn ? n.dn + (n.dn === 1 ? ' dano' : ' danos') : n.exec ? 'em exec.' : nc === 'nv' ? '–' : 's/ dano';
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
-    var badge = a && a.aa ? '<b class="pt-al" title="' + a.aa + (a.aa === 1 ? ' alerta alto' : ' alertas altos') + ' na análise das medições">' + a.aa + '</b>' : '';
+    var badge = (n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '') +
+      (a && a.aa ? '<b class="pt-al" title="' + a.aa + (a.aa === 1 ? ' alerta alto' : ' alertas altos') + ' na análise das medições">' + a.aa + '</b>' : '');
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n)) + '">' + nt + '</span>' + ICON_CHEV;
+      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n)) + '">' + nt + '</span>' + ICON_CHEV;
   }
 
   function ponteCard(p, c) {
@@ -1151,7 +1271,8 @@
       h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '') + '<div class="grid">';
       h += field('Nome da ponte', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
       h += field('Código (OAE)', 'data-p="codigo" data-id="' + id + '" type="text"', p.codigo);
-      h += field('KM', 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
+      h += field('KM (SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ')' + (p.kmConferir ? ' · estimado, conferir em campo' : ''), 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
+      h += field('KM do contrato (Anexo VI)', 'data-p="kmContrato" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmContrato));
       h += field('Município', 'data-p="municipio" data-id="' + id + '" type="text"', p.municipio);
       h += field('Extensão (m)', 'data-p="extensao" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtN(p.extensao));
       h += field('Largura (m)', 'data-p="largura" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtN(p.largura));
@@ -1162,7 +1283,7 @@
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
-        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última: ' + gi.ult + 'ª med.' : '') + (gi.altos ? ' · ' + gi.altos + (gi.altos === 1 ? ' alerta alto' : ' alertas altos') : '') + '</small>';
+        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + gi.ult + 'ª' : '') + (gi.altos ? ' · ' + gi.altos + (gi.altos === 1 ? ' alerta alto' : ' alertas altos') : '') + '</small>';
       });
 
       if (a) h += ponteAnaliseHtml(an, a);
@@ -1182,11 +1303,12 @@
     var ms = an.medicoes || [], mx = {}, max = 0, h = '';
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
-    var ratio = a.est > 0 ? a.tot / a.est : null;
+    // só o histórico: total, por etapa e as últimas medições com serviço (sem comparar com o estimado do Anexo VI)
+    var ult = ms.filter(function (m) { return Number(a.meses[String(m.n)]) > 0; }).slice(-3).reverse();
     h += '<div class="section-title">Medições nesta ponte</div>';
-    h += '<div class="an-line">Medido: <b>' + fmtBRL(a.tot) + '</b> · estimado da 1ª etapa (Anexo VI): <b>' + fmtBRL(a.est) + '</b>' +
-      (ratio != null ? ' · <b class="' + (ratio > 1.05 ? 'an-over' : '') + '">' + fmtPct(ratio * 100) + '</b> do estimado' : '') +
+    h += '<div class="an-line">Medido: <b>' + fmtBRL(a.tot) + '</b>' + medEtapas(an, a).map(function (e) { return ' · ' + e.etapa + 'ª etapa: <b>' + fmtBRL(e.v) + '</b>'; }).join('') +
       (a.gar ? ' · <span class="an-gar">garantia das juntas acionada (Carta ALT-002/2026)</span>' : '') + '</div>';
+    if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (m) { return m.n + 'ª (' + esc(m.mes) + ') ' + fmtBRL(Number(a.meses[String(m.n)])); }).join(' · ') + '</div>';
     var corte = -1;
     ms.forEach(function (m, i) { if (corte < 0 && i > 0 && m.etapa !== ms[i - 1].etapa) corte = i; });
     h += '<div class="an-bars" role="img" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
@@ -1202,11 +1324,10 @@
     var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }).slice(0, 8);
     if (sv.length) {
       h += '<div class="section-title">Serviços mais caros</div><div class="an-table" role="table">';
-      h += '<div class="an-tr an-th" role="row"><span role="columnheader">Serviço</span><span role="columnheader">Executado / estimado</span><span role="columnheader">Valor</span></div>';
+      h += '<div class="an-tr an-th" role="row"><span role="columnheader">Serviço</span><span role="columnheader">Medido</span><span role="columnheader">Valor</span></div>';
       sv.forEach(function (s) {
-        var over = s.est != null && s.q > s.est * 1.05;
         h += '<div class="an-tr" role="row"><span role="cell">' + esc(s.nome) + (s.meds ? '<small>' + esc(s.meds) + '</small>' : '') + '</span>' +
-          '<span role="cell" class="' + (over ? 'an-over' : '') + '">' + fmtN(s.q) + ' ' + esc(s.un) + (s.est != null ? ' / ' + fmtN(s.est) : '') + '</span>' +
+          '<span role="cell">' + fmtN(s.q) + ' ' + esc(s.un) + '</span>' +
           '<span role="cell">' + fmtBRL(s.v) + '</span></div>';
       });
       h += '</div>';
@@ -1217,10 +1338,11 @@
       return (o[x.sev] - o[y.sev]) || (y.valor - x.valor);
     });
     h += '<div class="section-title">Alertas da análise</div>';
-    if (!al.length) h += '<div class="empty">Nenhum serviço repetido nem medido além do previsto nesta ponte.</div>';
+    if (!al.length) h += '<div class="empty">Nenhum serviço repetido nesta ponte.</div>';
     al.forEach(function (x) {
       h += '<div class="an-al"><span class="an-sev ' + (x.sev === 'Alta' ? 'alta' : x.sev === 'Baixa' ? 'baixa' : 'media') + '">' + esc(x.sev) + '</span>' +
-        '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) + (x.meds ? ' (' + esc(x.meds) + ')' : '') + '</small></div>' +
+        '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) + (x.meds ? ' (' + esc(x.meds) + ')' : '') +
+        (x.gap != null ? ' · menor intervalo entre medições: ' + x.gap + (x.gap === 1 ? ' mês' : ' meses') : '') + '</small></div>' +
         '<span class="an-v">' + fmtBRL(x.valor) + '</span></div>';
     });
     return h;
@@ -1265,12 +1387,13 @@
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
     if (isOae(ownerOf(p))) {
-      var n = oaeNec(p), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null;
+      var n = oaeNec(p), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null, nt = oaeNecTxt(n);
       return {
-        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: oaeNecTxt(n),
+        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: nt === 'sem vistoria' || nt === 'sem dano aparente' ? '' : nt,
         servs: OAE_SERVICES.filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
           var sv = p.serv[s.key], x = oaeSt(sv), qt = comQtd(x) ? fmtQtd(s, sv.q) : '';
-          return { label: s.label, color: OAE_STATUS[x].fill, text: OAE_STATUS[x].name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.n ? ' · ' + sv.n : '') };
+          return { label: s.label, color: OAE_STATUS[x].fill, text: oaeStOf(s, x).name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.pri ? ' · prioridade' : '') +
+            (comQtd(x) && sv.ci ? ' · conclusão informada' : '') + (comQtd(x) && sv.n ? ' · ' + sv.n : '') };
         })
       };
     }
@@ -1416,7 +1539,7 @@
   function metaSituacao(c, tot) {
     if (!isOae(c)) return ' · avanço médio ' + fmtPct(tot.avg);
     var r = oaeResumo(c);
-    return ' · ' + r.dn + (r.dn === 1 ? ' ponte com danos' : ' pontes com danos') + (r.exec ? ' · ' + r.exec + ' executando' : '');
+    return ' · ' + r.dn + (r.dn === 1 ? ' ponte com dano' : ' pontes com dano') + (r.exec ? ' · ' + r.exec + ' em execução' : '');
   }
   function renderPreview() {
     var c = active(), tot = totals(c);
@@ -1457,6 +1580,7 @@
       var p = findPoint(t.dataset.id);
       if (!p) return;
       p[t.dataset.p] = t.dataset.num ? parseNum(t.value) : t.value;
+      if (isOae(c) && t.dataset.p === 'kmIni' && p.kmConferir) p.kmConferir = false;   // km corrigido à mão: já foi conferido
       if (isOae(c) && (t.dataset.p === 'kmIni' || t.dataset.p === 'extensao')) {
         p.kmFim = p.kmIni != null ? Math.round((p.kmIni + (Number(p.extensao) || 0) / 1000) * 1000) / 1000 : null;
       }
@@ -1502,9 +1626,14 @@
     var act = b.dataset.act, c = active(), p;
     if (act === 'login') { openLogin(); return; }
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
-    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
+    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
+    if (act === 'janela') {
+      var jv = Number(b.dataset.v);
+      if (JANELAS.indexOf(jv) >= 0 && jv !== janela) { janela = jv; lsPut(JAN_KEY, jv); renderEditor(); renderPreview(); }
+      return;
+    }
     switch (act) {
       case 'toggle-contract':
         ui.contractOpen = !ui.contractOpen;
@@ -1523,13 +1652,21 @@
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
         if (!sv) return;
         if (isOae(c)) {
-          // ponte: a estimativa e o "onde" só valem enquanto está danificado ou executando
+          // ponte: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
           delete sv.pct;
-          if (!comQtd(st)) { delete sv.q; delete sv.n; }
+          if (!comQtd(st)) { delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; }
         } else if (st === 'OK') sv.pct = 100;
         else if (st === 'NA') sv.pct = 0;
         else if (sv.st === 'OK' || sv.st === 'NA') sv.pct = st === 'A' ? 50 : 0;
         sv.st = st;
+        rerenderPoint(p);
+        break;
+      case 'set-marca':
+        p = findPoint(b.dataset.id);
+        if (!p) return;
+        var svm = p.serv[b.dataset.svc], mk = b.dataset.m;
+        if (!svm || !OAE_MARCAS[mk] || !comQtd(oaeSt(svm))) return;
+        if (svm[mk]) delete svm[mk]; else svm[mk] = true;
         rerenderPoint(p);
         break;
       case 'add-point':
@@ -1739,7 +1876,7 @@
       if (!(window.svg2pdf && window.svg2pdf.svg2pdf)) return loadScript((local ? ['lib/svg2pdf.umd.min.js'] : []).concat(LIBS.svg2pdf));
     });
   }
-  function buildPdf(c) {
+  function buildPdf(c, semAnalise) {
     c = c || active();
     return ensureLibs().then(function () {
       var JsPDF = window.jspdf.jsPDF;
@@ -1750,7 +1887,7 @@
         author: c.supervisora || '',
         creator: 'Diagrama linear dos pontos críticos'
       });
-      var sheets = renderSheets(c), host = $('pdfHost');
+      var sheets = renderSheets(c, semAnalise), host = $('pdfHost');
       var chain = Promise.resolve();
       sheets.forEach(function (svg, i) {
         chain = chain.then(function () {
@@ -1762,27 +1899,47 @@
       return chain.then(function () { host.innerHTML = ''; return doc; });
     });
   }
-  function pdfName(c) {
-    var name = 'Diagrama linear - ' + [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - ') + ' - ' + todayIso() + '.pdf';
+  function pdfName(c, interno) {
+    var name = 'Diagrama linear - ' + [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - ') + ' - ' + todayIso() + (interno ? ' (interno)' : '') + '.pdf';
     return name.replace(/[\\/:*?"<>|]/g, '-');
   }
-  function exportPdf() {
-    var btn = $('btnPdf'), c = active(), old = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = 'Gerando PDF…';
-    buildPdf(c).then(function (doc) {
-      return saveBlob(pdfName(c), doc.output('blob'), 'PDF gerado: ' + pdfName(c));
-    }).catch(function (err) {
-      console.error(err);
-      toast('Não consegui gerar o PDF direto (sem internet?). Abrindo a impressão: escolha "Salvar como PDF".', 6000);
-      setTimeout(printSheets, 600);
-    }).then(function () {
-      btn.disabled = false;
-      btn.innerHTML = old;
+  // quem vê a análise das medições escolhe: só a vistoria (padrão, para enviar) ou com a análise (uso interno)
+  function escolherFolha(oque) {
+    var c = active();
+    if (!anOf(c)) return Promise.resolve(true);
+    return new Promise(function (resolve) {
+      modal('<h2 id="modalTitle">' + esc(oque) + '</h2>' +
+        '<fieldset class="folha-op"><legend>O que vai na folha</legend>' +
+        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Só a vistoria</b><small>Estado das pontes e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
+        '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
+        '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary">Continuar</button></div>',
+      function (f) {
+        var com = f.querySelector('input[name=folha]:checked').value === 'analise';
+        closeModal();
+        resolve(!com);
+      });
     });
   }
-  function printSheets() {
-    var sheets = renderSheets(active());
+  function exportPdf() {
+    escolherFolha('Gerar PDF').then(function (semAnalise) {
+      var btn = $('btnPdf'), c = active(), old = btn.innerHTML, nome = pdfName(c, !semAnalise && !!anOf(c));
+      btn.disabled = true;
+      btn.textContent = 'Gerando PDF…';
+      buildPdf(c, semAnalise).then(function (doc) {
+        return saveBlob(nome, doc.output('blob'), 'PDF gerado: ' + nome);
+      }).catch(function (err) {
+        console.error(err);
+        toast('Não consegui gerar o PDF direto (sem internet?). Abrindo a impressão: escolha "Salvar como PDF".', 6000);
+        setTimeout(function () { printSheets(semAnalise); }, 600);
+      }).then(function () {
+        btn.disabled = false;
+        btn.innerHTML = old;
+      });
+    });
+  }
+  function imprimir() { escolherFolha('Imprimir').then(printSheets); }
+  function printSheets(semAnalise) {
+    var sheets = renderSheets(active(), semAnalise === true);
     $('printArea').innerHTML = sheets.map(function (s) { return '<div class="print-sheet">' + s + '</div>'; }).join('');
     setTimeout(function () { window.print(); }, 50);
   }
@@ -1836,7 +1993,7 @@
       if (banco.on && !isResp()) { toast('Só o responsável pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
       $('fileInput').click();
     }
-    else if (act === 'print') printSheets();
+    else if (act === 'print') imprimir();
     else if (act === 'reset') {
       confirmar({ titulo: 'Voltar aos dados iniciais?', texto: 'Apaga as alterações deste navegador e volta aos dados da planilha. Faça um backup antes, se precisar.', digitar: 'APAGAR', botao: 'Voltar aos dados iniciais', perigo: true }).then(function (r) {
         if (!r) return;
@@ -2020,7 +2177,8 @@
     numero: 'nº do contrato', lote: 'lote', executora: 'executora', supervisora: 'supervisora', ctSupervisao: 'contrato da supervisora',
     orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
-    codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato'
+    codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
+    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir'
   };
   function fieldName(k) {
     if (k.indexOf('serv.') === 0) { var s = SERVICES.concat(OAE_SERVICES).find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
@@ -2113,7 +2271,7 @@
       var so = OAE_SERVICES.find(function (x) { return x.key === campo.slice(5); });
       if (so) {
         var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
-        return OAE_STATUS[k].name + (qt ? ' ' + qt : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
+        return oaeStOf(so, k).name + (qt ? ' ' + qt : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', conclusão informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
       }
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
       return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
@@ -2895,8 +3053,8 @@
     if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
-  var EDIT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract'];
-  var POINT_ACTS = ['set-st', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
+  var EDIT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract'];
+  var POINT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }
     prepareOld();
