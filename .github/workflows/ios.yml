@@ -45,25 +45,11 @@ jobs:
 
       - name: Arquivos do site para o app
         run: |
-          mkdir -p www
-          cp index.html ambiente.js app.js foto.js mapa.js banco.js drive.js galeria.js relatorio-logos.js relatorio.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
-          cp -R lib icons www/
-          # no app: a página vai até a borda da tela (o CSS desvia do relógio e do recorte) e não dá zoom
-          sed -i '' 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
-          grep -q 'viewport-fit=cover' www/index.html || { echo "Não achei a linha do viewport em index.html"; exit 1; }
           # ambiente: oficial só do ramo producao; de qualquer outro ramo sai a prévia (banco de teste)
           if [ "$GITHUB_REF_NAME" = "producao" ]; then NOME=oficial; else NOME=previa; fi
-          sed -i '' "s|^  var NOME = 'oficial';|  var NOME = '$NOME';|" www/ambiente.js
-          sed -i '' "s|^  var VERSAO = 'dev';|  var VERSAO = '$VERSAO ($GITHUB_RUN_NUMBER) · ${GITHUB_SHA::7}';|" www/ambiente.js
-          grep -q "var NOME = '$NOME';" www/ambiente.js || { echo "Não consegui marcar o ambiente em ambiente.js"; exit 1; }
-          echo "Ambiente do app: $NOME"
+          # a mesma montagem do pacote de atualização pelo servidor (pages.yml)
+          bash ferramentas/montar-app.sh . www "$NOME" "$VERSAO ($GITHUB_RUN_NUMBER) · ${GITHUB_SHA::7}"
           echo "AMBIENTE=$NOME" >> "$GITHUB_ENV"
-          # bibliotecas do PDF dentro do app (gera o PDF sem internet)
-          cp node_modules/jspdf/dist/jspdf.umd.min.js node_modules/svg2pdf.js/dist/svg2pdf.umd.min.js www/lib/
-          # todo script que a página carrega tem de estar no app (arquivo novo no site e esquecido aqui quebra o app)
-          for f in $(grep -o '<script src="[^"]*"' www/index.html | sed 's/^<script src="//; s/"$//'); do
-            [ -f "www/$f" ] || { echo "Falta no app: $f (acrescente na linha do cp acima)"; exit 1; }
-          done
 
       - name: Projeto iOS (Capacitor)
         run: |
@@ -72,6 +58,41 @@ jobs:
           # o identificador vem do capacitor.config.json; só confere (não passar na linha de comando: iria para as bibliotecas também)
           sed -i '' "s/io\.ionic\.starter/$BUNDLE_ID/g" ios/App/App.xcodeproj/project.pbxproj
           grep -m1 "PRODUCT_BUNDLE_IDENTIFIER" ios/App/App.xcodeproj/project.pbxproj
+
+      - name: Manifesto de privacidade
+        run: |
+          # o plugin de atualização pelo servidor guarda o estado em UserDefaults: a Apple pede o motivo declarado (CA92.1)
+          cat > ios/App/App/PrivacyInfo.xcprivacy <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>NSPrivacyTracking</key><false/>
+            <key>NSPrivacyTrackingDomains</key><array/>
+            <key>NSPrivacyCollectedDataTypes</key><array/>
+            <key>NSPrivacyAccessedAPITypes</key>
+            <array>
+              <dict>
+                <key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+                <key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          EOF
+          plutil -lint ios/App/App/PrivacyInfo.xcprivacy
+          ruby -e 'require "xcodeproj"' 2>/dev/null || sudo gem install xcodeproj --no-document
+          ruby -e '
+            require "xcodeproj"
+            p = Xcodeproj::Project.open("ios/App/App.xcodeproj")
+            t = p.targets.find { |x| x.name == "App" }
+            g = p.main_group["App"]
+            unless g.files.any? { |f| f.path == "PrivacyInfo.xcprivacy" }
+              t.resources_build_phase.add_file_reference(g.new_reference("PrivacyInfo.xcprivacy"))
+            end
+            p.save
+          '
+          grep -c "PrivacyInfo.xcprivacy" ios/App/App.xcodeproj/project.pbxproj
 
       - name: Ícone e permissões
         run: |

@@ -44,29 +44,11 @@ jobs:
 
       - name: Arquivos do site para o app
         run: |
-          mkdir -p www
-          # tudo o que a página carrega (scripts do index.html), mais o manifest, as bibliotecas e os ícones
-          cp index.html manifest.webmanifest www/
-          for f in $(grep -o '<script src="[^"]*"' index.html | sed 's/^<script src="//; s/"$//'); do
-            case "$f" in lib/*) ;; *) cp "$f" www/ ;; esac
-          done
-          cp -R lib icons www/
-          rm -rf www/icons/android
-          # no app: a página vai até a borda da tela e não dá zoom
-          sed -i 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
-          grep -q 'viewport-fit=cover' www/index.html || { echo "Não achei a linha do viewport em index.html"; exit 1; }
           # ambiente: oficial só do ramo producao; de qualquer outro ramo sai a prévia (banco de teste)
           if [ "$GITHUB_REF_NAME" = "producao" ]; then NOME=oficial; else NOME=previa; fi
-          sed -i "s|^  var NOME = 'oficial';|  var NOME = '$NOME';|" www/ambiente.js
-          sed -i "s|^  var VERSAO = 'dev';|  var VERSAO = '$VERSAO ($GITHUB_RUN_NUMBER) · ${GITHUB_SHA::7}';|" www/ambiente.js
-          grep -q "var NOME = '$NOME';" www/ambiente.js || { echo "Não consegui marcar o ambiente em ambiente.js"; exit 1; }
-          echo "Ambiente do app: $NOME"
+          # a mesma montagem do pacote de atualização pelo servidor (pages.yml)
+          bash ferramentas/montar-app.sh . www "$NOME" "$VERSAO ($GITHUB_RUN_NUMBER) · ${GITHUB_SHA::7}"
           echo "AMBIENTE=$NOME" >> "$GITHUB_ENV"
-          # bibliotecas do PDF dentro do app (gera o PDF sem internet)
-          cp node_modules/jspdf/dist/jspdf.umd.min.js node_modules/svg2pdf.js/dist/svg2pdf.umd.min.js www/lib/
-          for f in $(grep -o '<script src="[^"]*"' www/index.html | sed 's/^<script src="//; s/"$//'); do
-            [ -f "www/$f" ] || { echo "Falta no app: $f"; exit 1; }
-          done
 
       - name: Projeto Android (Capacitor)
         run: |

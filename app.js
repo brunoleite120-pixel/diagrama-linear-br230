@@ -3297,4 +3297,5 @@
   };
 
   init();
+  window.Unifilar.pronto = true;   // atualizar.js confere isto antes de confirmar ao app que uma versão baixada abriu bem
 })();

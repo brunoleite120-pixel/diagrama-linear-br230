@@ -4,6 +4,9 @@
 # A prévia usa o banco de teste (ambiente.js). Todo envio ao main atualiza só a prévia.
 # Para publicar no link oficial a versão que está na prévia:
 #   git push origin main:producao  e depois  gh workflow run pages.yml
+# Também monta o pacote de atualização do app (iOS/Android) de cada ambiente, que o app baixa sozinho (atualizar.js):
+#   <site>/app/versao.json + app-<commit>.zip (oficial)   e   <site>/previa/app/... (prévia)
+# O ambiente cujo ramo ainda não tem ferramentas/montar-app.sh fica sem pacote (o app dele ainda não sabe se atualizar).
 name: Site (oficial e prévia)
 
 on:
@@ -41,7 +44,7 @@ jobs:
           copia() {
             mkdir -p "$2"
             rsync -a --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='node_modules' \
-              --exclude='package.json' --exclude='package-lock.json' --exclude='capacitor.config.json' "$1"/ "$2"/
+              --exclude='package.json' --exclude='package-lock.json' --exclude='capacitor.config.json' --exclude='ferramentas' "$1"/ "$2"/
           }
           copia oficial _site
           rm -rf _site/previa
@@ -60,6 +63,32 @@ jobs:
           grep -q '(prévia)"' _site/previa/manifest.webmanifest || { echo "Não marquei a prévia no manifest"; exit 1; }
 
           grep -h "var NOME\|var VERSAO" _site/ambiente.js _site/previa/ambiente.js 2>/dev/null || true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pacotes de atualização do app
+        run: |
+          versao() { echo "$(TZ=America/Belem git -C "$1" log -1 --format=%cd --date=format-local:'%d/%m/%Y %H:%M') · $(git -C "$1" rev-parse --short HEAD)"; }
+          # $1 = checkout do ramo, $2 = ambiente, $3 = pasta dele no site
+          pacote() {
+            if [ ! -f "$1/ferramentas/montar-app.sh" ]; then echo "$2: ramo ainda sem atualização do app pelo servidor"; return 0; fi
+            (cd "$1" && npm install --no-audit --no-fund --ignore-scripts)
+            W="$RUNNER_TEMP/www-$2"
+            bash "$1/ferramentas/montar-app.sh" "$1" "$W" "$2" "$(versao "$1")"
+            P=$(git -C "$1" rev-parse --short=7 HEAD)
+            O=$(git -C "$1" log -1 --format=%ct)
+            Z="app-$P.zip"
+            mkdir -p "$3/app"
+            (cd "$W" && zip -q -r -X "$GITHUB_WORKSPACE/$3/app/$Z" .)
+            S=$(sha256sum "$3/app/$Z" | cut -d' ' -f1)
+            T=$(stat -c %s "$3/app/$Z")
+            jq -n --arg a "$2" --arg v "$P" --argjson o "$O" --arg z "$Z" --arg s "$S" --argjson t "$T" --arg x "$(versao "$1")"               '{ambiente: $a, versao: $v, ordem: $o, arquivo: $z, sha256: $s, tamanho: $t, texto: $x}' > "$3/app/versao.json"
+            cat "$3/app/versao.json"
+          }
+          pacote oficial oficial _site
+          pacote previa previa _site/previa
 
       - uses: actions/configure-pages@v5
 
