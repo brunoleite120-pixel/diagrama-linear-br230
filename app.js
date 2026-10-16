@@ -126,6 +126,8 @@
   };
   var STORE_KEY = 'unifilar-pontos-criticos.v1';
   var PREVIA = !!(window.AMBIENTE && window.AMBIENTE.previa);
+  // folha na tela (pontes com análise): só a vistoria ou com a análise das medições
+  var FOLHA_KEY = 'diagrama-linear.folha-tela', folhaVistoria = false;
   var PAGE_W = 1190.55, PAGE_H = 841.89; // A3 paisagem em pontos
   var FONT = 'Helvetica, Arial, sans-serif';
   var LIBS = {
@@ -1312,15 +1314,19 @@
     if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (m) { return m.n + 'ª (' + esc(m.mes) + ') ' + fmtBRL(Number(a.meses[String(m.n)])); }).join(' · ') + '</div>';
     var corte = -1;
     ms.forEach(function (m, i) { if (corte < 0 && i > 0 && m.etapa !== ms[i - 1].etapa) corte = i; });
-    h += '<div class="an-bars" role="img" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
-      var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0;
-      var tip = m.n + 'ª medição · ' + m.mes + (v ? ' · ' + fmtBRL(v) + (a.itens && a.itens[String(m.n)] ? ' · ' + a.itens[String(m.n)] : '') : ' · sem serviço');
-      return '<span class="an-bar' + (i === corte ? ' corte' : '') + '" title="' + esc(tip) + '"><i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></span>';
+    // cada barra é um botão: no celular não há "passar o mouse", então o toque mostra a medição embaixo do gráfico
+    h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
+      var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
+      var tip = m.n + 'ª medição · ' + m.mes + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição de alerta alto' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
+      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + '" data-act="med-bar" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+        '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
     if (ms.length) {
       h += '<div class="an-axis"><span>' + esc(ms[0].mes) + '</span>' + (corte > 0 ? '<span>' + (ms[corte].etapa) + 'ª etapa a partir de ' + esc(ms[corte].mes) + '</span>' : '') + '<span>' + esc(ms[ms.length - 1].mes) + '</span></div>';
       h += '<div class="an-leg"><span><i class="on"></i>com serviço</span><span><i class="al"></i>medição de alerta alto</span></div>';
+      h += '<div class="an-det" aria-live="polite">Toque numa barra para ver qual medição é e o valor.</div>';
     }
+    h += '</div>';
 
     var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }).slice(0, 8);
     if (sv.length) {
@@ -1533,6 +1539,7 @@
     $('pages').hidden = isMap;
     $('mapHost').hidden = !isMap;
     $('selPages').closest('label').hidden = isMap;
+    $('folhaSw').classList.toggle('so-diagrama', isMap);
     $('btnWide').textContent = ui.wide ? 'Mostrar editor' : (isMap ? 'Ampliar mapa' : 'Ampliar diagrama');
     if (isMap && ensureMap()) { mapa.render(); mapa.show(); }
     renderPreview();
@@ -1549,7 +1556,12 @@
       $('previewMeta').textContent = 'Mapa pelo SNV/DNIT ' + window.SNV_BR230.versao + ' · ' + tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
       return;
     }
-    var sheets = renderSheets(c);
+    var temAn = isOae(c) && !!anOf(c), sw = $('folhaSw');
+    if (sw) {
+      sw.hidden = !temAn;
+      sw.querySelectorAll('[data-folha]').forEach(function (x) { x.setAttribute('aria-pressed', String((x.dataset.folha === 'vistoria') === folhaVistoria)); });
+    }
+    var sheets = renderSheets(c, temAn && folhaVistoria);
     renderPagesCtl(c);
     $('pages').innerHTML = sheets.map(function (svg, i) {
       return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + '</div>';
@@ -1630,6 +1642,14 @@
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
+    if (act === 'med-bar') {
+      var gr = b.closest('.an-graf'), det = gr && gr.querySelector('.an-det');
+      if (!gr) return;
+      gr.querySelectorAll('.an-bar.sel').forEach(function (x) { x.classList.remove('sel'); });
+      b.classList.add('sel');
+      if (det) { det.textContent = b.dataset.tip; det.classList.add('on'); }
+      return;
+    }
     if (act === 'janela') {
       var jv = Number(b.dataset.v);
       if (JANELAS.indexOf(jv) >= 0 && jv !== janela) { janela = jv; lsPut(JAN_KEY, jv); renderEditor(); renderPreview(); }
@@ -1653,6 +1673,7 @@
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
         if (!sv) return;
         if (isOae(c)) {
+          if (oaeSt(sv) === st) st = 'NV';   // tocar de novo no status marcado desmarca (volta para sem vistoria)
           // ponte: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
           delete sv.pct;
           if (!comQtd(st)) { delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; }
@@ -1911,8 +1932,8 @@
     return new Promise(function (resolve) {
       modal('<h2 id="modalTitle">' + esc(oque) + '</h2>' +
         '<fieldset class="folha-op"><legend>O que vai na folha</legend>' +
-        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Só a vistoria</b><small>Estado das pontes e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
-        '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
+        '<label><input type="radio" name="folha" value="vistoria"' + (folhaVistoria ? ' checked' : '') + '> <span><b>Só a vistoria</b><small>Estado das pontes e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
+        '<label><input type="radio" name="folha" value="analise"' + (folhaVistoria ? '' : ' checked') + '> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
         '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary">Continuar</button></div>',
       function (f) {
         var com = f.querySelector('input[name=folha]:checked').value === 'analise';
@@ -3159,6 +3180,14 @@
     $('btnWide').addEventListener('click', function () { toggleWide(); });
     $('selPages').addEventListener('change', onPagesChange);
     $('viewDiagrama').addEventListener('click', function () { setView('diagrama'); });
+    folhaVistoria = lsGet(FOLHA_KEY) === 'vistoria';
+    $('folhaSw').addEventListener('click', function (e) {
+      var x = e.target.closest('[data-folha]');
+      if (!x) return;
+      folhaVistoria = x.dataset.folha === 'vistoria';
+      lsPut(FOLHA_KEY, folhaVistoria ? 'vistoria' : 'analise');
+      renderPreview();
+    });
     $('btnFoto').addEventListener('click', function () { openFoto(''); });
     if (!window.FotoCarimbo || !window.SNV_BR230) $('btnFoto').hidden = true;
     $('viewMapa').addEventListener('click', function () { setView('mapa'); });
