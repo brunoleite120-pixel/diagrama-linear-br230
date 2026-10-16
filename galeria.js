@@ -7,7 +7,11 @@
  *   Deletados       as apagadas do Drive por engenheiros (só o criador; dá para restaurar)
  * A galeria mostra só a miniatura leve; a foto inteira vem do aparelho (se estiver aqui) ou do Drive ao abrir ou baixar.
  *
- *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, toast, confirmar, saveBlob, entrar });
+ * As fotos ficam separadas por contrato (fila de contratos no alto). Na foto aberta ou em várias selecionadas, "Contrato e ponto"
+ * corrige o contrato e o ponto (ou ponte): no aparelho e, se já foi enviada, no banco (migração 06). Quem tirou corrige as dele;
+ * engenheiro e Administrador, qualquer uma. Foto sem ponto não entra no relatório.
+ *
+ *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar });
  *   g.open({ cid, pid })   abre (opcional: já filtrada num ponto)      g.changed()   a fila do aparelho mudou
  */
 (function () {
@@ -24,6 +28,14 @@
     '.gl-tab small{margin-left:6px;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
     '.gl-tab[aria-selected="true"]{background:var(--ink,#17201C);border-color:var(--ink,#17201C);color:#fff}',
     '.gl-tab[aria-selected="true"] small{color:#C9D0CC}',
+    '.gl-cts{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;scrollbar-width:none}',
+    '.gl-cts::-webkit-scrollbar{display:none}',
+    '.gl-cts:empty{display:none}',
+    '.gl-ct{flex:none;display:flex;align-items:baseline;gap:6px;border:1px solid var(--line,#D5DAD6);background:var(--panel,#fff);color:var(--ink-2,#3B4540);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap}',
+    '.gl-ct small{font-weight:400;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
+    '.gl-ct[aria-pressed="true"]{background:var(--accent,#1D4F91);border-color:var(--accent,#1D4F91);color:#fff}',
+    '.gl-ct[aria-pressed="true"] small{color:#D6E2F3}',
+    '.gl-ct.sem{border-style:dashed}',
     '.gl-fil{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px 0}',
     '.gl-fil select{min-height:32px;max-width:100%;padding:4px 8px;border:1px solid var(--line,#D5DAD6);border-radius:6px;background:var(--panel,#fff);font-size:13px}',
     '.gl-info{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 16px;font-size:12.5px;color:var(--ink-2,#3B4540)}',
@@ -44,6 +56,8 @@
     '.gl-b.erro{background:#FEE4E2;color:#912018}',
     '.gl-b.ok{background:#D1FADF;color:#05603A}',
     '.gl-b.ap{background:#E4E7EC;color:#344054}',
+    '.gl-b.sp{background:#FEF0C7;color:#7A2E0E}',
+    '.gl-info .gl-lk{border:0;background:none;padding:0;color:var(--accent,#1D4F91);font-size:12.5px;text-decoration:underline}',
     '.gl-star{position:absolute;top:4px;right:6px;color:#FDB022;font-size:17px;text-shadow:0 1px 2px rgba(0,0,0,.5)}',
     '.gl-ck{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}',
     '.gl-t[aria-pressed="true"]{outline:3px solid var(--accent,#1D4F91);outline-offset:-3px}',
@@ -70,11 +84,26 @@
     '.gl-ver-info .gl-desc{white-space:pre-wrap;color:#C9D0CC}',
     '.gl-ver-acts{display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px))}',
     '.gl-nav{min-width:40px;justify-content:center}',
-    '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
+    '.gl-ver-info .gl-warn{color:#FEC84B}',
+    '.gl-mv{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-end;justify-content:center;background:rgba(14,19,17,.5)}',
+    '.gl-mv-box{width:100%;max-width:560px;max-height:92%;overflow:auto;display:grid;gap:12px;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));background:var(--panel,#fff);color:var(--ink,#17201C);border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25)}',
+    '@media (min-width:640px){.gl-mv{align-items:center}.gl-mv-box{border-radius:14px}}',
+    '.gl-mv-box h3{margin:0;font-size:16px;font-weight:650}',
+    '.gl-mv-box h3 small{font-weight:400;color:var(--ink-3,#5C6661);font-size:13px}',
+    '.gl-mv-now{font-size:13px;color:var(--ink-2,#3B4540)}',
+    '.gl-mv-box label{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--ink-2,#3B4540)}',
+    '.gl-mv-box select{min-height:42px;width:100%;max-width:100%;padding:6px 10px;border:1px solid var(--line,#D5DAD6);border-radius:8px;background:var(--panel,#fff);color:var(--ink,#17201C);font-size:15px;font-weight:400}',
+    '.gl-mv-sug{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:var(--accent-soft,#E7EEF7);font-size:13px}',
+    '.gl-mv-sug:empty{display:none}',
+    '.gl-mv-sug.fora{background:#FEF0C7;color:#7A2E0E}',
+    '.gl-mv-nota{margin:0;font-size:12px;color:var(--ink-3,#5C6661);line-height:1.45}',
+    '.gl-mv-acts{display:flex;gap:8px;justify-content:flex-end}',
+    '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-cts,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
     '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}'
   ].join('\n');
 
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  var SEM = '__sem';   // filtro "Sem contrato" / "Sem ponto"
   var POR_ZIP = 40;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -149,7 +178,7 @@
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
-    var ver = -1, grande = null, ocupado = null, cancelar = false;
+    var ver = -1, grande = null, ocupado = null, cancelar = false, cidAuto = false, mv = null;
 
     function login() { return o.getLogin ? o.getLogin() : null; }
     function nv() { return o.nivel ? o.nivel() : 0; }
@@ -178,7 +207,7 @@
       return { id: f.id, nome: f.nome_arquivo || 'foto.jpg', origem: 'banco', cid: f.contrato_id || '', pid: f.ponto_id || '', pnome: f.ponto_nome || '', lote: f.lote || '',
         km: f.km, lat: f.lat, lng: f.lng, em: f.tirada_em || f.enviada_em, desc: f.descricao || '', autor: f.autor_nome || '', situacao: f.situacao,
         relatorio: !!f.relatorio, relPor: f.relatorio_por || '', delPor: f.deletada_por || '', delEm: f.deletada_em || null, enviadaEm: f.enviada_em,
-        driveId: f.drive_id || null, driveUrl: f.drive_url || null, tamanho: f.tamanho };
+        driveId: f.drive_id || null, driveUrl: f.drive_url || null, tamanho: f.tamanho, autorUid: f.autor_uid || null };
     }
     function soltarUrls() { urlsLocais.forEach(function (u) { URL.revokeObjectURL(u); }); urlsLocais = []; }
     function carregar() {
@@ -199,6 +228,11 @@
         if (g !== geracao || !arr) return;
         arr.sort(function (a, b) { return String(b.em || '').localeCompare(String(a.em || '')); });
         itens = arr; carregando = false;
+        if (cidAuto) {
+          cidAuto = false;
+          var at = o.ativo ? o.ativo() : '';
+          if (!filtro.cid && at && itens.some(function (x) { return x.cid === at; })) filtro.cid = at;
+        }
         render();
       }, function (e) {
         if (g !== geracao) return;
@@ -273,9 +307,14 @@
       var c = contratos().find(function (x) { return x.id === cid; });
       return c ? [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ') || 'Contrato' : (it && it.lote) || 'Sem contrato';
     }
+    // nome curto do contrato para a fila de contratos e as legendas ("Lote 01", "CT 424 · OAEs")
+    function curto(cid) {
+      var c = contratos().find(function (x) { return x.id === cid; });
+      return c ? c.lote || (c.numero ? 'CT ' + c.numero : 'Contrato') : 'Sem contrato';
+    }
     function filtrar() {
       lista = itens.filter(function (it) {
-        return (!filtro.cid || it.cid === filtro.cid) && (!filtro.pid || it.pid === filtro.pid) &&
+        return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
           (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes);
       });
     }
@@ -284,24 +323,38 @@
         return '<option value="' + esc(p[0]) + '"' + (p[0] === sel0 ? ' selected' : '') + '>' + esc(p[1]) + '</option>';
       }).join('');
     }
+    // fila de contratos: Todos, cada contrato com fotos e as sem contrato (cada uma com a quantidade)
+    function contratosHtml() {
+      if (!itens.length && !filtro.cid) return '';
+      var n = {}, sem = 0, ordem = contratos().map(function (c) { return c.id; });
+      itens.forEach(function (it) { if (it.cid) n[it.cid] = (n[it.cid] || 0) + 1; else sem++; });
+      if (filtro.cid && filtro.cid !== SEM && !n[filtro.cid]) n[filtro.cid] = 0;
+      var ids = Object.keys(n).sort(function (a, b) { var ia = ordem.indexOf(a), ib = ordem.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+      function chip(v, t, k, cls) {
+        return '<button type="button" class="gl-ct' + (cls ? ' ' + cls : '') + '" data-ct="' + esc(v) + '" aria-pressed="' + (filtro.cid === v) + '">' + esc(t) + '<small>' + k + '</small></button>';
+      }
+      return chip('', 'Todos', itens.length) + ids.map(function (id) { return chip(id, curto(id), n[id]); }).join('') +
+        (sem || filtro.cid === SEM ? chip(SEM, 'Sem contrato', sem, 'sem') : '');
+    }
     function filtrosHtml() {
-      var cs = {}, ps = {}, as = {}, ms = {};
+      var ps = {}, as = {}, ms = {}, semPonto = 0;
       itens.forEach(function (it) {
-        if (it.cid) cs[it.cid] = nomeContrato(it.cid, it);
-        if (it.pid && (!filtro.cid || it.cid === filtro.cid)) ps[it.pid] = it.pnome || 'Ponto';
+        var noCt = !filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid);
+        if (it.pid && noCt) ps[it.pid] = it.pnome || 'Ponto';
+        if (!it.pid && noCt) semPonto++;
         as[it.autor || 'Sem nome'] = 1;
         var k = mesKey(it.em); if (k) ms[k] = 1;
       });
       // aberta num ponto sem fotos: o filtro continua visível
-      if (filtro.cid && !cs[filtro.cid]) cs[filtro.cid] = nomeContrato(filtro.cid);
-      if (filtro.pid && !ps[filtro.pid]) {
+      if (filtro.pid && filtro.pid !== SEM && !ps[filtro.pid]) {
         var c0 = contratos().find(function (x) { return x.id === filtro.cid; }), p0 = c0 && (c0.pontos || []).find(function (x) { return x.id === filtro.pid; });
         ps[filtro.pid] = (p0 && p0.nome) || 'Ponto';
       }
       var ordem = function (m) { return Object.keys(m).map(function (k) { return [k, m[k] === 1 ? k : m[k]]; }).sort(function (a, b) { return a[1].localeCompare(b[1], 'pt-BR', { numeric: true }); }); };
       var h = '';
-      if (Object.keys(cs).length > 1 || filtro.cid) h += '<select data-f="cid" aria-label="Contrato">' + opcoes(filtro.cid, 'Todos os contratos', ordem(cs)) + '</select>';
-      if (Object.keys(ps).length || filtro.pid) h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps)) + '</select>';
+      if (Object.keys(ps).length || filtro.pid || semPonto) {
+        h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>';
+      }
       if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
       var mm = Object.keys(ms).sort().reverse().map(function (k) { return [k, mesNome(k)]; });
       if (mm.length > 1 || filtro.mes) h += '<select data-f="mes" aria-label="Mês">' + opcoes(filtro.mes, 'Todos os meses', mm) + '</select>';
@@ -333,11 +386,14 @@
         return '<span class="gl-b fila">Na fila</span>';
       }
       if (aba === 'deletadas') return '<span class="gl-b erro">Apagada</span>';
+      if (!it.pid) return '<span class="gl-b sp">Sem ponto</span>';
       return locais[it.id] ? '<span class="gl-b">No aparelho</span>' : '';
     }
     function tile(it, i) {
       var m = miniDe(it), cap = [it.pnome, kmTxt(it.km)].filter(Boolean).join(' · ') || hora(it.em);
       if ((aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa') cap = (it.autor ? it.autor.split(' ')[0] + ' · ' : '') + cap;
+      // em "Todos" a legenda diz de qual contrato é
+      if (!filtro.cid) cap = curto(it.cid) + ' · ' + cap;
       // por mês o grupo não diz o dia: vai na legenda da foto
       if (modo() === 'mes' && it.em && cap.indexOf(dia(it.em)) < 0) cap = dia(it.em).slice(0, 5) + ' · ' + cap;
       return '<button type="button" class="gl-t" data-i="' + i + '" data-id="' + esc(it.id) + '"' + (m ? '' : ' data-falta') +
@@ -375,6 +431,8 @@
         relatorio: 'Fotos escolhidas para o relatório fotográfico.',
         deletadas: 'Apagadas do Drive por engenheiros. Ficam na pasta Deletados até você restaurar.'
       }[aba];
+      var semP = aba === 'relatorio' ? lista.filter(function (x) { return !x.pid; }).length : 0;
+      if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
       return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' +
         (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
     }
@@ -413,6 +471,8 @@
       }
       var ap = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'aparelho'; }).length;
       var fi = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'fila' && locais[x.id].etapa !== 'registro'; }).length;
+      var mov = aba !== 'deletadas' ? ls.filter(podeMover).length : 0;
+      if (mov) a.push({ k: 'mover', t: 'Contrato e ponto' + (ls.length > 1 ? ' (' + mov + ')' : '') });
       if (ap) a.push({ k: 'enviar-drive', t: 'Enviar ao Drive' + (ls.length > 1 ? ' (' + ap + ')' : ''), c: 'primary' });
       if (fi) a.push({ k: 'segurar', t: 'Não enviar' + (ls.length > 1 ? ' (' + fi + ')' : '') });
       if (ls.some(function (x) { return locais[x.id]; })) a.push({ k: 'apagar-local', t: 'Apagar do celular', c: 'danger' });
@@ -436,6 +496,7 @@
         return '<button type="button" class="gl-tab" role="tab" data-aba="' + a.k + '" aria-selected="' + (a.k === aba) + '">' + esc(a.t) +
           (a.k === aba && itens.length ? '<small>' + itens.length + '</small>' : '') + '</button>';
       }).join('') : '';
+      q('.gl-cts').innerHTML = contratosHtml();
       q('.gl-fil').innerHTML = filtrosHtml();
       q('.gl-info').innerHTML = carregando && !itens.length ? '' : infoHtml();
       corpo.innerHTML = corpoHtml();
@@ -474,7 +535,9 @@
       var src = grande && grande.id === it.id ? grande.url : miniDe(it);
       if (!src) pedirMini(it.id);
       var linhas = [];
-      linhas.push('<b>' + esc([it.cid ? nomeContrato(it.cid, it) : it.lote, it.pnome ? 'Ponto ' + it.pnome : 'Sem ponto'].filter(Boolean).join(' · ')) + '</b>');
+      var oae = ehOae(contratos().find(function (x) { return x.id === it.cid; }));
+      linhas.push('<b>' + esc([it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ')) + '</b>' +
+        (!it.pid && podeMover(it) ? ' <span class="gl-warn">· não entra no relatório</span>' : ''));
       linhas.push(esc([kmTxt(it.km), it.lat != null ? Number(it.lat).toFixed(5) + ', ' + Number(it.lng).toFixed(5) : '', hora(it.em)].filter(Boolean).join(' · ')));
       if (it.autor) linhas.push('Tirada por ' + esc(it.autor));
       if (it.origem === 'local') {
@@ -643,6 +706,149 @@
         });
       });
     }
+    // ---------------------------------------------------------------- contrato e ponto da foto
+    // quem tirou corrige as dele; engenheiro e Administrador, qualquer uma; a que está neste aparelho, quem tem o aparelho
+    function podeMover(it) {
+      if (!it || it.situacao === 'deletada') return false;
+      if (locais[it.id]) return true;
+      var l = login();
+      return it.origem === 'banco' && !!l && (nv() >= 2 || (!!it.autorUid && it.autorUid === l.uid));
+    }
+    function nf(v, d) { return Number(v).toFixed(d).replace('.', ','); }
+    function ehOae(c) { return !!c && c.tipo === 'oae'; }
+    function pontosDe(c) {
+      return ((c && c.pontos) || []).slice().sort(function (a, b) {
+        var ka = a.kmIni != null ? a.kmIni : 1e9, kb = b.kmIni != null ? b.kmIni : 1e9;
+        return ka - kb || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
+      });
+    }
+    function rotuloPonto(c, p) {
+      var km = p.kmIni == null ? '' : 'km ' + nf(p.kmIni, 2) + (p.kmFim != null && p.kmFim !== p.kmIni && !ehOae(c) ? ' a ' + nf(p.kmFim, 2) : '');
+      return [ehOae(c) ? p.nome || p.codigo || 'Ponte' : 'Ponto ' + (p.nome || '?'), ehOae(c) && p.codigo && p.codigo !== p.nome ? p.codigo : '', km].filter(Boolean).join(' · ');
+    }
+    // distância (km) do km da foto ao ponto: zero dentro do trecho do ponto
+    function dist(p, km) {
+      if (p.kmIni == null || km == null) return null;
+      var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni;
+      return km < a ? a - km : km > b ? km - b : 0;
+    }
+    function maisPerto(c, km) {
+      var best = null;
+      pontosDe(c).forEach(function (p) { var d = dist(p, km); if (d != null && (!best || d < best.d)) best = { p: p, d: d }; });
+      return best;
+    }
+    function trecho(c) {
+      var ks = pontosDe(c).filter(function (p) { return p.kmIni != null; });
+      var a = c.kmIni != null ? c.kmIni : ks.length ? ks[0].kmIni - 0.5 : null;
+      var b = c.kmFim != null ? c.kmFim : ks.length ? Math.max.apply(null, ks.map(function (p) { return p.kmFim != null ? p.kmFim : p.kmIni; })) + 0.5 : null;
+      return a != null && b != null ? [a, b] : null;
+    }
+    function metr(d) { return d < 1 ? Math.round(d * 1000) + ' m' : nf(d, 1) + ' km'; }
+    function abrirMover(ls) {
+      if (!ls.length) return;
+      var cs = contratos();
+      if (!cs.length) { o.toast('Nenhum contrato cadastrado.'); return; }
+      var c0 = ls[0].cid, p0 = ls[0].pid, mesmoC = ls.every(function (x) { return x.cid === c0; }), mesmoP = mesmoC && ls.every(function (x) { return x.pid === p0; });
+      var kms = ls.filter(function (x) { return x.km != null && x.km !== ''; }).map(function (x) { return Number(x.km); });
+      var cid = mesmoC && c0 && cs.some(function (c) { return c.id === c0; }) ? c0 : (filtro.cid && filtro.cid !== SEM ? filtro.cid : (o.ativo && o.ativo()) || cs[0].id);
+      mv = { ls: ls, km: kms.length ? kms.reduce(function (a, b) { return a + b; }, 0) / kms.length : null, varios: kms.length > 1 && Math.max.apply(null, kms) - Math.min.apply(null, kms) > 0.2,
+        pid0: mesmoP ? p0 : null, sug: null };
+      var agora = mesmoP ? [c0 ? curto(c0) : 'Sem contrato', ls[0].pnome ? (ls[0].pnome) : 'sem ponto'].join(' · ') : 'contratos ou pontos diferentes';
+      var enviadas = ls.filter(function (x) { return x.origem === 'banco' || (locais[x.id] && locais[x.id].situacao === 'enviada'); }).length;
+      var el = document.createElement('div');
+      el.className = 'gl-mv';
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-label', 'Contrato e ponto');
+      el.innerHTML = '<div class="gl-mv-box"><h3>Contrato e ponto' + (ls.length > 1 ? ' <small>' + plural(ls.length, 'foto', 'fotos') + '</small>' : '') + '</h3>' +
+        '<div class="gl-mv-now">Agora: <b>' + esc(agora) + '</b>' + (mv.km != null ? ' · ' + (mv.varios ? 'km de ' + nf(Math.min.apply(null, kms), 2) + ' a ' + nf(Math.max.apply(null, kms), 2) : kmTxt(mv.km)) : '') + '</div>' +
+        '<label for="glMvC">Contrato<select id="glMvC">' + cs.map(function (c) {
+          return '<option value="' + esc(c.id) + '"' + (c.id === cid ? ' selected' : '') + '>' + esc(nomeContrato(c.id)) + '</option>';
+        }).join('') + '</select></label>' +
+        '<label for="glMvP"><span id="glMvPl">Ponto</span><select id="glMvP"></select></label>' +
+        '<div class="gl-mv-sug" aria-live="polite"></div>' +
+        '<p class="gl-mv-nota">O carimbo gravado na foto não muda. A galeria e o relatório passam a usar o contrato e o ponto escolhidos aqui.' +
+        (enviadas ? ' No Drive, o arquivo continua na pasta em que foi guardado.' : '') + '</p>' +
+        '<div class="gl-mv-acts"><button type="button" class="btn" data-g="mv-fechar">Cancelar</button><button type="button" class="btn primary" data-g="mv-salvar">Salvar</button></div></div>';
+      root.appendChild(el);
+      pontosMover(true);
+      var s0 = q('#glMvC'); if (s0) s0.focus();
+    }
+    // lista de pontos do contrato escolhido; já escolhe o ponto atual ou o do km da foto (até 50 m)
+    function pontosMover(primeira) {
+      var c = contratos().find(function (x) { return x.id === q('#glMvC').value; }), sp = q('#glMvP');
+      q('#glMvPl').textContent = ehOae(c) ? 'Ponte' : 'Ponto';
+      var ps = pontosDe(c), perto = mv.km != null && !mv.varios ? maisPerto(c, mv.km) : null, vai = '';
+      if (primeira && mv.pid0 && ps.some(function (p) { return p.id === mv.pid0; })) vai = mv.pid0;
+      else if (perto && perto.d <= 0.05) vai = perto.p.id;
+      sp.innerHTML = '<option value="">' + (ehOae(c) ? 'Sem ponte (não entra no relatório)' : 'Sem ponto (não entra no relatório)') + '</option>' +
+        ps.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === vai ? ' selected' : '') + '>' + esc(rotuloPonto(c, p)) + '</option>'; }).join('');
+      sugestao();
+    }
+    // pelo km da foto: o ponto mais perto, e aviso se o km cai fora do trecho do contrato
+    function sugestao() {
+      var box = q('.gl-mv-sug');
+      if (!box || !mv) return;
+      var c = contratos().find(function (x) { return x.id === q('#glMvC').value; }), sp = q('#glMvP');
+      mv.sug = null;
+      box.className = 'gl-mv-sug';
+      if (mv.km == null) { box.innerHTML = ''; return; }
+      var tr = trecho(c);
+      if (tr && (mv.km < tr[0] - 0.05 || mv.km > tr[1] + 0.05)) {
+        // o contrato cujo trecho tem o km da foto
+        var certo = contratos().find(function (x) { var t2 = x.id !== c.id && trecho(x); return t2 && mv.km >= t2[0] - 0.05 && mv.km <= t2[1] + 0.05; });
+        box.className = 'gl-mv-sug fora';
+        box.innerHTML = 'O km da foto (' + nf(mv.km, 2) + ') fica fora do trecho deste contrato (km ' + nf(tr[0], 2) + ' a ' + nf(tr[1], 2) + ').' +
+          (certo ? ' Ele é do ' + esc(curto(certo.id)) + '. <button type="button" class="btn small" data-g="mv-ct" data-id="' + esc(certo.id) + '">Passar para o ' + esc(curto(certo.id)) + '</button>' : ' Confira o contrato.');
+        return;
+      }
+      if (mv.varios) { box.innerHTML = 'As fotos foram tiradas em km diferentes: confira se são todas do mesmo ponto.'; return; }
+      var perto = maisPerto(c, mv.km);
+      if (!perto) { box.innerHTML = ''; return; }
+      mv.sug = perto.p;
+      var rot = esc(ehOae(c) ? perto.p.nome || perto.p.codigo : 'Ponto ' + perto.p.nome);
+      box.innerHTML = 'Pelo km da foto (' + nf(mv.km, 2) + '): ' + (perto.d <= 0.05 ? 'fica no ' + rot : 'o mais perto é ' + rot + ', a ' + metr(perto.d)) +
+        (sp.value === perto.p.id ? '' : ' <button type="button" class="btn small" data-g="mv-usar">Usar</button>');
+    }
+    function fecharMover() { mv = null; var el = root && q('.gl-mv'); if (el) el.remove(); }
+    function salvarMover() {
+      if (!mv) return;
+      var cid = q('#glMvC').value, pid = q('#glMvP').value || null, ls = mv.ls;
+      var c = contratos().find(function (x) { return x.id === cid; }), p = pid ? (c.pontos || []).find(function (x) { return x.id === pid; }) : null;
+      var lote = [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ') || 'Contrato';
+      var meta = { cid: cid, pid: pid, pnome: p ? p.nome || null : null, lote: lote };
+      var pastas = [c.lote || lote || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'];   // como o foto.js monta
+      var locIds = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return x.id; });
+      var banIds = ls.filter(function (x) { return x.origem === 'banco' ? x.situacao === 'ativa' : locais[x.id] && locais[x.id].situacao === 'enviada'; }).map(function (x) { return x.id; });
+      var l = login();
+      if (banIds.length && !l) { o.toast('Entre com o seu código para corrigir as fotos que já foram enviadas.', 6000); return; }
+      var b = q('[data-g="mv-salvar"]'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
+      var pLoc = locIds.length && o.drive && o.drive.corrigir ? o.drive.corrigir(locIds, meta, pastas) : Promise.resolve(0);
+      pLoc.then(function () {
+        return banIds.length ? o.Banco.fotosMover(l.codigo, banIds, cid, pid) : null;
+      }).then(function () {
+        ls.forEach(function (x) {
+          var it = itens.find(function (y) { return y.id === x.id; });
+          [it, locais[x.id]].forEach(function (y) { if (y) { y.cid = cid; y.pid = pid || ''; y.pnome = meta.pnome || ''; y.lote = lote; } });
+        });
+        var n = ls.length;
+        o.toast((n === 1 ? 'Foto agora em ' : n + ' fotos agora em ') + curto(cid) + ' · ' + (p ? (ehOae(c) ? p.nome : 'ponto ' + p.nome) : 'sem ponto') + '.', 5000);
+        fecharMover();
+        // a foto foi para outro contrato: a fila de contratos acompanha, para ela continuar à vista
+        if (filtro.cid && filtro.cid !== cid) filtro.cid = cid;
+        if (filtro.pid && filtro.pid !== (pid || SEM)) filtro.pid = '';
+        var aberta = ver >= 0 && lista[ver] ? lista[ver].id : null;
+        sel = {}; selecionando = false;
+        filtrar();
+        ver = aberta ? lista.findIndex(function (y) { return y.id === aberta; }) : -1;
+        if (ver < 0 && aberta) fecharVer();
+        render();
+      }, function (e) {
+        if (b) { b.disabled = false; b.textContent = 'Salvar'; }
+        var cd = e && (e.code || e.message);
+        o.toast(cd === 'sem_permissao' ? 'Você só pode corrigir as fotos que você tirou.' : cd === 'sem_rede' ? 'Sem conexão: tente de novo com sinal.'
+          : /fotos_mover|PGRST202/.test(cd || '') ? 'O banco ainda não tem esta correção.' : 'Não foi possível corrigir (' + (cd || 'erro') + ').', 6000);
+      });
+    }
     function fazer(k, ls) {
       if (k === 'baixar') baixar(ls);
       else if (k === 'por-rel') relatorio(ls, true);
@@ -652,11 +858,19 @@
       else if (k === 'segurar') enviarDrive(ls, false);
       else if (k === 'apagar-drive') moverDrive(ls, true);
       else if (k === 'restaurar') moverDrive(ls, false);
+      else if (k === 'mover') abrirMover(ls.filter(podeMover));
     }
 
     function onClick(e) {
-      var t = e.target.closest('[data-g],[data-aba],.gl-t');
+      var t = e.target.closest('[data-g],[data-aba],[data-ct],.gl-t');
       if (!t || !root.contains(t)) return;
+      if (t.hasAttribute('data-ct')) {
+        var v = t.getAttribute('data-ct');
+        if (v === filtro.cid) return;
+        filtro.cid = v; filtro.pid = '';
+        render();
+        return;
+      }
       if (t.hasAttribute('data-aba')) {
         var a = t.getAttribute('data-aba');
         if (a === aba) return;
@@ -695,9 +909,16 @@
       else if (g === 'ant' && ver > 0) abrir(ver - 1);
       else if (g === 'prox' && ver < lista.length - 1) abrir(ver + 1);
       else if (g === 'grande') carregarGrande();
+      else if (g === 'ver-sem') { filtro.pid = SEM; render(); }
+      else if (g === 'mv-fechar') fecharMover();
+      else if (g === 'mv-usar') { var sp = q('#glMvP'); if (sp && mv && mv.sug) { sp.value = mv.sug.id; sugestao(); } }
+      else if (g === 'mv-salvar') salvarMover();
+      else if (g === 'mv-ct') { var sc = q('#glMvC'); if (sc) { sc.value = t.getAttribute('data-id'); pontosMover(); } }
       else fazer(g, t.hasAttribute('data-um') ? [lista[ver]] : selecionadas());
     }
     function onChange(e) {
+      if (e.target.id === 'glMvC') { pontosMover(); return; }
+      if (e.target.id === 'glMvP') { sugestao(); return; }
       var f = e.target.getAttribute('data-f');
       if (!f) return;
       if (f === 'agrupar') agrupar = e.target.value;
@@ -706,7 +927,8 @@
     }
     function onKey(e) {
       if (!root || document.querySelector('.modal')) return;
-      if (e.key === 'Escape') { if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
+      if (mv && e.key !== 'Escape') return;   // no painel de contrato e ponto as setas são das listas
+      if (e.key === 'Escape') { if (mv) fecharMover(); else if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
       else if (ver >= 0 && e.key === 'ArrowLeft' && ver > 0) abrir(ver - 1);
       else if (ver >= 0 && e.key === 'ArrowRight' && ver < lista.length - 1) abrir(ver + 1);
     }
@@ -721,7 +943,7 @@
         root.setAttribute('aria-modal', 'true');
         root.setAttribute('aria-label', 'Fotos');
         root.innerHTML = '<div class="gl-top"><button type="button" class="btn small" data-g="fechar">← Voltar</button><h2>Fotos</h2></div>' +
-          '<div class="gl-tabs" role="tablist"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
+          '<div class="gl-tabs" role="tablist"></div><div class="gl-cts" role="group" aria-label="Contrato"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
         root.addEventListener('click', onClick);
         root.addEventListener('change', onChange);
         document.addEventListener('keydown', onKey);
@@ -729,6 +951,8 @@
         document.body.style.overflow = 'hidden';
       }
       filtro = { cid: f.cid || '', pid: f.pid || '', autor: '', mes: '' };
+      cidAuto = !f.cid;
+      fecharMover();
       var vis = abasVisiveis().map(function (a) { return a.k; });
       aba = f.aba && vis.indexOf(f.aba) >= 0 ? f.aba : (f.pid ? (vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local') : (vis.indexOf(aba) >= 0 ? aba : 'local'));
       sel = {}; selecionando = false; ver = -1; itens = [];

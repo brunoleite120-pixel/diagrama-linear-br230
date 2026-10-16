@@ -13,6 +13,8 @@
  *   d.list() -> Promise<[{ id, nome, meta, situacao: 'fila'|'aparelho'|'enviada', erro, enviada, tamanho, mini: Blob|null }]>
  *   d.enviar(ids, sim) -> Promise<quantas>   sim: as 'aparelho' vão para a fila; não: as da fila que ainda não subiram ficam só no aparelho
  *   d.arquivo(id) -> Promise<Blob|null>      d.apagar(ids) (some do aparelho)
+ *   d.corrigir(ids, meta, pastas) -> Promise<quantas>   troca contrato e ponto (meta: cid, pid, pnome, lote); as que ainda não
+ *     subiram vão para a pasta nova do Drive
  *   d.info() -> { n, aparelho, busy, erro, enviadas, total, bytes }   d.pump()
  */
 (function () {
@@ -142,6 +144,24 @@
         });
       }).then(recount).then(function () { if (sim) pump(); return m; });
     }
+    // contrato e ponto corrigidos na galeria: muda os dados guardados; a que ainda não subiu vai para a pasta nova do Drive.
+    // A que espera só o registro no banco sobe com os dados novos; a já enviada o app corrige também no banco.
+    function corrigir(ids, meta, pastas) {
+      var m = 0;
+      return tx([FOTOS], 'readwrite', function (s) {
+        ids.forEach(function (id) {
+          var g = s[FOTOS].get(id);
+          g.onsuccess = function () {
+            var r = g.result;
+            if (!r) return;
+            r.meta = Object.assign({}, r.meta || {}, { cid: meta.cid || null, pid: meta.pid || null, pnome: meta.pnome || null, lote: meta.lote || null });
+            if (pastas && r.etapa !== 'registro' && r.situacao !== 'enviada') r.pastas = pastas;
+            m++;
+            s[FOTOS].put(r);
+          };
+        });
+      }).then(recount).then(function () { return m; });
+    }
     // some do aparelho (a foto enviada continua no Drive e nas galerias do banco)
     function apagar(ids) {
       return tx([FOTOS, ARQ], 'readwrite', function (s) { ids.forEach(function (id) { s[FOTOS].delete(id); s[ARQ].delete(id); }); }).then(recount);
@@ -233,7 +253,7 @@
     window.addEventListener('online', function () { pump(); });
     setInterval(pump, 60000);
     return {
-      add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, pump: pump, resetCode: resetCode, post: post,
+      add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, corrigir: corrigir, pump: pump, resetCode: resetCode, post: post,
       info: function () { return { n: n, aparelho: soAparelho, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes }; }
     };
   };

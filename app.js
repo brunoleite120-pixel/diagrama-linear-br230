@@ -3116,7 +3116,7 @@
         drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; },
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
-        contratos: function () { return state.contracts; },
+        contratos: function () { return state.contracts; }, ativo: function () { var c = active(); return c ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });

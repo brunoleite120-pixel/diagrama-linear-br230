@@ -20,6 +20,7 @@
  * Fotos (migração 04; o arquivo inteiro fica no Drive, aqui só os dados e a miniatura):
  *   Banco.fotoRegistrar(cred, foto, miniB64), Banco.fotosListar(cred, 'minhas'|'todas'|'relatorio'|'deletadas', limite, antes)
  *   Banco.fotosMini(cred, ids) -> [{id, jpeg}]   Banco.fotoRelatorio(cred, ids, marcar) -> quantas
+ *   Banco.fotosMover(cred, ids, contratoId, pontoId|null) -> {movidas, lote, ponto_nome}   (migração 06: corrigir contrato e ponto)
  *
  * Análise das medições (migração 05; só engenheiro e criador, a tabela não tem leitura pública):
  *   Banco.analise(cred, contratoId) -> {dados, fonte, em, por} | null
@@ -108,6 +109,7 @@
     },
     fotosMini: function (cred, ids) { return rpc('fotos_mini', { p_cred: cred, p_ids: ids }).then(function (r) { return r || []; }); },
     fotoRelatorio: function (cred, ids, marcar) { return rpc('foto_relatorio', { p_cred: cred, p_ids: ids, p_marcar: !!marcar }).then(Number); },
+    fotosMover: function (cred, ids, cid, pid) { return rpc('fotos_mover', { p_cred: cred, p_ids: ids, p_contrato: cid, p_ponto: pid || null }); },
 
     analise: function (cred, cid) { return rpc('analise_ler', { p_cred: cred, p_contrato: cid }); }
   };
