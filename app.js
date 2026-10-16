@@ -2543,7 +2543,8 @@
       : 'Não deu certo (' + ((err && err.message) || 'erro') + ').';
   }
   function mField(id, label, pw, value, extra) {
-    return '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '"' + (pw ? ' type="password" data-pw autocomplete="off"' : ' autocomplete="' + (extra || 'name') + '"') +
+    // código: sem maiúscula automática nem corretor (no iPhone, "Mostrar o que digitei" vira campo de texto comum)
+    return '<div class="field"><label for="' + id + '">' + label + '</label><input id="' + id + '"' + (pw ? ' type="password" data-pw autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"' : ' autocomplete="' + (extra || 'name') + '"') +
       ' maxlength="' + (pw ? 200 : 60) + '" value="' + esc(value || '') + '"></div>';
   }
   var SHOWPW = '<label class="show-pw"><input type="checkbox" data-showpw> Mostrar o que digitei</label>';
@@ -2593,9 +2594,11 @@
       if (!box.hidden && !n) { modalErr(f, 'Escreva seu nome.'); return; }
       modalErr(f, '');
       busyBtn(f, true, 'Conferindo…');
-      window.Banco.entrarV2(c, box.hidden ? null : n, aparelho()).then(function (r) {
+      // espaço sobrando no fim (sugestão do teclado do celular): se o código como digitado não entra, tenta sem ele
+      var tentar = function (cod) { return window.Banco.entrarV2(cod, box.hidden ? null : n, aparelho()); };
+      tentar(c).then(function (r) { return (r && r.token) || c.trim() === c || !c.trim() ? r : tentar(c.trim()); }).then(function (r) {
         busyBtn(f, false);
-        if (!r || !r.token) { modalErr(f, PREVIA ? 'Código errado para a prévia (o do site oficial não vale aqui).' : 'Código errado.'); return; }
+        if (!r || !r.token) { modalErr(f, (PREVIA ? 'Código errado para a prévia (o do site oficial não vale aqui).' : 'Código errado.') + ' Confira maiúsculas e minúsculas.'); return; }
         if (!box.hidden) lsPut(NAME_KEY, n);
         entrou(r);
       }, function (err) {

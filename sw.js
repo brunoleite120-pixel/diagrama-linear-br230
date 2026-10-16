@@ -6,7 +6,7 @@
 // A prévia (/previa/) tem o próprio service worker e o próprio cache; o do site oficial não mexe nela.
 var PREVIA = /\/previa\/$/.test(self.registration.scope);
 var FAMILIA = (PREVIA ? 'previa-' : '') + 'diagrama-linear-';
-var CACHE = FAMILIA + 'v27';
+var CACHE = FAMILIA + 'v28';
 var PASTA_PREVIA = PREVIA ? null : self.registration.scope + 'previa/';
 var SHELL = [
   './', 'index.html', 'app.js', 'banco.js', 'drive.js', 'galeria.js', 'foto.js', 'mapa.js', 'snv-br230.js', 'osm-br230.js', 'tela-cheia.js', 'logo.js',
