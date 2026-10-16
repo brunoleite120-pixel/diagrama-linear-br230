@@ -46,7 +46,7 @@ jobs:
       - name: Arquivos do site para o app
         run: |
           mkdir -p www
-          cp index.html ambiente.js app.js foto.js mapa.js banco.js drive.js galeria.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
+          cp index.html ambiente.js app.js foto.js mapa.js banco.js drive.js galeria.js relatorio-logos.js relatorio.js snv-br230.js osm-br230.js fundo-br230.js tela-cheia.js logo.js dados-iniciais.js manifest.webmanifest www/
           cp -R lib icons www/
           # no app: a página vai até a borda da tela (o CSS desvia do relógio e do recorte) e não dá zoom
           sed -i '' 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' www/index.html
@@ -60,6 +60,10 @@ jobs:
           echo "AMBIENTE=$NOME" >> "$GITHUB_ENV"
           # bibliotecas do PDF dentro do app (gera o PDF sem internet)
           cp node_modules/jspdf/dist/jspdf.umd.min.js node_modules/svg2pdf.js/dist/svg2pdf.umd.min.js www/lib/
+          # todo script que a página carrega tem de estar no app (arquivo novo no site e esquecido aqui quebra o app)
+          for f in $(grep -o '<script src="[^"]*"' www/index.html | sed 's/^<script src="//; s/"$//'); do
+            [ -f "www/$f" ] || { echo "Falta no app: $f (acrescente na linha do cp acima)"; exit 1; }
+          done
 
       - name: Projeto iOS (Capacitor)
         run: |
