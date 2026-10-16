@@ -55,9 +55,9 @@ jobs:
           sed -i "s|^  var NOME = 'oficial';|  var NOME = 'previa';|" "$A"
           sed -i "s|^  var VERSAO = 'dev';|  var VERSAO = '$(versao previa)';|" "$A"
           grep -q "var NOME = 'previa';" "$A" || { echo "A prévia ficou sem o ambiente de teste"; exit 1; }
-          # nome do app instalado pela prévia (tela de início), para não confundir com o oficial
-          sed -i 's|"name": "VIA-230 · Diagrama Linear BR-230"|"name": "VIA Prévia · Diagrama Linear BR-230"|; s|"short_name": "VIA-230"|"short_name": "VIA Prévia"|' _site/previa/manifest.webmanifest
-          grep -q '"short_name": "VIA Prévia"' _site/previa/manifest.webmanifest || { echo "Não troquei o nome da prévia no manifest"; exit 1; }
+          # na tela de início a prévia também se chama VIA-230 (decisão do usuário); só o nome longo diz que é a prévia
+          sed -i 's|"name": "VIA-230 · Diagrama Linear BR-230"|"name": "VIA-230 · Diagrama Linear BR-230 (prévia)"|' _site/previa/manifest.webmanifest
+          grep -q '(prévia)"' _site/previa/manifest.webmanifest || { echo "Não marquei a prévia no manifest"; exit 1; }
 
           grep -h "var NOME\|var VERSAO" _site/ambiente.js _site/previa/ambiente.js 2>/dev/null || true
 

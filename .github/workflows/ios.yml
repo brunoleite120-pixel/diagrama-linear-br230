@@ -1,6 +1,6 @@
 # Compila o app iOS num Mac do GitHub e envia ao TestFlight.
 # Rodar: aba Actions > "App iOS (TestFlight)" > Run workflow  (ou: gh workflow run ios.yml)
-# Do ramo main sai o app da PRÉVIA (banco de teste, selo laranja), para o grupo "Prévia" do TestFlight:
+# Do ramo main sai o app da PRÉVIA (banco de teste, selo laranja; na tela de início também se chama VIA-230), para o grupo "Prévia" do TestFlight:
 #   gh workflow run ios.yml --ref main -f versao=1.1.0
 # Do ramo producao sai o app OFICIAL (banco da equipe), que depois é liberado para o grupo "Equipe":
 #   gh workflow run ios.yml --ref producao -f versao=1.1.0
@@ -76,9 +76,8 @@ jobs:
       - name: Ícone e permissões
         run: |
           PL=ios/App/App/Info.plist
-          # nome na tela de início: a prévia aparece diferente do oficial
-          if [ "$AMBIENTE" = "oficial" ]; then NOME_APP="VIA-230"; else NOME_APP="VIA Prévia"; fi
-          plutil -replace CFBundleDisplayName -string "$NOME_APP" "$PL"
+          # nome na tela de início: VIA-230 no oficial e na prévia (decisão do usuário; a prévia tem o selo laranja dentro do app)
+          plutil -replace CFBundleDisplayName -string "VIA-230" "$PL"
           # o app é claro: com o iPhone no modo escuro o relógio ficaria branco em cima da barra branca
           plutil -replace UIUserInterfaceStyle -string Light "$PL"
           plutil -replace NSLocationWhenInUseUsageDescription -string "O app usa a sua posição para mostrar o km da BR-230 no mapa e identificar o ponto da foto." "$PL"
