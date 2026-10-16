@@ -15,15 +15,15 @@
     { key: 'prelim', label: 'Sv. Preliminares', short: 'Sv. preliminares' }
   ];
   // contrato de pontes (tipo 'oae', ex.: CT 424): um grupo de serviços por linha, uma coluna por ponte.
-  // un = unidade de quanto a ponte precisa (q = o que a quantidade mede); rotina não tem quantidade
+  // un = unidade da estimativa do dano feita pela supervisão (q = o que ela mede); rotina não tem quantidade
   var OAE_SERVICES = [
-    { key: 'juntas', label: 'Juntas e aparelhos de apoio', short: 'Juntas e apoios', un: 'm', q: 'metros de junta' },
-    { key: 'concreto', label: 'Recuperação estrutural (concreto)', short: 'Concreto', un: 'm²', q: 'área a recuperar' },
-    { key: 'pintura', label: 'Proteção superficial (pintura)', short: 'Pintura', un: '%', q: 'da ponte a pintar' },
-    { key: 'drenagem', label: 'Drenagem da OAE', short: 'Drenagem', un: 'un', q: 'drenos' },
+    { key: 'juntas', label: 'Juntas e aparelhos de apoio', short: 'Juntas e apoios', un: 'm', q: 'm de junta danificada' },
+    { key: 'concreto', label: 'Recuperação estrutural (concreto)', short: 'Concreto', un: 'm²', q: 'm² de concreto danificado' },
+    { key: 'pintura', label: 'Proteção superficial (pintura)', short: 'Pintura', un: '%', q: '% da pintura danificada' },
+    { key: 'drenagem', label: 'Drenagem da OAE', short: 'Drenagem', un: 'un', q: 'nº de drenos danificados' },
     { key: 'rotina', label: 'Conservação de rotina (vegetação e limpeza)', short: 'Rotina', un: null, q: '' },
-    { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'de guarda-corpo ou pista' },
-    { key: 'acesso', label: 'Plataforma e apoio à execução', short: 'Plataforma / acesso', un: 'm²', q: 'de plataforma' }
+    { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'm de guarda-corpo ou pista danificados' },
+    { key: 'acesso', label: 'Plataforma e apoio à execução', short: 'Plataforma / acesso', un: 'm²', q: 'm² de plataforma' }
   ];
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
   function servicesOf(c) { return isOae(c) ? OAE_SERVICES : SERVICES; }
@@ -34,27 +34,31 @@
     NA: { tag: 'N/A', name: 'Não se aplica', btn: 'N/A', fill: 'none' }
   };
   var STATUS_ORDER = ['OK', 'A', 'P', 'NA'];
-  // pontes: serviço contínuo de conservação, então o status diz o que a ponte PRECISA (e quanto),
-  // e não o avanço de uma obra feita uma vez só, como nos pontos críticos
+  // pontes: serviço contínuo de conservação. O estado é o que a supervisão viu na vistoria (OK, danificado,
+  // executando) com a ESTIMATIVA do dano, e não o avanço de uma obra feita uma vez só, como nos pontos críticos
   var OAE_STATUS = {
     NV: { tag: 'SEM VISTORIA', name: 'Sem vistoria', fill: 'none' },
-    OK: { tag: 'OK', name: 'Em ordem', btn: 'OK', fill: '#1E9E55', ink: '#FFFFFF' },
-    PR: { tag: 'PRECISA', name: 'Precisa de manutenção', btn: 'Precisa', fill: '#F2A93B', ink: '#3D2800' },
-    UR: { tag: 'URGENTE', name: 'Urgente', btn: 'Urgente', fill: '#D93025', ink: '#FFFFFF' },
-    EX: { tag: 'EM EXECUÇÃO', name: 'Em execução', btn: 'Em exec.', fill: '#2B5797', ink: '#FFFFFF' },
+    OK: { tag: 'OK', name: 'OK', btn: 'OK', fill: '#1E9E55', ink: '#FFFFFF' },
+    DN: { tag: 'DANIFICADO', name: 'Danificado', btn: 'Danificado', fill: '#F2A93B', ink: '#3D2800' },
+    EX: { tag: 'EXECUTANDO', name: 'Executando', btn: 'Executando', fill: '#2B5797', ink: '#FFFFFF' },
     NA: { tag: 'N/A', name: 'Não tem nesta ponte', btn: 'N/A', fill: 'none' }
   };
-  var OAE_STATUS_ORDER = ['OK', 'PR', 'UR', 'EX', 'NA'];
-  var ALERTA_COR = '#7B3FA0', ALERTA_TINTA = '#5B2C8F';   // roxo = análise das medições (não confundir com urgente)
-  function oaeSt(sv) { return sv && OAE_STATUS[sv.st] ? sv.st : 'NV'; }
-  function comQtd(st) { return st === 'PR' || st === 'UR' || st === 'EX'; }
+  var OAE_STATUS_ORDER = ['OK', 'DN', 'EX', 'NA'];
+  var ALERTA_COR = '#7B3FA0', ALERTA_TINTA = '#5B2C8F';   // roxo = análise das medições (separada do estado da ponte)
+  function oaeSt(sv) {
+    var st = sv && sv.st;
+    if (st === 'PR' || st === 'UR') return 'DN';   // nomes da primeira versão desta tela
+    return OAE_STATUS[st] ? st : 'NV';
+  }
+  function comQtd(st) { return st === 'DN' || st === 'EX'; }
+  // "~" = estimativa da supervisão
   function fmtQtd(s, q) {
     if (q == null || q === '' || !s.un || !isFinite(q)) return '';
-    return s.un === '%' ? fmtPct(Number(q)) : fmtN(Number(q)) + ' ' + s.un;
+    return '~' + (s.un === '%' ? fmtPct(Number(q)) : fmtN(Number(q)) + ' ' + s.un);
   }
-  // resumo da ponte: grupos que precisam, urgentes, em execução, em ordem e sem vistoria (N/A não conta)
+  // resumo da ponte: grupos danificados, executando, OK e sem vistoria (N/A não conta)
   function oaeNec(p) {
-    var r = { prec: 0, urg: 0, exec: 0, ok: 0, nv: 0, aval: 0 };
+    var r = { dn: 0, exec: 0, ok: 0, nv: 0, aval: 0 };
     OAE_SERVICES.forEach(function (s) {
       var st = oaeSt(p.serv[s.key]);
       if (st === 'NA') return;
@@ -62,31 +66,29 @@
       if (st === 'NV') r.nv++;
       else if (st === 'OK') r.ok++;
       else if (st === 'EX') r.exec++;
-      else { r.prec++; if (st === 'UR') r.urg++; }
+      else r.dn++;
     });
     return r;
   }
   function oaeNecTxt(n) {
-    if (n.prec) return n.prec + (n.prec === 1 ? ' precisa' : ' precisam') + (n.urg ? ' · ' + n.urg + (n.urg === 1 ? ' urgente' : ' urgentes') : '') + (n.exec ? ' · ' + n.exec + ' em exec.' : '');
-    if (n.exec) return n.exec + ' em execução';
+    if (n.dn) return n.dn + (n.dn === 1 ? ' danificado' : ' danificados') + (n.exec ? ' · ' + n.exec + ' executando' : '');
+    if (n.exec) return n.exec + ' executando';
     if (!n.aval || n.nv === n.aval) return 'sem vistoria';
-    return 'em ordem' + (n.nv ? ' · ' + n.nv + ' sem vistoria' : '');
+    return n.nv ? 'OK · ' + n.nv + ' sem vistoria' : 'tudo OK';
   }
-  // contrato: pontes que precisam e, por grupo, quantas pontes e quanto (soma só das quantidades informadas)
+  // contrato: pontes com dano e, por grupo, quantas pontes e quanto (soma só das estimativas informadas)
   function oaeResumo(c) {
-    var r = { prec: 0, urg: 0, exec: 0, nv: 0, grupos: {} };
-    OAE_SERVICES.forEach(function (s) { r.grupos[s.key] = { pontes: 0, urg: 0, q: 0, semQ: 0 }; });
+    var r = { dn: 0, exec: 0, nv: 0, grupos: {} };
+    OAE_SERVICES.forEach(function (s) { r.grupos[s.key] = { pontes: 0, q: 0, semQ: 0 }; });
     c.pontos.forEach(function (p) {
       var n = oaeNec(p);
-      if (n.prec) r.prec++;
-      if (n.urg) r.urg++;
+      if (n.dn) r.dn++;
       if (n.exec) r.exec++;
       if (!n.aval || n.nv === n.aval) r.nv++;
       OAE_SERVICES.forEach(function (s) {
-        var sv = p.serv[s.key], st = oaeSt(sv), gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
-        if (st !== 'PR' && st !== 'UR') return;
+        var sv = p.serv[s.key], gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
+        if (oaeSt(sv) !== 'DN') return;
         gr.pontes++;
-        if (st === 'UR') gr.urg++;
         if (s.un && s.un !== '%') { if (isFinite(q)) gr.q += q; else gr.semQ++; }
       });
     });
@@ -94,11 +96,11 @@
   }
   function oaeFaltaTxt(r) {
     var asterisco = false, t = OAE_SERVICES.filter(function (s) { return r.grupos[s.key].pontes; }).map(function (s) {
-      var gr = r.grupos[s.key], q = s.un && s.un !== '%' && gr.q ? fmtN(gr.q) + ' ' + s.un + (gr.semQ ? '*' : '') + ' em ' : '';
+      var gr = r.grupos[s.key], q = s.un && s.un !== '%' && gr.q ? '~' + fmtN(gr.q) + ' ' + s.un + (gr.semQ ? '*' : '') + ' em ' : '';
       if (q && gr.semQ) asterisco = true;
       return s.short + ': ' + q + gr.pontes + (gr.pontes === 1 ? ' ponte' : ' pontes');
     }).join(' · ');
-    return t ? t + (asterisco ? '  (* há pontes sem a quantidade)' : '') : '';
+    return t ? t + (asterisco ? '  (* há pontes sem a estimativa)' : '') : '';
   }
   var DEVICE_COLORS = {
     vermelho: { name: 'Vermelho', hex: '#E02424' },
@@ -618,7 +620,7 @@
   function oaeExt(c) { return c.pontos.reduce(function (s, p) { return s + (Number(p.extensao) || 0); }, 0); }
   function oaeKpis(c, tot, an) {
     var ext = oaeExt(c), r = an && an.resumo, n = oaeResumo(c);
-    var nec = { k: 'PRECISAM DE MANUTENÇÃO', v: n.prec + (n.prec === 1 ? ' ponte' : ' pontes'), s: n.urg ? n.urg + ' com urgência' + (n.exec ? ' · ' + n.exec + ' em execução' : '') : n.exec ? n.exec + ' em execução' : '' };
+    var nec = { k: 'PONTES COM DANOS', v: n.dn + (n.dn === 1 ? ' ponte' : ' pontes'), s: n.exec ? n.exec + (n.exec === 1 ? ' executando' : ' executando') : 'estimativa da supervisão' };
     if (r) return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
       nec,
@@ -644,9 +646,9 @@
     o.push(T(x, g.yBand + 24, 'PONTE', { size: 7, bold: true }));
     o.push(T(x, g.yBand + 35, 'nome e código', { size: 6.4, fill: gray }));
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
-    o.push(T(x, g.yNec + 12, 'NECESSIDADE', { size: 7, bold: true }));
+    o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
     o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
-    o.push(T(x, g.yServ - 4, 'O QUE PRECISA (QUANTO)', { size: 6, bold: true, fill: gray }));
+    o.push(T(x, g.yServ - 4, 'DANO ESTIMADO', { size: 6, bold: true, fill: gray }));
     OAE_SERVICES.forEach(function (s, i) {
       var y = g.yServ + i * g.servStep + 12.8, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
       o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
@@ -685,18 +687,18 @@
     var extTxt = p.extensao != null ? fmtN(p.extensao) + ' m' + (p.largura != null ? ' × ' + fmtN(p.largura) : '') : '-';
     o.push(T(cx, g.yExt + 12.4, extTxt, { size: r2(fitSize(extTxt, bw - 4, 8, true, 4.6)), bold: true, anchor: 'middle' }));
 
-    // necessidade da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou
+    // estado da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou
     var nn = oaeNec(p), vis = c ? vistoriaPonte(c, p) : null;
-    var nf = nn.urg ? '#F6C9C4' : nn.prec ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
+    var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
     var ntx = oaeNecTxt(nn), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
     o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
-    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: nn.urg ? '#8E1B12' : '#17201C', anchor: 'middle' }));
+    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
     if (vis) {
       var vt = 'vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : '');
       o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
     }
 
-    // grupos: cor = o que o fiscal marcou; quantidade = quanto a ponte precisa; contorno roxo = alerta alto nas medições
+    // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições
     OAE_SERVICES.forEach(function (s, i) {
       var sv = p.serv[s.key], k = oaeSt(sv), st = OAE_STATUS[k], y = g.yServ + i * g.servStep;
       var gi = a && a.grupos ? a.grupos[s.key] : null;
@@ -768,7 +770,7 @@
     o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
     o.push(T(x, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
     var lx = x + 44;
-    [['OK', 'Em ordem (OK)'], ['PR', 'Precisa de manutenção'], ['UR', 'Urgente'], ['EX', 'Em execução'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
+    [['OK', 'OK'], ['DN', 'Danificado'], ['EX', 'Executando'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
       var st = OAE_STATUS[it[0]];
       if (st.fill === 'none') o.push(R(lx, y + 2, 16, 10, { fill: it[0] === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
       else o.push(R(lx, y + 2, 16, 10, { fill: st.fill, rx: 1.5 }));
@@ -789,9 +791,9 @@
         o.push(T(lx + 20, y2 + 10, it[1], { size: 7 }));
         lx += 20 + textW(it[1], 7) + 14;
       });
-      o.push(T(x, y + 46, fitText('Quantidade = quanto a ponte precisa, na unidade do grupo. Em roxo, a análise das medições: medido ÷ estimado = soma das medições na ponte sobre o estimado da 1ª etapa no Anexo VI, a preços iniciais.', 590, 6.4), { size: 6.4, fill: gray }));
+      o.push(T(x, y + 46, fitText('~ = estimativa do dano feita pela supervisão na vistoria. Em roxo, a análise das medições: medido ÷ estimado = soma das medições na ponte sobre o estimado da 1ª etapa no Anexo VI, a preços iniciais.', 590, 6.4), { size: 6.4, fill: gray }));
     } else {
-      o.push(T(x, y + 28, fitText('Serviço contínuo: cada grupo mostra o que a ponte precisa hoje e quanto (m de junta, m² de concreto, % da ponte a pintar, drenos, m de guarda-corpo ou pista, m² de plataforma).', 590, 6.6), { size: 6.6, fill: gray }));
+      o.push(T(x, y + 28, fitText('Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão (m de junta, m² de concreto, % da pintura, drenos, m de guarda-corpo ou pista, m² de plataforma).', 590, 6.6), { size: 6.6, fill: gray }));
     }
 
     var bx = 640;
@@ -799,8 +801,8 @@
       var rs = oaeResumo(c), falta = oaeFaltaTxt(rs);
       o.push(R(bx, y, G.x1 - bx, falta ? 46 : 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(bx + 10, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
-      if (falta) o.push(T(bx + 10, y + 39, fitText('Precisam: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
-      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Precisam de manutenção', String(rs.prec)]];
+      if (falta) o.push(T(bx + 10, y + 39, fitText('Danos estimados: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
+      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Pontes com danos', String(rs.dn)]];
       if (an && an.resumo) {
         parts.push(['Medido', fmtBRLc(an.resumo.total)]);
         parts.push(['Alertas altos', String(an.resumo.altos)]);
@@ -947,7 +949,7 @@
     var pts = sortedPoints(c), oae = isOae(c);
     if (oae) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
     h.push('<div class="points-head"><h2>' + (oae ? 'Pontes' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ Ponte' : '+ Ponto') + '</button></div>');
-    h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o que ela precisa' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
+    h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
       'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
     h.push('<div class="pt-list" id="ptList">');
     pts.forEach(function (p) { h.push(pointCard(p)); });
@@ -956,7 +958,7 @@
       h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
         '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
     } else if (isFiscal()) {
-      h.unshift('<div class="ro-note fiscal-note"><span>Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o que cada ponte precisa, quanto e onde' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.</span></div>');
+      h.unshift('<div class="ro-note fiscal-note"><span>Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o estado de cada ponte e estime o dano (quanto e onde)' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.</span></div>');
     }
     $('editor').innerHTML = h.join('');
     lockEditor();
@@ -975,7 +977,7 @@
   }
 
   // botões de status de cada serviço. Pontos críticos (obra feita uma vez): OK, Ativo, Parado, N/A e o % executado.
-  // Pontes (serviço contínuo): o que a ponte precisa (OK, Precisa, Urgente, Em execução, N/A), quanto e onde
+  // Pontes (serviço contínuo): estado na vistoria (OK, Danificado, Executando, N/A), estimativa do dano e onde
   function servHtml(p, list, extra) {
     var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), oae = list === OAE_SERVICES;
     list.forEach(function (s) {
@@ -986,11 +988,11 @@
       }).join('');
       if (oae) {
         var on = comQtd(cur);
-        h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q) + '</small>' : '') +
+        h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q + ' (estimativa)') + '</small>' : '') +
           (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + (extra ? extra(s) : '') + '</div>' +
           '<div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
           (s.un ? '<div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (on && sv.q != null ? esc(sv.q) : '') + '"' +
-            (on ? ' placeholder="quanto?"' : ' disabled') + ' aria-label="' + esc(s.short + ': ' + s.q + ' (' + s.un + ')') + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
+            (on ? ' placeholder="estimativa"' : ' disabled') + ' aria-label="' + esc(s.short + ': estimativa, ' + s.q) + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
           (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' : '') +
           '</div>';
         return;
@@ -1131,8 +1133,8 @@
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
       return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + OAE_STATUS[k].name + (qt ? ' · ' + qt : '')) + '"></span>';
     }).join('');
-    var n = oaeNec(p), nc = n.urg ? 'urg' : n.prec ? 'prec' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok';
-    var nt = n.urg ? n.urg + ' urg.' : n.prec ? n.prec + ' prec.' : n.exec ? 'exec.' : nc === 'nv' ? '–' : 'OK';
+    var n = oaeNec(p), nc = n.dn ? 'dn' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok';
+    var nt = n.dn ? n.dn + ' dan.' : n.exec ? 'exec.' : nc === 'nv' ? '–' : 'OK';
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
     var badge = a && a.aa ? '<b class="pt-al" title="' + a.aa + (a.aa === 1 ? ' alerta alto' : ' alertas altos') + ' na análise das medições">' + a.aa + '</b>' : '';
@@ -1156,7 +1158,7 @@
       h += '</div>';
 
       var vis = vistoriaPonte(c, p);
-      h += '<div class="section-title">O que a ponte precisa' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
+      h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
@@ -1263,7 +1265,7 @@
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
     if (isOae(ownerOf(p))) {
-      var n = oaeNec(p), k = n.urg ? 'UR' : n.prec ? 'PR' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null;
+      var n = oaeNec(p), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null;
       return {
         color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: oaeNecTxt(n),
         servs: OAE_SERVICES.filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
@@ -1414,7 +1416,7 @@
   function metaSituacao(c, tot) {
     if (!isOae(c)) return ' · avanço médio ' + fmtPct(tot.avg);
     var r = oaeResumo(c);
-    return ' · ' + r.prec + (r.prec === 1 ? ' precisa' : ' precisam') + ' de manutenção' + (r.urg ? ' (' + r.urg + ' com urgência)' : '');
+    return ' · ' + r.dn + (r.dn === 1 ? ' ponte com danos' : ' pontes com danos') + (r.exec ? ' · ' + r.exec + ' executando' : '');
   }
   function renderPreview() {
     var c = active(), tot = totals(c);
@@ -1521,7 +1523,7 @@
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
         if (!sv) return;
         if (isOae(c)) {
-          // ponte: a quantidade e o "onde" só valem enquanto precisa ou está em execução
+          // ponte: a estimativa e o "onde" só valem enquanto está danificado ou executando
           delete sv.pct;
           if (!comQtd(st)) { delete sv.q; delete sv.n; }
         } else if (st === 'OK') sv.pct = 100;
@@ -2110,7 +2112,7 @@
     if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
       var so = OAE_SERVICES.find(function (x) { return x.key === campo.slice(5); });
       if (so) {
-        var k = OAE_STATUS[v.st] ? v.st : 'NV', qt = comQtd(k) ? fmtQtd(so, v.q) : '';
+        var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
         return OAE_STATUS[k].name + (qt ? ' ' + qt : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
       }
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
