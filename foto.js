@@ -17,6 +17,7 @@
   var KEY = 'diagrama-linear.foto';
   var LOGOS_KEY = 'diagrama-linear.foto-logos';           // logos adicionadas neste aparelho
   var LOGO_SEL_KEY = 'diagrama-linear.foto-logo-escolhida';
+  var DNIT_KEY = 'diagrama-linear.foto-logo-dnit';         // '1': a logo do DNIT já foi posta como padrão neste aparelho
   var OLD_LOGO_KEY = 'diagrama-linear.foto-logo';           // versão 9: uma logo só
   var DRIVE_KEY = 'diagrama-linear.foto-drive';             // '0': fotos novas ficam só no aparelho (desmarcadas para o Drive)
   var MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
@@ -1671,7 +1672,7 @@
       } else if (t.id === 'ftLado') { st.side = t.value; if (!st.side) { st.dist = null; q('#ftDl').value = ''; } scheduleDraw(0); }
     }
 
-    // ---------------- logos: consórcio (embutida), padrão da equipe (banco, definida pelo responsável) e as adicionadas neste aparelho
+    // ---------------- logos: DNIT e consórcio (embutidas), padrão da equipe (banco, definida pelo responsável) e as adicionadas neste aparelho
     function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
     // escolha "Enviar ao Drive" das fotos novas: vale a última que a pessoa usou
@@ -1689,11 +1690,14 @@
       try { localStorage.removeItem(OLD_LOGO_KEY); } catch (e) { /* nada */ }
       return list;
     })();
+    // a logo do DNIT passa a ser a padrão: marcada uma vez em cada aparelho (depois a pessoa troca se quiser)
+    if (window.FOTO_LOGO_DNIT && lsGet(DNIT_KEY) !== '1') { lsSet(LOGO_SEL_KEY, 'dnit'); lsSet(DNIT_KEY, '1'); }
     var selId = lsGet(LOGO_SEL_KEY) || '', curImg = null, curKey = '';
     function teamLogo() { var t = opts.getTeamLogo ? opts.getTeamLogo() : null; return t && typeof t.src === 'string' && /^data:image\//.test(t.src) ? t : null; }
     function library() {
       var out = [], t = teamLogo();
       if (t) out.push({ id: 'equipe', nome: t.nome || 'Logo da equipe', src: t.src, team: true });
+      if (window.FOTO_LOGO_DNIT) out.push({ id: 'dnit', nome: 'DNIT', src: window.FOTO_LOGO_DNIT.src, builtin: true });
       if (opts.logoSrc) out.push({ id: 'consorcio', nome: 'Consórcio Magna/Enecon', src: opts.logoSrc, builtin: true });
       return out.concat(deviceLogos);
     }

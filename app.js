@@ -1330,7 +1330,7 @@
       h += servHtml(p, OAE_SERVICES, function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
-        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + gi.ult + 'ª' : '') + (gi.altos ? ' · ' + (gi.alerta || 'alerta alto') : '') + '</small>';
+        return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + esc(medTxt(an, gi.ult)) : '') + (gi.altos ? ' · ' + esc(comMes(an, gi.alerta || 'alerta alto')) : '') + '</small>';
       });
 
       if (a) h += ponteAnaliseHtml(an, a, p.id);
@@ -1362,9 +1362,9 @@
     var h = '';
     if (med) {
       h += '<div class="section-title">Serviços · Curva ABC · ' + med + 'ª medição' + (mesDe[med] ? ' (' + esc(mesDe[med]) + ')' : '') + '</div>';
-      h += '<div class="abc-filtro"><span>' + (temPor ? 'Só o que foi medido nesta ponte na ' + med + 'ª.' : 'Serviços medidos na ' + med + 'ª, com o total de cada um nesta ponte.') +
+      h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido nesta ponte na ' + medTxt(an, med) + '.' : 'Serviços medidos na ' + medTxt(an, med) + ', com o total de cada um nesta ponte.') +
         '</span><button type="button" class="btn small" data-act="abc-todas">Todas as medições · ' + fmtBRL(a.tot) + '</button></div>';
-      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + med + 'ª.</div>';
+      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + esc(medTxt(an, med)) + '.</div>';
     } else {
       if (!sv.length) return '';
       h += '<div class="section-title">Serviços · Curva ABC</div>';
@@ -1380,7 +1380,7 @@
     function meds(t) {
       var ns = medsNums(t);
       return ns.length ? '<span class="abc-meds">' + ns.map(function (n) {
-        return '<i' + (n === med ? ' class="sel"' : '') + '>' + n + 'ª' + (mesDe[n] ? ' <small>' + esc(mesDe[n]) + '</small>' : '') + '</i>';
+        return '<i' + (n === med ? ' class="sel"' : '') + '>' + n + 'ª' + (mesDe[n] ? ' <small>(' + esc(mesDe[n]) + ')</small>' : '') + '</i>';
       }).join('') + '</span>' : '';
     }
     // à direita, a quantidade medida em destaque e o valor pequeno embaixo (a classe A/B/C continua sendo pelo valor)
@@ -1399,19 +1399,26 @@
     return h + '</div>';
   }
   function medsNums(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
+  // medição citada sempre com o mês e o ano: "25ª (mar/26)" (os meses vêm da análise)
+  function mesMed(an, n) { var m = null; ((an && an.medicoes) || []).forEach(function (x) { if (x.n === Number(n)) m = x; }); return m && m.mes ? m.mes : ''; }
+  function medTxt(an, n) { var mm = mesMed(an, n); return n + 'ª' + (mm ? ' (' + mm + ')' : ''); }
+  // nos textos que vêm prontos da análise: cada "Nª" de medição ganha o mês (etapa e o que já tem mês ficam como estão)
+  function comMes(an, t) {
+    return String(t == null ? '' : t).replace(/(\d+)ª(?!\s*(etapa|\(|saída))/g, function (x, n) { var mm = mesMed(an, n); return mm ? x + ' (' + mm + ')' : x; });
+  }
   var DET0 = 'Toque numa barra para ver só aquela medição.';
-  function detTxt(med) { return med ? 'Toque de novo na barra da ' + med + 'ª ou em “Todas as medições” para voltar ao total.' : DET0; }
+  function detTxt(med) { return med ? 'Toque de novo na barra da ' + medTxt(anOf(active()), med) + ' ou em “Todas as medições” para voltar ao total.' : DET0; }
   // topo de "Medições nesta ponte": "Todas as medições" com a soma, ou só os dados da medição escolhida no gráfico
   function topoHtml(an, a, med) {
     var ms = an.medicoes || [], m = null, h = '', k = String(med || '');
     ms.forEach(function (x) { if (x.n === med) m = x; });
     var v = m ? Number(a.meses[k]) || 0 : 0;
     h += '<div class="an-esc"><button type="button" class="an-chip' + (m ? '' : ' on') + '" data-act="abc-todas" aria-pressed="' + !m + '">Todas as medições <b>' + fmtBRL(a.tot) + '</b></button>' +
-      (m ? '<span class="an-chip on">' + m.n + 'ª medição <b>' + fmtBRL(v) + '</b></span>' : '') + '</div>';
+      (m ? '<span class="an-chip on">' + esc(medTxt(an, m.n)) + ' <b>' + fmtBRL(v) + '</b></span>' : '') + '</div>';
     if (m) {
       var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = sv.some(function (s) { return s.por; });
       var nsv = sv.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(m.n) >= 0; }).length;
-      h += '<div class="an-line">' + esc(m.mes) + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + ' · ' +
+      h += '<div class="an-line">' + (m.etapa ? esc(m.etapa) + 'ª etapa · ' : '') +
         (v ? nsv + (nsv === 1 ? ' serviço medido' : ' serviços medidos') + ' nesta ponte' : 'sem serviço nesta ponte') +
         ((a.mx || []).indexOf(m.n) >= 0 ? ' · <span class="an-over">medição de alerta alto</span>' : '') + '</div>';
       return h;
@@ -1443,7 +1450,7 @@
     // cada barra é um botão: no celular não há "passar o mouse", então o toque mostra a medição embaixo do gráfico
     h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
-      var tip = m.n + 'ª medição · ' + m.mes + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição de alerta alto' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
+      var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição de alerta alto' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
       return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + '" data-act="med-bar" data-n="' + m.n + '" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
@@ -1464,7 +1471,7 @@
     if (!al.length) h += '<div class="empty">Nenhuma etapa com mais de uma passagem e nenhuma junta refeita em menos de 1 ano.</div>';
     al.forEach(function (x) {
       h += '<div class="an-al"><span class="an-sev ' + (x.sev === 'Alta' ? 'alta' : x.sev === 'Baixa' ? 'baixa' : 'media') + '">' + esc(x.sev) + '</span>' +
-        '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) +
+        '<div><b>' + esc(x.servico) + '</b> · ' + esc(x.tipoNome || ALERTA_TXT[x.tipo] || x.tipo) + '<small>' + esc(x.motivo) +   // os trechos já vêm com os meses
         (x.gap != null ? ' · voltou em ' + x.gap + (x.gap === 1 ? ' mês' : ' meses') : '') + '</small></div>' +
         '<span class="an-v">' + fmtBRL(x.valor) + '</span></div>';
     });
