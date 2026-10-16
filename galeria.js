@@ -71,7 +71,8 @@
     '.gl-bar .gl-n{flex:1 1 120px;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}',
     '.gl-prog{flex:1 1 200px;font-size:13px;font-variant-numeric:tabular-nums}',
     '.gl-ver{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;background:#0E1311;color:#fff}',
-    '.gl-ver-top{display:flex;align-items:center;gap:8px;padding:10px 12px}',
+    // a foto aberta cobre a tela toda (por cima da margem da .gl): a barra de cima desce abaixo do relógio do iPhone, onde o toque não chega
+    '.gl-ver-top{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) 10px calc(12px + env(safe-area-inset-left,0px))}',
     '.gl-ver-top .gl-c{flex:1;text-align:center;font-size:13px;color:#C9D0CC;font-variant-numeric:tabular-nums}',
     '.gl-ver .btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff}',
     '.gl-ver .btn:hover{background:rgba(255,255,255,.16)}',
