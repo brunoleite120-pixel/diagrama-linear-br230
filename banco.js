@@ -51,6 +51,8 @@
         if (!r.ok) {
           var err = new Error((j && j.message) || 'HTTP ' + r.status);
           err.code = (j && j.message) || 'http_' + r.status;
+          err.status = r.status;          // 4xx: o banco respondeu e recusou; 5xx: falha do servidor
+          err.pg = (j && j.code) || '';   // código do Postgres (P0001 = recusa das nossas funções)
           throw err;
         }
         return j;
@@ -59,6 +61,7 @@
       clearTimeout(timer);
       var err = new Error('Sem conexão com o banco');
       err.code = 'sem_rede';
+      err.status = 0;
       throw err;
     });
   }

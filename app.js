@@ -2151,6 +2151,7 @@
       });
     }
     else if (act === 'lixeira') openLixeira();
+    else if (act === 'recusadas') openRecusadas();
     else if (act === 'usuarios') openUsuarios();
     else if (act === 'aprovar') openAprov();
   }
@@ -2162,7 +2163,9 @@
   var LOGIN_KEY = 'diagrama-linear.acesso';         // {codigo, nome, papel} deste aparelho
   var NAME_KEY = 'diagrama-linear.nome';
   var OLD_KEY = 'diagrama-linear.antes-do-banco';   // o que estava só neste aparelho antes do banco da equipe
-  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false };
+  var RECUSA_KEY = 'diagrama-linear.recusadas';     // alterações que o banco recusou de vez (guardadas, nunca apagadas sozinhas)
+  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false,
+    falhas: 0, espera: 0, lote: 0 };   // falhas seguidas do servidor, quando tentar de novo e tamanho do lote ao separar uma recusa
   var flushTimer = null;
 
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
@@ -2466,7 +2469,8 @@
   function scheduleFlush(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms || 0); syncStatus(); }
   function flush() {
     if (!banco.on || banco.busy || !banco.pend.length || !banco.login) { syncStatus(); return; }
-    var ops = banco.pend.slice(0, 500), n = ops.length;
+    if (banco.espera > Date.now()) { scheduleFlush(banco.espera - Date.now()); return; }   // o servidor falhou há pouco: espera
+    var ops = banco.pend.slice(0, banco.lote || 500), n = ops.length;
     banco.busy = true;
     banco.sending = n;
     syncStatus();
@@ -2477,6 +2481,8 @@
       banco.online = true;
       banco.at = new Date();
       banco.pend.splice(0, n);
+      banco.falhas = 0; banco.espera = 0;
+      if (!banco.pend.length) banco.lote = 0; else if (banco.lote) banco.lote = Math.min(500, banco.lote * 2);   // separou a recusa: volta a crescer
       if (res && res.propostas != null) {                            // fiscal: vira proposta, o banco não muda
         if (res.propostas) toast('Enviado para aprovação de um engenheiro.', 4000);
         keepSync();
@@ -2498,11 +2504,86 @@
       if (code === 'sem_rede') { banco.online = false; syncStatus(); return; }
       if (code === 'codigo_invalido') { logout(true); toast('Seu acesso mudou ou foi desativado. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
       if (code === 'muitas_tentativas') { toast('O banco bloqueou por muitas tentativas com código errado. Tente de novo em 10 minutos.', 7000); syncStatus(); return; }
-      banco.pend.splice(0, n);   // o banco recusou os dados: descarta e volta ao que está lá
+      if (!recusaDefinitiva(err)) {
+        // falha do servidor (5xx, tempo esgotado, banco reiniciando, função ainda sendo trocada...): nada sai da fila;
+        // tenta de novo sozinho, esperando cada vez mais (10 s, 20 s, 40 s... até 5 min)
+        banco.falhas++;
+        banco.espera = Date.now() + Math.min(300000, 10000 * Math.pow(2, banco.falhas - 1));
+        if (banco.falhas === 1 || banco.falhas % 5 === 0) toast('O banco não respondeu direito (' + ((err && err.message) || 'erro') + '). As alterações continuam guardadas neste aparelho e sobem sozinhas quando ele voltar.', 7000);
+        keepSync();
+        scheduleFlush(banco.espera - Date.now());
+        return;
+      }
+      // o banco recusou de vez (dado ou permissão). O lote é uma transação só: nada dele foi gravado. Manda em lotes
+      // menores até sobrar só a alteração recusada; as outras sobem normalmente.
+      if (n > 1) { banco.lote = Math.ceil(n / 2); scheduleFlush(300); return; }
+      var op = banco.pend[0];
+      if (!guardarRecusada(op, err)) {   // sem espaço no aparelho para guardar: não apaga; avisa e para de tentar
+        banco.espera = Date.now() + 300000;
+        toast('O banco recusou uma alteração e não há espaço neste aparelho para guardá-la à parte. Ela continua na fila: salve um backup (menu Dados).', 9000);
+        syncStatus();
+        return;
+      }
+      banco.pend.splice(0, 1);
+      if (!banco.pend.length) banco.lote = 0;
       keepSync();
-      toast(code === 'so_status' ? 'Fiscal de campo só altera o status dos serviços. Os dados foram recarregados.'
-        : 'O banco recusou uma alteração (' + ((err && err.message) || 'erro') + '). Os dados foram recarregados.', 7000);
+      toast((code === 'so_status' ? 'Fiscal de campo só altera o status dos serviços.' : 'O banco recusou uma alteração (' + ((err && err.message) || 'erro') + ').') +
+        ' A alteração "' + opsResumo([op]) + '" ficou guardada em Dados › Alterações recusadas; as outras seguem para o banco.', 9000);
       refresh();
+      if (banco.pend.length) scheduleFlush(300);
+    });
+  }
+  // recusa definitiva: o banco respondeu que o dado (ou a permissão) não serve, e mandar de novo daria o mesmo erro.
+  // 5xx, 408 e 429 são falha passageira do servidor; 401/403/404 são acesso ou versão do banco: também não são do dado.
+  function recusaDefinitiva(err) {
+    var s = err && err.status, pg = String((err && err.pg) || '');
+    if (s === 413) return true;                                    // grande demais: em lotes menores passa
+    if (!s || s >= 500 || s === 408 || s === 429) return false;
+    return pg === 'P0001' || /^2[23]/.test(pg);                    // erro das nossas funções, dado inválido ou regra do banco
+  }
+  // ---- alterações recusadas: ficam neste aparelho até alguém baixar, mandar de novo ou apagar (menu Dados)
+  function recusadas() { var l = lsGet(RECUSA_KEY); return Array.isArray(l) ? l : []; }
+  function guardarRecusada(op, err) {
+    var l = recusadas();
+    l.push({ em: new Date().toISOString(), por: (banco.login && banco.login.nome) || null, erro: (err && err.message) || 'erro', op: op });
+    try { localStorage.setItem(RECUSA_KEY, JSON.stringify(l)); return true; } catch (e) { return false; }
+  }
+  function openRecusadas() {
+    var l = recusadas();
+    if (!l.length) { toast('Nenhuma alteração recusada neste aparelho.'); return; }
+    var f = modal('<h2 id="modalTitle">Alterações recusadas</h2>' +
+      '<p>O banco recusou estas alterações deste aparelho. Elas não foram gravadas, mas ficaram guardadas aqui. Baixe o arquivo para conferir ou guardar, ou mande de novo se o motivo já foi resolvido (por exemplo, o acesso foi corrigido).</p>' +
+      '<ul class="rec-lista">' + l.map(function (x) {
+        return '<li><b>' + esc(opsResumo([x.op])) + '</b><small>' + esc(new Date(x.em).toLocaleString('pt-BR')) + (x.por ? ' · ' + esc(x.por) : '') + ' · motivo: ' + esc(x.erro) + '</small></li>';
+      }).join('') + '</ul>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button>' +
+      '<button type="button" class="btn danger" data-rec="apagar">Apagar a lista</button>' +
+      '<button type="button" class="btn" data-rec="baixar">Baixar (.json)</button>' +
+      (banco.login ? '<button type="button" class="btn primary" data-rec="reenviar">Mandar de novo</button>' : '') + '</div>');
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-rec]');
+      if (!b) return;
+      var k = b.dataset.rec;
+      if (k === 'baixar') {
+        saveBlob('alteracoes-recusadas-' + todayIso() + '.json', new Blob([JSON.stringify(recusadas(), null, 2)], { type: 'application/json' }), 'Arquivo das alterações recusadas salvo.');
+      } else if (k === 'reenviar') {
+        var ops = recusadas().map(function (x) { return x.op; });
+        lsPut(RECUSA_KEY, null);
+        closeModal();
+        enqueue(ops);
+        keepSync();
+        banco.espera = 0;
+        refresh();          // mostra o banco com estas alterações por cima, como as outras da fila
+        scheduleFlush(300);
+        toast('Mandando de novo ' + ops.length + (ops.length === 1 ? ' alteração.' : ' alterações.'));
+      } else if (k === 'apagar') {
+        closeModal();
+        confirmar({ titulo: 'Apagar as alterações recusadas?', texto: 'Elas somem deste aparelho. Se quiser guardar, baixe o arquivo antes.', botao: 'Apagar', perigo: true }).then(function (r) {
+          if (!r) return;
+          lsPut(RECUSA_KEY, null);
+          toast('Lista apagada.');
+        });
+      }
     });
   }
   function typing() {
@@ -2573,6 +2654,7 @@
     var el = $('saveState'), n = banco.pend.length, t, warn = false;
     if (banco.busy) t = 'Enviando ao banco…';
     else if (n && !banco.login) { t = n + (n === 1 ? ' alteração não enviada' : ' alterações não enviadas') + ': entre para enviar'; warn = true; }
+    else if (n && banco.falhas) { t = 'Banco com falha · ' + n + (n === 1 ? ' alteração guardada' : ' alterações guardadas') + ' · tenta de novo às ' + hhmm(new Date(banco.espera)); warn = true; }
     else if (n && isFiscal()) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' mudança para enviar à aprovação' : ' mudanças para enviar à aprovação'); warn = banco.online === false; }
     else if (n) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' alteração aguardando' : ' alterações aguardando'); warn = banco.online === false; }
     else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
@@ -3265,7 +3347,7 @@
     initAprov();
     document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
     $('editor').addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
-    window.addEventListener('online', function () { banco.online = true; flush(); poll(); });
+    window.addEventListener('online', function () { banco.online = true; banco.espera = 0; flush(); poll(); });
     window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
@@ -3322,7 +3404,8 @@
       $('btnFull').hidden = true;
     }
     $('btnMenu').addEventListener('click', function () {
-      var pop = $('menuPop');
+      var pop = $('menuPop'), rec = pop.querySelector('[data-act="recusadas"]'), nr = recusadas().length;
+      if (rec) { rec.hidden = !nr; rec.textContent = 'Alterações recusadas (' + nr + ')'; }
       pop.hidden = !pop.hidden;
       $('btnMenu').setAttribute('aria-expanded', String(!pop.hidden));
     });
