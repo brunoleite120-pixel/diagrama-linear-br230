@@ -893,7 +893,7 @@
   }
 
   // ------------------------------------------------------------------ estado
-  var state, ui = { contractOpen: false, open: {}, wide: false };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {} };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -1333,7 +1333,7 @@
         return '<small class="svc-med' + (gi.altos ? ' al' : '') + '">' + (gi.ult ? 'última medição: ' + gi.ult + 'ª' : '') + (gi.altos ? ' · ' + (gi.alerta || 'alerta alto') : '') + '</small>';
       });
 
-      if (a) h += ponteAnaliseHtml(an, a);
+      if (a) h += ponteAnaliseHtml(an, a, p.id);
       else if (banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros e para o Administrador.</div>';
 
       var tid = 'obs-' + id;
@@ -1347,11 +1347,29 @@
 
   // curva ABC dos serviços medidos na ponte: A = os que somam os primeiros 80% do valor, B = até 95%, C = o resto.
   // A em destaque; C fica recolhido. Cada serviço mostra em quais medições foi medido nesta ponte.
-  function abcHtml(an, a) {
-    var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }).sort(function (x, y) { return y.v - x.v; });
-    if (!sv.length) return '';
-    var tot = sv.reduce(function (t, s) { return t + s.v; }, 0), acum = 0, cls = { A: [], B: [], C: [] }, mesDe = {};
+  // Com uma medição escolhida no gráfico (med), a curva é só daquela medição: quantidade e valor de cada serviço nela
+  // (campo "por" da análise: {"22": [quantidade, valor]}); sem esse campo, mostra os serviços dela com o total de cada um.
+  function abcHtml(an, a, med) {
+    var mesDe = {}, k = String(med || ''), base = (a.servicos || []).filter(function (s) { return s.v > 0; });
     (an.medicoes || []).forEach(function (m) { mesDe[m.n] = m.mes; });
+    var temPor = base.some(function (s) { return s.por; }), sv = base;
+    if (med) {
+      sv = base.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(med) >= 0; }).map(function (s) {
+        return temPor ? Object.assign({}, s, { q: s.por[k][0], v: s.por[k][1] }) : s;
+      });
+    }
+    sv = sv.slice().sort(function (x, y) { return y.v - x.v; });
+    var h = '';
+    if (med) {
+      h += '<div class="section-title">Serviços · Curva ABC · ' + med + 'ª medição' + (mesDe[med] ? ' (' + esc(mesDe[med]) + ')' : '') + '</div>';
+      h += '<div class="abc-filtro"><span>' + (temPor ? 'Quantidade e valor medidos nesta ponte na ' + med + 'ª.' : 'Serviços medidos na ' + med + 'ª, com o total de cada um nesta ponte.') +
+        '</span><button type="button" class="btn small" data-act="abc-todas">Ver todas as medições</button></div>';
+      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + med + 'ª.</div>';
+    } else {
+      if (!sv.length) return '';
+      h += '<div class="section-title">Serviços · Curva ABC</div>';
+    }
+    var tot = sv.reduce(function (t, s) { return t + s.v; }, 0), acum = 0, cls = { A: [], B: [], C: [] };
     sv.forEach(function (s) {
       var k = acum / tot < 0.8 ? 'A' : acum / tot < 0.95 ? 'B' : 'C';
       acum += s.v;
@@ -1360,17 +1378,18 @@
     function pct(v) { return (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('pt-BR') + '%'; }
     function soma(l) { return l.reduce(function (t, x) { return t + x.pct; }, 0); }
     function meds(t) {
-      var ns = [];
-      String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); });
-      return ns.length ? '<span class="abc-meds">' + ns.map(function (n) { return '<i>' + n + 'ª' + (mesDe[n] ? ' <small>' + esc(mesDe[n]) + '</small>' : '') + '</i>'; }).join('') + '</span>' : '';
+      var ns = medsNums(t);
+      return ns.length ? '<span class="abc-meds">' + ns.map(function (n) {
+        return '<i' + (n === med ? ' class="sel"' : '') + '>' + n + 'ª' + (mesDe[n] ? ' <small>' + esc(mesDe[n]) + '</small>' : '') + '</i>';
+      }).join('') + '</span>' : '';
     }
     function linha(x) {
+      var onde = med && temPor ? ' medidos na ' + med + 'ª' : ' medidos nesta ponte';
       return '<div class="abc-r ' + x.k.toLowerCase() + '"><span class="abc-c" aria-label="classe ' + x.k + '">' + x.k + '</span>' +
-        '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span><small>' + fmtN(x.s.q) + ' ' + esc(x.s.un) + ' medidos nesta ponte</small>' + meds(x.s.meds) +
+        '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span><small>' + fmtN(x.s.q) + ' ' + esc(x.s.un) + onde + '</small>' + meds(x.s.meds) +
         '<span class="abc-bar"><i style="width:' + Math.max(1.5, x.pct).toFixed(1) + '%"></i></span></div>' +
         '<div class="abc-v"><b>' + fmtBRL(x.s.v) + '</b><small>' + pct(x.pct) + ' · acum. ' + pct(x.ac) + '</small></div></div>';
     }
-    var h = '<div class="section-title">Serviços · Curva ABC</div>';
     h += '<div class="abc-res">' + ['A', 'B', 'C'].filter(function (k) { return cls[k].length; }).map(function (k) {
       return '<span class="abc-tag ' + k.toLowerCase() + '"><b>' + k + '</b> ' + cls[k].length + (cls[k].length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls[k])) + '</span>';
     }).join('') + '</div>';
@@ -1378,9 +1397,16 @@
     if (cls.C.length) h += '<details class="abc-mais"><summary>Classe C: ' + cls.C.length + (cls.C.length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls.C)) + ' do valor</summary>' + cls.C.map(linha).join('') + '</details>';
     return h + '</div>';
   }
+  function medsNums(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
+  var DET0 = 'Toque numa barra para ver a medição e os serviços dela.';
+  // troca só a curva ABC da ponte aberta, pela medição escolhida no gráfico (ou todas)
+  function abcTrocar(art) {
+    var pid = art && art.dataset.id, an = anOf(active()), a = an && an.pontes ? an.pontes[pid] : null, box = art && art.querySelector('.abc-box');
+    if (a && box) box.innerHTML = abcHtml(an, a, ui.medSel[pid]);
+  }
   // medições da ponte (barras por medição), serviços pela curva ABC e alertas
-  function ponteAnaliseHtml(an, a) {
-    var ms = an.medicoes || [], mx = {}, max = 0, h = '';
+  function ponteAnaliseHtml(an, a, pid) {
+    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = ui.medSel[pid] || null, tipSel = '';
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
     // só o histórico: total, por etapa e as últimas medições com serviço (sem comparar com o estimado do Anexo VI)
@@ -1395,17 +1421,18 @@
     h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
       var tip = m.n + 'ª medição · ' + m.mes + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição de alerta alto' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
-      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + '" data-act="med-bar" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+      if (m.n === sel) tipSel = tip;
+      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + '" data-act="med-bar" data-n="' + m.n + '" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
     if (ms.length) {
       h += '<div class="an-axis"><span>' + esc(ms[0].mes) + '</span>' + (corte > 0 ? '<span>' + (ms[corte].etapa) + 'ª etapa a partir de ' + esc(ms[corte].mes) + '</span>' : '') + '<span>' + esc(ms[ms.length - 1].mes) + '</span></div>';
       h += '<div class="an-leg"><span><i class="on"></i>com serviço</span><span><i class="al"></i>medição de alerta alto</span></div>';
-      h += '<div class="an-det" aria-live="polite">Toque numa barra para ver qual medição é e o valor.</div>';
+      h += '<div class="an-det' + (tipSel ? ' on' : '') + '" aria-live="polite">' + esc(tipSel || DET0) + '</div>';
     }
     h += '</div>';
 
-    h += abcHtml(an, a);
+    h += '<div class="abc-box">' + abcHtml(an, a, sel) + '</div>';
 
     var al = (a.alertas || []).slice().sort(function (x, y) {
       var o = { Alta: 0, 'Média': 1, Baixa: 2 };
@@ -1709,12 +1736,20 @@
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
-    if (act === 'med-bar') {
-      var gr = b.closest('.an-graf'), det = gr && gr.querySelector('.an-det');
-      if (!gr) return;
-      gr.querySelectorAll('.an-bar.sel').forEach(function (x) { x.classList.remove('sel'); });
-      b.classList.add('sel');
-      if (det) { det.textContent = b.dataset.tip; det.classList.add('on'); }
+    // barra do gráfico: escolhe a medição (a curva ABC passa a ser só dela); tocar de novo, ou "Ver todas", volta a todas
+    if (act === 'med-bar' || act === 'abc-todas') {
+      var art = b.closest('article.pt'), gr = art && art.querySelector('.an-graf'), det = gr && gr.querySelector('.an-det');
+      if (!art || !gr) return;
+      var pidSel = art.dataset.id, n = act === 'med-bar' ? Number(b.dataset.n) : null;
+      if (n && ui.medSel[pidSel] === n) n = null;
+      if (n) ui.medSel[pidSel] = n; else delete ui.medSel[pidSel];
+      gr.querySelectorAll('.an-bar').forEach(function (x) {
+        var on = n != null && Number(x.dataset.n) === n;
+        x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on));
+        if (on && det) { det.textContent = x.dataset.tip; det.classList.add('on'); }
+      });
+      if (!n && det) { det.textContent = DET0; det.classList.remove('on'); }
+      abcTrocar(art);
       return;
     }
     if (act === 'janela') {
