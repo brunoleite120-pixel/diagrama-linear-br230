@@ -2999,7 +2999,7 @@
   function driveStatus() {
     if (!driveQ || !driveReady()) return '';
     var i = driveQ.info(), n = i.n, fotos = n + (n === 1 ? ' foto' : ' fotos');
-    if (!n) return i.enviadas ? 'Fotos enviadas ao Drive da equipe.' : 'As fotos também vão para o Drive da equipe.';
+    if (!n) return i.enviadas ? 'Fotos enviadas ao Drive da equipe.' : 'As fotos marcadas vão para o Drive da equipe.';
     if (!banco.login) return fotos + ' esperando para o Drive: entre com o código da equipe.';
     if (i.erro === 'codigo') return fotos + ' esperando para o Drive: o código mudou, entre de novo.';
     if (i.busy) return 'Enviando ao Drive… (' + fotos + ' na fila)';

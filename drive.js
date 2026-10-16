@@ -5,13 +5,15 @@
  *   1) o arquivo vai para o script do Google (drive-fotos/Codigo.gs), que guarda em "Fotos por pessoa / <nome> / Lote / Ponto";
  *   2) os dados e a miniatura vão para o banco (foto_registrar), que alimenta as galerias do app.
  * Sem sinal, as fotos esperam (mesmo com o app fechado). Depois de enviada, a foto continua no aparelho até a pessoa
- * apagar "só do celular".
+ * apagar "só do celular". A foto marcada para não ir ao Drive fica só no aparelho (situação 'aparelho') até a pessoa
+ * mandar enviar pela galeria.
  *
  *   var d = DriveFotos({ getUrl, getLogin, ambiente, registrar(cred, foto, miniB64), onChange, onSent });
- *   d.add([{ id, nome, blob, pastas: ['Lote 02', 'P7'], descricao, meta }])  -> Promise
- *   d.list() -> Promise<[{ id, nome, meta, situacao: 'fila'|'enviada', erro, enviada, tamanho, mini: Blob|null }]>
+ *   d.add([{ id, nome, blob, pastas: ['Lote 02', 'P7'], descricao, meta, enviar }])  -> Promise   (enviar: false = só no aparelho)
+ *   d.list() -> Promise<[{ id, nome, meta, situacao: 'fila'|'aparelho'|'enviada', erro, enviada, tamanho, mini: Blob|null }]>
+ *   d.enviar(ids, sim) -> Promise<quantas>   sim: as 'aparelho' vão para a fila; não: as da fila que ainda não subiram ficam só no aparelho
  *   d.arquivo(id) -> Promise<Blob|null>      d.apagar(ids) (some do aparelho)
- *   d.info() -> { n, busy, erro, enviadas, total, bytes }   d.pump()
+ *   d.info() -> { n, aparelho, busy, erro, enviadas, total, bytes }   d.pump()
  */
 (function () {
   'use strict';
@@ -79,13 +81,14 @@
   }
 
   window.DriveFotos = function (opts) {
-    var n = 0, total = 0, bytes = 0, busy = false, erro = null, enviadas = 0, timer = null;
+    var n = 0, soAparelho = 0, total = 0, bytes = 0, busy = false, erro = null, enviadas = 0, timer = null;
     function change() { if (opts.onChange) opts.onChange(); }
     function recount() {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
         all = all || [];
         total = all.length;
-        n = all.filter(function (r) { return r.situacao !== 'enviada'; }).length;
+        n = all.filter(function (r) { return r.situacao === 'fila'; }).length;
+        soAparelho = all.filter(function (r) { return r.situacao === 'aparelho'; }).length;
         bytes = all.reduce(function (a, r) { return a + (r.temArquivo ? r.tamanho || 0 : 0); }, 0);
         change();
       }, function () { n = 0; });
@@ -100,7 +103,7 @@
             arq: { id: it.id, buf: r[0] },
             foto: { id: it.id, nome: it.nome, tipo: it.blob.type || 'image/jpeg', pastas: it.pastas, descricao: it.descricao || '', meta: it.meta || {},
               mini: r[1], criada: Date.now(), autor: login ? { uid: login.uid || null, nome: login.nome || null } : null,
-              situacao: 'fila', etapa: 'drive', tent: 0, prox: 0, tamanho: r[0].byteLength, temArquivo: true }
+              situacao: it.enviar === false ? 'aparelho' : 'fila', etapa: 'drive', tent: 0, prox: 0, tamanho: r[0].byteLength, temArquivo: true }
           };
         });
       })).then(function (rows) {
@@ -121,6 +124,24 @@
     function arquivo(id) {
       return tx([ARQ], 'readonly', function (s) { return s[ARQ].get(id); }).then(function (x) { return x && x.buf ? new Blob([x.buf], { type: 'image/jpeg' }) : null; });
     }
+    // manda para o Drive as que ficaram só no aparelho (sim) ou segura as da fila que ainda não subiram (não)
+    function enviar(ids, sim) {
+      var m = 0;
+      return tx([FOTOS], 'readwrite', function (s) {
+        ids.forEach(function (id) {
+          var g = s[FOTOS].get(id);
+          g.onsuccess = function () {
+            var r = g.result;
+            if (!r) return;
+            if (sim && r.situacao === 'aparelho') { r.situacao = 'fila'; r.etapa = 'drive'; r.tent = 0; r.prox = 0; r.erro = null; }
+            else if (!sim && r.situacao === 'fila' && r.etapa !== 'registro') { r.situacao = 'aparelho'; r.erro = null; }
+            else return;
+            m++;
+            s[FOTOS].put(r);
+          };
+        });
+      }).then(recount).then(function () { if (sim) pump(); return m; });
+    }
     // some do aparelho (a foto enviada continua no Drive e nas galerias do banco)
     function apagar(ids) {
       return tx([FOTOS, ARQ], 'readwrite', function (s) { ids.forEach(function (id) { s[FOTOS].delete(id); s[ARQ].delete(id); }); }).then(recount);
@@ -129,7 +150,7 @@
     // a próxima foto que pode subir agora (a mais antiga)
     function next() {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
-        var now = Date.now(), pend = (all || []).filter(function (r) { return r.situacao !== 'enviada'; });
+        var now = Date.now(), pend = (all || []).filter(function (r) { return r.situacao === 'fila'; });
         var ok = pend.filter(function (r) { return (r.prox || 0) <= now; }).sort(function (a, b) { return (a.criada || 0) - (b.criada || 0); });
         if (!ok.length && pend.length) later(Math.max(5000, Math.min.apply(null, pend.map(function (r) { return r.prox || 0; })) - now));
         return ok[0] || null;
@@ -212,8 +233,8 @@
     window.addEventListener('online', function () { pump(); });
     setInterval(pump, 60000);
     return {
-      add: add, list: list, arquivo: arquivo, apagar: apagar, pump: pump, resetCode: resetCode, post: post,
-      info: function () { return { n: n, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes }; }
+      add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, pump: pump, resetCode: resetCode, post: post,
+      info: function () { return { n: n, aparelho: soAparelho, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes }; }
     };
   };
 })();

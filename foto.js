@@ -18,6 +18,7 @@
   var LOGOS_KEY = 'diagrama-linear.foto-logos';           // logos adicionadas neste aparelho
   var LOGO_SEL_KEY = 'diagrama-linear.foto-logo-escolhida';
   var OLD_LOGO_KEY = 'diagrama-linear.foto-logo';           // versão 9: uma logo só
+  var DRIVE_KEY = 'diagrama-linear.foto-drive';             // '0': fotos novas ficam só no aparelho (desmarcadas para o Drive)
   var MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
   var FIELDS = [
     { k: 'rodkm', label: 'Rodovia e km', on: true },
@@ -204,6 +205,10 @@
     '.ft-checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}',
     '.ft-checks label{display:flex;align-items:center;gap:7px;font-size:13px;min-height:28px}',
     '.ft-checks input{width:18px;height:18px;min-height:0;margin:0;flex:none;accent-color:var(--ft-accent)}',
+    '.ft-chk{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;min-height:32px;cursor:pointer}',
+    '.ft-chk input{width:20px;height:20px;min-height:0;margin:0;flex:none;accent-color:var(--ft-accent)}',
+    '.ft-item .ft-chk{font-weight:500;font-size:13px}',
+    '.ft-bdrv{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px}',
     '.ft-opts{display:flex;flex-wrap:wrap;gap:6px}',
     '.ft-opt{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink-2);border-radius:6px;min-height:32px;padding:4px 10px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}',
     '.ft-opt[aria-pressed="true"]{background:var(--ft-ink);border-color:var(--ft-ink);color:var(--ft-panel)}',
@@ -377,6 +382,8 @@
                   '<label class="ft-f full"><span>Descrição</span><textarea id="ftDesc" maxlength="240" placeholder="Ex.: lançamento de enrocamento no bueiro"></textarea></label>' +
                 '</div>' +
               '</section>' +
+              '<section class="ft-sec ft-drvsec" hidden><label class="ft-chk"><input type="checkbox" id="ftDrive"> Enviar ao Drive da equipe</label>' +
+                '<div class="ft-src">Desmarcada, a foto fica só neste aparelho (Fotos › Neste aparelho) e dá para enviar depois.</div></section>' +
               '<section class="ft-sec ft-shared"><h4>O que aparece na legenda</h4><div class="ft-checks">' +
                 FIELDS.map(function (f) { return '<label><input type="checkbox" id="ftC-' + f.k + '" data-campo="' + f.k + '">' + f.label + '</label>'; }).join('') +
               '</div></section>' +
@@ -401,6 +408,8 @@
               '<section class="ft-sec ft-bsum"><h4 class="ft-bcount">Fotos</h4><div class="ft-src ft-bstat"></div><div class="ft-lot ft-blot" role="status" hidden></div>' +
                 '<label class="ft-f"><span>Descrição de todas as fotos</span><textarea id="ftBDesc" maxlength="240" placeholder="Ex.: lançamento de enrocamento no bueiro"></textarea></label>' +
                 '<div class="ft-src">Cada foto também pode ter a própria descrição; se ficar em branco, vale esta.</div>' +
+                '<div class="ft-bdrv" hidden><span class="ft-bdrvn"></span><span class="ft-opts"><button type="button" class="ft-opt" data-ft="b-drv-all">Marcar todas</button>' +
+                  '<button type="button" class="ft-opt" data-ft="b-drv-none">Nenhuma</button></span></div>' +
               '</section>' +
               '<div class="ft-blist"></div>' +
             '</div>' +
@@ -552,7 +561,7 @@
     }
     function setupPhoto(img, url, file, ex, from) {
       if (st && st.url) URL.revokeObjectURL(st.url);
-      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: newUid() };
+      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: newUid(), drive: padraoDrive() };
       place(st, ex, file, from);
       showWork();
     }
@@ -605,6 +614,7 @@
       q('#ftDl').value = st.dist != null ? String(st.dist) : '';
       q('#ftData').value = dateInput(st.date);
       q('#ftDesc').value = st.desc;
+      q('#ftDrive').checked = st.drive !== false;
       renderHead();
       renderPontos();
       renderSrc();
@@ -933,14 +943,18 @@
         var meta = { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? lotName(c) : null,
           km: st.km != null ? Math.round(st.km * 1000) / 1000 : null, lat: ll ? ll[0] : null, lng: ll ? ll[1] : null,
           em: d ? d.toISOString() : null, desc: desc || null };
-        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && (c.lote || lotName(c))) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], descricao: info, meta: meta };
+        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && (c.lote || lotName(c))) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], descricao: info, meta: meta,
+          enviar: st.drive !== false };
       });
     }
     // a foto fica guardada no aparelho (galeria do app) mesmo sem o Drive configurado; o envio espera
     function toDrive(list, auto) {
       if (!opts.drive || !list.length) return;
       opts.drive.add(list).then(function () {
-        if (!auto) notify(list.length === 1 ? 'Foto na fila para o Drive da equipe.' : list.length + ' fotos na fila para o Drive da equipe.');
+        var nd = list.filter(function (x) { return x.enviar !== false; }).length, na = list.length - nd;
+        if (!auto) notify(((nd ? (nd === 1 ? 'Foto na fila' : nd + ' fotos na fila') + ' para o Drive da equipe.' : '') +
+          (na ? ' ' + (na === 1 ? '1 ficou' : na + ' ficaram') + ' só neste aparelho.' : '')).trim());
+        else if (na && !nd) notify(na === 1 ? 'Foto guardada só neste aparelho (não vai para o Drive).' : na + ' fotos guardadas só neste aparelho (não vão para o Drive).');
         refreshDrive();
       }, function () { notify('Não foi possível guardar a foto para o Drive neste aparelho.'); });
     }
@@ -949,6 +963,8 @@
       busy(true);
       makeBlob().then(function (blob) {
         if (!blob) { notify('Não foi possível gerar a foto. Tente com uma imagem menor.'); return; }
+        st.drive = true;
+        q('#ftDrive').checked = true;
         toDrive([driveItem(st, blob, fileName())]);
       }).then(function () { busy(false); }, function () { busy(false); });
     }
@@ -968,6 +984,8 @@
       if (!root) return;
       var on = driveOn();
       root.querySelectorAll('.ft-drv').forEach(function (b) { b.hidden = !on; });
+      var ds = q('.ft-drvsec');
+      if (ds) ds.hidden = !opts.drive;
       var el = q('.ft-dstat');
       if (el) { var t = on && opts.drive.status ? opts.drive.status() : ''; el.textContent = t; el.hidden = !t; }
     }
@@ -984,7 +1002,7 @@
       if (extra > 0) files = files.slice(0, MAX_FOTOS);
       clearBatch();
       var b = batch = { common: '', ver: 0, out: null, busy: false, items: files.map(function (f, i) {
-        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true, preset: presets ? presets[i] : null, uid: newUid() };
+        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true, preset: presets ? presets[i] : null, uid: newUid(), drive: padraoDrive() };
       }) };
       showBatch();
       if (extra > 0) notify('Abertas as primeiras ' + MAX_FOTOS + ' fotos. Salve estas e depois abra as outras ' + extra + '.');
@@ -1075,7 +1093,7 @@
             '<label class="ft-f"><span>km</span><input data-b="km"' + d + ' inputmode="decimal" autocomplete="off"></label>' +
             '<label class="ft-f"><span>Ponto</span><select data-b="ponto"' + d + '></select></label>' +
             '<label class="ft-f full"><span>Descrição desta foto</span><input data-b="desc"' + d + ' maxlength="240" autocomplete="off"></label>' +
-          '</div></div>';
+          '</div>' + (opts.drive ? '<label class="ft-chk"><input type="checkbox" data-b="drive"' + d + (it.drive !== false ? ' checked' : '') + '> Enviar ao Drive</label>' : '') + '</div>';
       el.querySelector('[data-b="km"]').value = it.km != null ? nf(it.km, 2) : '';
       el.querySelector('[data-b="desc"]').value = it.desc;
       refreshItem(i);
@@ -1125,8 +1143,16 @@
       box.innerHTML = wrong ? '<div><b>' + wrong + (wrong === 1 ? ' foto está' : ' fotos estão') + ' com o km em outro lote.</b> A legenda e o ponto ' + (wrong === 1 ? 'dela' : 'delas') + ' estão usando o lote errado.</div>' +
         '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">Corrigir o lote ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km</button></div>' : '';
       box.hidden = !wrong;
-      var n = ok.length, off = batch.busy || wait > 0 || !n;
-      root.querySelectorAll('[data-ft="b-save"],[data-ft="b-share"],[data-ft="b-drive"]').forEach(function (b) { b.disabled = off; });
+      var n = ok.length, off = batch.busy || wait > 0 || !n, nd = ok.filter(function (it) { return it.drive !== false; }).length;
+      var bd = q('.ft-bdrv');
+      if (bd) {
+        bd.hidden = !opts.drive || !n;
+        q('.ft-bdrvn').textContent = nd === n ? (n === 1 ? 'Vai para o Drive.' : 'Todas vão para o Drive.') : !nd ? (n === 1 ? 'Fica só no aparelho.' : 'Todas ficam só no aparelho.')
+          : nd + ' de ' + n + ' vão para o Drive; ' + (n - nd) + ' só no aparelho.';
+      }
+      root.querySelectorAll('[data-ft="b-save"],[data-ft="b-share"]').forEach(function (b) { b.disabled = off; });
+      var bdr = q('[data-ft="b-drive"]');
+      if (bdr) { bdr.disabled = off || !nd; bdr.textContent = nd === n ? 'Enviar todas ao Drive' : 'Enviar ' + (nd === 1 ? 'a marcada' : 'as ' + nd + ' marcadas') + ' ao Drive'; }
       var bs = q('[data-ft="b-save"]'), sh = q('[data-ft="b-share"]');
       bs.textContent = n > 1 ? 'Salvar as ' + n + ' fotos (.zip)' : 'Salvar (.zip)';
       if (sh) sh.textContent = n > 1 ? 'Compartilhar as ' + n : 'Compartilhar';
@@ -1505,6 +1531,13 @@
       if (b.dataset.ft === 'b-drive') { sendAllDrive(); return; }
       if (b.dataset.ft === 'drive') { sendDrive(); return; }
       if (b.dataset.ft === 'b-fixall') { if (batch) fixAll(); return; }
+      if ((b.dataset.ft === 'b-drv-all' || b.dataset.ft === 'b-drv-none') && batch) {
+        var vai = b.dataset.ft === 'b-drv-all';
+        padraoDrive(vai);
+        batch.items.forEach(function (it, i) { it.drive = vai; var cx = itemEl(i) && itemEl(i).querySelector('[data-b="drive"]'); if (cx) cx.checked = vai; });
+        renderBatchSum();
+        return;
+      }
       if (b.dataset.ft === 'close') close();
       else if (b.dataset.ft === 'new') { startView(); }
       else if (b.dataset.ft === 'save') save();
@@ -1616,6 +1649,8 @@
         return;
       }
       if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; saveSet(set); scheduleDraw(0); return; }
+      if (t.id === 'ftDrive') { if (st) st.drive = t.checked; padraoDrive(t.checked); return; }
+      if (batch && t.dataset && t.dataset.b === 'drive') { var bi = batch.items[+t.dataset.i]; if (bi) { bi.drive = t.checked; renderBatchSum(); } return; }
       if (batch && t.tagName === 'SELECT' && batchInput(t)) return;
       if (!st) return;
       if (t.id === 'ftPonto') {
@@ -1631,6 +1666,8 @@
     // ---------------- logos: consórcio (embutida), padrão da equipe (banco, definida pelo responsável) e as adicionadas neste aparelho
     function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+    // escolha "Enviar ao Drive" das fotos novas: vale a última que a pessoa usou
+    function padraoDrive(v) { if (v != null) lsSet(DRIVE_KEY, v ? '1' : '0'); return lsGet(DRIVE_KEY) !== '0'; }
     var deviceLogos = (function () {
       var list = [];
       try { list = JSON.parse(lsGet(LOGOS_KEY) || '[]') || []; } catch (e) { list = []; }

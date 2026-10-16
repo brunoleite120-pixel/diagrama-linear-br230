@@ -43,6 +43,7 @@
     '.gl-b.fila{background:#FEF0C7;color:#7A2E0E}',
     '.gl-b.erro{background:#FEE4E2;color:#912018}',
     '.gl-b.ok{background:#D1FADF;color:#05603A}',
+    '.gl-b.ap{background:#E4E7EC;color:#344054}',
     '.gl-star{position:absolute;top:4px;right:6px;color:#FDB022;font-size:17px;text-shadow:0 1px 2px rgba(0,0,0,.5)}',
     '.gl-ck{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}',
     '.gl-t[aria-pressed="true"]{outline:3px solid var(--accent,#1D4F91);outline-offset:-3px}',
@@ -171,7 +172,7 @@
       if (u) urlsLocais.push(u);
       return { id: r.id, nome: r.nome, origem: 'local', cid: m.cid || '', pid: m.pid || '', pnome: m.pnome || '', lote: m.lote || '', km: m.km, lat: m.lat, lng: m.lng,
         em: m.em || (r.criada ? new Date(r.criada).toISOString() : null), desc: m.desc || '', autor: r.autor && r.autor.nome || '',
-        situacao: r.situacao, erro: r.erro, enviada: r.enviada, driveId: r.drive && r.drive.id || null, tamanho: r.tamanho, temArquivo: r.temArquivo, mini: u };
+        situacao: r.situacao, etapa: r.etapa, erro: r.erro, enviada: r.enviada, driveId: r.drive && r.drive.id || null, tamanho: r.tamanho, temArquivo: r.temArquivo, mini: u };
     }
     function deBanco(f) {
       return { id: f.id, nome: f.nome_arquivo || 'foto.jpg', origem: 'banco', cid: f.contrato_id || '', pid: f.ponto_id || '', pnome: f.ponto_nome || '', lote: f.lote || '',
@@ -327,6 +328,7 @@
     function badge(it) {
       if (it.origem === 'local') {
         if (it.situacao === 'enviada') return '<span class="gl-b ok">Enviada</span>';
+        if (it.situacao === 'aparelho') return '<span class="gl-b ap">Só no aparelho</span>';
         if (it.erro && it.erro !== 'rede') return '<span class="gl-b erro">Tentando de novo</span>';
         return '<span class="gl-b fila">Na fila</span>';
       }
@@ -348,8 +350,8 @@
       if (aba === 'local') {
         var all = Object.keys(locais).map(function (k) { return locais[k]; });
         if (!all.length) return '';
-        var pend = all.filter(function (x) { return x.situacao !== 'enviada'; }).length;
-        var env = all.length - pend, bytes = all.reduce(function (a, x) { return a + (x.temArquivo ? x.tamanho || 0 : 0); }, 0);
+        var pend = all.filter(function (x) { return x.situacao === 'fila'; }).length, soAp = all.filter(function (x) { return x.situacao === 'aparelho'; }).length;
+        var env = all.filter(function (x) { return x.situacao === 'enviada'; }).length, bytes = all.reduce(function (a, x) { return a + (x.temArquivo ? x.tamanho || 0 : 0); }, 0);
         var inf = o.drive ? o.drive.info() : {};
         var t = '<b>' + plural(all.length, 'foto guardada', 'fotos guardadas') + '</b> neste aparelho' + (bytes ? ' · ' + tam(bytes) : '');
         if (pend) {
@@ -358,8 +360,10 @@
           else if (inf.busy) t += ' (enviando…)';
           else if (inf.erro === 'rede' || navigator.onLine === false) t += ' (sem sinal; envia sozinho depois)';
           else if (!(o.driveUrl && o.driveUrl())) t += ' (envio ao Drive não configurado)';
-        } else if (all.length) t += ' · todas já foram enviadas';
+        } else if (!soAp) t += ' · todas já foram enviadas';
+        if (soAp) t += ' · ' + plural(soAp, 'só no aparelho (não vai para o Drive)', 'só no aparelho (não vão para o Drive)');
         var b = '';
+        if (soAp) b += '<button type="button" class="btn small primary" data-g="enviar-ap">Enviar ' + (soAp === 1 ? 'esta' : 'as ' + soAp) + ' ao Drive</button>';
         if (pend && login() && !inf.busy) b += '<button type="button" class="btn small" data-g="enviar">Enviar agora</button>';
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         if (env) b += '<button type="button" class="btn small" data-g="limpar">Liberar espaço (' + env + ')</button>';
@@ -407,6 +411,10 @@
         var todas = ls.every(function (x) { return x.relatorio; });
         a.push({ k: todas ? 'tirar-rel' : 'por-rel', t: todas ? '☆ Tirar do relatório' : '★ Relatório' });
       }
+      var ap = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'aparelho'; }).length;
+      var fi = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'fila' && locais[x.id].etapa !== 'registro'; }).length;
+      if (ap) a.push({ k: 'enviar-drive', t: 'Enviar ao Drive' + (ls.length > 1 ? ' (' + ap + ')' : ''), c: 'primary' });
+      if (fi) a.push({ k: 'segurar', t: 'Não enviar' + (ls.length > 1 ? ' (' + fi + ')' : '') });
       if (ls.some(function (x) { return locais[x.id]; })) a.push({ k: 'apagar-local', t: 'Apagar do celular', c: 'danger' });
       if (n >= 2 && aba !== 'deletadas' && ls.some(function (x) { return x.driveId && (x.origem === 'banco' || x.situacao === 'enviada'); })) a.push({ k: 'apagar-drive', t: 'Apagar do Drive', c: 'danger' });
       if (n >= 3 && aba === 'deletadas') a.push({ k: 'restaurar', t: 'Restaurar', c: 'primary' });
@@ -471,6 +479,7 @@
       if (it.autor) linhas.push('Tirada por ' + esc(it.autor));
       if (it.origem === 'local') {
         linhas.push(it.situacao === 'enviada' ? 'Enviada ao Drive' + (it.enviada ? ' em ' + esc(hora(new Date(it.enviada).toISOString())) : '') + ' · também guardada neste aparelho'
+          : it.situacao === 'aparelho' ? 'Guardada só neste aparelho · não vai para o Drive (toque em Enviar ao Drive se quiser)'
           : 'Guardada neste aparelho · <span class="gl-warn">ainda não enviada</span>');
       } else {
         if (it.relatorio) linhas.push('★ No relatório fotográfico' + (it.relPor ? ' (marcada por ' + esc(it.relPor) + ')' : ''));
@@ -560,10 +569,11 @@
     function apagarLocal(ls) {
       var loc = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return locais[x.id]; });
       var nao = loc.filter(function (x) { return x.situacao !== 'enviada'; });
-      if (nao.length && nv() < 2) {
-        loc = loc.filter(function (x) { return x.situacao === 'enviada'; });
+      // fiscal: as da fila esperam o envio; as que ele escolheu deixar só no aparelho, ele mesmo pode apagar
+      if (nv() < 2 && nao.some(function (x) { return x.situacao === 'fila'; })) {
+        loc = loc.filter(function (x) { return x.situacao !== 'fila'; });
         if (!loc.length) { o.toast('Estas fotos ainda não foram enviadas. Espere o envio (ou peça a um engenheiro) para apagar do celular.', 7000); return; }
-        nao = [];
+        nao = loc.filter(function (x) { return x.situacao !== 'enviada'; });
       }
       if (!loc.length) return;
       var n = loc.length;
@@ -583,6 +593,19 @@
           carregar();
         }, function () { o.toast('Não foi possível apagar deste aparelho.', 5000); });
       });
+    }
+    // as que ficaram só no aparelho vão para a fila do Drive (sim), ou as da fila que ainda não subiram ficam só aqui (não)
+    function enviarDrive(ls, sim) {
+      var ids = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return x.id; });
+      if (!ids.length || !o.drive || !o.drive.enviar) return;
+      o.drive.enviar(ids, sim).then(function (m) {
+        if (!m) return;
+        o.toast(sim ? plural(m, 'foto na fila', 'fotos na fila') + ' para o Drive' + (login() ? '.' : ': entre com o seu código para enviar.')
+          : plural(m, 'foto fica', 'fotos ficam') + ' só neste aparelho (não ' + (m === 1 ? 'vai' : 'vão') + ' para o Drive).', 5000);
+        if (ver >= 0) fecharVer();
+        sel = {}; selecionando = false;
+        carregar();
+      }, function () { o.toast('Não foi possível mudar estas fotos neste aparelho.', 5000); });
     }
     function moverDrive(ls, apagar) {
       var l = login(), url = o.driveUrl ? o.driveUrl() : null;
@@ -625,6 +648,8 @@
       else if (k === 'por-rel') relatorio(ls, true);
       else if (k === 'tirar-rel') relatorio(ls, false);
       else if (k === 'apagar-local') apagarLocal(ls);
+      else if (k === 'enviar-drive') enviarDrive(ls, true);
+      else if (k === 'segurar') enviarDrive(ls, false);
       else if (k === 'apagar-drive') moverDrive(ls, true);
       else if (k === 'restaurar') moverDrive(ls, false);
     }
@@ -660,6 +685,7 @@
       else if (g === 'baixar-tudo') baixar(lista.slice());
       else if (g === 'rel-pdf') o.relatorioPdf({ itens: itens.slice(), arquivo: arquivo, cid: filtro.cid });
       else if (g === 'enviar') { if (o.drive) o.drive.pump(); setTimeout(render, 300); }
+      else if (g === 'enviar-ap') enviarDrive(Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'aparelho'; }), true);
       else if (g === 'limpar') {
         var env = Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'enviada'; });
         apagarLocal(env);
