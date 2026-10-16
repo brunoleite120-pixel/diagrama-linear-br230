@@ -124,6 +124,48 @@
   }
 
   // .zip sem compressão (o JPEG já é comprimido); nomes em UTF-8
+  // fotos inteiras trazidas do Drive ficam guardadas neste aparelho (IndexedDB "diagrama-linear-inteiras", pela id do
+  // arquivo no Drive): abrir de novo, baixar ou pôr no relatório não baixa outra vez. Loja "info" (tamanho, último uso)
+  // separada da loja "arq" (o arquivo), para a limpeza não precisar ler as fotos; passou do limite, saem as menos usadas.
+  var CDB = 'diagrama-linear-inteiras', CINFO = 'info', CARQ = 'arq', CACHE_MAX = 250 * 1048576;
+  function cacheTx(mode, fn) {
+    return new Promise(function (ok, no) {
+      if (!window.indexedDB) { no(new Error('sem_indexeddb')); return; }
+      var r = indexedDB.open(CDB, 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore(CINFO, { keyPath: 'id' }); r.result.createObjectStore(CARQ, { keyPath: 'id' }); };
+      r.onerror = function () { no(r.error); };
+      r.onsuccess = function () {
+        var db = r.result, t = db.transaction([CINFO, CARQ], mode), req = fn(t.objectStore(CINFO), t.objectStore(CARQ));
+        t.oncomplete = function () { db.close(); ok(req && 'result' in req ? req.result : undefined); };
+        t.onerror = t.onabort = function () { db.close(); no(t.error); };
+      };
+    });
+  }
+  function cacheLer(id) {
+    return cacheTx('readonly', function (i, a) { return a.get(id); }).then(function (r) {
+      if (!r || !r.buf) return null;
+      cacheTx('readwrite', function (i) { var g = i.get(id); g.onsuccess = function () { if (g.result) { g.result.usada = Date.now(); i.put(g.result); } }; }).catch(function () {});
+      return new Blob([r.buf], { type: r.tipo || 'image/jpeg' });
+    }, function () { return null; });
+  }
+  function cacheGravar(id, blob) {
+    return new Response(blob).arrayBuffer().then(function (buf) {
+      return cacheTx('readwrite', function (i, a) {
+        a.put({ id: id, buf: buf, tipo: blob.type || 'image/jpeg' });
+        i.put({ id: id, tam: buf.byteLength, usada: Date.now() });
+      });
+    }).then(function () {
+      return cacheTx('readwrite', function (i, a) {
+        var g = i.getAll();
+        g.onsuccess = function () {
+          var l = (g.result || []).sort(function (x, y) { return x.usada - y.usada; }), tot = l.reduce(function (t, x) { return t + (x.tam || 0); }, 0);
+          for (var k = 0; k < l.length - 1 && tot > CACHE_MAX; k++) { i.delete(l[k].id); a.delete(l[k].id); tot -= l[k].tam || 0; }
+        };
+      });
+    }).catch(function () { /* sem espaço ou sem IndexedDB: só não guarda */ });
+  }
+  function cacheIds() { return cacheTx('readonly', function (i) { return i.getAllKeys(); }).then(function (l) { var m = {}; (l || []).forEach(function (k) { m[k] = 1; }); return m; }, function () { return {}; }); }
+
   var CRC_T = null;
   function crc32(u8) {
     if (!CRC_T) {
@@ -180,7 +222,8 @@
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
-    var ver = -1, grande = null, ocupado = null, cancelar = false, cidAuto = false, mv = null;
+    var ver = -1, grande = null, ocupado = null, cancelar = false, cidAuto = false, mv = null, guardadas = {}, carregando = null;
+    cacheIds().then(function (m) { guardadas = m; });
 
     function login() { return o.getLogin ? o.getLogin() : null; }
     function nv() { return o.nivel ? o.nivel() : 0; }
@@ -280,20 +323,26 @@
       ts.forEach(function (t) { obs.observe(t); });
     }
 
-    // foto inteira: do aparelho, ou do Drive pelo script (confere quem pode ver)
+    // foto inteira: do aparelho (tirada aqui ou já baixada antes), ou do Drive pelo script (confere quem pode ver);
+    // a que vem do Drive fica guardada para a próxima vez
     function arquivo(it) {
       var l = locais[it.id];
       var aqui = l && l.temArquivo && o.drive ? o.drive.arquivo(it.id) : Promise.resolve(null);
       return aqui.then(function (b) {
         if (b) return b;
-        var url = o.driveUrl ? o.driveUrl() : null, lg = login();
         if (!it.driveId) throw { code: 'sem_drive' };
-        if (!url) throw { code: 'sem_url' };
-        if (!lg) throw { code: 'sem_login' };
-        return o.drive.post(url, { acao: 'baixar', ambiente: o.ambiente || 'oficial', codigo: lg.codigo, driveId: it.driveId }).then(function (r) {
-          if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
-          return b64Blob(r.dados, r.mime);
-        }, function () { throw { code: 'sem_rede' }; });
+        return cacheLer(it.driveId).then(function (c) {
+          if (c) return c;
+          var url = o.driveUrl ? o.driveUrl() : null, lg = login();
+          if (!url) throw { code: 'sem_url' };
+          if (!lg) throw { code: 'sem_login' };
+          return o.drive.post(url, { acao: 'baixar', ambiente: o.ambiente || 'oficial', codigo: lg.codigo, driveId: it.driveId }).then(function (r) {
+            if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
+            var bl = b64Blob(r.dados, r.mime);
+            cacheGravar(it.driveId, bl).then(function () { guardadas[it.driveId] = 1; });
+            return bl;
+          }, function () { throw { code: 'sem_rede' }; });
+        });
       });
     }
     function erroArquivo(e) {
@@ -512,20 +561,24 @@
 
     // ---------------------------------------------------------------- foto aberta
     function soltarGrande() { if (grande) { URL.revokeObjectURL(grande.url); grande = null; } }
-    function abrir(i) { soltarGrande(); ver = i; renderVer(); var it = lista[i]; if (it && locais[it.id] && locais[it.id].temArquivo) carregarGrande(); }
+    function abrir(i) { soltarGrande(); ver = i; var it = lista[i]; if (it && ((locais[it.id] && locais[it.id].temArquivo) || it.driveId)) carregando = it.id; renderVer(); if (carregando === (it && it.id)) carregarGrande(); }
     function fecharVer() { soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove(); }
     function carregarGrande() {
       var it = lista[ver];
       if (!it) return;
+      carregando = it.id;
       var lv = q('.gl-leve');
       if (lv) lv.innerHTML = 'Carregando a foto inteira…';
       arquivo(it).then(function (b) {
+        if (carregando === it.id) carregando = null;
         if (lista[ver] !== it) return;
         soltarGrande();
         grande = { id: it.id, blob: b, url: URL.createObjectURL(b) };
         var im = q('.gl-ver-img img'); if (im) im.src = grande.url;
         var l2 = q('.gl-leve'); if (l2) l2.remove();
       }, function (e) {
+        if (carregando === it.id) carregando = null;
+        if (lista[ver] !== it) return;
         var l3 = q('.gl-leve');
         if (l3) l3.innerHTML = esc(erroArquivo(e)) + ' <button type="button" class="btn small" data-g="grande">Tentar de novo</button>';
       });
@@ -551,12 +604,15 @@
         if (it.relatorio) linhas.push('★ No relatório fotográfico' + (it.relPor ? ' (marcada por ' + esc(it.relPor) + ')' : ''));
         if (it.situacao === 'deletada') linhas.push('Apagada do Drive' + (it.delPor ? ' por ' + esc(it.delPor) : '') + (it.delEm ? ' em ' + esc(hora(it.delEm)) : ''));
         if (locais[it.id]) linhas.push('Também guardada neste aparelho');
+        else if (it.driveId && guardadas[it.driveId]) linhas.push('Foto inteira já baixada neste aparelho');
       }
       if (it.tamanho) linhas.push(esc(it.nome) + ' · ' + tam(it.tamanho));
       if (it.desc) linhas.push('<span class="gl-desc">' + esc(it.desc) + '</span>');
       var temGrande = grande && grande.id === it.id;
-      var leve = !temGrande && !(locais[it.id] && locais[it.id].temArquivo) && it.driveId
-        ? '<div class="gl-leve">Prévia leve <button type="button" class="btn small" data-g="grande">Ver a foto inteira' + (it.tamanho ? ' (' + tam(it.tamanho) + ')' : '') + '</button></div>' : '';
+      var local = locais[it.id] && locais[it.id].temArquivo;
+      var leve = temGrande ? ''
+        : carregando === it.id ? '<div class="gl-leve">Carregando a foto inteira' + (it.tamanho && !local && !guardadas[it.driveId] ? ' (' + tam(it.tamanho) + ')' : '') + '…</div>'
+        : !local && it.driveId ? '<div class="gl-leve">Prévia leve <button type="button" class="btn small" data-g="grande">Ver a foto inteira' + (it.tamanho ? ' (' + tam(it.tamanho) + ')' : '') + '</button></div>' : '';
       var acts = acoes([it]).map(function (a) { return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '" data-um="1">' + esc(a.t) + '</button>'; }).join('');
       if (nv() >= 3 && it.driveUrl) acts += '<a class="btn small" href="' + esc(it.driveUrl) + '" target="_blank" rel="noopener">Abrir no Drive</a>';
       v.innerHTML = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← Voltar</button>' +

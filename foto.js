@@ -35,11 +35,14 @@
   var CORNERS = [['tl', 'Sup. esq.'], ['tr', 'Sup. dir.'], ['bl', 'Inf. esq.'], ['br', 'Inf. dir.']];
   var COLORS = { amarelo: '#FFE81A', branco: '#FFFFFF' };
   var SIZES = { P: 0.024, M: 0.031, G: 0.04 };
+  // tamanho do arquivo final (salvar, compartilhar, Drive): [lado maior em px, qualidade do JPEG].
+  // "Normal" fica com cerca de um terço da "Alta" (o padrão antigo, 3 a 4 MB) e continua nítida no relatório (1400 px).
+  var ARQS = { leve: [1600, 0.78], normal: [2400, 0.8], alta: [3200, 0.85] };
 
   function defaults() {
     var campos = {};
     FIELDS.forEach(function (f) { campos[f.k] = f.on; });
-    return { logo: 'tl', leg: 'bl', cor: 'amarelo', tam: 'M', fundo: 'sombra', logoFundo: true, logoOn: true, campos: campos };
+    return { logo: 'tl', leg: 'bl', cor: 'amarelo', tam: 'M', fundo: 'sombra', logoFundo: true, logoOn: true, arq: 'normal', campos: campos };
   }
   function loadSet() {
     var d = defaults();
@@ -48,6 +51,7 @@
       if (s && typeof s === 'object') {
         ['logo', 'leg', 'cor', 'tam', 'fundo'].forEach(function (k) { if (typeof s[k] === 'string') d[k] = s[k]; });
         ['logoFundo', 'logoOn'].forEach(function (k) { if (typeof s[k] === 'boolean') d[k] = s[k]; });
+        if (typeof s.arq === 'string' && ARQS[s.arq]) d.arq = s.arq;
         if (s.campos) FIELDS.forEach(function (f) { if (typeof s.campos[f.k] === 'boolean') d.campos[f.k] = s.campos[f.k]; });
       }
     } catch (e) { /* sem armazenamento: usa o padrão */ }
@@ -394,6 +398,8 @@
                 '<div class="ft-row"><span>Tamanho</span><div class="ft-opts" data-group="tam"></div></div>' +
                 '<div class="ft-row"><span>Fundo do texto</span><div class="ft-opts" data-group="fundo"></div></div>' +
                 '<div class="ft-row"><span>Fundo da logo</span><div class="ft-opts" data-group="logoFundo"></div></div>' +
+                '<div class="ft-row"><span>Tamanho do arquivo</span><div class="ft-opts" data-group="arq"></div></div>' +
+                '<div class="ft-src">Normal: cerca de metade do tamanho da Alta (a de antes), com a mesma nitidez no relatório. Leve: cerca de um quarto.</div>' +
                 '<div class="ft-row"><span>Qual logo</span><div class="ft-logos" role="group" aria-label="Logos disponíveis"></div>' +
                   '<div class="ft-opts"><label class="ft-opt">Adicionar logo (PNG ou JPG)<input class="ft-file" type="file" id="ftLogoFile" accept="image/png,image/jpeg,image/webp"></label>' +
                   '<button type="button" class="ft-opt" data-ft="logo-team" hidden>Usar como padrão da equipe</button>' +
@@ -451,6 +457,7 @@
       group('cor', [['amarelo', 'Amarelo'], ['branco', 'Branco']]);
       group('tam', [['P', 'Pequeno'], ['M', 'Médio'], ['G', 'Grande']]);
       group('fundo', [['sombra', 'Sombra'], ['faixa', 'Faixa escura'], ['nenhum', 'Sem fundo']]);
+      group('arq', [['leve', 'Leve · 1600 px'], ['normal', 'Normal · 2400 px'], ['alta', 'Alta · 3200 px']]);
       q('[data-group="logo"]').hidden = !set.logoOn;
       FIELDS.forEach(function (f) { q('#ftC-' + f.k).checked = !!set.campos[f.k]; });
     }
@@ -885,8 +892,7 @@
     }
 
     // ---------------- salvar
-    // qualidade do JPEG final (salvar, compartilhar, Drive): 85% fica igual a olho nu e uns 10% menor que 90%
-    var QUALIDADE = 0.85;
+    function arq() { return ARQS[set.arq] || ARQS.normal; }
     function fileName() {
       var p = findPoint(st.pid), d = st.date || new Date();
       var parts = ['Foto', rodovia().replace(/[\/\s]+/g, '-')];
@@ -898,8 +904,9 @@
     function makeBlob() {
       return new Promise(function (resolve) {
         var cv = document.createElement('canvas');
-        draw(cv, 3200);
-        cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', QUALIDADE);
+        var a = arq();
+        draw(cv, a[0]);
+        cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', a[1]);
       });
     }
     function busy(on) { root.querySelectorAll('[data-ft="save"],[data-ft="share"],[data-ft="drive"]').forEach(function (b) { b.disabled = on; }); }
@@ -1216,7 +1223,7 @@
     }
     function prog(t) { q('.ft-prog').textContent = t || ''; }
     function setBatchBusy(on) { if (!batch) return; batch.busy = on; if (!on) prog(''); renderBatchSum(); }
-    // gera as fotos finais (3200 px) e guarda enquanto nada mudar
+    // gera as fotos finais (no tamanho escolhido em "Tamanho do arquivo") e guarda enquanto nada mudar
     function outputs() {
       var b = batch, ver = b.ver;
       if (b.out && b.out.ver === ver) return Promise.resolve(b.out.files);
@@ -1227,9 +1234,10 @@
           prog('Gerando ' + (k + 1) + ' de ' + list.length + '…');
           return decode(it.file).then(function (d) {
             if (!d) return null;
-            withItem(it, function () { var keep = it.img; it.img = d.img; try { draw(cv, 3200); } finally { it.img = keep; } });
+            var a = arq();
+            withItem(it, function () { var keep = it.img; it.img = d.img; try { draw(cv, a[0]); } finally { it.img = keep; } });
             URL.revokeObjectURL(d.url);
-            return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', QUALIDADE); });
+            return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', a[1]); });
           }).then(function (blob) {
             if (!blob) return;
             var name = withItem(it, fileName), base = name.replace(/\.jpg$/i, ''), n = 2;
