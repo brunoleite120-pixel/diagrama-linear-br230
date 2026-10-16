@@ -138,8 +138,10 @@
     { k: 'relatorio', t: 'Relatório', nivel: 2 },
     { k: 'deletadas', t: 'Deletados', nivel: 3 }
   ];
-  var AGRUPAR = { dia: 'Por dia', pessoa: 'Por pessoa', ponto: 'Por ponto' };
-  function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : aba === 'relatorio' ? 'ponto' : 'dia'; }
+  var AGRUPAR = { mes: 'Por mês', pessoa: 'Por pessoa', ponto: 'Por ponto' };
+  var MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  function mesLongo(k) { var p = k.split('-'); return MESES_NOME[+p[1] - 1] + ' de ' + p[0]; }
+  function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : aba === 'relatorio' ? 'ponto' : 'mes'; }
 
   window.Galeria = function (o) {
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
@@ -311,11 +313,11 @@
     function grupos() {
       var g = agrupar || agruparPadrao(aba), mapa = {}, ordem = [];
       lista.forEach(function (it, i) {
-        var k = g === 'pessoa' ? it.autor || 'Sem nome' : g === 'ponto' ? [it.cid ? nomeContrato(it.cid, it) : '', it.pnome || 'Sem ponto'].filter(Boolean).join(' · ') : dia(it.em) || 'Sem data';
+        var k = g === 'pessoa' ? it.autor || 'Sem nome' : g === 'ponto' ? [it.cid ? nomeContrato(it.cid, it) : '', it.pnome || 'Sem ponto'].filter(Boolean).join(' · ') : (mesKey(it.em) ? mesLongo(mesKey(it.em)) : 'Sem data');
         if (!mapa[k]) { mapa[k] = []; ordem.push(k); }
         mapa[k].push(i);
       });
-      if (g !== 'dia') ordem.sort(function (a, b) { return a.localeCompare(b, 'pt-BR', { numeric: true }); });
+      if (g !== 'mes') ordem.sort(function (a, b) { return a.localeCompare(b, 'pt-BR', { numeric: true }); });
       return ordem.map(function (k) { return { nome: k, idx: mapa[k] }; });
     }
 
@@ -332,6 +334,8 @@
     function tile(it, i) {
       var m = miniDe(it), cap = [it.pnome, kmTxt(it.km)].filter(Boolean).join(' · ') || hora(it.em);
       if ((aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && (agrupar || agruparPadrao(aba)) !== 'pessoa') cap = (it.autor ? it.autor.split(' ')[0] + ' · ' : '') + cap;
+      // por mês o grupo não diz o dia: vai na legenda da foto
+      if ((agrupar || agruparPadrao(aba)) === 'mes' && it.em && cap.indexOf(dia(it.em)) < 0) cap = dia(it.em).slice(0, 5) + ' · ' + cap;
       return '<button type="button" class="gl-t" data-i="' + i + '" data-id="' + esc(it.id) + '"' + (m ? '' : ' data-falta') +
         (selecionando ? ' aria-pressed="' + !!sel[it.id] + '"' : '') + ' aria-label="' + esc(cap + ', ' + hora(it.em)) + '">' +
         (m ? '<img alt="" src="' + esc(m) + '">' : '<img alt="">') + badge(it) +
