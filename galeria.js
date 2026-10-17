@@ -10,10 +10,13 @@
  * As fotos ficam separadas por contrato (fila de contratos no alto). Na foto aberta ou em várias selecionadas, "Contrato e ponto"
  * corrige o contrato e o ponto (ou ponte): no aparelho e, se já foi enviada, no banco (migração 06). Quem tirou corrige as dele;
  * engenheiro e Administrador, qualquer uma. Foto sem ponto não entra no relatório.
- * O Administrador traz para a galeria as fotos que estão no Drive e não no banco ("Trazer fotos do Drive", em Todas).
+ * O Administrador traz para a galeria as fotos que estão no Drive e não no banco ("Trazer fotos do Drive", em Todas), e troca uma
+ * vez as pastas de contrato do Drive do Lote para o nº do contrato ("Pastas do Drive pelo nº do contrato", script versão 4).
+ * Restaurar da lixeira manda a pasta do contrato e do ponto, para quando a pasta original não existe mais.
  *
- *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar });
+ *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar, nomes });
  *   g.open({ cid, pid })   abre (opcional: já filtrada num ponto)      g.changed()   a fila do aparelho mudou
+ * nomes: funções de nome do contrato do app.js (nome de tela, formal, pasta do Drive); sem elas, vale a cópia curta daqui.
  */
 (function () {
   'use strict';
@@ -100,6 +103,8 @@
     '.gl-mv-sug.fora{background:#FEF0C7;color:#7A2E0E}',
     '.gl-mv-nota{margin:0;font-size:12px;color:var(--ink-3,#5C6661);line-height:1.45}',
     '.gl-mv-acts{display:flex;gap:8px;justify-content:flex-end}',
+    // lista das pastas do Drive (janela "Pastas do Drive pelo nº do contrato")
+    '.gl-pastas{margin:6px 0 10px;padding-left:18px;max-height:40vh;overflow:auto;font-size:13px;line-height:1.45;overflow-wrap:anywhere}',
     '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-cts,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
     '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}'
   ].join('\n');
@@ -217,8 +222,197 @@
   var MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   function mesLongo(k) { var p = k.split('-'); return MESES_NOME[+p[1] - 1] + ' de ' + p[0]; }
   function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : 'mes'; }
+  // cópia curta das funções de nome do app.js (o app passa as dele em o.nomes), com a mesma regra: nome de tela pelo tipo e
+  // número ("Pontos Críticos 314"), nome formal com o Lote da licitação e o nº do CT, pasta do Drive pelo número
+  // ("CT 02 00314-2026") e a pasta usada até a versão 51 (o Lote), que o script do Drive renomeia no primeiro envio
+  function nomesPadrao() {
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
+    function tipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
+    function numeroCurto(c) { var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c && c.numero)); return m ? String(Number(m[1])) : ''; }
+    function nome(c) { if (!c) return ''; var n = numeroCurto(c); return n ? PAL[tipo(c)] + ' ' + n : lp(c.lote) || PAL[tipo(c)]; }
+    function loteReal(c) { var l = lp(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
+    function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
+    function formal(c) { return c ? [loteReal(c), numeroCT(c)].filter(Boolean).join(' · ') || nome(c) : ''; }
+    function completo(c) { var out = []; [nome(c), loteReal(c), numeroCT(c)].forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out.join(' · '); }
+    // sem número e sem Lote, o id entra no nome (dois contratos novos não dividem a pasta)
+    function pasta(c) { if (!c) return ''; var n = lp(c.numero); return n ? 'CT ' + n.replace(/\s*\/\s*/g, '-') : lp(c.lote) || nome(c) + (c.id ? ' (' + c.id + ')' : ''); }
+    // as pastas que existiam até a versão 51, pelo nº (não dependem do Lote de hoje); dos outros, o Lote ou "CT nº", letra por letra
+    var ANTES = { '0200314/2026': 'Lote 01', '0200315/2026': 'Lote 02', '0200424/2024': 'CT 424 · OAEs' };
+    function pastaAntes(c) { var k = lp(c && c.numero).replace(/\s+/g, ''); return Object.prototype.hasOwnProperty.call(ANTES, k) ? ANTES[k] : ''; }
+    function pastaAntiga(c) { return c ? pastaAntes(c) || String(c.lote || (c.numero ? 'CT ' + c.numero : '') || 'Contrato') : 'Sem lote'; }
+    return { tipo: tipo, numeroCurto: numeroCurto, nome: nome, loteReal: loteReal, numeroCT: numeroCT, formal: formal, completo: completo,
+      pasta: pasta, pastaAntiga: pastaAntiga, pastaAntes: pastaAntes };
+  }
+  // nº do contrato num texto ("CT 02 00314/2026" ou, no nome da pasta do Drive, "CT 02 00314-2026") -> "0200314/2026"
+  function chaveCT(s) { var m = /(\d{2})\s*(\d{3,})\s*[\/-]\s*(\d{4})/.exec(String(s == null ? '' : s)); return m ? m[1] + m[2] + '/' + m[3] : ''; }
+  // nome comparável: como o script do Drive limpa o nome da pasta (barra vira hífen, espaços juntos), sem diferença de maiúscula
+  function chaveNome(s) { return String(s == null ? '' : s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+  // ---------------------------------------------------------------- pontos e trecho do contrato (km)
+  function pontosDe(c) {
+    return ((c && c.pontos) || []).slice().sort(function (a, b) {
+      var ka = a.kmIni != null ? a.kmIni : 1e9, kb = b.kmIni != null ? b.kmIni : 1e9;
+      return ka - kb || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
+    });
+  }
+  // distância (km) do km da foto ao ponto: zero dentro do trecho do ponto
+  function dist(p, km) {
+    if (p.kmIni == null || km == null) return null;
+    var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni;
+    return km < a ? a - km : km > b ? km - b : 0;
+  }
+  function maisPerto(c, km) {
+    var best = null;
+    pontosDe(c).forEach(function (p) { var d = dist(p, km); if (d != null && (!best || d < best.d)) best = { p: p, d: d }; });
+    return best;
+  }
+  function trecho(c) {
+    var ks = pontosDe(c).filter(function (p) { return p.kmIni != null; });
+    var a = c.kmIni != null ? c.kmIni : ks.length ? ks[0].kmIni - 0.5 : null;
+    var b = c.kmFim != null ? c.kmFim : ks.length ? Math.max.apply(null, ks.map(function (p) { return p.kmFim != null ? p.kmFim : p.kmIni; })) + 0.5 : null;
+    return a != null && b != null ? [a, b] : null;
+  }
+
+  // ---------------------------------------------------------------- de qual contrato é um arquivo do Drive ("Trazer do Drive")
+  // cs: os contratos do aparelho; nm: as funções de nome (o.nomes do app.js ou a cópia curta)
+  function ctsPorNumero(cs, k) { return k ? cs.filter(function (c) { return chaveCT(c.numero) === k; }) : []; }
+  // os contratos que têm um nome igual ao texto: o de tela, o formal, o completo, a pasta do Drive (a nova e a de antes), o Lote e o
+  // formato antigo "Lote 01 · CT 02 00314/2026"
+  function ctsPorNome(cs, nm, t) {
+    var k = chaveNome(t);
+    if (!k) return [];
+    return cs.filter(function (c) {
+      return [nm.nome(c), nm.formal(c), nm.completo(c), nm.pasta(c), nm.pastaAntiga(c), c.lote,
+        [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ')].some(function (n) { return n && chaveNome(n) === k; });
+    });
+  }
+  // linha que o app grava com o contrato: a que termina no nº do CT e é só ele ou vem depois de " · " ("CT 02 00314/2026",
+  // "Lote 01 · CT 02 00314/2026", "CT 424 · OAEs · CT 02 00424/2024"), ou igual a um nome conhecido. A frase da descrição que cita
+  // um CT ("CT 02 00315/2026 também atende este bueiro", "Medição do CT ...") fica na descrição
+  function linhaContrato(cs, nm, l) {
+    var k = /^(?:.*·\s*)?CT\s+\d{2}\s*\d{3,}\s*[\/-]\s*\d{4}$/.test(l) ? chaveCT(l) : '';
+    return { num: k, nomes: k ? [] : ctsPorNome(cs, nm, l) };
+  }
+  function comuns(a, b) { return a.filter(function (x) { return b.indexOf(x) >= 0; }); }
+  // pelo km: o único da lista cujo trecho tem o km; senão, o único com um ponto a até 50 m; senão, nenhum
+  function porKm(lista, km) {
+    if (km == null || !isFinite(km)) return null;
+    var dentro = lista.filter(function (c) { var t = trecho(c); return t && km >= t[0] - 0.05 && km <= t[1] + 0.05; });
+    if (dentro.length === 1) return dentro[0];
+    var perto = lista.filter(function (c) { var b = maisPerto(c, km); return b && b.d <= 0.05; });
+    return perto.length === 1 ? perto[0] : null;
+  }
+  // o contrato do arquivo, nesta ordem (nunca "o primeiro da lista"):
+  //   1º o nº do CT no texto ou no nome de uma pasta ("CT 02 00314-2026"); um nº que não é de nenhum contrato daqui: sem contrato;
+  //   2º um nome conhecido nas linhas do texto ou na pasta do contrato, quando dá um contrato só;
+  //   3º o nome serve a mais de um (a pasta "Lote 01" do 314 e do 437): decide o km, só entre eles;
+  //   4º sem nome nenhum: o km, quando um só contrato tem o km ou um ponto a até 50 m;
+  //   5º senão, sem contrato (fica em "Sem contrato", para corrigir em "Contrato e ponto").
+  // p: { numero: o nº do CT achado no texto, nomes: [os contratos de cada linha com nome], pastas: [contrato, ponto], km }
+  function ligarContrato(cs, nm, p) {
+    var k = p.numero || '';
+    if (!k) (p.pastas || []).some(function (n) { k = /^\s*CT\s+\d/.test(n) ? chaveCT(n) : ''; return !!k; });
+    if (k) { var l1 = ctsPorNumero(cs, k); return l1.length === 1 ? l1[0] : porKm(l1, p.km); }
+    // as linhas do texto se somam (o nome de tela e o formal); a pasta desempata entre elas
+    var tx = (p.nomes || []).reduce(function (a, l) { return !a ? l : comuns(a, l).length ? comuns(a, l) : a; }, null) || [];
+    var pa = p.pastas && p.pastas[0] ? ctsPorNome(cs, nm, p.pastas[0]) : [];
+    var cand = tx.length && pa.length && comuns(tx, pa).length ? comuns(tx, pa) : tx.length ? tx : pa;
+    if (cand.length === 1) return cand[0];
+    return porKm(cand.length ? cand : cs, p.km);
+  }
+  // os dados da galeria para um arquivo do Drive (f: o que o script lista). Contrato, ponto, km, posição, data e quem tirou vêm
+  // do texto que o app grava em cada arquivo; faltando, da pasta e do nome do arquivo
+  function lerArquivo(f, cs, nm) {
+    var r = { autor: '', idApp: '', km: null, lat: null, lng: null, em: null, pnome: '', desc: [] }, m;
+    var numero = '', nomes = [];   // contrato pelo nº do CT e pelos nomes, achados no texto do arquivo
+    String(f.descricao || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (l) {
+      if ((m = /^(?:Tirada|Enviada) por (.+?)(?: \([^)]*\))?$/.exec(l))) r.autor = m[1];
+      else if ((m = /^ID (\S+)$/.exec(l))) r.idApp = m[1];
+      else if (/^(Cópia do oficial|Pasta original|Apagada por) /.test(l) || l === 'Sem ponto') return;
+      else if ((m = /^Ponto (.+)$/.exec(l))) r.pnome = m[1];
+      else if ((m = /^BR\s[^-]*-\s*(\d+(?:,\d+)?)/.exec(l))) r.km = Number(m[1].replace(',', '.'));
+      else if ((m = /^(-?\d+,\d+)\/(-?\d+,\d+)$/.exec(l))) { r.lat = Number(m[1].replace(',', '.')); r.lng = Number(m[2].replace(',', '.')); }
+      else if ((m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(l))) r.em = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).toISOString();
+      else {
+        // as linhas do contrato (o app novo grava duas: o nome de tela e o formal) não vão para a descrição
+        var lc = linhaContrato(cs, nm, l);
+        if (lc.num) { if (!numero) numero = lc.num; }
+        else if (lc.nomes.length) nomes.push(lc.nomes);
+        else r.desc.push(l);
+      }
+    });
+    var ps = (f.pastas || []).slice(), n = String(f.nome || '');
+    if (ps[0] === 'Fotos por pessoa') { if (!r.autor && ps[1]) r.autor = ps[1]; ps = ps.slice(2); }
+    if (!r.pnome && ps[1] && ps[1] !== 'Sem ponto') r.pnome = ps[1];
+    // nome do arquivo: "Foto BR-230-PA km 822+720 P13 2026-06-23 12h09 (2).jpg"
+    if (r.km == null && (m = /km (\d+)\+(\d{3})/.exec(n))) r.km = Number(m[1]) + Number(m[2]) / 1000;
+    if (!r.em && (m = /(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})/.exec(n))) r.em = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString();
+    var c = ligarContrato(cs, nm, { numero: numero, nomes: nomes, pastas: ps, km: r.km }), p = null;
+    if (c) {
+      p = r.pnome ? (c.pontos || []).find(function (x) { return x.nome === r.pnome; }) : null;
+      if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= 0.05) p = pp.p; }
+    }
+    return { id: r.idApp && r.idApp.length >= 4 ? r.idApp.slice(0, 80) : 'drv_' + f.id, drive_id: f.id, drive_url: f.url || null, nome_arquivo: n || 'foto.jpg',
+      tamanho: f.tamanho || null, autor_nome: r.autor || 'Sem nome', contrato_id: c ? c.id : null, ponto_id: p ? p.id : null, ponto_nome: p ? p.nome : null,
+      lote: c ? nm.formal(c) : null, km: r.km != null ? Math.round(r.km * 1000) / 1000 : null, lat: r.lat, lng: r.lng,
+      tirada_em: r.em || f.criado || null, descricao: r.desc.join('\n') || null, enviada_em: f.criado || null };
+  }
+
+  // ---------------------------------------------------------------- pastas do Drive pelo nº do contrato (Administrador)
+  // o formato da pasta nova ("CT 02 00314-2026") e o nome como o script do Drive limpa (a barra vira hífen, espaços juntos)
+  var FORMATO_PASTA = /^CT \d{2} \d{5}-\d{4}$/;
+  function limparPasta(s) { return String(s == null ? '' : s).replace(/[\\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 150); }
+  // o mapa que o script usa para renomear (até 20 pares): de = a pasta de antes (o Lote), para = a pasta pelo nº do contrato.
+  // Fica de fora o que já está pelo número e, com aviso: o contrato sem número (ou com o número fora do formato 02 00000/0000);
+  // o nome antigo que serve a mais de um contrato (o "Lote 01" do 314 e do 437), a não ser que só um deles já tivesse essa pasta
+  // até a versão 51 (pastaAntes: o 314): vai o par dele, e em cada pessoa o script confere o nº do CT nas fotos antes de renomear;
+  // e o mesmo número em dois contratos
+  function mapaPastas(cs, nm) {
+    var lista = [], avisos = [], porDe = {}, porPara = {};
+    cs.forEach(function (c) {
+      var nome = nm.nome(c) || 'Contrato', de = limparPasta(nm.pastaAntiga(c)), para = limparPasta(nm.pasta(c));
+      if (!String(c.numero || '').trim()) { avisos.push(nome + ': sem nº do contrato; as fotos continuam na pasta "' + para + '".'); return; }
+      if (!FORMATO_PASTA.test(para)) { avisos.push(nome + ': o nº "' + String(c.numero).trim() + '" não está no formato 02 00000/0000; a pasta "' + de + '" fica como está.'); return; }
+      if (!de || de === para) return;   // já está pelo número
+      if (FORMATO_PASTA.test(de)) { avisos.push(nome + ': o Lote "' + de + '" parece o nº de outro contrato; a pasta fica como está.'); return; }
+      var x = { de: de, para: para, nome: nome, antes: !!(nm.pastaAntes && nm.pastaAntes(c)) };
+      lista.push(x);
+      (porDe[chaveNome(de)] = porDe[chaveNome(de)] || []).push(x);
+      (porPara[para] = porPara[para] || []).push(x);
+    });
+    var nomes = function (l) { return l.map(function (x) { return x.nome; }).join(', '); };
+    // de vários contratos: vale o único que já tinha a pasta (null: nenhum, ou mais de um)
+    var dono = function (g) { var a = g.filter(function (x) { return x.antes; }); return a.length === 1 ? a[0] : null; };
+    Object.keys(porDe).forEach(function (k) {
+      if (porDe[k].length < 2) return;
+      var d = dono(porDe[k]);
+      avisos.push('A pasta "' + porDe[k][0].de + '" é de mais de um contrato (' + nomes(porDe[k]) + '): ' +
+        (d ? 'vai para "' + d.para + '", de ' + d.nome + ', que já tinha essa pasta. Em cada pessoa, o script confere o nº do CT nas fotos antes de renomear.'
+          : 'fica como está aqui. O script renomeia a de cada pessoa no primeiro envio de foto do contrato certo (confere o nº do CT nas fotos da pasta).'));
+    });
+    Object.keys(porPara).forEach(function (k) {
+      if (porPara[k].length > 1) avisos.push('Mais de um contrato com o nº da pasta "' + k + '" (' + nomes(porPara[k]) + '): confira os dados; as pastas ficam como estão.');
+    });
+    var vale = lista.filter(function (x) { var g = porDe[chaveNome(x.de)]; return (g.length === 1 || dono(g) === x) && porPara[x.para].length === 1; });
+    if (vale.length > 20) { avisos.push('Mais de 20 contratos: vão só os 20 primeiros.'); vale = vale.slice(0, 20); }
+    return { mapa: vale.map(function (x) { return { de: x.de, para: x.para }; }), contratos: vale, avisos: avisos };
+  }
+  // junta as partes do relatório do script (um pedido a cada ~25 s): a mesma pessoa e pasta volta no pedido seguinte quando o
+  // tempo acabou no meio dela; as fotos somam, e vale a primeira ação que mexeu
+  function juntarRelatorio(acc, itens) {
+    var parada = function (a) { return a === 'nada' || a === 'ja_feito'; };
+    (itens || []).forEach(function (x) {
+      var k = x.pessoa + '\u0000' + x.de, a = acc.idx[k];
+      if (!a) { a = acc.idx[k] = { pessoa: x.pessoa, de: x.de, para: x.para, acao: x.acao, fotos: 0, antigas: x.antigas || 0, nova: !!x.nova }; acc.lista.push(a); }
+      else if (parada(a.acao) && !parada(x.acao)) { a.acao = x.acao; a.antigas = x.antigas || 0; a.nova = !!x.nova; }
+      if (!parada(x.acao)) a.fotos += x.fotos || 0;
+    });
+    return acc;
+  }
 
   window.Galeria = function (o) {
+    var nomesCt = o.nomes || nomesPadrao();   // funções de nome do contrato (o.nomes do app.js ou a cópia curta)
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
@@ -354,14 +548,16 @@
 
     // ---------------------------------------------------------------- filtros
     function contratos() { return (o.contratos ? o.contratos() : []) || []; }
+    // nome completo, para a foto aberta ("Pontos Críticos 314 · Lote 01 · CT 02 00314/2026"); contrato que não está neste
+    // aparelho: o texto gravado com a foto
     function nomeContrato(cid, it) {
       var c = contratos().find(function (x) { return x.id === cid; });
-      return c ? [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ') || 'Contrato' : (it && it.lote) || 'Sem contrato';
+      return c ? nomesCt.completo(c) || 'Contrato' : (it && it.lote) || 'Sem contrato';
     }
-    // nome curto do contrato para a fila de contratos e as legendas ("Lote 01", "CT 424 · OAEs")
+    // nome de tela, para a fila de contratos, as legendas e as escolhas ("Pontos Críticos 314", "Proarte 424")
     function curto(cid) {
       var c = contratos().find(function (x) { return x.id === cid; });
-      return c ? c.lote || (c.numero ? 'CT ' + c.numero : 'Contrato') : 'Sem contrato';
+      return c ? nomesCt.nome(c) || 'Contrato' : 'Sem contrato';
     }
     function filtrar() {
       lista = itens.filter(function (it) {
@@ -443,7 +639,7 @@
     function tile(it, i) {
       var m = miniDe(it), cap = [it.pnome, kmTxt(it.km)].filter(Boolean).join(' · ') || hora(it.em);
       if ((aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa') cap = (it.autor ? it.autor.split(' ')[0] + ' · ' : '') + cap;
-      // em "Todos" a legenda diz de qual contrato é
+      // em "Todos" a legenda diz de qual contrato é, com o nome de tela ("Pontos Críticos 314 · P3")
       if (!filtro.cid) cap = curto(it.cid) + ' · ' + cap;
       // por mês o grupo não diz o dia: vai na legenda da foto
       if (modo() === 'mes' && it.em && cap.indexOf(dia(it.em)) < 0) cap = dia(it.em).slice(0, 5) + ' · ' + cap;
@@ -489,7 +685,8 @@
       }[aba];
       var semP = aba === 'relatorio' ? lista.filter(function (x) { return !x.pid; }).length : 0;
       if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
-      var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' : '';
+      var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' +
+        '<button type="button" class="btn small" data-g="drive-pastas">Pastas do Drive pelo nº do contrato</button>' : '';
       return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' + trazer +
         (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
     }
@@ -754,7 +951,8 @@
           'Só o Administrador vê essa pasta e pode restaurar.</p>', digitar: n > 1 ? 'APAGAR' : null
       } : {
         titulo: 'Restaurar ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', botao: 'Restaurar',
-        html: '<p>' + (n === 1 ? 'Ela volta' : 'Elas voltam') + ' para a pasta original no Drive e para a galeria da equipe.</p>'
+        html: '<p>' + (n === 1 ? 'Ela volta' : 'Elas voltam') + ' para a pasta original no Drive (se ela não existir mais, para a pasta do contrato e do ponto) ' +
+          'e para a galeria da equipe.</p>'
       }).then(function (ok) {
         if (!ok) return;
         cancelar = false;
@@ -763,7 +961,11 @@
           cadeia = cadeia.then(function () {
             if (cancelar) return;
             ocupado = (apagar ? 'Apagando ' : 'Restaurando ') + (i + 1) + ' de ' + n + '…'; renderBar();
-            return o.drive.post(url, { acao: apagar ? 'apagar' : 'restaurar', ambiente: o.ambiente || 'oficial', codigo: l.codigo, driveId: it.driveId }).then(function (r) {
+            var corpo = { acao: apagar ? 'apagar' : 'restaurar', ambiente: o.ambiente || 'oficial', codigo: l.codigo, driveId: it.driveId };
+            // restaurar: se a pasta original não existe mais (juntada na pasta nova do contrato), o script usa estas (versão 4)
+            var pr = apagar ? null : pastasDaFoto(it);
+            if (pr) corpo.pastas = pr;
+            return o.drive.post(url, corpo).then(function (r) {
               if (r && r.ok) feitos++; else falhas.push((r && r.erro) || 'erro');
             }, function () { falhas.push('sem_rede'); });
           });
@@ -779,6 +981,13 @@
         });
       });
     }
+    // a pasta do Drive da foto, como a tela Foto monta: [pasta do contrato pelo nº, ponto]; contrato que não está neste aparelho: nenhuma
+    function pastasDaFoto(it) {
+      var c = contratos().find(function (x) { return x.id === it.cid; }), pa = c ? nomesCt.pasta(c) : '';
+      if (!pa) return null;
+      var p = it.pid ? (c.pontos || []).find(function (x) { return x.id === it.pid; }) : null;
+      return [pa, it.pid ? (p && p.nome) || it.pnome || 'Ponto sem nome' : 'Sem ponto'];
+    }
     // ---------------------------------------------------------------- contrato e ponto da foto
     // quem tirou corrige as dele; engenheiro e Administrador, qualquer uma; a que está neste aparelho, quem tem o aparelho
     function podeMover(it) {
@@ -789,32 +998,10 @@
     }
     function nf(v, d) { return Number(v).toFixed(d).replace('.', ','); }
     function ehOae(c) { return !!c && c.tipo === 'oae'; }
-    function pontosDe(c) {
-      return ((c && c.pontos) || []).slice().sort(function (a, b) {
-        var ka = a.kmIni != null ? a.kmIni : 1e9, kb = b.kmIni != null ? b.kmIni : 1e9;
-        return ka - kb || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
-      });
-    }
+    // pontosDe, dist, maisPerto e trecho: no começo do arquivo (servem também para ligar os arquivos do Drive aos contratos)
     function rotuloPonto(c, p) {
       var km = p.kmIni == null ? '' : 'km ' + nf(p.kmIni, 2) + (p.kmFim != null && p.kmFim !== p.kmIni && !ehOae(c) ? ' a ' + nf(p.kmFim, 2) : '');
       return [ehOae(c) ? p.nome || p.codigo || 'Ponte' : 'Ponto ' + (p.nome || '?'), ehOae(c) && p.codigo && p.codigo !== p.nome ? p.codigo : '', km].filter(Boolean).join(' · ');
-    }
-    // distância (km) do km da foto ao ponto: zero dentro do trecho do ponto
-    function dist(p, km) {
-      if (p.kmIni == null || km == null) return null;
-      var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni;
-      return km < a ? a - km : km > b ? km - b : 0;
-    }
-    function maisPerto(c, km) {
-      var best = null;
-      pontosDe(c).forEach(function (p) { var d = dist(p, km); if (d != null && (!best || d < best.d)) best = { p: p, d: d }; });
-      return best;
-    }
-    function trecho(c) {
-      var ks = pontosDe(c).filter(function (p) { return p.kmIni != null; });
-      var a = c.kmIni != null ? c.kmIni : ks.length ? ks[0].kmIni - 0.5 : null;
-      var b = c.kmFim != null ? c.kmFim : ks.length ? Math.max.apply(null, ks.map(function (p) { return p.kmFim != null ? p.kmFim : p.kmIni; })) + 0.5 : null;
-      return a != null && b != null ? [a, b] : null;
     }
     function metr(d) { return d < 1 ? Math.round(d * 1000) + ' m' : nf(d, 1) + ' km'; }
     function abrirMover(ls) {
@@ -835,7 +1022,7 @@
       el.innerHTML = '<div class="gl-mv-box"><h3>Contrato e ponto' + (ls.length > 1 ? ' <small>' + plural(ls.length, 'foto', 'fotos') + '</small>' : '') + '</h3>' +
         '<div class="gl-mv-now">Agora: <b>' + esc(agora) + '</b>' + (mv.km != null ? ' · ' + (mv.varios ? 'km de ' + nf(Math.min.apply(null, kms), 2) + ' a ' + nf(Math.max.apply(null, kms), 2) : kmTxt(mv.km)) : '') + '</div>' +
         '<label for="glMvC">Contrato<select id="glMvC">' + cs.map(function (c) {
-          return '<option value="' + esc(c.id) + '"' + (c.id === cid ? ' selected' : '') + '>' + esc(nomeContrato(c.id)) + '</option>';
+          return '<option value="' + esc(c.id) + '"' + (c.id === cid ? ' selected' : '') + '>' + esc(curto(c.id)) + '</option>';
         }).join('') + '</select></label>' +
         '<label for="glMvP"><span id="glMvPl">Ponto</span><select id="glMvP"></select></label>' +
         '<div class="gl-mv-sug" aria-live="polite"></div>' +
@@ -887,15 +1074,16 @@
       if (!mv) return;
       var cid = q('#glMvC').value, pid = q('#glMvP').value || null, ls = mv.ls;
       var c = contratos().find(function (x) { return x.id === cid; }), p = pid ? (c.pontos || []).find(function (x) { return x.id === pid; }) : null;
-      var lote = [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ') || 'Contrato';
+      var lote = nomesCt.formal(c) || 'Contrato';   // o texto gravado com a foto: Lote e nº do CT
       var meta = { cid: cid, pid: pid, pnome: p ? p.nome || null : null, lote: lote };
-      var pastas = [c.lote || lote || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'];   // como o foto.js monta
+      // como o foto.js monta: pasta pelo nº do contrato; a antiga (o Lote) vai junto para o script renomear a da pessoa
+      var pastas = [nomesCt.pasta(c) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], pastaAntiga = nomesCt.pastaAntiga(c);
       var locIds = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return x.id; });
       var banIds = ls.filter(function (x) { return x.origem === 'banco' ? x.situacao === 'ativa' : locais[x.id] && locais[x.id].situacao === 'enviada'; }).map(function (x) { return x.id; });
       var l = login();
       if (banIds.length && !l) { o.toast('Entre com o seu código para corrigir as fotos que já foram enviadas.', 6000); return; }
       var b = q('[data-g="mv-salvar"]'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
-      var pLoc = locIds.length && o.drive && o.drive.corrigir ? o.drive.corrigir(locIds, meta, pastas) : Promise.resolve(null);
+      var pLoc = locIds.length && o.drive && o.drive.corrigir ? o.drive.corrigir(locIds, meta, pastas, pastaAntiga) : Promise.resolve(null);
       pLoc.then(function (res) {
         // as que acabaram de chegar ao banco com o painel aberto (a tela ainda dizia "na fila"): o aparelho diz na própria gravação
         ((res && res.enviadas) || []).forEach(function (id) { if (banIds.indexOf(id) < 0) banIds.push(id); });
@@ -927,44 +1115,9 @@
       });
     }
     // ---------------------------------------------------------------- fotos do Drive que não estão na galeria (Administrador)
-    // O script do Drive lista as fotos da pasta do ambiente (na prévia, antes copia as do Drive oficial). Contrato, ponto, km,
-    // posição, data e quem tirou vêm do texto que o app grava em cada arquivo; faltando, da pasta e do nome do arquivo.
-    function deArquivo(f) {
-      var cs = contratos(), r = { autor: '', idApp: '', km: null, lat: null, lng: null, em: null, cid: '', pnome: '', desc: [] }, m;
-      String(f.descricao || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (l) {
-        if ((m = /^(?:Tirada|Enviada) por (.+?)(?: \([^)]*\))?$/.exec(l))) r.autor = m[1];
-        else if ((m = /^ID (\S+)$/.exec(l))) r.idApp = m[1];
-        else if (/^(Cópia do oficial|Pasta original|Apagada por) /.test(l) || l === 'Sem ponto') return;
-        else if ((m = /^Ponto (.+)$/.exec(l))) r.pnome = m[1];
-        else if ((m = /^BR\s[^-]*-\s*(\d+(?:,\d+)?)/.exec(l))) r.km = Number(m[1].replace(',', '.'));
-        else if ((m = /^(-?\d+,\d+)\/(-?\d+,\d+)$/.exec(l))) { r.lat = Number(m[1].replace(',', '.')); r.lng = Number(m[2].replace(',', '.')); }
-        else if ((m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(l))) r.em = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).toISOString();
-        else {
-          var c1 = cs.find(function (x) { return nomeContrato(x.id) === l || x.lote === l; });
-          if (c1 && !r.cid) r.cid = c1.id; else r.desc.push(l);
-        }
-      });
-      var ps = (f.pastas || []).slice(), n = String(f.nome || '');
-      if (ps[0] === 'Fotos por pessoa') { if (!r.autor && ps[1]) r.autor = ps[1]; ps = ps.slice(2); }
-      if (!r.cid && ps[0]) { var c2 = cs.find(function (x) { return x.lote === ps[0] || nomeContrato(x.id) === ps[0]; }); if (c2) r.cid = c2.id; }
-      if (!r.pnome && ps[1] && ps[1] !== 'Sem ponto') r.pnome = ps[1];
-      // nome do arquivo: "Foto BR-230-PA km 822+720 P13 2026-06-23 12h09 (2).jpg"
-      if (r.km == null && (m = /km (\d+)\+(\d{3})/.exec(n))) r.km = Number(m[1]) + Number(m[2]) / 1000;
-      if (!r.em && (m = /(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})/.exec(n))) r.em = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString();
-      if (!r.cid && r.km != null) {
-        var c3 = cs.find(function (x) { var t = trecho(x); return t && r.km >= t[0] - 0.05 && r.km <= t[1] + 0.05; });
-        if (c3) r.cid = c3.id;
-      }
-      var c = cs.find(function (x) { return x.id === r.cid; }), p = null;
-      if (c) {
-        p = r.pnome ? (c.pontos || []).find(function (x) { return x.nome === r.pnome; }) : null;
-        if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= 0.05) p = pp.p; }
-      }
-      return { id: r.idApp && r.idApp.length >= 4 ? r.idApp.slice(0, 80) : 'drv_' + f.id, drive_id: f.id, drive_url: f.url || null, nome_arquivo: n || 'foto.jpg',
-        tamanho: f.tamanho || null, autor_nome: r.autor || 'Sem nome', contrato_id: c ? c.id : null, ponto_id: p ? p.id : null, ponto_nome: p ? p.nome : null,
-        lote: c ? nomeContrato(c.id) : null, km: r.km != null ? Math.round(r.km * 1000) / 1000 : null, lat: r.lat, lng: r.lng,
-        tirada_em: r.em || f.criado || null, descricao: r.desc.join('\n') || null, enviada_em: f.criado || null };
-    }
+    // O script do Drive lista as fotos da pasta do ambiente (na prévia, antes copia as do Drive oficial); cada arquivo vira uma foto
+    // da galeria por lerArquivo (no começo do arquivo), que acha o contrato pelo nº do CT, depois pelo nome e por último pelo km
+    function deArquivo(f) { return lerArquivo(f, contratos(), nomesCt); }
     // miniatura feita aqui (~360 px), quando o Drive ainda não tem a dele
     function reduzir(blob) {
       return new Promise(function (resolve) {
@@ -1074,6 +1227,103 @@
         carregar();
       });
     }
+    // ---------------------------------------------------------------- pastas do Drive pelo nº do contrato (Administrador)
+    // Até a versão 51 a pasta do contrato era o Lote ("Lote 01"); agora é o nº ("CT 02 00314-2026"). O script (versão 4) renomeia a
+    // pasta antiga dentro da pasta de cada pessoa: primeiro só conferindo (testar), depois de verdade; ~25 s por pedido, até acabar.
+    function esperar(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function rodarPastas(url, l, amb, mapa, testar) {
+      var acc = { lista: [], idx: {} }, voltas = 0, esperas = 0, raizNome = '', total = 0;
+      function passo(desde) {
+        if (cancelar) return Promise.reject({ code: 'parado' });
+        ocupado = (testar ? 'Conferindo' : 'Renomeando') + ' as pastas do Drive' + (total ? ' (' + Math.min(desde, total) + ' de ' + plural(total, 'pessoa', 'pessoas') + ')' : '') + '…';
+        renderBar();
+        return postDrive(url, { acao: 'pastas_renomear', ambiente: amb, codigo: l.codigo, mapa: mapa, testar: testar, desde: desde }).then(function (r) {
+          if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
+          // outro pedido mexendo no Drive (um envio, a cópia da prévia): espera um pouco e tenta de novo
+          if (r.faltam === -1) { if (++esperas > 40) throw { code: 'ocupado' }; return esperar(3000).then(function () { return passo(desde); }); }
+          if (++voltas > 300) throw { code: 'demorou' };
+          raizNome = r.raiz || raizNome;
+          total = r.pessoas || total;
+          juntarRelatorio(acc, r.itens);
+          if (r.faltam > 0) return passo(r.proxima);
+          return { itens: acc.lista, raiz: raizNome, pessoas: total };
+        });
+      }
+      return passo(0);
+    }
+    function ondeRaiz(amb, nome) {
+      return (amb === 'previa' ? 'Pasta raiz da <b>prévia</b> (testes)' : 'Pasta raiz <b>oficial</b>') + (nome ? ': <b>' + esc(nome) + '</b>' : '') + '.';
+    }
+    // "Fotos por pessoa / Ana / Lote 01 → CT 02 00314-2026 · renomear · 34 fotos"
+    function linhaPasta(x) {
+      var oque = x.acao === 'renomear' ? 'renomear'
+        : x.acao === 'juntar' ? (x.nova ? 'juntar com a pasta nova, que já existe' : 'juntar as ' + (x.antigas || 2) + ' pastas com o nome antigo')
+        : x.acao === 'duas_pastas' ? 'fica como está: ' + (x.nova ? 'a pasta nova já existe' : 'há ' + (x.antigas || 2) + ' pastas com o nome antigo') + ' (nenhuma foto muda de lugar)'
+        : 'fica como está: as fotos são de outro contrato';
+      // "(raiz)": as pastas soltas na raiz, das fotos do app antigo (sem a pasta da pessoa)
+      return '<li>' + (x.pessoa === '(raiz)' ? 'Raiz' : 'Fotos por pessoa / ' + esc(x.pessoa)) + ' / ' + esc(x.de) + ' → <b>' + esc(x.para) + '</b> · ' + oque +
+        (x.fotos || (x.acao !== 'outro_contrato' && x.acao !== 'duas_pastas') ? ' · ' + plural(x.fotos || 0, 'foto', 'fotos') : '') + '</li>';
+    }
+    function listaPastas(ls) {
+      return '<ul class="gl-pastas">' + ls.slice(0, 80).map(linhaPasta).join('') + (ls.length > 80 ? '<li>e mais ' + (ls.length - 80) + '…</li>' : '') + '</ul>';
+    }
+    function msgPastas(e) {
+      var c = e && (e.code || e.erro);
+      return c === 'parado' ? 'Parado. O que já mudou fica; toque de novo para continuar.'
+        : c === 'acao_invalida' ? 'O script do Drive ainda é a versão antiga: reimplante o Codigo.gs (versão 4).'
+        : c === 'so_criador' ? 'Só o Administrador renomeia as pastas do Drive.'
+        : c === 'codigo_invalido' ? 'Seu acesso expirou ou mudou. Entre de novo.'
+        : c === 'mapa_invalido' ? 'O script recusou a lista de pastas. Confira os números dos contratos.'
+        : c === 'ocupado' ? 'O Drive está ocupado com outro pedido (um envio ou a cópia da prévia). Tente de novo em instantes.'
+        : c === 'tempo' || c === 'demorou' || (e && e.name === 'AbortError') ? 'O Drive demorou demais. Toque de novo: continua de onde parou.'
+        : c === 'sem_rede' || !c ? 'Sem conexão com o Drive.' : 'Não foi possível mexer nas pastas do Drive (' + c + ').';
+    }
+    function pastasDrive() {
+      var l = login(), url = o.driveUrl ? o.driveUrl() : null, amb = o.ambiente || 'oficial';
+      if (!l || !url || ocupado || !o.drive || !o.drive.post) return;
+      var mp = mapaPastas(contratos(), nomesCt);
+      var avisos = mp.avisos.map(function (t) { return '<p class="gl-mv-nota">' + esc(t) + '</p>'; }).join('');
+      if (!mp.mapa.length) { o.toast('Nenhuma pasta para renomear. ' + (mp.avisos.join(' ') || 'As pastas já estão pelo nº do contrato.'), 9000); return; }
+      // o app não pede "juntar": quando a pasta nova já existe, as duas ficam como estão ("duas_pastas") e nenhuma foto muda de lugar
+      var mexeu = function (x) { return x.acao === 'renomear' || x.acao === 'juntar'; };
+      var ficam = function (x) { return x.acao === 'outro_contrato' || x.acao === 'duas_pastas'; };
+      var fotos = function (ls) { return ls.reduce(function (s, x) { return s + (x.fotos || 0); }, 0); };
+      cancelar = false;
+      rodarPastas(url, l, amb, mp.mapa, true).then(function (r) {
+        ocupado = null; renderBar();
+        var mexe = r.itens.filter(mexeu), fora = r.itens.filter(ficam);
+        var ja = r.itens.filter(function (x) { return x.acao === 'ja_feito'; }).length;
+        return o.confirmar({
+          titulo: 'Pastas do Drive pelo nº do contrato', botao: mexe.length ? 'Renomear' : 'Confirmar',
+          html: '<p>' + ondeRaiz(amb, r.raiz) + '</p>' +
+            (mexe.length ? '<p><b>' + plural(mexe.length, 'pasta muda', 'pastas mudam') + '</b> (' + plural(fotos(mexe), 'foto', 'fotos') + '):</p>' + listaPastas(mexe)
+              : '<p>Nenhuma pasta para renomear agora.</p>') +
+            (fora.length ? '<p>Ficam como estão:</p>' + listaPastas(fora) : '') +
+            (ja ? '<p class="gl-mv-nota">' + plural(ja, 'pasta já está', 'pastas já estão') + ' pelo nº do contrato.</p>' : '') + avisos +
+            '<p class="gl-mv-nota">Renomear não tira nenhuma foto do lugar. Depois, o script guarda na pasta nova de cada pessoa as fotos que ainda ' +
+            'chegarem com o nome antigo (celulares com o app antigo). As pastas soltas na raiz, do app antigo, ficam com o nome de hoje.</p>'
+        }).then(function (ok) {
+          if (!ok) return;
+          cancelar = false;
+          return rodarPastas(url, l, amb, mp.mapa, false).then(function (r2) {
+            ocupado = null; renderBar();
+            var feitas = r2.itens.filter(mexeu), ren = feitas.filter(function (x) { return x.acao === 'renomear'; }).length, jun = feitas.length - ren;
+            var fora2 = r2.itens.filter(ficam);
+            o.confirmar({
+              titulo: 'Pastas do Drive', botao: 'OK', cancelar: 'Fechar',
+              html: '<p>' + ondeRaiz(amb, r2.raiz) + '</p>' +
+                (feitas.length ? '<p>' + [ren ? plural(ren, 'pasta renomeada', 'pastas renomeadas') : '', jun ? plural(jun, 'pasta juntada', 'pastas juntadas') + ' na nova' : '']
+                  .filter(Boolean).join(' e ') + ' (' + plural(fotos(feitas), 'foto', 'fotos') + ').</p>' + listaPastas(feitas) : '<p>Nenhuma pasta precisou mudar.</p>') +
+                (fora2.length ? '<p>Ficaram como estavam:</p>' + listaPastas(fora2) : '') +
+                '<p class="gl-mv-nota">O script guardou a troca de nomes desta pasta raiz: as fotos que ainda chegarem com o nome antigo vão para a pasta nova de cada pessoa.</p>'
+            });
+          });
+        });
+      }).catch(function (e) {
+        ocupado = null; renderBar();
+        o.toast(msgPastas(e), 8000);
+      });
+    }
     function fazer(k, ls) {
       if (k === 'baixar') baixar(ls);
       else if (k === 'por-rel') relatorio(ls, true);
@@ -1136,6 +1386,7 @@
       else if (g === 'grande') carregarGrande();
       else if (g === 'ver-sem') { filtro.pid = SEM; render(); }
       else if (g === 'drive-trazer') trazerDoDrive();
+      else if (g === 'drive-pastas') pastasDrive();
       else if (g === 'mv-fechar') fecharMover();
       else if (g === 'mv-usar') { var sp = q('#glMvP'); if (sp && mv && mv.sug) { sp.value = mv.sug.id; sugestao(); } }
       else if (g === 'mv-salvar') salvarMover();

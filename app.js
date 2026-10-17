@@ -31,6 +31,65 @@
   ];
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
   function servicesOf(c) { return isOae(c) ? OAE_SERVICES : SERVICES; }
+
+  // ---------------- nomes do contrato. O campo Lote é o lote da licitação ("Lote 01"): fica na folha A3, no carimbo da foto
+  // e no título do relatório. O nome de tela sai do tipo e do número do contrato ("Pontos Críticos 314", "Conservação 437",
+  // "Proarte 424") e a pasta do Drive, do número ("CT 02 00314-2026": a barra quebra caminhos no .zip e no Windows).
+  // Tipo vazio = pontos críticos (o padrão do app); 'oae' = pontes (Proarte); 'conserva' = conservação (437 e 438).
+  // Os módulos recebem estas funções em opts.nomes (NOMES, abaixo); foto.js e mapa.js também rodam na página online,
+  // sem o app.js, e por isso cada módulo tem uma cópia curta da mesma regra
+  var NOME_PALAVRA = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+  var NOME_CURTO = { pc: 'p. críticos', conserva: 'conserv.', oae: 'pontes' };   // rótulo pequeno da raia no celular
+  var TIPO_ORDEM = ['pc', 'conserva', 'oae'];
+  function txtLimpo(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
+  function ctTipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
+  function tipoDe(x) { return typeof x === 'string' ? (NOME_PALAVRA[x] ? x : 'pc') : ctTipo(x); }   // o tipo ou o próprio contrato
+  // "02 00314/2026" -> "314"; sem número no formato nº/ano, vazio
+  function ctNumeroCurto(c) { var m = /(\d{3,})\s*\/\s*\d{4}/.exec(txtLimpo(c && c.numero)); return m ? String(Number(m[1])) : ''; }
+  function ctNome(c) {
+    if (!c) return '';
+    var n = ctNumeroCurto(c), w = NOME_PALAVRA[ctTipo(c)];
+    return n ? w + ' ' + n : txtLimpo(c.lote) || w;
+  }
+  // só "Lote NN" é lote da licitação: o "CT 424 · OAEs" do 424 não é
+  function ctLoteReal(c) { var l = txtLimpo(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
+  function ctNumeroCT(c) { var n = txtLimpo(c && c.numero); return n ? 'CT ' + n : ''; }
+  function ctFormal(c) { return c ? [ctLoteReal(c), ctNumeroCT(c)].filter(Boolean).join(' · ') || ctNome(c) : ''; }   // "Lote 01 · CT 02 00314/2026"
+  function ctCompleto(c) { return nomeArquivo(c).join(' · '); }   // "Pontos Críticos 314 · Lote 01 · CT 02 00314/2026" (sem repetir)
+  // sem número e sem Lote (contrato recém-criado), o id entra no nome: dois contratos assim não dividem a mesma pasta
+  function ctPasta(c) {
+    if (!c) return '';
+    var n = txtLimpo(c.numero);
+    return n ? 'CT ' + n.replace(/\s*\/\s*/g, '-') : txtLimpo(c.lote) || ctNome(c) + (c.id ? ' (' + c.id + ')' : '');
+  }
+  // pastas que existiam no Drive até a versão 51, pelo nº do contrato: o nome antigo não depende do Lote de hoje, que pode ser
+  // corrigido ou limpo (o "CT 424 · OAEs" do 424) antes de as pastas serem renomeadas
+  var PASTA_ANTES = { '0200314/2026': 'Lote 01', '0200315/2026': 'Lote 02', '0200424/2024': 'CT 424 · OAEs' };
+  function ctPastaAntes(c) {
+    var k = txtLimpo(c && c.numero).replace(/\s+/g, '');
+    return Object.prototype.hasOwnProperty.call(PASTA_ANTES, k) ? PASTA_ANTES[k] : '';
+  }
+  // pasta usada até a versão 51 do app (o Lote ou "CT nº"), igual letra por letra (ou a da lista acima): o script do Drive
+  // renomeia a pasta antiga da pessoa no primeiro envio, sem mover as fotos
+  function ctPastaAntiga(c) { return c ? ctPastaAntes(c) || String(c.lote || (c.numero ? 'CT ' + c.numero : '') || 'Contrato') : 'Sem lote'; }
+  // ordem fixa: pontos críticos, conservação e pontes; dentro do tipo, pelo número (sem número no fim, na ordem da lista)
+  function ctOrdem(lista) {
+    return (lista || []).map(function (c, i) { return { c: c, i: i, t: TIPO_ORDEM.indexOf(ctTipo(c)), n: Number(ctNumeroCurto(c)) || Infinity }; })
+      .sort(function (a, b) { return a.t - b.t || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i; })
+      .map(function (x) { return x.c; });
+  }
+  var NOMES = {
+    tipo: ctTipo, nome: ctNome, numeroCurto: ctNumeroCurto, loteReal: ctLoteReal, numeroCT: ctNumeroCT, formal: ctFormal, completo: ctCompleto,
+    pasta: ctPasta, pastaAntiga: ctPastaAntiga, pastaAntes: ctPastaAntes, ordem: ctOrdem, tipos: TIPO_ORDEM.slice(), partesArquivo: nomeArquivo,
+    palavra: function (t) { return NOME_PALAVRA[tipoDe(t)]; },
+    curto: function (t) { return NOME_CURTO[tipoDe(t)]; }
+  };
+  // partes do nome dos arquivos (PDF da folha, relatório): nome, lote real e nº do CT, sem repetir
+  function nomeArquivo(c) {
+    var out = [];
+    [ctNome(c), ctLoteReal(c), ctNumeroCT(c)].forEach(function (s) { if (s && out.indexOf(s) < 0) out.push(s); });
+    return out;
+  }
   var STATUS = {
     OK: { tag: 'OK', name: 'Concluído', btn: 'OK', fill: '#1E9E55' },
     A: { tag: 'ATIVO', name: 'Ativo', btn: 'Ativo', fill: '#2B5797' },
@@ -1053,12 +1112,17 @@
   }
 
   // ------------------------------------------------------------------ interface: abas
+  // embaixo do nome, pequeno: o lote da licitação ou, sem ele, o nº do contrato (curto: a aba cabe na largura do celular)
+  function abaSub(c) {
+    var l = ctLoteReal(c);
+    return l && l !== ctNome(c) ? l : ctNumeroCT(c) || 'sem número';
+  }
   function renderTabs() {
     var nav = $('tabs');
     nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-current="' + visaoOn + '">' + ICON_VISAO + 'Visão geral</button>' : '') +
       state.contracts.map(function (c) {
       return '<button type="button" class="tab" data-tab="' + esc(c.id) + '" aria-current="' + (!visaoOn && c.id === state.activeId) + '">' +
-        esc(c.lote || 'Contrato') + '<small>' + esc(c.numero || 'sem número') + '</small></button>';
+        esc(ctNome(c)) + '<small>' + esc(abaSub(c)) + '</small></button>';
     }).join('') + '<button type="button" class="tab add" data-act="new-contract">+ Contrato</button>';
     // celular: as abas rolam para o lado; a aba aberta fica à vista
     var at = nav.querySelector('[aria-current="true"]');
@@ -1078,11 +1142,14 @@
     var c = active();
     var h = [];
     h.push('<section class="card">');
-    h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub">· ' + esc(c.lote || '') + ' ' + esc(c.numero || '') + '</span></span>' + ICON_CHEV + '</button>');
+    h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span></span>' + ICON_CHEV + '</button>');
     if (ui.contractOpen) {
       h.push('<div class="card-body">' + (banco.on ? lastLine(metaKey(c.id)) : '') + '<div class="grid">');
       h.push(field('Nº da obra / contrato', 'data-c="numero" type="text"', c.numero));
-      h.push(field('Lote', 'data-c="lote" type="text"', c.lote));
+      h.push(field('Lote (da licitação)', 'data-c="lote" type="text"', c.lote));
+      // só para leitura: saem do tipo e do número do contrato (o Lote não muda o nome nem a pasta quando há número)
+      h.push(field('Nome na tela', 'data-nomes="nome" type="text" readonly', ctNome(c)));
+      h.push(field('Pasta no Drive', 'data-nomes="pasta" type="text" readonly', ctPasta(c)));
       h.push(field('Executora', 'data-c="executora" type="text"', c.executora, ' full'));
       h.push(field('Supervisora', 'data-c="supervisora" type="text"', c.supervisora));
       h.push(field('Contrato da supervisora', 'data-c="ctSupervisao" type="text"', c.ctSupervisao));
@@ -1858,7 +1925,7 @@
   function openFoto(pid) {
     if (!foto && window.FotoCarimbo) {
       foto = window.FotoCarimbo({
-        snv: window.SNV_BR230, getContract: active, logoSrc: window.UNIFILAR_LOGO && window.UNIFILAR_LOGO.src,
+        snv: window.SNV_BR230, getContract: active, logoSrc: window.UNIFILAR_LOGO && window.UNIFILAR_LOGO.src, nomes: NOMES,
         getContracts: function () { return state.contracts; },
         setActiveContract: function (id) {
           if (state.activeId === id || !state.contracts.some(function (c) { return c.id === id; })) return;
@@ -1881,7 +1948,7 @@
   function ensureMap() {
     if (mapa || !window.MapaSNV) return mapa;
     mapa = window.MapaSNV({
-      host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo,
+      host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo, nomes: NOMES,
       saveText: saveText, tiles: true, gps: true, notify: function (m) { toast(m); }, onPhoto: openFoto
     });
     return mapa;
@@ -1950,7 +2017,7 @@
   function ensureVisao() {
     if (visao || !window.VisaoGeral || !$('visaoHost')) return visao;
     visao = window.VisaoGeral({
-      host: $('visaoHost'), contratos: function () { return state.contracts; }, info: pointInfo, isOae: isOae,
+      host: $('visaoHost'), contratos: function () { return state.contracts; }, info: pointInfo, isOae: isOae, nomes: NOMES,
       temMapa: !!(window.MapaSNV && window.L && window.SNV_BR230), temFotos: galeriaOn,
       onAbrir: function (c, p) { abrirDaVisao(c, p, false); },
       onMapa: function (c, p) { abrirDaVisao(c, p, true); },
@@ -2000,6 +2067,14 @@
   }
 
   // ------------------------------------------------------------------ eventos do editor
+  // nome na tela e pasta do Drive (só para leitura) acompanham o número e o lote digitados
+  function syncNomes(c) {
+    $('editor').querySelectorAll('[data-nomes]').forEach(function (el) {
+      var k = el.getAttribute('data-nomes');
+      if (k === 'sub') el.textContent = '· ' + ctNome(c);
+      else el.value = k === 'pasta' ? ctPasta(c) : ctNome(c);
+    });
+  }
   function onInput(e) {
     var t = e.target, c = active();
     if (isFiscal() && !t.dataset.svcpct) return;
@@ -2008,7 +2083,7 @@
       if (t.dataset.num) c[k] = parseNum(t.value);
       else if (t.dataset.int) c[k] = clamp(parseInt(t.value, 10) || 9, 1, 14);
       else c[k] = t.value;
-      if (k === 'numero' || k === 'lote') renderTabs();
+      if (k === 'numero' || k === 'lote') { renderTabs(); syncNomes(c); }
     } else if (t.dataset.marco != null && t.dataset.mf) {
       var m = c.marcos[Number(t.dataset.marco)];
       if (m) m[t.dataset.mf] = t.dataset.mf === 'km' ? parseNum(t.value) : t.value;
@@ -2248,7 +2323,8 @@
       case 'new-contract':
         var ref = active();
         var nc = {
-          id: uid('ct'), orgao: ref ? ref.orgao : '', numero: '', lote: 'Lote ' + String(state.contracts.length + 1).padStart(2, '0'),
+          // o lote é o da licitação: fica vazio até alguém digitar (o nome de tela sai do tipo e do número)
+          id: uid('ct'), orgao: ref ? ref.orgao : '', numero: '', lote: '',
           rodovia: ref ? ref.rodovia : '', objeto: ref ? ref.objeto : '', executora: '', supervisora: ref ? ref.supervisora : '',
           ctSupervisao: ref ? ref.ctSupervisao : '', extensaoContrato: null, origem: '', destino: '', kmIni: null, kmFim: null,
           plataforma: ref ? ref.plataforma : '', dataVistoria: todayIso(), porPagina: 9, marcos: [], pontos: []
@@ -2305,10 +2381,10 @@
     });
   }
   function excluirContrato(c) {
-    var nome = (c.lote || c.numero || 'Contrato').trim(), cid = c.id;
+    var nome = ctNome(c) || 'Contrato', cid = c.id;
     confirmar({
       titulo: 'Excluir o contrato ' + nome + ' inteiro?',
-      html: '<p>Sai o contrato <b>' + esc([c.lote, c.numero].filter(Boolean).join(' · ')) + '</b> com os <b>' + c.pontos.length + ' pontos</b>, para todos.</p><p>' +
+      html: '<p>Sai o contrato <b>' + esc(ctCompleto(c)) + '</b> com os <b>' + c.pontos.length + ' pontos</b>, para todos.</p><p>' +
         (banco.on ? 'Fica 30 dias na lixeira (menu Dados › Lixeira e cópias) e o banco guarda uma cópia antes de excluir.' : 'Neste aparelho só dá para recuperar por um backup.') + '</p>',
       digitar: nome, botao: 'Excluir contrato', perigo: true
     }).then(function (r) {
@@ -2394,7 +2470,7 @@
       var doc = new JsPDF({ orientation: 'landscape', unit: 'pt', format: 'a3', compress: true });
       doc.setProperties({
         title: 'Diagrama linear - Obra ' + (c.numero || ''),
-        subject: [c.lote, c.rodovia].filter(Boolean).join(' - '),
+        subject: nomeArquivo(c).concat(c.rodovia ? [c.rodovia] : []).join(' - '),
         author: c.supervisora || '',
         creator: 'Diagrama linear dos pontos críticos'
       });
@@ -2411,7 +2487,8 @@
     });
   }
   function pdfName(c, interno) {
-    var name = 'Diagrama linear - ' + [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - ') + ' - ' + todayIso() + (interno ? ' (interno)' : '') + '.pdf';
+    // "Diagrama linear - Pontos Críticos 314 - Lote 01 - CT 02 00314-2026 - 2026-10-17.pdf" (a barra do nº vira hífen)
+    var name = 'Diagrama linear - ' + nomeArquivo(c).join(' - ') + ' - ' + todayIso() + (interno ? ' (interno)' : '') + '.pdf';
     return name.replace(/[\\/:*?"<>|]/g, '-');
   }
   // quem vê a análise das medições escolhe: só a vistoria (padrão, para enviar) ou com a análise (uso interno)
@@ -2601,7 +2678,7 @@
       else {
         var cf = fieldDiff(contractFields(o.c), contractFields(c), false, em);
         if (cf || o.i !== i) {
-          var co = { t: 'contrato_campos', id: c.id, nome: c.lote || c.numero || '', campos: cf || {} };
+          var co = { t: 'contrato_campos', id: c.id, nome: ctNome(c), campos: cf || {} };   // nome: só o rótulo do aviso de conflito
           if (o.i !== i) co.ordem = i;
           ops.push(co);
         }
@@ -2690,7 +2767,7 @@
   }
   var FIELD_NAMES = {
     nome: 'nome', kmIni: 'KM inicial', kmFim: 'KM final', enr: 'enrocamento (m³)', sb: 'solo-brita (m³)', obs: 'observações', disp: 'dispositivos',
-    numero: 'nº do contrato', lote: 'lote', executora: 'executora', supervisora: 'supervisora', ctSupervisao: 'contrato da supervisora',
+    numero: 'nº do contrato', lote: 'lote da licitação', executora: 'executora', supervisora: 'supervisora', ctSupervisao: 'contrato da supervisora',
     orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
@@ -2700,7 +2777,8 @@
     if (k.indexOf('serv.') === 0) { var s = SERVICES.concat(OAE_SERVICES).find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
     return FIELD_NAMES[k] || k;
   }
-  function loteOf(cid) { var c = state.contracts.find(function (x) { return x.id === cid; }); return c ? (c.lote || c.numero || 'Contrato') : 'Contrato'; }
+  // nome de tela do contrato pelo id, buscado neste aparelho (histórico, conflitos, propostas, lixeira); sem ele, o texto que veio
+  function loteOf(cid, senao) { var c = contractById(cid); return c ? ctNome(c) || 'Contrato' : senao || 'Contrato'; }
   // texto curto do que mudou, para o histórico
   function opsResumo(ops) {
     var names = [];
@@ -2709,8 +2787,8 @@
       if (op.t === 'ponto_campos') t = loteOf(op.cid) + ' ' + (op.nome || 'ponto') + (f ? ': ' + f : '');
       else if (op.t === 'ponto') t = loteOf(op.cid) + ' ' + (op.dados.nome || 'ponto') + ' (novo ponto)';
       else if (op.t === 'apagar_ponto') t = loteOf(op.cid) + ' ' + (op.nome || '') + ': ponto excluído';
-      else if (op.t === 'contrato_campos') t = (op.nome || 'Contrato') + ': ' + (f || 'ordem das abas');
-      else if (op.t === 'contrato') t = (op.dados.lote || 'Contrato') + ' (novo contrato)';
+      else if (op.t === 'contrato_campos') t = loteOf(op.id, op.nome) + ': ' + (f || 'ordem das abas');
+      else if (op.t === 'contrato') t = (ctNome(op.dados) || 'Contrato') + ' (novo contrato)';
       else if (op.t === 'apagar_contrato') t = 'Contrato excluído';
       else t = 'Configuração';
       if (names.indexOf(t) < 0) names.push(t);
@@ -2798,7 +2876,8 @@
     return '"' + (s.length > 60 ? s.slice(0, 57) + '…' : s) + '"';
   }
   function conflictText(x, autor) {
-    var alvo = x.alvo === 'ponto' ? loteOf(x.cid) + ' ' + (x.nome || 'ponto') : (x.nome || 'Contrato');
+    // o banco manda o Lote como nome do contrato: a tela usa o nome do contrato deste aparelho, quando ele ainda existe
+    var alvo = x.alvo === 'ponto' ? loteOf(x.cid) + ' ' + (x.nome || 'ponto') : loteOf(x.id, x.nome);
     var secs = !!(x.em && x.seu_em && fmtWhen(x.em) === fmtWhen(x.seu_em));   // no mesmo minuto: mostra os segundos
     var campo = x.campo ? ' · ' + fieldName(x.campo) : '', quem = x.por || 'outra pessoa', quando = x.em ? ' (' + fmtWhen(x.em, secs) + ')' : '';
     var sua = autor ? 'a alteração de ' + autor : 'a sua alteração', seu = x.seu_em ? ' (' + fmtWhen(x.seu_em, secs) + ')' : '';
@@ -2955,6 +3034,9 @@
   }
   function typing() {
     var a = document.activeElement;
+    // a caixa de marcar da caixa "Contratos" (Visão geral) fica com o foco depois de cada toque e não é digitação: não
+    // adia a atualização do banco
+    if (a && a.type === 'checkbox' && a.closest && a.closest('#visaoHost')) return false;
     return !!(a && a.closest && a.closest('#editor, #visaoHost') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
   }
   function fromServer(r) {
@@ -3388,6 +3470,10 @@
   }
 
   // ---------------- lixeira e cópias automáticas (engenheiro ou criador)
+  // contrato do item da lixeira pelo nome deste aparelho; o banco só manda o Lote (ou o nº), que fica para o contrato que já saiu daqui
+  function lxContrato(x, senao) {
+    return x.tipo === 'ponto' ? loteOf(x.contrato_id, x.lote || senao || 'contrato') : loteOf(x.item_id, x.nome || x.item_id);
+  }
   function openLixeira() {
     if (!isEng()) { toast('A lixeira e as cópias são para engenheiros e o Administrador.'); return; }
     var f = modal('<h2 id="modalTitle">Lixeira e cópias de segurança</h2><div class="lx" aria-live="polite">Carregando…</div>' +
@@ -3399,7 +3485,7 @@
       h += '<div class="section-title">Excluídos · ficam 30 dias</div>';
       h += lx.length ? lx.map(function (x) {
         var km = x.km && (x.km[0] != null || x.km[1] != null) ? ' · KM ' + fmtKm(x.km[0]) + ' – ' + fmtKm(x.km[1]) : '';
-        var titulo = x.tipo === 'ponto' ? 'Ponto ' + (x.nome || x.item_id) + ' · ' + (x.lote || 'contrato') + km : 'Contrato ' + (x.nome || x.item_id) + ' · ' + (x.pontos || 0) + ' pontos';
+        var titulo = x.tipo === 'ponto' ? 'Ponto ' + (x.nome || x.item_id) + ' · ' + lxContrato(x) + km : 'Contrato ' + lxContrato(x) + ' · ' + (x.pontos || 0) + ' pontos';
         return '<div class="lx-row"><div class="lx-txt"><b>' + esc(titulo) + '</b><small>Excluído por ' + esc(x.apagado_por || '—') + ' em ' + esc(fmtWhen(x.apagado_em)) +
           (x.tipo === 'ponto' && !x.contrato_existe ? ' · o contrato também foi excluído' : '') + '</small></div>' +
           '<button type="button" class="btn small" data-lx="rest" data-id="' + x.id + '">Restaurar</button></div>';
@@ -3420,12 +3506,12 @@
       if (b.dataset.lx === 'rest') {
         var x = dados.lixeira.find(function (y) { return y.id === id; });
         if (!x) return;
-        confirmar({ titulo: 'Restaurar ' + (x.tipo === 'ponto' ? 'o ponto ' : 'o contrato ') + (x.nome || '') + '?',
-          texto: x.tipo === 'ponto' ? 'Ele volta para ' + (x.lote || 'o contrato') + ' com os dados de quando foi excluído.' : 'Ele volta com os ' + (x.pontos || 0) + ' pontos que tinha.',
+        confirmar({ titulo: 'Restaurar ' + (x.tipo === 'ponto' ? 'o ponto ' + (x.nome || '') : 'o contrato ' + lxContrato(x)) + '?',
+          texto: x.tipo === 'ponto' ? 'Ele volta para ' + lxContrato(x, 'o contrato') + ' com os dados de quando foi excluído.' : 'Ele volta com os ' + (x.pontos || 0) + ' pontos que tinha.',
           botao: 'Restaurar' }).then(function (r) {
           if (!r) { openLixeira(); return; }
           window.Banco.restaurarLixeira(banco.login.codigo, id).then(function () {
-            toast((x.tipo === 'ponto' ? 'Ponto ' : 'Contrato ') + (x.nome || '') + ' restaurado.', 5000);
+            toast((x.tipo === 'ponto' ? 'Ponto ' + (x.nome || '') : 'Contrato ' + lxContrato(x)) + ' restaurado.', 5000);
             if (x.tipo === 'contrato') state.activeId = x.item_id;
             refresh(true);
             openLixeira();
@@ -3626,7 +3712,7 @@
     if (!galeriaOn()) return;
     if (!galeria) {
       galeria = window.Galeria({
-        drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; },
+        drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; }, nomes: NOMES,
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
@@ -3642,7 +3728,7 @@
   function relatorioPdf(a) {
     if (!relFoto) {
       relFoto = window.RelatorioFoto({
-        contratos: function () { return state.contracts; }, ativo: function () { return visaoOn ? null : active(); }, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae,
+        contratos: function () { return state.contracts; }, ativo: function () { return visaoOn ? null : active(); }, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae, nomes: NOMES,
         ensureLibs: ensureLibs, saveBlob: saveBlob, toast: toast, modal: modal, closeModal: closeModal,
         podeEditar: function () { return !readOnly() && !isFiscal(); }, salvarContrato: salvarCamposContrato, logoSupervisora: window.UNIFILAR_LOGO || null
       });

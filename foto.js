@@ -4,9 +4,10 @@
  * Usado pelo site local e embutido na página online (build.js troca o marcador). Precisa de MapaSNV.Ref
  * (mapa.js) e de window.SNV_BR230.
  *
- *   var f = FotoCarimbo({ snv, getContract, logoSrc, gps, share, saveBlob, notify,
+ *   var f = FotoCarimbo({ snv, getContract, logoSrc, gps, share, saveBlob, notify, nomes,
  *                         getTeamLogo, canSetTeamLogo, setTeamLogo, clearTeamLogo });
  *   f.open({ pointId });
+ * nomes: funções de nome do contrato do app.js (nome de tela, formal, pasta do Drive); sem elas, vale a cópia curta daqui.
  *
  * De onde vem a posição, nesta ordem: GPS gravado na foto (EXIF), GPS do aparelho na hora da foto
  * (só onde o navegador libera), ou km digitado / ponto escolhido.
@@ -27,7 +28,7 @@
     { k: 'coord', label: 'Coordenadas', on: true },
     { k: 'data', label: 'Data e hora', on: true },
     { k: 'ponto', label: 'Ponto crítico', on: true },
-    { k: 'contrato', label: 'Lote e contrato', on: false },
+    { k: 'contrato', label: 'Lote e contrato', curto: 'lote', on: false },
     { k: 'executora', label: 'Executora', on: false },
     { k: 'supervisora', label: 'Supervisora', on: false },
     { k: 'desc', label: 'Descrição', on: true },
@@ -36,29 +37,83 @@
   var CORNERS = [['tl', 'Sup. esq.'], ['tr', 'Sup. dir.'], ['bl', 'Inf. esq.'], ['br', 'Inf. dir.']];
   var COLORS = { amarelo: '#FFE81A', branco: '#FFFFFF' };
   var SIZES = { P: 0.024, M: 0.031, G: 0.04 };
+  var CORES_OP = [['amarelo', 'Amarelo'], ['branco', 'Branco']];
+  var TAMS_OP = [['P', 'Pequeno'], ['M', 'Médio'], ['G', 'Grande']];
+  var FUNDOS_OP = [['sombra', 'Sombra'], ['faixa', 'Faixa escura'], ['nenhum', 'Sem fundo']];
   // tamanho do arquivo final (salvar, compartilhar, Drive): [lado maior em px, qualidade do JPEG].
-  // "Normal" fica com cerca de um terço da "Alta" (o padrão antigo, 3 a 4 MB) e continua nítida no relatório (1400 px).
-  var ARQS = { leve: [1600, 0.78], normal: [2400, 0.8], alta: [3200, 0.85] };
+  // Full HD (o padrão) fica com cerca de 0,5 MB e nítida no relatório (1400 px); HD fica com cerca de metade.
+  var ARQS = { hd: [1280, 0.85], fhd: [1920, 0.85] };
+  var ARQS_OP = [['fhd', 'Full HD', '1920 px · cerca de 0,5 MB · nítida no relatório (padrão)'], ['hd', 'HD', '1280 px · cerca de metade do tamanho da Full HD']];
+  // tamanhos guardados até a versão anterior (Leve 1600 px, Normal 2400 px, Alta 3200 px)
+  var ARQ_ANTIGO = { leve: 'hd', normal: 'fhd', alta: 'fhd' };
+  // os 4 grupos de opções (cada um abre a sua folha) e as chaves de `set` de cada um; a logo escolhida fica em LOGO_SEL_KEY
+  var GRUPOS = { leg: ['campos'], apa: ['leg', 'cor', 'tam', 'fundo'], logo: ['logoOn', 'logo', 'logoFundo'], arq: ['arq'] };
+  var GRUPO_NOME = { leg: 'Legenda', apa: 'Aparência', logo: 'Logo', arq: 'Arquivo' };
+  var GRUPO_TITULO = { leg: 'O que aparece na legenda', apa: 'Aparência', logo: 'Logo', arq: 'Tamanho do arquivo' };
 
+  function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function opcao(lista, k) { for (var i = 0; i < lista.length; i++) if (lista[i][0] === k) return lista[i]; return null; }
+  function rotulo(lista, k) { var o = opcao(lista, k); return o ? o[1] : ''; }
   function defaults() {
     var campos = {};
     FIELDS.forEach(function (f) { campos[f.k] = f.on; });
-    return { logo: 'tl', leg: 'bl', cor: 'amarelo', tam: 'M', fundo: 'sombra', logoFundo: true, logoOn: true, arq: 'normal', campos: campos };
+    return { logo: 'tl', leg: 'bl', cor: 'amarelo', tam: 'M', fundo: 'sombra', logoFundo: true, logoOn: true, arq: 'fhd', campos: campos };
   }
-  function loadSet() {
-    var d = defaults();
+  // `txt`: o texto guardado (para os testes); sem ele, lê o deste aparelho. Valor desconhecido volta ao padrão.
+  function loadSet(txt) {
+    var d = defaults(), VALE = { logo: CORNERS, leg: CORNERS, cor: CORES_OP, tam: TAMS_OP, fundo: FUNDOS_OP };
     try {
-      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      var s = JSON.parse((txt !== undefined ? txt : localStorage.getItem(KEY)) || 'null');
       if (s && typeof s === 'object') {
-        ['logo', 'leg', 'cor', 'tam', 'fundo'].forEach(function (k) { if (typeof s[k] === 'string') d[k] = s[k]; });
+        Object.keys(VALE).forEach(function (k) { if (typeof s[k] === 'string' && opcao(VALE[k], s[k])) d[k] = s[k]; });
         ['logoFundo', 'logoOn'].forEach(function (k) { if (typeof s[k] === 'boolean') d[k] = s[k]; });
-        if (typeof s.arq === 'string' && ARQS[s.arq]) d.arq = s.arq;
-        if (s.campos) FIELDS.forEach(function (f) { if (typeof s.campos[f.k] === 'boolean') d.campos[f.k] = s.campos[f.k]; });
+        if (typeof s.arq === 'string') d.arq = own(ARQS, s.arq) ? s.arq : own(ARQ_ANTIGO, s.arq) ? ARQ_ANTIGO[s.arq] : d.arq;
+        if (s.campos && typeof s.campos === 'object') FIELDS.forEach(function (f) { if (typeof s.campos[f.k] === 'boolean') d.campos[f.k] = s.campos[f.k]; });
       }
     } catch (e) { /* sem armazenamento: usa o padrão */ }
     return d;
   }
-  function saveSet(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* sem armazenamento */ } }
+  // false: o navegador não deixou guardar (aba anônima, armazenamento cheio)
+  function saveSet(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); return true; } catch (e) { return false; } }
+  // nome curto da logo, para o botão "Logo" ("DNIT", "Consórcio")
+  function logoCurto(l) {
+    if (!l) return '';
+    if (l.id === 'dnit') return 'DNIT';
+    if (l.id === 'consorcio') return 'Consórcio';
+    // sem o "Logo"/"Logo da" do começo do nome do arquivo ("Logo da Plennus" vira "Plennus"); nome longo fica só a primeira palavra
+    var n = String(l.nome || '').trim().replace(/^(logo(marca|tipo)?|marca)[\s_-]+(d[aeo]s?\s+)?(?=\S)/i, '');
+    n = n ? n.charAt(0).toUpperCase() + n.slice(1) : l.team ? 'Da equipe' : 'Logo';
+    var w = n.split(/\s+/)[0];
+    return n.length <= 12 ? n : w.length >= 3 && w.length <= 12 ? w : n.slice(0, 11) + '…';
+  }
+  // o valor de cada um dos 4 botões; `logo`: nome curto da logo escolhida ('' = nenhuma)
+  function resumos(s, logo) {
+    var n = FIELDS.filter(function (f) { return s.campos[f.k]; }).length;
+    return {
+      leg: n === 0 ? 'Nenhum item' : n === 1 ? '1 item' : n + ' itens',
+      apa: rotulo(CORES_OP, s.cor) + ' · ' + rotulo(TAMS_OP, s.tam),
+      logo: s.logoOn && logo ? logo + ' · ' + rotulo(CORNERS, s.logo).toLowerCase() : 'Sem logo',
+      arq: rotulo(ARQS_OP, s.arq)
+    };
+  }
+  // o grupo g está no padrão? (a logo escolhida, do grupo "logo", é conferida em FotoCarimbo)
+  function grupoNoPadrao(s, g) {
+    var d = defaults();
+    return GRUPOS[g].every(function (k) {
+      return k === 'campos' ? FIELDS.every(function (f) { return !!s.campos[f.k] === d.campos[f.k]; }) : s[k] === d[k];
+    });
+  }
+  // texto do padrão no rodapé da folha; `logo`: nome curto da logo padrão
+  function padraoTxt(g, logo) {
+    var d = defaults();
+    if (g === 'leg') {
+      var on = FIELDS.filter(function (f) { return f.on; }), off = FIELDS.filter(function (f) { return !f.on; }).map(function (f) { return f.curto || f.label.toLowerCase(); });
+      return 'Padrão: ' + on.length + ' de ' + FIELDS.length + ' itens' + (off.length ? ' (sem ' + (off.length > 1 ? off.slice(0, -1).join(', ') + ' e ' + off[off.length - 1] : off[0]) + ')' : '');
+    }
+    if (g === 'apa') return 'Padrão: ' + [rotulo(CORNERS, d.leg), rotulo(CORES_OP, d.cor), rotulo(TAMS_OP, d.tam), rotulo(FUNDOS_OP, d.fundo)].join(' · ');
+    if (g === 'logo') return 'Padrão: ' + [logo || 'sem logo', rotulo(CORNERS, d.logo).toLowerCase(), d.logoFundo ? 'fundo branco' : 'sem fundo'].join(' · ');
+    return 'Padrão: ' + rotulo(ARQS_OP, d.arq);
+  }
 
   // ------------------------------------------------------------------ formatação
   function nf(n, d) { return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
@@ -171,11 +226,12 @@
   // ------------------------------------------------------------------ estilo
   var CSS = [
     '.ft{--ft-bg:var(--bg,var(--ground,#F1F3F1));--ft-panel:var(--panel,#FFFFFF);--ft-ink:var(--ink,#17201C);--ft-ink-2:var(--ink-2,#3B4540);--ft-ink-3:var(--ink-3,#5C6661);--ft-line:var(--line,#D5DAD6);--ft-accent:var(--accent,#1D4F91);--ft-accent-ink:var(--accent-ink,#FFFFFF);',
+    '  --ft-line-2:#C9D0CC;--ft-soft:var(--accent-soft,#E7EEF7);--ft-ok:#17663A;--ft-ok-bg:#E5F2EA;--ft-off:#8C9690;',
     '  position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;background:var(--ft-bg);color:var(--ft-ink);font-size:14px;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}',
     '.ft-head{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--ft-panel);border-bottom:1px solid var(--ft-line)}',
     '.ft-head h2{margin:0;font-size:16px;font-weight:650;white-space:nowrap}',
     '.ft-ct{font-size:12.5px;color:var(--ft-ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}',
-    '.ft-x{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink);border-radius:8px;min-width:36px;min-height:36px;font-size:20px;line-height:1;cursor:pointer}',
+    '.ft-x{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink);border-radius:8px;min-width:40px;min-height:40px;font-size:20px;line-height:1;cursor:pointer}',
     '.ft-body{flex:1;overflow:auto;padding:16px}',
     '.ft-start{max-width:520px;margin:4vh auto 0;display:flex;flex-direction:column;gap:12px}',
     '.ft-start h3{margin:0;font-size:18px;text-wrap:balance}',
@@ -193,6 +249,10 @@
     '.ft-side{display:flex;flex-direction:column;gap:12px;min-width:0}',
     '.ft-sec{background:var(--ft-panel);border:1px solid var(--ft-line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}',
     '.ft-sec h4{margin:0;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ft-ink-3)}',
+    '.ft-sech{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+    '.ft-tag{font-size:11px;font-weight:600;color:var(--ft-ink-2);background:var(--ft-bg);border-radius:10px;padding:2px 8px}',
+    '.ft-mini{font-size:11.5px;color:var(--ft-ink-3)}',
+    '.ft-mini b{color:var(--ft-ok)}',
     '.ft-src{font-size:12.5px;color:var(--ft-ink-2);line-height:1.45}',
     '.ft-src b{color:var(--ft-ink)}',
     '.ft-warn{color:var(--danger,#B42318);font-weight:600}',
@@ -205,25 +265,95 @@
     '.ft-f.full{grid-column:1/-1}',
     '.ft-f span{font-size:11.5px;font-weight:600;color:var(--ft-ink-3)}',
     '.ft input,.ft select,.ft textarea{font:inherit;color:var(--ft-ink);background:var(--ft-panel);border:1px solid var(--ft-line);border-radius:6px;min-height:34px;padding:4px 8px;width:100%;min-width:0}',
+    // o campo de arquivo escondido (logo, câmera, galeria): a regra de cima dava a ele width:100% e, preso no canto do botão, ele
+    // passava da tela e deixava puxar a página para o lado no iPhone
+    '.ft .ft-file{position:absolute;left:0;top:0;width:1px;height:1px;min-width:0;min-height:0;padding:0;border:0;opacity:0;overflow:hidden;pointer-events:none}',
+    // data e hora: no iPhone o campo nativo tem largura própria e passava do cartão
+    '.ft input[type=datetime-local]{display:block;max-width:100%;-webkit-appearance:none;appearance:none;text-align:left}',
     '.ft textarea{min-height:58px;resize:vertical}',
     '.ft input:focus-visible,.ft select:focus-visible,.ft textarea:focus-visible,.ft button:focus-visible{outline:2px solid var(--ft-accent);outline-offset:1px}',
-    '.ft-checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}',
-    '.ft-checks label{display:flex;align-items:center;gap:7px;font-size:13px;min-height:28px}',
-    '.ft-checks input{width:18px;height:18px;min-height:0;margin:0;flex:none;accent-color:var(--ft-accent)}',
+    // os 10 itens da legenda (folha "Legenda"), com a nota de quando o item não sai nesta foto
+    '.ft-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}',
+    '.ft-checks label{display:flex;align-items:center;gap:8px;min-width:0;min-height:44px;padding:4px 8px;border:1px solid var(--ft-line);border-radius:8px;font-size:12.5px;line-height:1.2;cursor:pointer}',
+    '.ft-checks label:has(input:checked){border-color:#B9C7DA}',
+    '.ft-checks input{width:20px;height:20px;min-height:0;margin:0;flex:none;accent-color:var(--ft-accent)}',
+    '.ft-checks span{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}',
+    '.ft-checks small{font-size:10.5px;color:var(--ft-ink-3)}',
     '.ft-chk{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;min-height:32px;cursor:pointer}',
+    '.ft-drvsec .ft-chk{min-height:44px}',
     '.ft-chk input{width:20px;height:20px;min-height:0;margin:0;flex:none;accent-color:var(--ft-accent)}',
     '.ft-item .ft-chk{font-weight:500;font-size:13px}',
     '.ft-bdrv{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px}',
     '.ft-opts{display:flex;flex-wrap:wrap;gap:6px}',
     '.ft-opt{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink-2);border-radius:6px;min-height:32px;padding:4px 10px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}',
     '.ft-opt[aria-pressed="true"]{background:var(--ft-ink);border-color:var(--ft-ink);color:var(--ft-panel)}',
-    '.ft-corners{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}',
-    '.ft-logos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}',
-    '.ft-logo{display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:6px;border:1px solid var(--ft-line);border-radius:8px;background:var(--ft-panel);color:var(--ft-ink);font:inherit;font-size:12px;font-weight:600;text-align:left;cursor:pointer;min-width:0}',
-    '.ft-logo img{display:block;width:100%;height:52px;object-fit:contain;background:repeating-conic-gradient(#D9DDDA 0 25%,#F4F6F4 0 50%) 0 0/12px 12px;border-radius:4px}',
-    '.ft-logo span{display:flex;flex-direction:column;gap:1px;overflow-wrap:anywhere}',
+    '.ft-corners{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;width:100%}',
+    '.ft-logos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}',
+    '.ft-logo{display:flex;align-items:center;gap:8px;min-width:0;min-height:48px;padding:4px 8px;border:1px solid var(--ft-line-2);border-radius:8px;background:var(--ft-panel);color:var(--ft-ink);font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer}',
+    // miniatura de 48 px: com 56, "Consórcio Magna/Enecon" quebrava no meio da palavra a 360 px e no painel da tela larga
+    // (o nome só quebra depois da barra, onde renderLogos põe um <wbr>)
+    '.ft-logo img{flex:none;display:block;width:48px;height:34px;object-fit:contain;background:repeating-conic-gradient(#D9DDDA 0 25%,#F4F6F4 0 50%) 0 0/10px 10px;border-radius:4px}',
+    '.ft-logo span{display:flex;flex-direction:column;gap:1px;min-width:0;line-height:1.2;overflow-wrap:break-word}',
     '.ft-logo small{font-weight:600;color:var(--ft-accent)}',
-    '.ft-logo[aria-pressed="true"]{border-color:var(--ft-accent);box-shadow:0 0 0 2px var(--ft-accent)}',
+    '.ft-logo[aria-pressed="true"]{background:var(--ft-soft);border-color:var(--ft-accent);box-shadow:0 0 0 1px var(--ft-accent)}',
+    '.ft-lacts{display:flex;flex-wrap:wrap;gap:6px}',
+    '.ft-add{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;border:1px dashed #9AA39E;border-radius:8px;background:var(--ft-panel);color:var(--ft-accent);font-size:13px;font-weight:600;cursor:pointer}',
+    '.ft-add:focus-within{outline:2px solid var(--ft-accent);outline-offset:1px}',
+    '.ft-amostra{flex:none;width:12px;height:12px;border-radius:50%;border:1px solid var(--ft-off)}',
+    // tamanho do arquivo: duas opções grandes (HD e Full HD)
+    '.ft-arqs{display:flex;flex-direction:column;gap:8px}',
+    '.ft-arq{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border:1px solid var(--ft-line-2);border-radius:10px;background:var(--ft-panel);color:var(--ft-ink);font:inherit;text-align:left;cursor:pointer}',
+    '.ft-arq[aria-pressed="true"]{background:var(--ft-soft);border:2px solid var(--ft-accent);padding:7px 11px}',
+    '.ft-arq i{flex:none;width:20px;height:20px;box-sizing:border-box;border-radius:50%;border:1.5px solid #9AA39E;background:var(--ft-panel)}',
+    '.ft-arq[aria-pressed="true"] i{border:6px solid var(--ft-accent)}',
+    '.ft-arq span{display:flex;flex-direction:column;gap:2px;min-width:0}',
+    '.ft-arq b{font-size:14px}',
+    '.ft-arq small{font-size:11.5px;font-weight:400;color:var(--ft-ink-2)}',
+    // fileira dos 4 botões (Legenda, Aparência, Logo, Arquivo) embaixo da prévia: cada um mostra o valor de agora e abre a sua folha
+    '.ft-bar{display:flex;flex-direction:column;gap:6px;min-width:0}',
+    '.ft-bbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}',
+    '.ft-bb{min-width:0;min-height:52px;padding:6px 2px;border:1px solid var(--ft-line-2);border-radius:10px;background:var(--ft-panel);color:var(--ft-ink);font:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;cursor:pointer}',
+    '.ft-bb[aria-expanded="true"]{background:var(--ft-ink);border-color:var(--ft-ink);color:var(--ft-panel)}',
+    '.ft-bbn{display:flex;align-items:center;gap:4px;max-width:100%}',
+    '.ft-bbn svg{flex:none;width:13px;height:13px}',
+    '.ft-bbn i{flex:none;font-style:normal;font-weight:800;font-size:10px;line-height:1}',
+    '.ft-bbn b{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.ft-bbv{font-size:10.5px;line-height:1.2;color:var(--ft-ink-3);max-width:100%;overflow-wrap:anywhere}',
+    '.ft-bb[aria-expanded="true"] .ft-bbv{color:var(--ft-line)}',
+    '.ft-bb[disabled]{opacity:.55;cursor:progress}',
+    '.ft-bnote{margin:0;display:flex;align-items:center;gap:7px;padding:0 2px;font-size:11.5px;line-height:1.35;color:var(--ft-ink-2)}',
+    '.ft-bnote i{flex:none;width:9px;height:14px;box-sizing:border-box;border:1.5px solid var(--ft-ok);border-radius:2.5px}',
+    '.ft-bnote b{color:var(--ft-ok)}',
+    // a folha de opções: sobe de baixo no celular (a prévia continua à vista em cima); na tela larga, painel sobre a coluna do lado
+    '.ft-camada{position:absolute;inset:0;z-index:20}',
+    '.ft-fundo{position:absolute;inset:0;background:rgba(23,32,28,.32);animation:ft-esmaece .2s ease-out}',
+    '.ft-folha{position:absolute;left:0;right:0;bottom:0;max-height:62%;box-sizing:border-box;display:flex;flex-direction:column;background:var(--ft-panel);color:var(--ft-ink);border-radius:16px 16px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.18);overflow:hidden;' +
+      'padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);animation:ft-sobe .22s ease-out;outline:none}',
+    '.ft-alca{flex:none;align-self:center;width:36px;height:4px;border-radius:2px;background:var(--ft-line-2);margin-top:8px}',
+    '.ft-fhead{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:6px 14px 10px}',
+    '.ft-ftit{display:flex;flex-direction:column;gap:5px;min-width:0}',
+    '.ft-ftit h3{margin:0;font-size:17px;font-weight:700}',
+    '.ft-fsalvo{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:11px;color:var(--ft-ink-3)}',
+    '.ft-pill{display:inline-flex;align-items:center;gap:5px;font-weight:700;color:var(--ft-ok);background:var(--ft-ok-bg);border-radius:10px;padding:2px 8px}',
+    '.ft-pill i{width:7px;height:11px;box-sizing:border-box;border:1.5px solid currentColor;border-radius:2px}',
+    '.ft-pill.err{color:var(--danger,#B42318);background:#FCEBE8}',
+    '.ft-fbody{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:2px 14px 12px}',
+    '.ft-fg{display:flex;flex-direction:column;gap:12px}',
+    '.ft-fg>.ft-src{font-size:12px}',
+    '.ft-folha .ft-row>span{font-size:12px}',
+    '.ft-folha .ft-opts{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px}',
+    '.ft-folha .ft-opt{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:40px;padding:4px;border-color:var(--ft-line-2);border-radius:8px;color:var(--ft-ink);font-size:12.5px;text-align:center}',
+    '.ft-folha .ft-opt[aria-pressed="true"]{border-color:var(--ft-ink);color:var(--ft-panel)}',
+    '.ft-folha .ft-lacts .ft-opt{padding:4px 12px}',
+    '.ft-ffoot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px 12px;border-top:1px solid var(--ft-line)}',
+    '.ft-fpad{font-size:11.5px;color:var(--ft-ink-3);line-height:1.3;min-width:0}',
+    '.ft-facts{flex:none;display:flex;align-items:center;gap:4px}',
+    '.ft-desf{min-height:40px;padding:0 12px;border:0;border-radius:8px;background:none;color:var(--ft-accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer}',
+    '.ft-voltar{min-height:40px;padding:0 12px;border:1px solid var(--ft-line-2);border-radius:8px;background:var(--ft-panel);color:var(--ft-accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer}',
+    '.ft-voltar[aria-disabled="true"]{color:var(--ft-off);border-color:var(--ft-line);cursor:default}',
+    '@keyframes ft-sobe{from{transform:translateY(100%)}to{transform:none}}',
+    '@keyframes ft-entra{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}',
+    '@keyframes ft-esmaece{from{opacity:0}to{opacity:1}}',
     '.ft-row{display:flex;flex-direction:column;gap:5px}',
     '.ft-row>span{font-size:11.5px;font-weight:600;color:var(--ft-ink-3)}',
     '.ft-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:10px 16px;background:var(--ft-panel);border-top:1px solid var(--ft-line)}',
@@ -289,7 +419,33 @@
     '}',
     '@media (max-width:820px){.ft-work,.ft-batch{grid-template-columns:1fr}.ft-prev{position:static}.ft-prev canvas{max-height:58vh}.ft-body{padding:12px}}',
     '@media (max-width:560px){.ft-item{grid-template-columns:1fr}.ft-thumb img{max-height:52vh}}',
-    '@media (max-width:420px){.ft-checks{grid-template-columns:1fr}}'
+    // celular: no lote de fotos, os 4 botões ficam no alto (antes das fotos); com a folha aberta, a prévia encolhe para caber
+    // em cima dela (--ft-livre vem de ajustaFolha)
+    '@media (max-width:820px){' +
+      '.ft-bside{order:-1}' +
+      '.ft.folha .ft-prev canvas{max-height:var(--ft-livre,40vh)}' +
+      '.ft.folha .ft-thumb{min-height:0}' +
+      '.ft.folha .ft-thumb img{max-height:var(--ft-livre,40vh)}' +
+    '}',
+    // tela larga: a folha vira um painel sobre a coluna do lado (ajustaFolha acerta a posição), sem cobrir a prévia
+    '@media (min-width:821px){' +
+      '.ft-fundo{background:rgba(23,32,28,.12)}' +
+      '.ft-folha{left:auto;right:16px;bottom:auto;top:72px;width:340px;max-height:calc(100% - 160px);border-radius:12px;box-shadow:0 10px 32px rgba(0,0,0,.22);padding:0;animation-name:ft-entra}' +
+      '.ft-alca{display:none}' +
+      '.ft-fhead{padding-top:14px}' +
+    '}',
+    // celular deitado (pouca altura): a folha de baixo cobria a legenda da foto; ela fica do lado direito, com toda a altura,
+    // e a prévia (ou a primeira foto do lote) ocupa o resto da largura. ajustaFolha põe a classe e acerta --ft-lado e --ft-livre
+    '.ft.folha-lado .ft-fundo{background:rgba(23,32,28,.12)}',
+    '.ft.folha-lado .ft-folha{left:auto;top:0;right:0;bottom:0;width:min(400px,52%);max-height:none;border-radius:16px 0 0 16px;box-shadow:-6px 0 24px rgba(0,0,0,.18);' +
+      'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) 0;animation-name:ft-lado}',
+    '.ft.folha-lado .ft-alca{display:none}',
+    '.ft.folha-lado .ft-fhead{padding-top:12px}',
+    '.ft.folha-lado .ft-body{padding-right:calc(var(--ft-lado,52%) + 12px - env(safe-area-inset-right,0px))}',
+    '@keyframes ft-lado{from{transform:translateX(100%)}to{transform:none}}',
+    // tela muito estreita (320 px): os 4 nomes sem os ícones
+    '@media (max-width:349px){.ft-bbn svg,.ft-bbn i{display:none}}',
+    '@media (prefers-reduced-motion:reduce){.ft-folha,.ft-fundo,.ft.folha-lado .ft-folha{animation:none}}'
   ].join('\n');
   function injectStyle() {
     if (document.getElementById('ft-style')) return;
@@ -301,12 +457,42 @@
   var CAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
   var ARQ = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
   var GAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>';
+  // ícones dos 4 botões de opções
+  var ICONE = {
+    leg: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 2h12M1 7h8M1 12h12"/></svg>',
+    apa: '<i aria-hidden="true">Aa</i>',
+    logo: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="0.75" y="1.75" width="12.5" height="10.5" rx="2"/><rect x="2.75" y="3.75" width="4" height="3" fill="currentColor"/></svg>',
+    arq: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.25" y="0.75" width="9.5" height="12.5" rx="2"/><path d="M4.5 4.5h5M4.5 8h5"/></svg>'
+  };
+
+  // nomes do contrato: o app.js passa os seus em opts.nomes. Esta cópia curta, com a mesma regra, vale na página online,
+  // que embute este arquivo sem o app.js: nome de tela pelo tipo e número ("Pontos Críticos 314"), nome formal com o Lote
+  // da licitação e o nº do CT, pasta do Drive pelo número ("CT 02 00314-2026") e a pasta usada até a versão 51 (o Lote)
+  function nomesPadrao() {
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
+    function tipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
+    function numeroCurto(c) { var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c && c.numero)); return m ? String(Number(m[1])) : ''; }
+    function nome(c) { if (!c) return ''; var n = numeroCurto(c); return n ? PAL[tipo(c)] + ' ' + n : lp(c.lote) || PAL[tipo(c)]; }
+    function loteReal(c) { var l = lp(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
+    function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
+    function formal(c) { return c ? [loteReal(c), numeroCT(c)].filter(Boolean).join(' · ') || nome(c) : ''; }
+    function completo(c) { var out = []; [nome(c), loteReal(c), numeroCT(c)].forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out.join(' · '); }
+    // sem número e sem Lote, o id entra no nome (dois contratos novos não dividem a pasta)
+    function pasta(c) { if (!c) return ''; var n = lp(c.numero); return n ? 'CT ' + n.replace(/\s*\/\s*/g, '-') : lp(c.lote) || nome(c) + (c.id ? ' (' + c.id + ')' : ''); }
+    // as pastas que existiam até a versão 51, pelo nº (não dependem do Lote de hoje); dos outros, o Lote ou "CT nº", letra por letra
+    var ANTES = { '0200314/2026': 'Lote 01', '0200315/2026': 'Lote 02', '0200424/2024': 'CT 424 · OAEs' };
+    function pastaAntes(c) { var k = lp(c && c.numero).replace(/\s+/g, ''); return Object.prototype.hasOwnProperty.call(ANTES, k) ? ANTES[k] : ''; }
+    function pastaAntiga(c) { return c ? pastaAntes(c) || String(c.lote || (c.numero ? 'CT ' + c.numero : '') || 'Contrato') : 'Sem lote'; }
+    return { tipo: tipo, numeroCurto: numeroCurto, nome: nome, loteReal: loteReal, numeroCT: numeroCT, formal: formal, completo: completo,
+      pasta: pasta, pastaAntiga: pastaAntiga, pastaAntes: pastaAntes };
+  }
 
   function FotoCarimbo(opts) {
     var snv = opts.snv, Ref = window.MapaSNV && window.MapaSNV.Ref;
     if (!snv || !Ref) return null;
     injectStyle();
-    var ref = Ref(snv), set = loadSet(), notify = opts.notify || function () {};
+    var ref = Ref(snv), set = loadSet(), notify = opts.notify || function () {}, nomes = opts.nomes || nomesPadrao();
     var root = null, st = null, gpsWatch = null, lastFix = null, drawTimer = null, origin = 'camera';
 
     function q(sel) { return root.querySelector(sel); }
@@ -320,7 +506,8 @@
     }
     function byId(id) { var r = null; contracts().forEach(function (c) { if (c.id === id) r = c; }); return r; }
     function contract() { return (st && st.cid && byId(st.cid)) || activeContract(); }
-    function lotName(c) { return c ? [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ') || 'Contrato' : ''; }
+    // nome de tela do contrato ("Pontos Críticos 314"); o Lote da licitação fica no carimbo e no texto do Drive
+    function lotName(c) { return c ? nomes.nome(c) || 'Contrato' : ''; }
     function numOr(v) { var n = typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : null; }
     // trecho do contrato (km inicial e final); sem eles, a faixa dos pontos com 500 m de folga
     function lotRange(c) {
@@ -377,10 +564,17 @@
           '<div class="ft-work" hidden>' +
             '<div class="ft-prev"><canvas aria-label="Prévia da foto com carimbo"></canvas></div>' +
             '<div class="ft-side">' +
-              '<section class="ft-sec"><h4>Local</h4><div class="ft-lot" role="status" hidden></div><div class="ft-src"></div>' +
+              // legenda, aparência, logo e arquivo: valem para a foto única e para o lote de fotos (moveShared leva para o lugar certo)
+              '<div class="ft-shared ft-bar"><div class="ft-bbs" role="group" aria-label="Opções do carimbo">' +
+                ['leg', 'apa', 'logo', 'arq'].map(function (g) {
+                  return '<button type="button" class="ft-bb" data-folha="' + g + '" aria-haspopup="dialog" aria-expanded="false" aria-controls="ftFolha">' +
+                    '<span class="ft-bbn">' + ICONE[g] + '<b>' + GRUPO_NOME[g] + '</b></span><span class="ft-bbv"></span></button>';
+                }).join('') +
+                '</div><p class="ft-bnote"><i aria-hidden="true"></i><span></span></p></div>' +
+              '<section class="ft-sec"><div class="ft-sech"><h4>Local</h4><span class="ft-tag">Desta foto</span></div><div class="ft-lot" role="status" hidden></div><div class="ft-src"></div>' +
                 '<div class="ft-opts ft-here" hidden><button type="button" class="ft-opt" data-ft="here">Usar o GPS do aparelho agora</button></div>' +
                 '<div class="ft-grid">' +
-                  '<label class="ft-f full" id="ftLoteWrap"><span>Lote / contrato da foto</span><select id="ftLote"></select></label>' +
+                  '<label class="ft-f full" id="ftLoteWrap"><span>Contrato da foto</span><select id="ftLote"></select></label>' +
                   '<label class="ft-f"><span>km</span><input id="ftKm" inputmode="decimal" autocomplete="off"></label>' +
                   '<label class="ft-f"><span>Ponto</span><select id="ftPonto"></select></label>' +
                   '<label class="ft-f"><span>Lado</span><select id="ftLado"><option value="">Eixo / não informar</option><option value="LE">LE · lado esquerdo</option><option value="LD">LD · lado direito</option></select></label>' +
@@ -390,26 +584,8 @@
                 '</div>' +
               '</section>' +
               '<section class="ft-sec ft-drvsec" hidden><label class="ft-chk"><input type="checkbox" id="ftDrive"> Enviar ao Drive da equipe</label>' +
-                '<div class="ft-src">Desmarcada, a foto fica só neste aparelho (Fotos › Neste aparelho) e dá para enviar depois.</div></section>' +
-              '<section class="ft-sec ft-shared"><h4>O que aparece na legenda</h4><div class="ft-checks">' +
-                FIELDS.map(function (f) { return '<label><input type="checkbox" id="ftC-' + f.k + '" data-campo="' + f.k + '">' + f.label + '</label>'; }).join('') +
-              '</div></section>' +
-              '<section class="ft-sec ft-shared"><h4>Aparência</h4>' +
-                '<div class="ft-row"><span>Logo</span><div class="ft-opts" data-group="logoOn"></div><div class="ft-corners" data-group="logo"></div></div>' +
-                '<div class="ft-row"><span>Legenda</span><div class="ft-corners" data-group="leg"></div></div>' +
-                '<div class="ft-row"><span>Cor do texto</span><div class="ft-opts" data-group="cor"></div></div>' +
-                '<div class="ft-row"><span>Tamanho</span><div class="ft-opts" data-group="tam"></div></div>' +
-                '<div class="ft-row"><span>Fundo do texto</span><div class="ft-opts" data-group="fundo"></div></div>' +
-                '<div class="ft-row"><span>Fundo da logo</span><div class="ft-opts" data-group="logoFundo"></div></div>' +
-                '<div class="ft-row"><span>Tamanho do arquivo</span><div class="ft-opts" data-group="arq"></div></div>' +
-                '<div class="ft-src">Normal: cerca de metade do tamanho da Alta (a de antes), com a mesma nitidez no relatório. Leve: cerca de um quarto.</div>' +
-                '<div class="ft-row"><span>Qual logo</span><div class="ft-logos" role="group" aria-label="Logos disponíveis"></div>' +
-                  '<div class="ft-opts"><label class="ft-opt">Adicionar logo (PNG ou JPG)<input class="ft-file" type="file" id="ftLogoFile" accept="image/png,image/jpeg,image/webp"></label>' +
-                  '<button type="button" class="ft-opt" data-ft="logo-team" hidden>Usar como padrão da equipe</button>' +
-                  '<button type="button" class="ft-opt" data-ft="logo-team-off" hidden>Tirar padrão da equipe</button>' +
-                  '<button type="button" class="ft-opt" data-ft="logo-del" hidden>Remover esta logo</button></div>' +
-                  '<div class="ft-src ft-logo-src"></div></div>' +
-              '</section>' +
+                '<div class="ft-src">Desmarcada, a foto fica só neste aparelho (Fotos › Neste aparelho) e dá para enviar depois.</div>' +
+                '<div class="ft-mini">A escolha vale para as próximas fotos · <b>salva neste aparelho</b></div></section>' +
             '</div>' +
           '</div>' +
           '<div class="ft-batch" hidden>' +
@@ -438,18 +614,57 @@
           '<button type="button" class="ft-btn ft-one ft-drv" data-ft="drive" hidden>Enviar ao Drive</button><button type="button" class="ft-btn ft-many ft-drv" data-ft="b-drive" hidden>Enviar todas ao Drive</button>' +
           (opts.share ? '<button type="button" class="ft-btn ft-one" data-ft="share">Compartilhar</button><button type="button" class="ft-btn ft-many" data-ft="b-share">Compartilhar todas</button>' : '') +
           '<button type="button" class="ft-btn primary ft-one" data-ft="save">Salvar foto</button>' +
-          '<button type="button" class="ft-btn primary ft-many" data-ft="b-save">Salvar todas (.zip)</button></div>';
+          '<button type="button" class="ft-btn primary ft-many" data-ft="b-save">Salvar todas (.zip)</button></div>' +
+        // folha de opções: um grupo por vez (o do botão tocado)
+        '<div class="ft-camada" hidden><div class="ft-fundo" data-ft="folha-fecha" aria-hidden="true"></div>' +
+          '<div class="ft-folha" id="ftFolha" role="dialog" aria-modal="true" aria-labelledby="ftFolhaT" tabindex="-1">' +
+            '<i class="ft-alca" aria-hidden="true"></i>' +
+            '<div class="ft-fhead"><div class="ft-ftit"><h3 id="ftFolhaT"></h3>' +
+                '<span class="ft-fsalvo"><span class="ft-pill" role="status"><i aria-hidden="true"></i><span class="ft-salvo"></span></span><span class="ft-svale"></span></span></div>' +
+              '<button type="button" class="ft-btn primary" data-ft="folha-fecha">Pronto</button></div>' +
+            '<div class="ft-fbody">' +
+              '<div class="ft-fg" data-g="leg"><p class="ft-src ft-leghint"></p><div class="ft-checks">' +
+                FIELDS.map(function (f) { return '<label><input type="checkbox" id="ftC-' + f.k + '" data-campo="' + f.k + '"><span>' + f.label + '<small data-nota="' + f.k + '" hidden></small></span></label>'; }).join('') +
+              '</div></div>' +
+              '<div class="ft-fg" data-g="apa">' +
+                '<div class="ft-row"><span>Canto da legenda</span><div class="ft-corners" data-group="leg"></div></div>' +
+                '<div class="ft-row"><span>Cor do texto</span><div class="ft-opts" data-group="cor"></div></div>' +
+                '<div class="ft-row"><span>Tamanho</span><div class="ft-opts" data-group="tam"></div></div>' +
+                '<div class="ft-row"><span>Fundo do texto</span><div class="ft-opts" data-group="fundo"></div></div></div>' +
+              '<div class="ft-fg" data-g="logo">' +
+                '<div class="ft-row"><span>Logo</span><div class="ft-opts" data-group="logoOn"></div></div>' +
+                '<div class="ft-row ft-sologo"><span>Canto da logo</span><div class="ft-corners" data-group="logo"></div></div>' +
+                '<div class="ft-row"><span>Qual logo</span><div class="ft-logos" role="group" aria-label="Logos disponíveis"></div>' +
+                  '<label class="ft-add">+ Adicionar logo (PNG ou JPG)<input class="ft-file" type="file" id="ftLogoFile" accept="image/png,image/jpeg,image/webp"></label>' +
+                  '<div class="ft-lacts"><button type="button" class="ft-opt" data-ft="logo-team" hidden>Usar como padrão da equipe</button>' +
+                  '<button type="button" class="ft-opt" data-ft="logo-team-off" hidden>Tirar padrão da equipe</button>' +
+                  '<button type="button" class="ft-opt" data-ft="logo-del" hidden>Remover esta logo</button></div>' +
+                  '<div class="ft-src ft-logo-src"></div></div>' +
+                '<div class="ft-row ft-sologo"><span>Fundo da logo</span><div class="ft-opts" data-group="logoFundo"></div></div></div>' +
+              '<div class="ft-fg" data-g="arq"><div class="ft-arqs" role="group" aria-label="Tamanho do arquivo" data-group="arq"></div>' +
+                '<p class="ft-src">Vale para Salvar, Compartilhar e Enviar ao Drive.</p></div>' +
+            '</div>' +
+            '<div class="ft-ffoot"><span class="ft-fpad"></span><span class="ft-facts">' +
+              '<button type="button" class="ft-desf" data-ft="folha-desfaz" hidden>Desfazer</button>' +
+              '<button type="button" class="ft-voltar" data-ft="folha-padrao" aria-disabled="false">Voltar ao padrão</button></span></div>' +
+          '</div></div>';
       root.addEventListener('click', onClick);
       root.addEventListener('input', onInput);
       root.addEventListener('change', onChange);
-      root.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+      root.addEventListener('keydown', function (e) {
+        if (folha) { teclaFolha(e); return; }
+        if (e.key === 'Escape') close();
+      });
     }
 
     function renderOpts() {
+      // os botões são refeitos: o foco (teclado) volta para o botão equivalente
+      var a = document.activeElement, foco = '', naFolha = !!folha && (a === document.body || q('.ft-folha').contains(a));
+      if (a && root.contains(a) && a.dataset) foco = a.dataset.set ? '[data-set="' + a.dataset.set + '"][data-val="' + a.dataset.val + '"]' : a.dataset.logo != null ? '[data-logo="' + a.dataset.logo + '"]' : '';
       function group(name, items) {
         var el = q('[data-group="' + name + '"]');
         el.innerHTML = items.map(function (it) {
-          return '<button type="button" class="ft-opt" data-set="' + name + '" data-val="' + it[0] + '" aria-pressed="' + (String(set[name]) === String(it[0])) + '">' + it[1] + '</button>';
+          return '<button type="button" class="ft-opt" data-set="' + name + '" data-val="' + it[0] + '" aria-pressed="' + (String(set[name]) === String(it[0])) + '">' + (it[2] || '') + it[1] + '</button>';
         }).join('');
       }
       group('logoOn', [['true', 'Mostrar'], ['false', 'Sem logo']]);
@@ -457,15 +672,206 @@
       renderLogos();
       group('logo', CORNERS);
       group('leg', CORNERS);
-      group('cor', [['amarelo', 'Amarelo'], ['branco', 'Branco']]);
-      group('tam', [['P', 'Pequeno'], ['M', 'Médio'], ['G', 'Grande']]);
-      group('fundo', [['sombra', 'Sombra'], ['faixa', 'Faixa escura'], ['nenhum', 'Sem fundo']]);
-      group('arq', [['leve', 'Leve · 1600 px'], ['normal', 'Normal · 2400 px'], ['alta', 'Alta · 3200 px']]);
-      q('[data-group="logo"]').hidden = !set.logoOn;
-      FIELDS.forEach(function (f) { q('#ftC-' + f.k).checked = !!set.campos[f.k]; });
+      group('cor', CORES_OP.map(function (c) { return [c[0], c[1], '<i class="ft-amostra" style="background:' + COLORS[c[0]] + '" aria-hidden="true"></i>']; }));
+      group('tam', TAMS_OP);
+      group('fundo', FUNDOS_OP);
+      q('[data-group="arq"]').innerHTML = ARQS_OP.map(function (o) {
+        return '<button type="button" class="ft-arq" data-set="arq" data-val="' + o[0] + '" aria-pressed="' + (set.arq === o[0]) + '"><i aria-hidden="true"></i><span><b>' + o[1] + '</b><small>' + o[2] + '</small></span></button>';
+      }).join('');
+      root.querySelectorAll('.ft-sologo').forEach(function (r) { r.hidden = !set.logoOn; });
+      FIELDS.forEach(function (f) {
+        q('#ftC-' + f.k).checked = !!set.campos[f.k];
+        var n = notaCampo(f.k), el = q('[data-nota="' + f.k + '"]');
+        el.textContent = n;
+        el.hidden = !n;
+      });
+      renderBar();
+      renderFolha();
+      if (foco) { var novo = q(foco); if (novo && novo !== a && novo.offsetParent) novo.focus(); }
+      if (naFolha) seguraFoco();
+    }
+    // o botão com o foco sumiu com a própria ação ("Remover esta logo", "Usar como padrão da equipe", "Tirar padrão da equipe"):
+    // o foco ia para o body, fora da folha, e o Esc e o Tab deixavam de valer. Vai para a logo marcada (do lado desses botões),
+    // senão para a primeira opção marcada do grupo, senão para a folha
+    function seguraFoco() {
+      var p = q('.ft-folha'), at = document.activeElement;
+      if (at === p || (at && p.contains(at) && at.getClientRects().length)) return;
+      var alvo = q('.ft-fg:not([hidden]) .ft-logo[aria-pressed="true"]') || q('.ft-fg:not([hidden]) [aria-pressed="true"]');
+      (alvo && alvo.getClientRects().length ? alvo : p).focus({ preventScroll: true });
+    }
+    // por que um item marcado não sai nesta foto (só na foto única; no lote, cada foto tem o seu caso)
+    function notaCampo(k) {
+      if (k === 'lado' && !set.campos.rodkm) return 'só sai com Rodovia e km';
+      if (!st || batch) return '';
+      var c = contract();
+      if (k === 'lado' && !st.side) return 'sem lado nesta foto';
+      if (k === 'coord' && !st.ll && st.km == null) return 'sem local nesta foto';
+      if (k === 'ponto' && !findPoint(st.pid)) return 'nenhum ponto nesta foto';
+      if (k === 'desc' && !(st.desc || '').trim()) return 'vazia nesta foto';
+      if (k === 'executora' && !(c && c.executora)) return 'o contrato não tem';
+      if (k === 'supervisora' && !(c && c.supervisora)) return 'o contrato não tem';
+      return '';
+    }
+    // o valor de agora em cada um dos 4 botões
+    function renderBar() {
+      var cur = currentLogo(), v = resumos(set, cur ? logoCurto(cur) : '');
+      root.querySelectorAll('[data-folha]').forEach(function (b) {
+        var g = b.dataset.folha;
+        b.querySelector('.ft-bbv').textContent = v[g];
+        b.setAttribute('aria-label', GRUPO_NOME[g] + ': ' + v[g]);
+      });
+      q('.ft-bnote span').innerHTML = batch ? 'Legenda, aparência, logo e arquivo valem para todas as fotos e ficam <b>salvos neste aparelho</b>.'
+        : 'Legenda, aparência, logo e arquivo ficam <b>salvos neste aparelho</b>.';
+    }
+
+    // ---------------- folhas de opções: cada botão abre a sua, com só aquele grupo; a prévia redesenha a cada toque
+    var folha = null;   // { g, btn, antes (para o Desfazer), mudou, ok (guardou no aparelho), rolagem }
+    function abreFolha(g, btn) {
+      if (folha) fechaFolha(true);
+      folha = { g: g, btn: btn, antes: null, mudou: false, ok: saveSet(set), rolagem: q('.ft-body').scrollTop };
+      q('#ftFolhaT').textContent = GRUPO_TITULO[g];
+      q('.ft-leghint').textContent = batch ? 'Marque o que vai escrito nas fotos. As prévias já mostram a mudança.' : 'Marque o que vai escrito na foto. A prévia já mostra a mudança.';
+      root.querySelectorAll('.ft-fg').forEach(function (el) { el.hidden = el.dataset.g !== g; });
+      ['.ft-head', '.ft-body', '.ft-foot'].forEach(function (s) { q(s).setAttribute('inert', ''); });
+      q('.ft-camada').hidden = false;
+      root.classList.add('folha');
+      btn.setAttribute('aria-expanded', 'true');
+      renderOpts();
+      q('.ft-fbody').scrollTop = 0;
+      ajustaFolha(true);
+      window.addEventListener('resize', onResizeFolha);
+      document.addEventListener('keydown', teclaFora, true);
+      q('.ft-folha').focus();
+    }
+    function fechaFolha(semFoco) {
+      if (!folha || !root) return;
+      var f = folha;
+      folha = null;
+      window.removeEventListener('resize', onResizeFolha);
+      document.removeEventListener('keydown', teclaFora, true);
+      q('.ft-camada').hidden = true;
+      root.classList.remove('folha', 'folha-lado');
+      root.style.removeProperty('--ft-livre');
+      root.style.removeProperty('--ft-lado');
+      ['.ft-head', '.ft-body', '.ft-foot'].forEach(function (s) { q(s).removeAttribute('inert'); });
+      f.btn.setAttribute('aria-expanded', 'false');
+      q('.ft-body').scrollTop = f.rolagem;
+      if (!semFoco && f.btn.offsetParent) f.btn.focus({ preventScroll: true });
+    }
+    function onResizeFolha() { ajustaFolha(false); }
+    // tela larga: o painel fica sobre a coluna do lado, entre o cabeçalho e o rodapé (com pouca altura, do alto até o fim do rodapé).
+    // Celular em pé: a folha sobe de baixo e a prévia (ou a primeira foto do lote) encolhe para caber em cima dela.
+    // Celular deitado (pouca altura): a folha fica do lado direito e a prévia, no resto da largura, com a altura do corpo.
+    // `rolar` leva a prévia ao alto (na tela larga, só quando ela não está toda à vista)
+    function ajustaFolha(rolar) {
+      if (!folha) return;
+      var p = q('.ft-folha'), r = root.getBoundingClientRect(), h = q('.ft-head').getBoundingClientRect(), ft = q('.ft-foot'), body = q('.ft-body');
+      var larga = midia('(min-width: 821px)'), lado = !larga && midia('(orientation: landscape) and (max-height: 560px)'), modo = larga ? 'larga' : lado ? 'lado' : 'baixo';
+      root.classList.toggle('folha-lado', lado);
+      if (folha.modo !== modo) { folha.modo = modo; rolar = true; }   // virou o celular: leva a prévia de novo para a vista
+      if (larga) {
+        // pouca altura (celular grande deitado, 896x414): o painel vai do alto até o fim do rodapé (os dois ficam inertes com a folha
+        // aberta), senão a lista da folha ficava com pouco mais de 100 px
+        var baixa = midia('(max-height: 560px)'), side = (batch ? q('.ft-bside') : q('.ft-work .ft-side')).getBoundingClientRect();
+        var fim = ft.hidden ? r.bottom : ft.getBoundingClientRect()[baixa ? 'bottom' : 'top'], topo = baixa ? 8 : h.bottom - r.top + 12;
+        if (side.width) { p.style.left = Math.round(side.left - r.left) + 'px'; p.style.width = Math.round(Math.min(420, side.width)) + 'px'; }
+        p.style.top = Math.round(topo) + 'px';
+        p.style.maxHeight = Math.max(240, Math.round(fim - r.top - topo - 12)) + 'px';
+        root.style.removeProperty('--ft-livre');
+        root.style.removeProperty('--ft-lado');
+      } else {
+        p.style.left = p.style.width = p.style.top = p.style.maxHeight = '';
+        if (lado) {
+          root.style.setProperty('--ft-lado', p.offsetWidth + 'px');
+          root.style.setProperty('--ft-livre', Math.max(120, body.clientHeight - 24) + 'px');
+        } else {
+          root.style.removeProperty('--ft-lado');
+          // offsetTop: a posição sem a animação de subida (getBoundingClientRect pega a folha ainda lá embaixo)
+          root.style.setProperty('--ft-livre', Math.max(120, Math.round(p.offsetTop - (h.bottom - r.top) - 24)) + 'px');
+        }
+      }
+      if (!rolar) return;
+      var alvo = batch ? q('.ft-item:not(.err) .ft-thumb') : q('.ft-prev');
+      if (!alvo) return;
+      var ar = alvo.getBoundingClientRect(), br = body.getBoundingClientRect();
+      if (larga && ar.top >= br.top && ar.bottom <= br.bottom) return;   // tela larga: só rola se a foto não estiver toda à vista
+      body.scrollTop += ar.top - br.top - 12;
+    }
+    function midia(m) { return !!(window.matchMedia && window.matchMedia(m).matches); }
+    // tecla com o foco fora da tela da foto (no body, depois que o botão com o foco sumiu): Esc e Tab continuam presos à folha
+    function teclaFora(e) { if (folha && root && !root.contains(e.target)) teclaFolha(e); }
+    // Esc fecha só a folha; Tab não sai dela
+    function teclaFolha(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechaFolha(); return; }
+      if (e.key !== 'Tab') return;
+      var l = Array.prototype.filter.call(q('.ft-folha').querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])'), function (el) {
+        return !el.disabled && el.offsetParent !== null;
+      });
+      if (!l.length) { e.preventDefault(); return; }
+      var i = l.indexOf(document.activeElement);
+      if (e.shiftKey && i <= 0) { e.preventDefault(); l[l.length - 1].focus(); }
+      else if (!e.shiftKey && (i < 0 || i === l.length - 1)) { e.preventDefault(); l[0].focus(); }
+    }
+    // a logo padrão: a do DNIT, a mesma que o bloco de DNIT_KEY marca uma vez em cada aparelho (sem ela, a primeira da lista)
+    function logoPadrao() {
+      var lib = library(), d = null;
+      lib.forEach(function (l) { if (l.id === 'dnit') d = l; });
+      return d || lib[0] || null;
+    }
+    function folhaNoPadrao(g) {
+      if (!grupoNoPadrao(set, g)) return false;
+      if (g !== 'logo') return true;
+      var cur = currentLogo(), lp = logoPadrao();
+      return (cur ? cur.id : '') === (lp ? lp.id : '');
+    }
+    function renderFolha() {
+      if (!folha) return;
+      var g = folha.g, np = folhaNoPadrao(g), lp = logoPadrao();
+      q('.ft-pill').classList.toggle('err', !folha.ok);
+      q('.ft-salvo').textContent = !folha.ok ? 'Não deu para salvar neste aparelho' : folha.mudou ? 'Salvo agora neste aparelho' : 'Salvo neste aparelho';
+      q('.ft-svale').textContent = folha.ok ? 'vale para as próximas fotos' : 'vale só nesta visita';
+      q('.ft-fpad').textContent = np ? 'Já está no padrão.' : padraoTxt(g, lp ? logoCurto(lp) : '');
+      q('[data-ft="folha-padrao"]').setAttribute('aria-disabled', String(np));
+      q('[data-ft="folha-desfaz"]').hidden = !folha.antes;
+      ajustaFolha(false);
+    }
+    // toda mudança de opção passa por aqui: guarda no aparelho e some o Desfazer
+    function guarda(ok) {
+      ok = saveSet(set) && ok !== false;
+      if (folha) { folha.mudou = true; folha.antes = null; folha.ok = ok; }
+      return ok;
+    }
+    function grupoAgora(g) {
+      var o = {};
+      GRUPOS[g].forEach(function (k) { o[k] = k === 'campos' ? Object.assign({}, set.campos) : set[k]; });
+      if (g === 'logo') o.selId = selId;
+      return o;
+    }
+    // aplica um grupo guardado (padrão ou Desfazer); `antes` fica para o Desfazer
+    function poeGrupo(o, antes) {
+      var ok = true;
+      Object.keys(o).forEach(function (k) { if (k !== 'selId') set[k] = k === 'campos' ? Object.assign({}, o[k]) : o[k]; });
+      if (own(o, 'selId')) { selId = o.selId; ok = lsSet(LOGO_SEL_KEY, selId); refreshLogo(); }
+      guarda(ok);
+      folha.antes = antes;
+      renderOpts();
+      scheduleDraw(0);
+    }
+    function padraoFolha() {
+      if (!folha || folhaNoPadrao(folha.g)) return;
+      var g = folha.g, d = defaults(), o = {};
+      GRUPOS[g].forEach(function (k) { o[k] = d[k]; });
+      if (g === 'logo') { var lp = logoPadrao(); o.selId = lp ? lp.id : ''; }
+      poeGrupo(o, grupoAgora(g));
+    }
+    function desfazFolha() {
+      if (!folha || !folha.antes) return;
+      poeGrupo(folha.antes, null);
+      q('[data-ft="folha-padrao"]').focus();
     }
 
     function startView() {
+      fechaFolha(true);
       stopCam();
       clearBatch();
       if (st && st.url) URL.revokeObjectURL(st.url);
@@ -479,14 +885,14 @@
       startMsg('');
       var and = isAndroid(), h;
       if (camSupported()) {
-        h = esc('"Câmera com GPS" tira várias fotos seguidas sem sair do app: o km, o ponto e o lote de cada foto vêm do GPS do celular na hora do clique. ' +
+        h = esc('"Câmera com GPS" tira várias fotos seguidas sem sair do app: o km, o ponto e o contrato de cada foto vêm do GPS do celular na hora do clique. ' +
           (and ? 'É o jeito mais seguro no Android, que costuma apagar o local das fotos escolhidas na galeria ou nos arquivos. ' : '') +
           'Para fotos já tiradas, use "Arquivos do celular" (uma ou várias): o km sai da localização gravada em cada foto.');
       } else {
         h = esc((opts.gps
           ? 'O km sai do GPS do aparelho na hora da foto ou da localização gravada na foto. '
           : 'Neste link o navegador não informa a localização do aparelho: o km sai da localização gravada na foto. Deixe a câmera do celular salvando o local. ') +
-          'Em "Arquivos do celular" dá para marcar várias fotos de uma vez: cada uma recebe o km, o ponto e o lote do próprio GPS.');
+          'Em "Arquivos do celular" dá para marcar várias fotos de uma vez: cada uma recebe o km, o ponto e o contrato do próprio GPS.');
         // página online: no Android o sistema apaga o local das fotos; o app (site) tem a câmera com GPS
         if (and && opts.appUrl) h += ' <b>No Android</b>, o sistema costuma apagar o local das fotos entregues ao navegador. Para não depender disso, use o app ' +
           '<a href="' + esc(opts.appUrl) + '" target="_blank" rel="noopener">' + esc(opts.appUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')) + '</a> e o botão "Câmera com GPS", que usa o GPS do celular na hora da foto.';
@@ -494,8 +900,8 @@
       q('.ft-note').innerHTML = h + ' Se faltar o local, você digita o km ou escolhe o ponto.';
       renderGps();
     }
-    // as seções de legenda e aparência valem para a foto única e para o lote de fotos
-    function moveShared(target) { root.querySelectorAll('.ft-shared').forEach(function (s) { target.appendChild(s); }); }
+    // os 4 botões de opções (legenda, aparência, logo, arquivo) valem para a foto única e para o lote de fotos: ficam no alto da coluna do lado
+    function moveShared(target) { root.querySelectorAll('.ft-shared').forEach(function (s) { target.insertBefore(s, target.firstChild); }); }
     function renderGps() {
       var el = q('.ft-gps');
       if (!opts.gps) { el.hidden = true; return; }
@@ -509,17 +915,17 @@
     function gpsLot(km) {
       var here = lotsAt(km), cur = activeContract();
       if (!here.length || !cur || has(here, cur)) return '';
-      return ' · <span class="ft-warn">este km é do ' + esc(lotName(here[0])) + '</span>';
+      return ' · <span class="ft-warn">este km é do contrato ' + esc(lotName(here[0])) + '</span>';
     }
     function renderHead() {
       var c = contract();
       if (batch) {   // lote de fotos: os lotes/contratos em uso
         var seen = {}, names = [];
-        readyItems().forEach(function (it) { var x = byId(it.cid); if (x && !seen[x.id]) { seen[x.id] = 1; names.push(x.lote || lotName(x)); } });
+        readyItems().forEach(function (it) { var x = byId(it.cid); if (x && !seen[x.id]) { seen[x.id] = 1; names.push(lotName(x)); } });
         q('.ft-ct').textContent = [rodovia()].concat(names.length ? [names.join(', ')] : []).join(' · ');
         return;
       }
-      q('.ft-ct').textContent = c ? [c.lote, c.numero, rodovia()].filter(Boolean).join(' · ') : rodovia();
+      q('.ft-ct').textContent = c ? [lotName(c), nomes.numeroCT(c), rodovia()].filter(Boolean).join(' · ') : rodovia();
     }
     var lastFixErr = '';
     function startGps() {
@@ -750,17 +1156,17 @@
       var di = st.bi != null ? ' data-i="' + st.bi + '"' : '';   // foto do lote de fotos
       if (st.km != null && cur && !has(here, cur)) {
         if (here.length) {
-          h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica no <b>' + esc(lotName(here[0])) + '</b> (' + esc(rangeTxt(here[0])) + '), não no ' + esc(lotName(cur)) +
-            (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '') + '. A legenda e o ponto estão usando o lote errado.</div><div class="ft-opts">' +
+          h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica no contrato <b>' + esc(lotName(here[0])) + '</b> (' + esc(rangeTxt(here[0])) + '), não no ' + esc(lotName(cur)) +
+            (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '') + '. A legenda e o ponto estão usando o contrato errado.</div><div class="ft-opts">' +
             here.map(function (c) {
               var a = pointNear(c, st.km);
-              return '<button type="button" class="ft-opt ft-fix" data-ft="fix-lot" data-cid="' + esc(c.id) + '"' + di + '>Corrigir para ' + esc(c.lote || lotName(c)) + (a ? ' · ' + esc(a.nome) : '') + '</button>';
+              return '<button type="button" class="ft-opt ft-fix" data-ft="fix-lot" data-cid="' + esc(c.id) + '"' + di + '>Corrigir para ' + esc(lotName(c)) + (a ? ' · ' + esc(a.nome) : '') + '</button>';
             }).join('') +
-            '<button type="button" class="ft-opt" data-ft="keep-lot"' + di + '>Manter ' + esc(cur.lote || lotName(cur)) + '</button></div>';
+            '<button type="button" class="ft-opt" data-ft="keep-lot"' + di + '>Manter ' + esc(lotName(cur)) + '</button></div>';
           if (st.keepLot === cur.id + '@' + nf(st.km, 2)) h = '';
         } else if (lotRange(cur)) {
           h = '<div>O km <b>' + nf(st.km, 2) + '</b> está fora do trecho de todos os contratos cadastrados (' +
-            list.filter(function (c) { return lotRange(c); }).map(function (c) { return esc(c.lote || lotName(c)) + ': ' + esc(rangeTxt(c)); }).join('; ') +
+            list.filter(function (c) { return lotRange(c); }).map(function (c) { return esc(lotName(c)) + ': ' + esc(rangeTxt(c)); }).join('; ') +
             '). Confira o km.</div>';
         }
       }
@@ -786,7 +1192,7 @@
       renderHead(); renderPontos(); renderSrc(); scheduleDraw(0);
       if (opts.setActiveContract) opts.setActiveContract(c.id);
       var p = findPoint(st.pid);
-      notify('Foto no ' + lotName(c) + (p ? ' · ponto ' + p.nome : '') + '.');
+      notify('Foto no contrato ' + lotName(c) + (p ? ' · ponto ' + p.nome : '') + '.');
     }
 
     // ---------------- desenho
@@ -895,7 +1301,7 @@
     }
 
     // ---------------- salvar
-    function arq() { return ARQS[set.arq] || ARQS.normal; }
+    function arq() { return own(ARQS, set.arq) ? ARQS[set.arq] : ARQS.fhd; }
     function fileName() {
       var p = findPoint(st.pid), d = st.date || new Date();
       var parts = ['Foto', rodovia().replace(/[\/\s]+/g, '-')];
@@ -933,15 +1339,18 @@
       }).catch(function () { /* compartilhamento cancelado */ }).then(function () { busy(false); });
     }
 
-    // ---------------- Google Drive da equipe: toda foto salva, compartilhada ou enviada vai para "Lote / Ponto"
+    // ---------------- Google Drive da equipe: toda foto salva, compartilhada ou enviada vai para "CT nº / Ponto"
+    // (pasta pelo número do contrato, "CT 02 00314-2026"; pastaAntiga = a do Lote, que o script renomeia no primeiro envio)
     function newUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
     function driveOn() { return !!(opts.drive && opts.drive.ready()); }
     function driveItem(it, blob, name) {
       return withItem(it, function () {
         var c = contract(), p = findPoint(st.pid), ll = st.ll || (st.km != null ? ref.at(st.km) : null);
         var desc = (st.desc || '').trim() || (st.bi != null && batch ? batch.common.trim() : '');
+        // nome de tela e nome formal, sempre com o nº do CT: a importação do Drive acha o contrato pelo número
         var info = [
-          c ? lotName(c) : '',
+          c ? nomes.nome(c) : '',
+          c && nomes.formal(c) !== nomes.nome(c) ? nomes.formal(c) : '',
           p ? 'Ponto ' + p.nome : 'Sem ponto',
           st.km != null ? kmLine(st.km, st.side, st.dist, true) : '',
           ll ? coordTxt(ll) : '',
@@ -950,11 +1359,11 @@
         ].filter(Boolean).join('\n');
         var d = st.date && isFinite(st.date.getTime()) ? st.date : null;
         // dados para as galerias do app (banco)
-        var meta = { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? lotName(c) : null,
+        var meta = { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? nomes.formal(c) : null,
           km: st.km != null ? Math.round(st.km * 1000) / 1000 : null, lat: ll ? ll[0] : null, lng: ll ? ll[1] : null,
           em: d ? d.toISOString() : null, desc: desc || null };
-        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && (c.lote || lotName(c))) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], descricao: info, meta: meta,
-          enviar: st.drive !== false };
+        return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && nomes.pasta(c)) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'],
+          pastaAntiga: nomes.pastaAntiga(c), descricao: info, meta: meta, enviar: st.drive !== false };
       });
     }
     // a foto fica guardada no aparelho (galeria do app) mesmo sem o Drive configurado; o envio espera
@@ -1066,7 +1475,7 @@
       batch.items.forEach(function (it) { if (it.url) URL.revokeObjectURL(it.url); if (it.prevUrl) URL.revokeObjectURL(it.prevUrl); });
       batch = null;
       drawQ = [];
-      if (root) { q('.ft-blist').innerHTML = ''; q('.ft-prog').textContent = ''; }
+      if (root) { q('.ft-blist').innerHTML = ''; q('.ft-prog').textContent = ''; travaOpcoes(false); }   // "Nova seleção" no meio da geração
     }
     function showBatch() {
       root.classList.add('many');
@@ -1101,7 +1510,7 @@
           '<div class="ft-opts ft-here" hidden><button type="button" class="ft-opt" data-ft="b-here"' + d + '>Usar o GPS do aparelho agora</button></div>' +
           '<div class="ft-lot" role="status" hidden></div>' +
           '<div class="ft-grid">' +
-            (contracts().length > 1 ? '<label class="ft-f full"><span>Lote / contrato</span><select data-b="lote"' + d + '></select></label>' : '') +
+            (contracts().length > 1 ? '<label class="ft-f full"><span>Contrato</span><select data-b="lote"' + d + '></select></label>' : '') +
             '<label class="ft-f"><span>km</span><input data-b="km"' + d + ' inputmode="decimal" autocomplete="off"></label>' +
             '<label class="ft-f"><span>Ponto</span><select data-b="ponto"' + d + '></select></label>' +
             '<label class="ft-f full"><span>Descrição desta foto</span><input data-b="desc"' + d + ' maxlength="240" autocomplete="off"></label>' +
@@ -1152,8 +1561,8 @@
       if (bad) parts.push('<span class="ft-warn">' + bad + (bad === 1 ? ' não abriu' : ' não abriram') + '</span>');
       q('.ft-bstat').innerHTML = parts.join(' · ');
       var wrong = ok.filter(function (it) { return wrongLot(it); }).length, box = q('.ft-blot');
-      box.innerHTML = wrong ? '<div><b>' + wrong + (wrong === 1 ? ' foto está' : ' fotos estão') + ' com o km em outro lote.</b> A legenda e o ponto ' + (wrong === 1 ? 'dela' : 'delas') + ' estão usando o lote errado.</div>' +
-        '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">Corrigir o lote ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km</button></div>' : '';
+      box.innerHTML = wrong ? '<div><b>' + wrong + (wrong === 1 ? ' foto está' : ' fotos estão') + ' com o km em outro contrato.</b> A legenda e o ponto ' + (wrong === 1 ? 'dela' : 'delas') + ' estão usando o contrato errado.</div>' +
+        '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">Corrigir o contrato ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km</button></div>' : '';
       box.hidden = !wrong;
       var n = ok.length, off = batch.busy || wait > 0 || !n, nd = ok.filter(function (it) { return it.drive !== false; }).length;
       var bd = q('.ft-bdrv');
@@ -1192,7 +1601,7 @@
         queueDraw(i);
       });
       renderBatchSum();
-      if (n) notify(n + (n === 1 ? ' foto corrigida' : ' fotos corrigidas') + ' para o lote do km.');
+      if (n) notify(n + (n === 1 ? ' foto corrigida' : ' fotos corrigidas') + ' para o contrato do km.');
     }
     function itemChanged(i, later) {
       batch.ver++;
@@ -1227,19 +1636,24 @@
       }, 'image/jpeg', 0.85);
     }
     function prog(t) { q('.ft-prog').textContent = t || ''; }
-    function setBatchBusy(on) { if (!batch) return; batch.busy = on; if (!on) prog(''); renderBatchSum(); }
-    // gera as fotos finais (no tamanho escolhido em "Tamanho do arquivo") e guarda enquanto nada mudar
+    function setBatchBusy(on) { if (!batch) return; batch.busy = on; travaOpcoes(on); if (!on) prog(''); renderBatchSum(); }
+    // enquanto o lote gera as fotos, os 4 botões de opções ficam travados: mudar a legenda ou o tamanho no meio deixava o .zip
+    // (e a fila do Drive) com fotos de carimbos e tamanhos diferentes
+    function travaOpcoes(on) {
+      if (on) fechaFolha(true);
+      root.querySelectorAll('[data-folha]').forEach(function (b) { b.disabled = on; });
+    }
+    // gera as fotos finais (no tamanho escolhido em "Tamanho do arquivo", lido uma vez) e guarda enquanto nada mudar
     function outputs() {
       var b = batch, ver = b.ver;
       if (b.out && b.out.ver === ver) return Promise.resolve(b.out.files);
-      var list = readyItems(), out = [], used = {}, cv = document.createElement('canvas');
+      var list = readyItems(), out = [], used = {}, cv = document.createElement('canvas'), a = arq();
       return list.reduce(function (p, it, k) {
         return p.then(function () {
           if (batch !== b) throw new Error('cancel');
           prog('Gerando ' + (k + 1) + ' de ' + list.length + '…');
           return decode(it.file).then(function (d) {
             if (!d) return null;
-            var a = arq();
             withItem(it, function () { var keep = it.img; it.img = d.img; try { draw(cv, a[0]); } finally { it.img = keep; } });
             URL.revokeObjectURL(d.url);
             return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', a[1]); });
@@ -1521,13 +1935,18 @@
       if (o) {
         var k = o.dataset.set, v = o.dataset.val;
         set[k] = k === 'logoOn' || k === 'logoFundo' ? v === 'true' : v;
-        saveSet(set); renderOpts(); scheduleDraw(0);
+        guarda(); renderOpts(); scheduleDraw(0);
         return;
       }
       var lg = e.target.closest('[data-logo]');
       if (lg) { selectLogo(lg.dataset.logo); return; }
+      var fb = e.target.closest('[data-folha]');
+      if (fb) { if (folha && folha.btn === fb) fechaFolha(); else abreFolha(fb.dataset.folha, fb); return; }
       var b = e.target.closest('[data-ft]');
       if (!b) return;
+      if (b.dataset.ft === 'folha-fecha') { fechaFolha(); return; }
+      if (b.dataset.ft === 'folha-padrao') { padraoFolha(); return; }
+      if (b.dataset.ft === 'folha-desfaz') { desfazFolha(); return; }
       if (batch && b.dataset.i != null) { batchClick(b, +b.dataset.i); return; }
       if (b.dataset.ft === 'cam-open') { openCam(); return; }
       if (b.dataset.ft === 'cam-shot') { shoot(); return; }
@@ -1585,7 +2004,7 @@
         if (!c) return;
         refreshItem(i); itemChanged(i); renderBatchSum();
         var p = withItem(it, function () { return findPoint(it.pid); });
-        notify('Foto ' + (i + 1) + ' no ' + lotName(c) + (p ? ' · ponto ' + p.nome : '') + '.');
+        notify('Foto ' + (i + 1) + ' no contrato ' + lotName(c) + (p ? ' · ponto ' + p.nome : '') + '.');
       } else if (b.dataset.ft === 'keep-lot') {
         var kc = withItem(it, contract);
         it.keepLot = kc && it.km != null ? kc.id + '@' + nf(it.km, 2) : '';
@@ -1666,7 +2085,7 @@
         t.value = '';
         return;
       }
-      if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; saveSet(set); scheduleDraw(0); return; }
+      if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; guarda(); renderOpts(); scheduleDraw(0); return; }
       if (t.id === 'ftDrive') { if (st) st.drive = t.checked; padraoDrive(t.checked); return; }
       if (batch && t.dataset && t.dataset.b === 'drive') { var bi = batch.items[+t.dataset.i]; if (bi) { bi.drive = t.checked; renderBatchSum(); } return; }
       if (batch && t.tagName === 'SELECT' && batchInput(t)) return;
@@ -1715,27 +2134,41 @@
       lib.forEach(function (l) { if (l.id === selId) pick = l; });
       return pick || lib[0] || null;
     }
+    // true: a logo mudou e a prévia vai ser redesenhada quando ela carregar
     function refreshLogo() {
       var cur = currentLogo(), key = cur ? cur.id + ':' + cur.src.length : '';
-      if (key === curKey) return;
+      if (key === curKey) return false;
       curKey = key;
-      if (!cur) { curImg = null; scheduleDraw(0); return; }
+      if (!cur) { curImg = null; scheduleDraw(0); return true; }
       loadLogo(cur.src).then(function (im) { if (curKey === key) { curImg = im; scheduleDraw(0); } });
+      return true;
     }
     function renderLogos() {
       if (!root) return;
       var cur = currentLogo(), t = teamLogo(), canTeam = !!(opts.canSetTeamLogo && opts.canSetTeamLogo());
+      // "Sem logo": nenhuma fica marcada (tocar numa logo volta a mostrar); o nome só quebra linha depois da barra ("Magna/Enecon")
       q('.ft-logos').innerHTML = library().map(function (l) {
-        return '<button type="button" class="ft-logo" data-logo="' + esc(l.id) + '" aria-pressed="' + (cur && cur.id === l.id) + '"><img src="' + esc(l.src) + '" alt=""><span>' + esc(l.nome) + (l.team ? '<small>padrão da equipe</small>' : '') + '</span></button>';
+        return '<button type="button" class="ft-logo" data-logo="' + esc(l.id) + '" aria-pressed="' + !!(set.logoOn && cur && cur.id === l.id) + '"><img src="' + esc(l.src) + '" alt=""><span>' +
+          esc(l.nome).replace(/\//g, '/<wbr>') + (l.team ? '<small>padrão da equipe</small>' : '') + '</span></button>';
       }).join('');
-      q('[data-ft="logo-del"]').hidden = !(cur && !cur.team && !cur.builtin);
-      q('[data-ft="logo-team"]').hidden = !(canTeam && cur && !cur.team);
+      // remover e pôr como padrão da equipe agem na logo marcada: com "Sem logo" nenhuma está marcada, então somem
+      q('[data-ft="logo-del"]').hidden = !(set.logoOn && cur && !cur.team && !cur.builtin);
+      q('[data-ft="logo-team"]').hidden = !(canTeam && set.logoOn && cur && !cur.team);
       q('[data-ft="logo-team-off"]').hidden = !(canTeam && t);
       q('.ft-logo-src').textContent = 'A logo marcada fica como padrão neste aparelho. ' +
         (t ? 'A equipe usa por padrão: ' + (t.nome || 'logo da equipe') + '. ' : '') +
         (canTeam ? 'Como responsável, você pode deixar a logo marcada como padrão para toda a equipe.' : '');
     }
-    function selectLogo(id) { selId = id; lsSet(LOGO_SEL_KEY, id); set.logoOn = true; saveSet(set); renderOpts(); refreshLogo(); }
+    // tocar numa logo liga a logo; `manter`: só troca qual é a escolhida (remover, padrão da equipe), sem mexer em "Mostrar"/"Sem logo".
+    // Mesma logo de antes depois de "Sem logo": refreshLogo não muda nada, então redesenha aqui (no lote, isso também invalida as fotos já geradas)
+    function selectLogo(id, manter) {
+      selId = id;
+      var ok = lsSet(LOGO_SEL_KEY, id);
+      if (!manter) set.logoOn = true;
+      guarda(ok);
+      renderOpts();
+      if (!refreshLogo()) scheduleDraw(0);
+    }
     // logo adicionada: reduzida (PNG mantém a transparência; até 600 px) e guardada no aparelho
     function shrinkLogo(im) {
       function enc(w, type) {
@@ -1765,14 +2198,14 @@
       if (!cur || cur.team || cur.builtin) return;
       deviceLogos = deviceLogos.filter(function (l) { return l.id !== cur.id; });
       lsSet(LOGOS_KEY, JSON.stringify(deviceLogos));
-      selectLogo('');
+      selectLogo('', true);
     }
     function setTeam() {
       var cur = currentLogo();
       if (!cur || cur.team || !opts.setTeamLogo) return;
       Promise.resolve(opts.setTeamLogo({ nome: cur.nome, src: cur.src })).then(function () {
         notify('Logo "' + cur.nome + '" definida como padrão da equipe.');
-        selectLogo('equipe');
+        selectLogo('equipe', true);
       }, function () { notify('Não foi possível salvar a logo da equipe. Tente de novo.'); });
     }
     function clearTeam() {
@@ -1793,6 +2226,7 @@
       setTimeout(function () { var x = q('.ft-x'); if (x) x.focus(); }, 30);
     }
     function close() {
+      fechaFolha(true);
       stopCam();
       stopGps();
       if (root && root.parentNode) root.parentNode.removeChild(root);
@@ -1810,5 +2244,8 @@
 
   FotoCarimbo.readExif = readExif;
   FotoCarimbo.readMeta = readMeta;
+  // as regras das opções, sem tela (para os testes em node)
+  FotoCarimbo.opcoes = { padrao: defaults, ler: loadSet, resumos: resumos, logoCurto: logoCurto, noPadrao: grupoNoPadrao, padraoTxt: padraoTxt,
+    ARQS: ARQS, GRUPOS: GRUPOS, FIELDS: FIELDS };
   window.FotoCarimbo = FotoCarimbo;
 })();

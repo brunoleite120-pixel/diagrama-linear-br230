@@ -82,6 +82,7 @@ button{cursor:pointer}
   .tabs{flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
   .tabs::-webkit-scrollbar{display:none}
   .tab{flex:none}
+  .tab small{display:none}   /* no celular a aba leva só o nome ("Pontos Críticos 314"); o Lote ou o nº fica no computador */
 }
 
 /* ---------- visão geral: todos os contratos em escala de km (visao.js); só na tela ---------- */
@@ -97,11 +98,50 @@ button{cursor:pointer}
 /* texto só para leitor de tela (aviso do cartão aberto, #vgAviso) */
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .vg-box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-sizing:border-box}
+/* barra do desenho: [Tudo] [Contratos ▾] e a caixa seletora logo abaixo, por cima do desenho (visao.js caixaContratos).
+   Marcar vale na hora; a caixa fica aberta até "Contratos", "Pronto", Esc ou um toque fora. O símbolo de cada contrato é o
+   da raia (losango: pontos críticos; faixa: conservação; círculo: pontes) */
+.vg-ctw{position:relative;display:flex;min-width:0;max-width:100%}
+.vg-pre .vg-ctb{display:inline-flex;align-items:center;min-width:0}
+.vg-ctb span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.vg-pre .vg-ctb.on{background:var(--ink);color:#fff}
+.vg-seta{flex:none;width:6px;height:6px;margin:-3px 2px 0 9px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}
+.vg-ctb[aria-expanded="true"] .vg-seta{margin-top:3px;transform:rotate(-135deg)}
+/* largura até 340 px, sem passar da borda da caixa do desenho no celular (a página não rola para o lado); por cima da
+   folha do ponto do celular (15) e embaixo da barra do topo (20) */
+.vg-pnl{position:absolute;top:calc(100% + 6px);left:0;z-index:16;width:min(340px,calc(100vw - 48px));display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 2px 6px rgba(23,32,28,.08),0 12px 32px rgba(23,32,28,.18)}
+.vg-pnl-l{max-height:min(380px,55vh);overflow-y:auto;overscroll-behavior:contain;padding:4px 6px}
+.vg-pg{margin:0;padding:6px 0 2px;border:0;min-width:0}
+.vg-pg+.vg-pg{margin-top:2px;border-top:1px solid var(--line-2)}
+.vg-pg legend{padding:2px 8px 2px;color:var(--vg-t)}
+.vg-op{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 8px;border-radius:6px;cursor:pointer}
+.vg-op:hover,.vg-op:focus-within{background:var(--ground)}
+.vg-op input{flex:none;width:18px;height:18px;margin:0;accent-color:var(--ink);cursor:pointer}
+/* símbolos de larguras diferentes numa casa fixa: os nomes ficam alinhados */
+.vg-op-s{flex:none;display:flex;justify-content:center;width:14px}
+.vg-op-t{display:grid;flex:1 1 auto;min-width:0}
+.vg-op-t b{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vg-op.on .vg-op-t b{font-weight:700}
+.vg-op-t small{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.vg-sb{display:block;flex:none;background:var(--vg-t)}
+.vg-sb.pc{width:8px;height:8px;border-radius:1px;transform:rotate(45deg)}
+.vg-sb.conserva{width:14px;height:5px;border-radius:1px}
+.vg-sb.oae{width:9px;height:9px;border-radius:50%}
+/* contrato que chegou depois da última escolha: fica desmarcado, com o selo */
+.vg-novo{flex:none;padding:0 6px;border-radius:7px;background:#B54708;color:#fff;font-size:10px;font-weight:700;line-height:16px;letter-spacing:.03em}
+.vg-pnl-p{display:flex;justify-content:flex-end;gap:8px;padding:8px 10px;border-top:1px solid var(--line-2)}
+.vg-pnl-p .ghost{margin-right:auto;color:var(--accent)}
+/* cor de cada tipo: título do grupo na caixa, símbolo e a borda do cartão */
+.vg-pg.pc,.vg-ct.pc{--vg-t:#B3261E}
+.vg-pg.conserva,.vg-ct.conserva{--vg-t:#1D4F91}
+.vg-pg.oae,.vg-ct.oae{--vg-t:#59615D}
+.vg-fora{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:-4px;font-size:12.5px;color:var(--ink-2)}
+.vg-fora .btn{color:var(--accent)}
 .vg-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
-.vg-ct{display:grid;gap:7px;min-width:0;align-content:start}
-.vg-ct-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.vg-ct{display:grid;gap:7px;min-width:0;align-content:start;border-top:3px solid var(--vg-t,var(--line))}
+.vg-ct-h{display:flex;flex-direction:column;gap:1px;min-width:0}
 .vg-ct-h h3{margin:0;font-size:15px;font-weight:650}
-.vg-ct-h span{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.vg-ct-h span{font-size:12px;color:var(--ink-3)}
 .vg-ct-t{font-size:12.5px;color:var(--ink-2)}
 .vg-ct-n{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px}
 .vg-ct-n b{font-size:21px;font-weight:650;font-variant-numeric:tabular-nums}
@@ -120,6 +160,7 @@ button{cursor:pointer}
 .vg-res button{text-align:left;border:0;background:var(--ground);border-radius:5px;padding:9px 10px;font-size:13px}
 .vg-res button:hover{background:var(--accent-soft)}
 .vg-res-n{font-size:12.5px;color:var(--ink-3);padding:4px 2px}
+.vg-res-f{color:#8A5A00;font-weight:600}
 .vg-chips{display:grid;gap:6px;flex:1 1 280px}
 .vg-chips>div{display:flex;flex-wrap:wrap;gap:6px}
 .vg-chip{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:4px 11px;border:1px solid var(--line);border-radius:999px;background:var(--panel);font-size:12.5px}
@@ -129,15 +170,19 @@ button{cursor:pointer}
 .vg-chip[aria-pressed="false"]{background:var(--ground);color:var(--ink-3);border-style:dashed}
 .vg-chip[aria-pressed="false"] i{background:transparent!important;border:2px solid currentColor}
 .vg-meio{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
-.vg-diag{flex:999 1 560px;min-width:0;display:grid;gap:10px}
+.vg-diag{flex:999 1 560px;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:10px}   /* a coluna encolhe (min-width:0): a barra quebra em linhas e o texto de "Contratos" corta com reticências, sem a página rolar para o lado */
 .vg-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .vg-pre{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .vg-pre button{min-height:34px;padding:4px 12px;border:0;border-right:1px solid var(--line);background:var(--panel);font-size:13px;font-weight:600;white-space:nowrap}
 .vg-pre button:last-child{border-right:0}
 .vg-pre button[aria-pressed="true"]{background:var(--ink);color:#fff}
+/* o grupo corta o que passa da borda (overflow:hidden): o anel do foco fica por dentro do botão; no botão escuro, branco */
+.vg-pre button:focus-visible{outline-offset:-4px}
+.vg-pre button[aria-pressed="true"]:focus-visible,.vg-pre .vg-ctb.on:focus-visible{outline-color:#fff}
 .vg-zoom{display:flex;gap:6px}
 .vg-zoom button{width:36px;height:34px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:17px;line-height:1}
 .vg-faixa{margin-left:auto;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.vg-nokm,.vg-av{margin:0;font-size:12.5px;color:#8A5A00}
 .vg-mini{position:relative;display:block;width:100%;height:24px;border:1px solid var(--line-2);border-radius:5px;background:#F7F8F7;padding:0}
 .vg-mini span{position:absolute;height:4px;border-radius:2px}
 .vg-mini .vg-jan{top:-1px;bottom:-1px;height:auto;border:2px solid var(--accent);border-radius:4px;background:rgba(29,79,145,.08);box-sizing:border-box;min-width:6px}
@@ -146,6 +191,7 @@ button{cursor:pointer}
 .vg-lab{align-self:center;display:grid;gap:1px;padding-right:10px;min-width:0}
 .vg-lab b{font-size:13px;font-weight:650}
 .vg-lab small{font-size:11.5px;color:var(--ink-3)}
+.vg-lane .vg-lab b,.vg-lane .vg-lab small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vg-lab-s{font-size:11px;color:var(--ink-3);align-self:end;padding-bottom:4px}
 .vg-trk{position:relative;overflow:hidden;min-width:0}
 .vg-loc{height:46px}
@@ -199,7 +245,7 @@ button{cursor:pointer}
 .vg-lista-h h3{margin:0;font-size:15px;font-weight:650}
 .vg-lista-h span,.vg-resto{font-size:12.5px;color:var(--ink-3)}
 .vg-tab{overflow-x:auto}
-.vg-tr{display:grid;grid-template-columns:110px minmax(150px,1.4fr) 100px 90px minmax(180px,1fr);min-width:620px;width:100%;border:0;border-top:1px solid #EEF0EE;background:var(--panel);padding:0;font-size:13px;text-align:left}
+.vg-tr{display:grid;grid-template-columns:150px minmax(150px,1.4fr) 100px 90px minmax(180px,1fr);min-width:660px;width:100%;border:0;border-top:1px solid #EEF0EE;background:var(--panel);padding:0;font-size:13px;text-align:left}
 .vg-tr>span{padding:8px;min-width:0}
 .vg-tr.h{border-top:0}
 .vg-tr.h>span{padding:6px 8px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
@@ -216,20 +262,20 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg{gap:12px}
   .vg.com-card{padding-bottom:260px}   /* reserva até o JS medir a folha (visao.js folga) */
   .vg-head h2{font-size:18px}
-  .vg-meio{order:1}
-  .vg-cards{order:2;grid-template-columns:minmax(0,1fr);gap:8px}
-  .vg-filtros{order:3}
-  .vg-lista{order:4}
+  .vg-cards{grid-template-columns:minmax(0,1fr);gap:8px}
+  .vg-fora{margin-top:0}
   .vg-box{padding:12px}
-  .vg-ct{gap:5px}
+  .vg-ct{gap:5px;border-top:1px solid var(--line);border-left:4px solid var(--vg-t,var(--line))}
+  .vg-ct-h{flex-direction:row;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 8px}
+  .vg-ct-h span{font-size:11px}
   .vg-ct-t{display:none}
   .vg-ct-n b{font-size:17px}
-  .vg-plot{--vg-lab:46px}
+  .vg-plot{--vg-lab:54px}
   .vg-lab{padding-right:6px}
-  .vg-lab small{font-size:10px}
+  .vg-lab small{font-size:9.5px}
   .vg-lab-s{visibility:hidden}
   .vg-faixa{margin-left:0;width:100%}
-  .vg-pre{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
+  .vg-pre{flex-wrap:nowrap;max-width:100%}
   .vg-pre button{min-height:40px;padding:4px 10px}
   .vg-zoom{margin-left:auto}
   .vg-zoom button{width:40px;height:40px}

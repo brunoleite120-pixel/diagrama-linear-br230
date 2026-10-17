@@ -2,7 +2,9 @@
  * Fotos do aparelho e envio ao Google Drive da equipe.
  * Cada foto com carimbo fica guardada no aparelho (IndexedDB "diagrama-linear-fotos": loja "fotos" com os dados e a
  * miniatura, loja "arquivos" com a foto inteira) e sobe em duas etapas, uma foto de cada vez:
- *   1) o arquivo vai para o script do Google (drive-fotos/Codigo.gs), que guarda em "Fotos por pessoa / <nome> / Lote / Ponto";
+ *   1) o arquivo vai para o script do Google (drive-fotos/Codigo.gs), que guarda em "Fotos por pessoa / <nome> / CT nº / Ponto"
+ *      (a pasta do contrato pelo número, "CT 02 00314-2026"; `pastaAntiga`, o nome usado até a versão 51 do app, vai junto para o
+ *      script renomear a pasta antiga da pessoa no primeiro envio; o script antigo ignora o campo);
  *   2) os dados e a miniatura vão para o banco (foto_registrar), que alimenta as galerias do app.
  * Sem sinal, as fotos esperam (mesmo com o app fechado). Depois de enviada, a foto continua no aparelho até a pessoa
  * apagar "só do celular". A foto marcada para não ir ao Drive fica só no aparelho (situação 'aparelho') até a pessoa
@@ -19,14 +21,15 @@
  *
  *   var d = DriveFotos({ getUrl, getLogin, ambiente, registrar(cred, foto, miniB64), conferir(cred) -> Promise<vale>, onChange, onSent });
  *     conferir: true = o acesso vale, false = o banco confirmou que não vale mais; falha = não deu para conferir
- *   d.add([{ id, nome, blob, pastas: ['Lote 02', 'P7'], descricao, meta, enviar }])  -> Promise   (enviar: false = só no aparelho)
+ *   d.add([{ id, nome, blob, pastas: ['CT 02 00315-2026', 'P7'], pastaAntiga: 'Lote 02', descricao, meta, enviar }])  -> Promise
+ *     (enviar: false = só no aparelho; pastaAntiga: opcional, texto)
  *   d.list() -> Promise<[{ id, nome, meta, situacao: 'fila'|'aparelho'|'enviada', erro, enviada, tamanho, mini: Blob|null }]>
  *   d.enviar(ids, sim) -> Promise<quantas>   sim: as 'aparelho' vão para a fila; não: as da fila que ainda não subiram ficam só no
  *     aparelho (a que está subindo agora não: ela já vai para o Drive)
  *   d.arquivo(id) -> Promise<Blob|null>      d.apagar(ids) (some do aparelho)
- *   d.corrigir(ids, meta, pastas) -> Promise<{ quantas, enviadas: [ids] }>   troca contrato e ponto (meta: cid, pid, pnome, lote); as
- *     que ainda não subiram vão para a pasta nova do Drive; `enviadas`: as que já estavam registradas no banco na hora da
- *     gravação (o app corrige essas também no banco)
+ *   d.corrigir(ids, meta, pastas, pastaAntiga) -> Promise<{ quantas, enviadas: [ids] }>   troca contrato e ponto (meta: cid, pid,
+ *     pnome, lote); as que ainda não subiram vão para a pasta nova do Drive (com a pastaAntiga do contrato novo; sem ela, nenhuma);
+ *     `enviadas`: as que já estavam registradas no banco na hora da gravação (o app corrige essas também no banco)
  *   d.info() -> { n, aparelho, busy, erro, enviadas, total, bytes, prox, emEnvio }   prox: hora (ms) da próxima tentativa, ou null;
  *     emEnvio: id da foto que está subindo agora, ou null
  *     erro: 'rede' (sem sinal), 'tempo' (o envio demorou demais), 'recusado' (o script recusou e o banco não respondeu),
@@ -147,6 +150,8 @@
       }, function () { n = 0; });
     }
     function later(ms) { clearTimeout(timer); timer = setTimeout(function () { pump(); }, ms); }
+    // a pasta antiga do contrato (o Lote) que o script renomeia: só texto não vazio; sem ela, o registro fica sem o campo
+    function comAntiga(r, v) { if (typeof v === 'string' && v) r.pastaAntiga = v; else delete r.pastaAntiga; return r; }
     // espera crescente: 1, 2, 4, 8… até 15 min
     function pausa(t) { return Math.min(15 * 60000, 60000 * Math.pow(2, Math.max(0, t - 1))); }
 
@@ -156,9 +161,9 @@
         return Promise.all([new Response(it.blob).arrayBuffer(), miniatura(it.blob)]).then(function (r) {
           return {
             arq: { id: it.id, buf: r[0] },
-            foto: { id: it.id, nome: it.nome, tipo: it.blob.type || 'image/jpeg', pastas: it.pastas, descricao: it.descricao || '', meta: it.meta || {},
+            foto: comAntiga({ id: it.id, nome: it.nome, tipo: it.blob.type || 'image/jpeg', pastas: it.pastas, descricao: it.descricao || '', meta: it.meta || {},
               mini: r[1], criada: Date.now(), autor: login ? { uid: login.uid || null, nome: login.nome || null } : null,
-              situacao: it.enviar === false ? 'aparelho' : 'fila', etapa: 'drive', tent: 0, prox: 0, tamanho: r[0].byteLength, temArquivo: true }
+              situacao: it.enviar === false ? 'aparelho' : 'fila', etapa: 'drive', tent: 0, prox: 0, tamanho: r[0].byteLength, temArquivo: true }, it.pastaAntiga)
           };
         });
       })).then(function (rows) {
@@ -214,10 +219,11 @@
         });
       }).then(recount).then(function () { if (sim) pump(); return m; });
     }
-    // contrato e ponto corrigidos na galeria: muda os dados guardados; a que ainda não subiu vai para a pasta nova do Drive.
+    // contrato e ponto corrigidos na galeria: muda os dados guardados; a que ainda não subiu vai para a pasta nova do Drive (a
+    // pasta antiga troca junto: a do contrato anterior não pode ficar, senão o script renomearia a pasta errada).
     // A que espera só o registro no banco sobe com os dados novos; a já enviada (lida aqui, na mesma gravação: pode ter
     // acabado de subir com a galeria aberta) volta em `enviadas`, para o app corrigir também no banco.
-    function corrigir(ids, meta, pastas) {
+    function corrigir(ids, meta, pastas, pastaAntiga) {
       var m = 0, env = [];
       return tx([FOTOS], 'readwrite', function (s) {
         ids.forEach(function (id) {
@@ -226,7 +232,7 @@
             var r = g.result;
             if (!r) return;
             r.meta = Object.assign({}, r.meta || {}, { cid: meta.cid || null, pid: meta.pid || null, pnome: meta.pnome || null, lote: meta.lote || null });
-            if (pastas && r.etapa !== 'registro' && r.situacao !== 'enviada') r.pastas = pastas;
+            if (pastas && r.etapa !== 'registro' && r.situacao !== 'enviada') { r.pastas = pastas; comAntiga(r, pastaAntiga); }
             if (r.situacao === 'enviada') env.push(r.id);
             r.versao = (r.versao || 0) + 1;
             m++;
@@ -287,8 +293,11 @@
         return new Response(blob).arrayBuffer().then(function (buf) {
           // tempo limite pelo tamanho: 60 s + 60 s por MB, até 10 min (a foto pequena não espera à toa; a grande no sinal fraco tem tempo)
           var ms = Math.min(10 * 60000, 60000 + 60000 * buf.byteLength / 1048576);
-          return post(url, { acao: 'enviar', ambiente: opts.ambiente || 'oficial', codigo: login.codigo, autor: login.nome, id: r.id, nome: r.nome,
-            pastas: r.pastas, descricao: r.descricao, mime: r.tipo, dados: b64(buf) }, ms);
+          var corpo = { acao: 'enviar', ambiente: opts.ambiente || 'oficial', codigo: login.codigo, autor: login.nome, id: r.id, nome: r.nome,
+            pastas: r.pastas, descricao: r.descricao, mime: r.tipo, dados: b64(buf) };
+          // só quando existe (foto tirada pelo app novo): o script de antes ignora o campo; a foto antiga da fila vai sem ele
+          if (typeof r.pastaAntiga === 'string' && r.pastaAntiga) corpo.pastaAntiga = r.pastaAntiga;
+          return post(url, corpo, ms);
         });
       });
     }

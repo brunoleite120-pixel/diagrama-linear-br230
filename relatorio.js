@@ -9,7 +9,9 @@
  * e pode ser ajustada antes de gerar; o texto ajustado fica guardado neste aparelho para a próxima vez.
  *
  *   var r = RelatorioFoto({ contratos, ativo, ordem, descricao, ehOae, ensureLibs, saveBlob, toast, modal, closeModal,
- *                           podeEditar, salvarContrato, logoSupervisora });
+ *                           podeEditar, salvarContrato, logoSupervisora, nomes });
+ * nomes: funções de nome do contrato do app.js (nome de tela na escolha do contrato e no nome do arquivo); o título do PDF
+ * continua com o Lote da licitação.
  *   r.abrir({ itens, arquivo, cid })   itens: fotos marcadas (da galeria); arquivo(it) -> Promise<Blob> da foto inteira
  */
 (function () {
@@ -257,22 +259,44 @@
     '.rf-pt .rf-auto{justify-self:start;border:0;background:none;color:var(--accent);font-size:12px;padding:0}'
   ].join('\n');
 
+  // cópia curta das funções de nome do app.js (o app passa as dele em o.nomes): nome de tela pelo tipo e número do contrato,
+  // lote da licitação ("Lote 01") e nº do CT, para o nome do arquivo
+  function nomesPadrao() {
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
+    function nome(c) {
+      if (!c) return '';
+      var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c.numero)), w = PAL[c.tipo === 'oae' ? 'oae' : c.tipo === 'conserva' ? 'conserva' : 'pc'];
+      return m ? w + ' ' + String(Number(m[1])) : lp(c.lote) || w;
+    }
+    function loteReal(c) { var l = lp(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
+    function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
+    function partesArquivo(c) {
+      var out = [];
+      [nome(c), loteReal(c), numeroCT(c)].forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); });
+      return out;
+    }
+    return { nome: nome, loteReal: loteReal, numeroCT: numeroCT, partesArquivo: partesArquivo };
+  }
+
   window.RelatorioFoto = function (o) {
-    var LG = window.RELATORIO_LOGOS || {};
+    var LG = window.RELATORIO_LOGOS || {}, nomes = o.nomes || nomesPadrao();
     // "Nº 01" dos pontos emergenciais: o número do nome (P1 → 01) ou a ordem no contrato
     function numero(c, p, i) { var m = /(\d+)/.exec(p.nome || ''); return pad2(m ? Number(m[1]) : i + 1); }
+    // conservação (437, 438): "SEGMENTO Nº 01", e não "PONTO EMERGENCIAL" (texto a confirmar com a fiscalização)
+    function conserva(c) { return !!(c && c.tipo === 'conserva'); }
     function titulo(c, p, num) {
       if (o.ehOae(c)) {
         return [p.codigo, p.nome ? 'PONTE ' + String(p.nome).toUpperCase() : ''].filter(Boolean).join(' · ') +
           (p.kmIni != null ? ' · KM ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') +
           (p.kmContrato != null && p.kmContrato !== p.kmIni ? ' (CONTR. ' + fmtKm(p.kmContrato) + ')' : '');
       }
-      return 'PONTO EMERGENCIAL Nº ' + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) + (p.kmFim != null && p.kmFim !== p.kmIni ? ' A ' + fmtKm(p.kmFim) : '') : '');
+      return (conserva(c) ? 'SEGMENTO Nº ' : 'PONTO EMERGENCIAL Nº ') + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) + (p.kmFim != null && p.kmFim !== p.kmIni ? ' A ' + fmtKm(p.kmFim) : '') : '');
     }
     // nome curto, para a legenda de cada foto quando a folha junta vários pontos
     function curto(c, p, num) {
       if (o.ehOae(c)) return p.nome ? 'PONTE ' + String(p.nome).toUpperCase() : String(p.codigo || p.id).toUpperCase();
-      return 'PONTO Nº ' + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) : '');
+      return (conserva(c) ? 'SEGMENTO Nº ' : 'PONTO Nº ') + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) : '');
     }
     function localPadrao(c) {
       return c.localRelatorio || [c.rodovia || 'BR-230/PA', [c.origem, c.destino].filter(Boolean).join(' – ')].filter(Boolean).join(': ') +
@@ -393,7 +417,7 @@
 
       var f = o.modal('<h2 id="modalTitle">Relatório fotográfico</h2>' +
         '<div class="field"><label for="rfCt">Contrato</label><select id="rfCt" class="rf-sel">' + cs.map(function (c) {
-          return '<option value="' + esc(c.id) + '"' + (c.id === S.cid ? ' selected' : '') + '>' + esc([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' · ')) + '</option>';
+          return '<option value="' + esc(c.id) + '"' + (c.id === S.cid ? ' selected' : '') + '>' + esc(nomes.nome(c) || 'Contrato') + '</option>';
         }).join('') + '</select></div>' +
         '<fieldset class="rf-per"><legend>Período das fotos (marcadas com ★ na galeria)</legend><div id="rfPer"></div></fieldset>' +
         '<div id="rfCorpo" style="display:grid;gap:10px"></div>' +
@@ -476,7 +500,7 @@
                   logos: LG, logoSup: o.logoSupervisora,
                   executora: String(c.executora || '-').toUpperCase(), supervisora: String(c.supervisora || '-').toUpperCase(),
                   contrato: c.numero || '', ctSupervisao: c.ctSupervisao || '', objeto: c.objeto || '', local: localPadrao(c),
-                  titulo: varios ? (G.oae ? 'PONTES: ' : 'PONTOS EMERGENCIAIS: ') + pg.itens.map(function (pd) { return G.oae ? pd.x.curto.replace(/^PONTE /, '') : 'Nº ' + pd.x.num; }).join(' · ')
+                  titulo: varios ? (G.oae ? 'PONTES: ' : conserva(c) ? 'SEGMENTOS: ' : 'PONTOS EMERGENCIAIS: ') + pg.itens.map(function (pd) { return G.oae ? pd.x.curto.replace(/^PONTE /, '') : 'Nº ' + pd.x.num; }).join(' · ')
                     : um.x.titulo + (um.partes > 1 ? ' – FOLHA ' + um.parte + '/' + um.partes : ''),
                   periodo: perTxt(per), fotos: imgs, numIni: um.numIni, legendas: legendas, rotDesc: 'Serviço:',
                   desc: varios ? pg.itens.filter(function (pd) { return String(pd.x.desc || '').trim(); }).map(function (pd) { return pd.x.curto + ': ' + String(pd.x.desc).trim().replace(/\s*\n+\s*/g, ' '); }) : um.x.desc,
@@ -486,7 +510,8 @@
             });
           });
           return cadeia.then(function () {
-            var nome = ('Relatório fotográfico - ' + [c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - ') + ' - ' + per.de + (per.ate !== per.de ? ' a ' + per.ate : '') + '.pdf').replace(/[\\/:*?"<>|]/g, '-');
+            // "Relatório fotográfico - Pontos Críticos 314 - Lote 01 - CT 02 00314-2026 - <período>.pdf"; o título do PDF fica com o Lote
+            var nome = ('Relatório fotográfico - ' + nomes.partesArquivo(c).join(' - ') + ' - ' + per.de + (per.ate !== per.de ? ' a ' + per.ate : '') + '.pdf').replace(/[\\/:*?"<>|]/g, '-');
             S.gerando = 'Salvando…';
             foot();
             return o.saveBlob(nome, doc.output('blob'), 'PDF gerado: ' + nome);

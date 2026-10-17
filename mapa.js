@@ -5,8 +5,9 @@
  * Usado pelo site local (index.html) e embutido na página online (build.js troca o marcador).
  * Precisa do Leaflet (window.L) e dos dados do SNV (window.SNV_BR230, arquivo snv-br230.js).
  *
- *   var m = MapaSNV({ host, snv, getContract, pointInfo, saveText, tiles, gps, notify });
+ *   var m = MapaSNV({ host, snv, getContract, pointInfo, saveText, tiles, gps, notify, nomes });
  *   m.show(); m.render(); m.openFull(); m.closeFull(); m.isFull(); m.exportKml();
+ * nomes: funções de nome do contrato do app.js; sem elas (página online), vale a cópia curta daqui.
  */
 (function () {
   'use strict';
@@ -264,12 +265,28 @@
     chegada: navIco('<path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>')
   };
 
+  // nome do contrato no título do mapa e no KML: o app.js passa opts.nomes; esta cópia curta, com a mesma regra, vale na página
+  // online, que embute este arquivo sem o app.js ("Pontos Críticos 314", "Conservação 437", "Proarte 424"; sem nº, o Lote)
+  function nomesPadrao() {
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
+    function nome(c) {
+      if (!c) return '';
+      var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c.numero)), w = PAL[c.tipo === 'oae' ? 'oae' : c.tipo === 'conserva' ? 'conserva' : 'pc'];
+      return m ? w + ' ' + String(Number(m[1])) : lp(c.lote) || w;
+    }
+    function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
+    return { nome: nome, numeroCT: numeroCT };
+  }
+
   function MapaSNV(opts) {
     var Lf = window.L, snv = opts.snv;
     if (!Lf || !snv || !opts.host) return null;
     injectStyle();
     var ref = Ref(snv), host = opts.host, rodovia = snv.rodovia || 'BR-230/PA';
-    var notify = opts.notify || function () {};
+    var notify = opts.notify || function () {}, nomes = opts.nomes || nomesPadrao();
+    // "Pontos Críticos 314 · CT 02 00314/2026 · BR-230/PA"
+    function titulo(c) { return [nomes.nome(c), nomes.numeroCT(c), c.rodovia || rodovia].filter(Boolean).join(' · '); }
 
     host.innerHTML =
       '<div class="mp" role="region" aria-label="Mapa do trecho">' +
@@ -520,7 +537,7 @@
       pts = [];
       if (!c) { range = null; drawKm(); q('.mp-t1').textContent = 'Sem contrato'; q('.mp-t2').textContent = ''; q('.mp-chips').innerHTML = ''; return; }
       range = contractRange(c);
-      q('.mp-t1').textContent = [c.lote, c.numero, c.rodovia || rodovia].filter(Boolean).join(' · ');
+      q('.mp-t1').textContent = titulo(c);
       q('.mp-t2').textContent = range
         ? 'km ' + km2(range[0]) + ' a ' + km2(range[1]) + ' · SNV ' + snv.versao
         : 'Sem km cadastrado';
@@ -629,15 +646,17 @@
       pts.forEach(function (x) { styles[x.info.color] = true; });
       out.push('<?xml version="1.0" encoding="UTF-8"?>');
       out.push('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>');
-      out.push('<name>' + xml([c.lote, c.numero, c.rodovia || rodovia].filter(Boolean).join(' · ')) + '</name>');
-      out.push('<description>' + xml('Pontos críticos com km pelo SNV do DNIT, versão ' + snv.versao + '. Gerado em ' + new Date().toLocaleString('pt-BR') + '.') + '</description>');
+      out.push('<name>' + xml(titulo(c)) + '</name>');
+      // o que o contrato tem: pontes (424), segmentos de conservação (437, 438) ou pontos críticos (314, 315)
+      var itensKml = c.tipo === 'oae' ? 'Pontes' : c.tipo === 'conserva' ? 'Segmentos de conservação' : 'Pontos críticos';
+      out.push('<description>' + xml(itensKml + ' com km pelo SNV do DNIT, versão ' + snv.versao + '. Gerado em ' + new Date().toLocaleString('pt-BR') + '.') + '</description>');
       out.push('<Style id="rodovia"><LineStyle><color>ff1c2017</color><width>4</width></LineStyle></Style>');
       out.push('<Style id="km"><IconStyle><scale>0.5</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle></Style>');
       Object.keys(styles).forEach(function (col, i) {
         out.push('<Style id="st' + i + '"><LineStyle><color>' + kmlColor(col) + '</color><width>8</width></LineStyle><IconStyle><color>' + kmlColor(col) + '</color><scale>0.9</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>');
         styles[col] = 'st' + i;
       });
-      out.push('<Folder><name>Pontos críticos</name>');
+      out.push('<Folder><name>' + xml(itensKml) + '</name>');
       pts.forEach(function (x) {
         var p = x.p, st = '#' + styles[x.info.color], a = ref.at(p.kmIni), b = ref.at(x.kf);
         var desc = 'km ' + km2(p.kmIni) + ' a ' + km2(x.kf) + ' (' + nf(Math.max(0, x.kf - p.kmIni), 2) + ' km)\n' +
@@ -657,7 +676,8 @@
         out.push('</Folder>');
       }
       out.push('</Document></kml>');
-      var name = ('Pontos criticos - ' + [c.lote, c.numero].filter(Boolean).join(' - ')).replace(/[\/\\:*?"<>|]+/g, '-') + '.kml';
+      // "Mapa - Pontos Críticos 314 - CT 02 00314-2026.kml" (a barra do nº vira hífen)
+      var name = ('Mapa - ' + [nomes.nome(c), nomes.numeroCT(c)].filter(Boolean).join(' - ')).replace(/[\/\\:*?"<>|]+/g, '-') + '.kml';
       return { name: name, text: out.join('\n') };
     }
     function exportKml() {
