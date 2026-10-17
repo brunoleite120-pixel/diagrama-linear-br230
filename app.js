@@ -92,12 +92,13 @@
   }
   // ---------------- tipos de contrato: o que cada tipo tem, pela chave de ctTipo (sem tipo, ou tipo desconhecido, = pontos
   // críticos, como sempre). item/itens: o que o contrato lista (folha, lista, textos); porPagina: o padrão da folha;
-  // continuo: serviço contínuo (estado na vistoria, como nas pontes), que a conservação vai dividir com as pontes.
+  // continuo: serviço contínuo (estado na vistoria, como nas pontes), que a conservação vai dividir com as pontes;
+  // opcao: o texto do tipo na janela do "+ Contrato".
   // isOae continua só para o que é das pontes (análise das medições, km final pela extensão, código OAE)
   var TIPOS = {
-    pc: { item: 'ponto', itens: 'pontos', porPagina: 9, continuo: false },
-    conserva: { item: 'segmento', itens: 'segmentos', porPagina: 13, continuo: true },
-    oae: { item: 'ponte', itens: 'pontes', porPagina: 9, continuo: true }
+    pc: { item: 'ponto', itens: 'pontos', porPagina: 9, continuo: false, opcao: 'Pontos Críticos (obra emergencial)' },
+    conserva: { item: 'segmento', itens: 'segmentos', porPagina: 13, continuo: true, opcao: 'Conservação (P.A.T.O.)' },
+    oae: { item: 'ponte', itens: 'pontes', porPagina: 9, continuo: true, opcao: 'Proarte (pontes, OAE)' }
   };
   function tipoInfo(c) { return TIPOS[ctTipo(c)]; }
   function isConserva(c) { return ctTipo(c) === 'conserva'; }
@@ -255,6 +256,12 @@
     var n = Number(t);
     return isFinite(n) ? n : null;
   }
+  // valor em R$ (PI): aceita o "R$" colado de um documento e, sem vírgula, o ponto de milhar ("1.500.000"), que o parseNum
+  // leria como decimal ("1.500" = 1,5) ou como texto (sem valor)
+  function parseValor(v) {
+    var t = String(v == null ? '' : v).replace(/R\$/gi, '').replace(/\s/g, '');
+    return parseNum(/^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t);
+  }
   // um Intl.NumberFormat por número de casas (toLocaleString cria um a cada chamada)
   var FMT = {};
   function fmt(n, dec) {
@@ -315,6 +322,44 @@
       pct += pointPct(p, c);
     });
     return { n: pts.length, len: len, enr: enr, sb: sb, avg: pts.length ? pct / pts.length : null };
+  }
+  // conservação (por enquanto só a faixa): a extensão do contrato ou, sem ela, km final − inicial; os segmentos do SNV
+  // (snv-br230.js) que entram na faixa do km inicial ao final (sem os km ou sem o eixo, nenhum)
+  function extensaoFaixa(c) {
+    if (typeof c.extensaoContrato === 'number' && isFinite(c.extensaoContrato)) return c.extensaoContrato;
+    return typeof c.kmIni === 'number' && typeof c.kmFim === 'number' && c.kmFim > c.kmIni ? r2(c.kmFim - c.kmIni) : null;
+  }
+  function snvDaFaixa(c) {
+    var eixo = window.SNV_BR230;
+    if (!eixo || !Array.isArray(eixo.segmentos) || typeof c.kmIni !== 'number' || typeof c.kmFim !== 'number') return [];
+    return eixo.segmentos.filter(function (s) { return s.kmFim > c.kmIni + 0.001 && s.kmIni < c.kmFim - 0.001; });
+  }
+  // "122,00 km · 3 segmentos do SNV" (vazio sem a extensão e sem os km)
+  function faixaTexto(c) {
+    var e = extensaoFaixa(c), n = snvDaFaixa(c).length;
+    return [e != null ? fmt(e, 2) + ' km' : '', n ? n + (n === 1 ? ' segmento do SNV' : ' segmentos do SNV') : ''].filter(Boolean).join(' · ');
+  }
+  // km inicial e final que dão para desenhar a faixa (números, o final depois do inicial)
+  function kmFaixaOk(c) {
+    return typeof c.kmIni === 'number' && typeof c.kmFim === 'number' && isFinite(c.kmIni) && isFinite(c.kmFim) && c.kmFim > c.kmIni;
+  }
+  // indicador EXECUÇÃO / VIGÊNCIA da folha da conservação, pelos prazos que são fim (fim 'exec', 'vig' ou 'ambos', com data;
+  // plano, seção 3): o número é o último fim de execução confirmado, com " · vig. <data>" quando a vigência confirmada vai além,
+  // e embaixo o fim previsto (a confirmar) quando é mais tarde. Sem fim confirmado, o número é o previsto, com "a confirmar"
+  // embaixo e prev (caixa tracejada, número em cinza). { v, s, prev }
+  function execVig(c) {
+    var E = '', V = '', P = '';
+    (Array.isArray(c.prazos) ? c.prazos : []).forEach(function (x) {
+      if (!x || !x.fim || !/^\d{4}-\d{2}-\d{2}$/.test(x.data || '')) return;
+      if (x.sit !== 'conf') { if (x.data > P) P = x.data; return; }
+      if ((x.fim === 'exec' || x.fim === 'ambos') && x.data > E) E = x.data;
+      if ((x.fim === 'vig' || x.fim === 'ambos') && x.data > V) V = x.data;
+    });
+    var s = P > E && P > V ? 'prev. ' + fmtDate(P) + ' · a confirmar' : '';
+    if (E) return { v: fmtDate(E) + (V > E ? ' · vig. ' + fmtDate(V) : ''), s: s, prev: false };
+    if (V) return { v: 'vig. ' + fmtDate(V), s: s, prev: false };
+    if (P) return { v: fmtDate(P), s: 'a confirmar', prev: true };
+    return { v: '-', s: '', prev: false };
   }
 
   // ------------------------------------------------------------------ medida de texto
@@ -446,6 +491,7 @@
   // ------------------------------------------------------------------ desenho da folha
   // semAnalise: folha só com a vistoria, mesmo para quem vê a análise das medições (PDF e impressão perguntam)
   function renderSheets(c, semAnalise) {
+    if (isConserva(c)) return [renderFaixa(c)];   // conservação: por enquanto, a faixa do contrato numa página só
     var pg = paginate(c), tot = totals(c), marcos = placeMarcos(c, pg);
     return pg.chunks.map(function (chunk, i) {
       return renderSheet(c, chunk, i, pg.chunks.length, pg.slots, tot, marcos.filter(function (m) { return m.pageIdx === i; }), semAnalise);
@@ -495,14 +541,15 @@
       tx = 32 + lw + 14;
     }
     // indicadores à direita
-    var kpis = isOae(c) ? oaeKpis(c, tot, an) : [
+    var cons = isConserva(c), kpis = isOae(c) ? oaeKpis(c, tot, an) : cons ? faixaKpis(c) : [
       { k: 'EXTENSÃO DO CONTRATO', v: c.extensaoContrato != null ? fmt(c.extensaoContrato, 2) + ' km' : '-', s: '' },
       { k: 'PONTOS CRÍTICOS', v: String(tot.n), s: fmt(tot.len, 2) + ' km somados' },
       { k: 'AVANÇO MÉDIO', v: fmtPct(tot.avg), s: 'média dos pontos' },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
     ];
     var bw = 98, bg = 6, bx0 = G.x1 - (kpis.length * bw + (kpis.length - 1) * bg);
-    kpis.forEach(function (k, i) {
+    if (cons) bx0 = drawKpisFaixa(o, kpis, bw, bg);
+    else kpis.forEach(function (k, i) {
       var x = bx0 + i * (bw + bg);
       o.push(R(x, 30, bw, 56, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(x + 8, 43, k.k, { size: 5.8, bold: true, fill: '#5C6661' }));
@@ -511,7 +558,11 @@
     });
     var maxW = bx0 - tx - 16;
     o.push(T(tx, 41, fitText(String(c.orgao || '').toUpperCase(), maxW, 6.6), { size: 6.6, fill: '#5C6661' }));
-    o.push(T(tx, 62, fitText((isOae(c) ? 'DIAGRAMA DE OAEs · CT ' : 'DIAGRAMA LINEAR · OBRA ') + (c.numero || '[Nº DA OBRA]'), maxW, 17, true), { size: 17, bold: true }));
+    if (cons) {
+      // conservação: o título inteiro, com a letra diminuindo (até 13 pt) em vez de ser cortado
+      var tit = 'DIAGRAMA LINEAR · CONSERVAÇÃO (P.A.T.O.) · CT ' + (pdfTxt(c.numero) || '[Nº DO CONTRATO]'), ts = fitSize(tit, maxW, 17, true, 13);
+      o.push(T(tx, 62, fitText(tit, maxW, ts, true), { size: r2(ts), bold: true }));
+    } else o.push(T(tx, 62, fitText((isOae(c) ? 'DIAGRAMA DE OAEs · CT ' : 'DIAGRAMA LINEAR · OBRA ') + (c.numero || '[Nº DA OBRA]'), maxW, 17, true), { size: 17, bold: true }));
     var sub = [
       c.rodovia ? 'Rodovia ' + c.rodovia : '',
       c.lote || '',
@@ -704,6 +755,145 @@
       o.push(T(G.x1, y + 13, 'Continua na página ' + (pageIdx + 2), { size: 7.4, fill: gray, anchor: 'end' }));
     }
     o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página ' + (pageIdx + 1) + ' de ' + pageCount + '   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
+  }
+
+  // ------------------------------------------------------------------ folha da conservação (por enquanto, só a faixa)
+  // Uma página: o cabeçalho da conservação (drawHeader) e a faixa do contrato em escala, do km inicial ao final (km Atualizado),
+  // com as localidades (marcos) e o km duplo, os segmentos do SNV (snv-br230.js), a pista e a régua do km; embaixo, as
+  // Observações gerais (obsFolha). Sem os outros contratos e sem as pontes. As duas faixas por folha, a régua do km do contrato
+  // e os quadros de prazos e de notas vêm depois (plano, passo 1.4). Sem hachura, recorte, transparência nem itálico, que o
+  // PDF não passa a limpo; o tracejado passa
+  var GF = { yFlag: 108, flagH: 25, flagStep: 29, lanes: 3, ySeg: 206, segH: 20, yBand: 232, bandH: 30, yRule: 270, yObs: 304 };
+  // texto digitado que vai à folha: o PDF sai sem fonte embutida (buildPdf), e a Helvetica dele não tem "≈", "→" nem "−"
+  function pdfTxt(s) { return String(s == null ? '' : s).replace(/≈\s*/g, 'aprox. ').replace(/\s*→\s*/g, ' para ').replace(/−/g, '-'); }
+  function faixaKpis(c) {
+    var ki = c.kmIniContrato, kf = c.kmFimContrato, e = extensaoFaixa(c), ev = execVig(c);
+    function num(k) { return typeof k === 'number' && isFinite(k); }
+    // nas pontas, o km do cadastro, com "*" quando a régua discorda (o início do 437: 750,90*)
+    function contr(k, s) { var r = kmDoContrato(c, s); return num(k) ? fmtKm(k) + (r && r.ast ? '*' : '') : '?'; }
+    return [
+      { k: 'EXTENSÃO DO CONTRATO', v: e != null ? fmt(e, 2) + ' km' : '-', s: kmFaixaOk(c) ? 'km Atualizado ' + fmtKm(c.kmIni) + '–' + fmtKm(c.kmFim) : '' },
+      { k: 'KM DO CONTRATO', v: num(ki) || num(kf) ? contr(ki, c.kmIni) + ' a ' + contr(kf, c.kmFim) : '-', s: pdfTxt(txtLimpo(c.snvContrato)) },
+      { k: 'EXECUÇÃO / VIGÊNCIA', v: ev.v, s: ev.s, prev: ev.prev, w: 160 },
+      { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
+    ];
+  }
+  // indicadores da conservação: largura própria (k.w, padrão bw); o que é só previsto (k.prev) em caixa tracejada, com o número
+  // em cinza; o número e a linha de baixo diminuem (até 9 e 5,6 pt) em vez de serem cortados. Devolve o x da 1ª caixa
+  function drawKpisFaixa(o, kpis, bw, bg) {
+    var x0 = G.x1 - kpis.reduce(function (s, k) { return s + (k.w || bw) + bg; }, -bg);
+    kpis.reduce(function (x, k) {
+      var w = k.w || bw, vs = fitSize(k.v, w - 14, 14, true, 9), ss = fitSize(k.s, w - 14, 6.4, false, 5.6);
+      o.push(k.prev ? R(x, 30, w, 56, { fill: '#FFFFFF', stroke: '#8E9792', sw: 0.9, rx: 3, dash: '3 2' }) : R(x, 30, w, 56, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
+      o.push(T(x + 8, 43, k.k, { size: 5.8, bold: true, fill: '#5C6661' }));
+      o.push(T(x + 8, 63, fitText(k.v, w - 14, vs, true), { size: r2(vs), bold: true, fill: k.prev ? '#5C6661' : '#17201C' }));
+      if (k.s) o.push(T(x + 8, 77, fitText(k.s, w - 14, ss), { size: r2(ss), fill: '#5C6661' }));
+      return x + w + bg;
+    }, x0);
+    return x0;
+  }
+  // sentido: a origem e o destino quebram em até 2 linhas cada (a 2ª recuada), em vez de serem cortados na 1ª; o que passar
+  // das 2 linhas termina em "..."
+  function sentidoFaixa(o, c, x, w, gray) {
+    var y = 114;
+    o.push(T(x, 104, 'SENTIDO', { size: 6, bold: true, fill: gray }));
+    [['De: ', c.origem], ['Para: ', c.destino]].forEach(function (d) {
+      var ind = textW(d[0], 7.4, true), ls = wrap(d[0] + (pdfTxt(txtLimpo(d[1])) || '-'), w, 7.4, true);
+      if (ls.length > 1) ls = [ls[0], fitText(ls.slice(1).join(' '), w - ind, 7.4, true)];
+      ls.forEach(function (ln, i) { o.push(T(x + (i ? ind : 0), y, ln, { size: 7.4, bold: true })); y += 8.4; });
+    });
+    var ya = y - 2.4;
+    o.push(L(x, ya, x + 70, ya, { stroke: '#B42318', sw: 1.4 }));
+    o.push(P([[x + 76, ya], [x + 68, ya - 4], [x + 68, ya + 4]], '#B42318'));
+  }
+  function renderFaixa(c) {
+    var o = [], x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661', versao = window.SNV_BR230 && window.SNV_BR230.versao;
+    o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
+    o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
+    o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
+    drawHeader(o, c);
+    sentidoFaixa(o, c, x, w, gray);
+
+    if (!kmFaixaOk(c)) {
+      o.push(T((G.x0 + G.x1) / 2, GF.yBand + 4, 'Informe o KM inicial e o final (km Atualizado) nos dados do contrato para desenhar a faixa.', { size: 12, fill: gray, anchor: 'middle' }));
+    } else {
+      var k0 = c.kmIni, k1 = c.kmFim, ppk = (G.x1 - G.x0) / (k1 - k0), segs = snvDaFaixa(c), lim = [];
+      var X = function (k) { return G.x0 + (k - k0) * ppk; };
+      o.push(T(x, 166, 'FAIXA DO CONTRATO', { size: 6, bold: true, fill: gray }));
+      o.push(T(x, 176, 'km ' + fmtKm(k0) + ' a ' + fmtKm(k1), { size: 6.6, fill: gray }));
+      o.push(T(x, 188, fmt(ppk, 1) + ' pt por km', { size: 6, fill: gray }));
+      if (segs.length) o.push(T(x, GF.ySeg + 13, 'SEGMENTO SNV', { size: 7, bold: true }));
+      o.push(T(x, GF.yBand + 12, 'PISTA', { size: 7, bold: true }));
+      o.push(T(x, GF.yRule + 8, 'KM ATUALIZADO', { size: 7, bold: true }));
+      if (versao) o.push(T(x, GF.yRule + 16, 'SNV ' + versao, { size: 5.8, fill: gray }));
+
+      // segmentos do SNV que entram na faixa: código e de onde a onde
+      segs.forEach(function (g) {
+        var xa = X(Math.max(g.kmIni, k0)), xb = X(Math.min(g.kmFim, k1));
+        o.push(R(xa, GF.ySeg, xb - xa, GF.segH, { fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }));
+        if (xb - xa > 24) o.push(T((xa + xb) / 2, GF.ySeg + 13, fitText(pdfTxt(g.codigo + ' · ' + g.de + ' – ' + g.ate), xb - xa - 8, 6.6, true), { size: 6.6, bold: true, anchor: 'middle' }));
+        [g.kmIni, g.kmFim].forEach(function (k) {
+          if (k > k0 + 0.001 && k < k1 - 0.001 && !lim.some(function (q) { return Math.abs(q - k) < 0.001; })) lim.push(k);
+        });
+      });
+      // pista, com o eixo tracejado, e os limites dos segmentos tracejados até a régua
+      o.push(R(G.x0, GF.yBand, G.x1 - G.x0, GF.bandH, { fill: '#E8DCBF' }));
+      o.push(L(G.x0, GF.yBand + GF.bandH / 2, G.x1, GF.yBand + GF.bandH / 2, { stroke: '#30353A', sw: 0.8, dash: '7 4' }));
+      o.push(R(G.x0, GF.yBand, G.x1 - G.x0, GF.bandH, { stroke: '#7D8581', sw: 0.8 }));
+      lim.forEach(function (k) { o.push(L(X(k), GF.ySeg, X(k), GF.yRule, { stroke: '#7D8581', sw: 0.7, dash: '3 2' })); });
+
+      // régua do km Atualizado: número a cada pn km e traço a cada pt km, pelo espaço que a escala dá (no 437, 5 e 1)
+      var PASSOS = [1, 2, 5, 10, 20, 50, 100, 200, 500], yR = GF.yRule, la = fmtKm(k0), lb = fmtKm(k1);
+      var pn = PASSOS.find(function (p) { return p * ppk >= 28; }) || 1000, pt = PASSOS.find(function (p) { return p * ppk >= 3.5 && pn % p === 0; }) || pn;
+      o.push(L(G.x0, yR, G.x1, yR, { stroke: '#17201C', sw: 0.7 }));
+      for (var i = Math.floor(k0 / pt + 1e-9) + 1; i * pt < k1 - 1e-9; i++) {
+        var km = i * pt, xx = X(km), big = km % pn === 0;
+        o.push(L(xx, yR, xx, yR + (big ? 6 : 3), { stroke: '#17201C', sw: 0.6 }));
+        if (big && xx - G.x0 > textW(la, 6.4, true) + 10 && G.x1 - xx > textW(lb, 6.4, true) + 10) o.push(T(xx, yR + 14, fmt(km, 0), { size: 6.2, anchor: 'middle' }));
+      }
+      o.push(T(G.x0 + 1, yR + 14, la, { size: 6.4, bold: true }));
+      o.push(T(G.x1 - 1, yR + 14, lb, { size: 6.4, bold: true, anchor: 'end' }));
+
+      // localidades (marcos) da faixa, com o km duplo (fora da faixa, omitidas). A bandeira que encostaria numa anterior desce
+      // uma linha (até 3); as setas vão antes das bandeiras, que ficam por cima
+      var lanes = [], fl = (c.marcos || []).filter(function (m) {
+        return m && typeof m.km === 'number' && m.km >= k0 - 0.001 && m.km <= k1 + 0.001;
+      }).map(function (m) {
+        var r = kmDoContrato(c, m.km), nome = fitText(pdfTxt(txtLimpo(m.nome) || 'Marco').toUpperCase(), 260, 7.2, true);
+        var sub = 'KM ' + fmtKm(m.km) + (r ? ' · CONTR. ' + fmtKm(r.km) + (r.ast ? '*' : '') : ''), xm = clamp(X(m.km), G.x0 + 1, G.x1 - 1);
+        var bw = Math.max(textW(nome, 7.2, true), textW(sub, 6.4, true)) + 14;
+        return { x: xm, nome: nome, sub: sub, w: bw, bx: clamp(xm - bw / 2, G.x0, G.x1 - bw) };
+      }).sort(function (a, b) { return a.bx - b.bx; });
+      fl.forEach(function (f) {
+        var li = lanes.findIndex(function (fim) { return fim + 4 <= f.bx; });
+        if (li < 0) li = lanes.length < GF.lanes ? lanes.length : lanes.indexOf(Math.min.apply(null, lanes));
+        lanes[li] = f.bx + f.w;
+        f.y = GF.yFlag + li * GF.flagStep;
+      });
+      fl.forEach(function (f) {
+        o.push(L(f.x, f.y + GF.flagH, f.x, GF.yBand - 8, { stroke: '#2B5797', sw: 1.8 }));
+        o.push(P([[f.x - 4.5, GF.yBand - 9], [f.x + 4.5, GF.yBand - 9], [f.x, GF.yBand - 1]], '#2B5797'));
+      });
+      fl.forEach(function (f) {
+        o.push(R(f.bx, f.y, f.w, GF.flagH, { fill: '#5E8C2E', rx: 2 }));
+        o.push(T(f.bx + f.w / 2, f.y + 10, f.nome, { size: 7.2, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+        o.push(T(f.bx + f.w / 2, f.y + 20, f.sub, { size: 6.4, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+      });
+    }
+
+    // Observações gerais (obsFolha): o quadro cresce com o texto, até o rodapé
+    var yO = GF.yObs, wO = G.x1 - G.x0, lh = 9, maxL = Math.floor((G.yFoot - 14 - yO - 31) / lh);
+    var ls = wrap(pdfTxt(c.obsFolha), wO - 12, 7), hO;
+    if (ls.length > maxL) { ls = ls.slice(0, maxL); ls[maxL - 1] = fitText(ls[maxL - 1] + '...', wO - 12, 7); }
+    hO = Math.max(48, 31 + ls.length * lh);
+    o.push(T(x, yO + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
+    o.push(R(G.x0, yO, wO, hO, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(G.x0 + 6, yO + 12, 'Observações gerais', { size: 7, bold: true }));
+    ls.forEach(function (ln, i) { o.push(T(G.x0 + 6, yO + 25 + i * lh, ln, { size: 7, fill: '#2B3430' })); });
+    o.push(L(G.colLine, 106, G.colLine, yO + hO, { stroke: '#C9CECB', sw: 0.6 }));
+    o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página 1 de 1   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
+    o.push('</svg>');
+    return o.join('');
   }
 
   // ------------------------------------------------------------------ folha de pontes (contrato tipo 'oae')
@@ -1166,8 +1356,74 @@
   }
 
   // ------------------------------------------------------------------ interface: editor
+  // o relatório fotográfico (relatorio.js, linhaRot) escreve o objeto em Helvetica 8 pt numa largura de 391,28 pt (A4 sem as
+  // margens de 40, a coluna do rótulo de 112 e 12 de folga) e mostra só as 2 primeiras linhas. Aqui, a mesma quebra por
+  // palavras do jsPDF (splitTextToSize: parágrafos pelas quebras de linha, palavras pelo espaço), com a medida da folha A3
+  // (textW: Helvetica ou Arial). As larguras do jsPDF são cerca de 1% menores: perto do limite, o aviso pode vir um pouco
+  // antes do corte de verdade, não depois. Num aparelho sem as duas (Android), a letra de lá pode errar por pouco
+  var OBJ_LARGURA = 595.28 - 2 * 40 - 112 - 12;
+  function linhasObjeto(s) {
+    var sp = textW(' ', 8), out = [];
+    String(s || '-').split(/\r?\n/).forEach(function (par) {
+      var ln = '', w = 0;
+      par.split(' ').forEach(function (p, i) {
+        var pw = textW(p, 8);
+        if (i && w + sp + pw > OBJ_LARGURA) { out.push(ln); ln = p; w = pw; }
+        else { ln = i ? ln + ' ' + p : p; w += (i ? sp : 0) + pw; }
+      });
+      out.push(ln);
+    });
+    return out;
+  }
+  // avisos do formulário (vazio = escondido): objeto maior que as 2 linhas do relatório; na conservação, km Atualizado igual
+  // ao do contrato (no início ou no fim), sinal de que o km do documento foi digitado no campo do km do site
+  function avisoObjeto(c) {
+    var ls = linhasObjeto(c.objeto);
+    if (ls.length <= 2) return '';
+    var fim = ls[1].trim();
+    return 'O relatório fotográfico mostra só 2 linhas do objeto: este texto dá ' + ls.length + ' linhas e sai cortado depois de "' + (fim.length > 30 ? '…' + fim.slice(-29) : fim) + '".';
+  }
+  function avisoKm(c) {
+    function igual(a, b) { return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 0.5; }
+    if (!isConserva(c) || (!igual(c.kmIni, c.kmIniContrato) && !igual(c.kmFim, c.kmFimContrato))) return '';
+    var v = window.SNV_BR230 && window.SNV_BR230.versao;
+    return 'O km Atualizado está igual ao do contrato. O km Atualizado' + (v ? ' (SNV ' + v + ')' : '') + ' é cerca de 7,1 km menor: confira.';
+  }
+  // km do contrato de um marco da conservação, só para leitura ("(contr. 783,90)"; "*" quando a régua discorda do cadastro
+  // na ponta do contrato); sem a régua, nada
+  function marcoContr(c, km) {
+    var k = isConserva(c) ? kmDoContrato(c, km) : null;
+    return k ? { t: '(contr. ' + fmtKm(k.km) + (k.ast ? '*' : '') + ')', g: k.ast ? 'Pela régua: ' + fmtKm(k.geom) : '' } : { t: '', g: '' };
+  }
+  // prazos e valores (PI) da conservação em dois grupos: confirmados e previstos, a confirmar (tracejado). Cada item na ordem
+  // da lista; data-prazo/data-valor e data-idx são a posição na lista, não no grupo. Um toque na situação troca o grupo
+  var FIM_OPC = [['', '-'], ['exec', 'execução'], ['vig', 'vigência'], ['ambos', 'execução e vigência']];
+  function listaHtml(c, k) {
+    var pz = k === 'prazos', lst = Array.isArray(c[k]) ? c[k] : [], at = pz ? 'data-prazo' : 'data-valor', a = pz ? 'prazo' : 'valor', h = [];
+    h.push('<div class="section-title">' + (pz ? 'Prazos' : 'Valores (PI)') + '<button type="button" class="btn small" data-act="add-' + a + '">' + (pz ? '+ Prazo' : '+ Valor') + '</button></div>');
+    if (!lst.length) h.push('<div class="empty">' + (pz ? 'Nenhum prazo.' : 'Nenhum valor.') + ' O novo entra em "a confirmar"; um toque na situação confirma.</div>');
+    [['conf', 'Confirmados'], ['prev', 'Previstos, a confirmar']].forEach(function (g) {
+      var itens = [];
+      lst.forEach(function (x, i) {
+        x = x || {};
+        if ((x.sit === 'conf' ? 'conf' : 'prev') !== g[0]) return;
+        var d = at + '="' + i + '" data-pf=', conf = g[0] === 'conf', sid = 'sel-' + Math.random().toString(36).slice(2, 9);
+        itens.push('<div class="pz-item">' + field('Rótulo', d + '"rotulo" type="text"', x.rotulo, ' full') +
+          (pz ? field('Data', d + '"data" type="date"', x.data) +
+            '<div class="field"><label for="' + sid + '">Fim de</label><select id="' + sid + '" ' + d + '"fim">' + FIM_OPC.map(function (o) {
+              return '<option value="' + o[0] + '"' + ((x.fim || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+            }).join('') + '</select></div>' :
+            field('Valor (R$)', d + '"valor" type="text" inputmode="decimal"', fmt(x.valor, 2)) + field('Data de referência', d + '"data" type="date"', x.data)) +
+          field('Fonte', d + '"fonte" type="text"', x.fonte, ' full') + field('Nota', d + '"nota" type="text"', x.nota, ' full') +
+          '<div class="pz-acts"><button type="button" class="pz-sit" data-act="set-' + a + '-sit" data-idx="' + i + '" aria-pressed="' + conf + '" title="Um toque troca a situação">' + (conf ? 'confirmado' : 'a confirmar') + '</button>' +
+          '<button type="button" class="icon-btn" data-act="del-' + a + '" data-idx="' + i + '" aria-label="Remover ' + (pz ? 'o prazo ' : 'o valor ') + esc(x.rotulo) + '">' + ICON_TRASH + '</button></div></div>');
+      });
+      if (itens.length) h.push('<div class="pz-grupo' + (g[0] === 'prev' ? ' prev' : '') + '"><div class="pz-gtit">' + g[1] + '</div>' + itens.join('') + '</div>');
+    });
+    return h.join('');
+  }
   function renderEditor() {
-    var c = active();
+    var c = active(), cons = isConserva(c);
     var h = [];
     h.push('<section class="card">');
     h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span></span>' + ICON_CHEV + '</button>');
@@ -1178,6 +1434,9 @@
       // só para leitura: saem do tipo e do número do contrato (o Lote não muda o nome nem a pasta quando há número)
       h.push(field('Nome na tela', 'data-nomes="nome" type="text" readonly', ctNome(c)));
       h.push(field('Pasta no Drive', 'data-nomes="pasta" type="text" readonly', ctPasta(c)));
+      // o objeto sai no relatório fotográfico (em todos os tipos), cortado na 2ª linha: o aviso diz quando passa
+      h.push(field('Objeto', 'data-c="objeto" type="text"', c.objeto, ' full'));
+      h.push('<div class="hint ct-aviso full" data-aviso="objeto">' + esc(avisoObjeto(c)) + '</div>');
       h.push(field('Executora', 'data-c="executora" type="text"', c.executora, ' full'));
       h.push(field('Supervisora', 'data-c="supervisora" type="text"', c.supervisora));
       h.push(field('Contrato da supervisora', 'data-c="ctSupervisao" type="text"', c.ctSupervisao));
@@ -1186,18 +1445,39 @@
       h.push(field('Extensão do contrato (km)', 'data-c="extensaoContrato" data-num="1" type="text" inputmode="decimal"', fmt(c.extensaoContrato, 2)));
       h.push(field('Sentido: de', 'data-c="origem" type="text"', c.origem));
       h.push(field('Sentido: para', 'data-c="destino" type="text"', c.destino));
-      h.push(field('KM inicial do trecho', 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
-      h.push(field('KM final do trecho', 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
-      h.push(field('Largura da plataforma', 'data-c="plataforma" type="text"', c.plataforma));
-      h.push(field('Data da última vistoria', 'data-c="dataVistoria" type="date"', c.dataVistoria));
-      h.push(field('Pontos por página (máx.)', 'data-c="porPagina" data-int="1" type="number" min="1" max="14"', c.porPagina || 9));
+      if (cons) {
+        // conservação: o km do site é o km Atualizado (o eixo de snv-br230.js); o do contrato é o dos documentos (SNV 2020–2022),
+        // que a régua de snv-conversao.js converte. Sem largura da plataforma nem pontos por página (a folha é a faixa)
+        var snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '';
+        h.push(field('KM inicial · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : ''), 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
+        h.push(field('KM final · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : ''), 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
+        h.push(field('KM inicial do contrato', 'data-c="kmIniContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIniContrato)));
+        h.push(field('KM final do contrato', 'data-c="kmFimContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFimContrato)));
+        h.push('<div class="hint ct-aviso full" data-aviso="km">' + esc(avisoKm(c)) + '</div>');
+        h.push(field('SNV do contrato', 'data-c="snvContrato" type="text"', c.snvContrato));
+        h.push(field('Data da última vistoria', 'data-c="dataVistoria" type="date"', c.dataVistoria));
+      } else {
+        h.push(field('KM inicial do trecho', 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
+        h.push(field('KM final do trecho', 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
+        h.push(field('Largura da plataforma', 'data-c="plataforma" type="text"', c.plataforma));
+        h.push(field('Data da última vistoria', 'data-c="dataVistoria" type="date"', c.dataVistoria));
+        h.push(field('Pontos por página (máx.)', 'data-c="porPagina" data-int="1" type="number" min="1" max="14"', c.porPagina || 9));
+      }
       h.push('</div>');
+      if (cons) {
+        h.push(listaHtml(c, 'prazos'));
+        h.push(listaHtml(c, 'valores'));
+        var obsId = 'obsf-' + Math.random().toString(36).slice(2, 9);
+        h.push('<div class="field"><label for="' + obsId + '">Observações da folha</label><textarea id="' + obsId + '" data-c="obsFolha" rows="4">' + esc(c.obsFolha) + '</textarea></div>');
+      }
       h.push('<div class="section-title">Marcos no diagrama<button type="button" class="btn small" data-act="add-marco">+ Marco</button></div>');
       if (!c.marcos.length) h.push('<div class="empty">Nenhum marco. Use para pedreira, cidade, ponte etc.</div>');
       c.marcos.forEach(function (m, i) {
+        var kmF = field('KM', 'data-marco="' + i + '" data-mf="km" type="text" inputmode="decimal"', fmtKm(m.km));
+        // conservação: o km do contrato do marco, só para leitura, embaixo de "KM" (acompanha o km digitado: syncAvisos)
+        if (cons) { var mc = marcoContr(c, m.km); kmF = kmF.replace('</label>', '<span class="mk-c" data-mkc="' + i + '" title="' + esc(mc.g) + '">' + esc(mc.t) + '</span></label>'); }
         h.push('<div class="mini-row">' +
-          field('Nome', 'data-marco="' + i + '" data-mf="nome" type="text"', m.nome) +
-          field('KM', 'data-marco="' + i + '" data-mf="km" type="text" inputmode="decimal"', fmtKm(m.km)) +
+          field('Nome', 'data-marco="' + i + '" data-mf="nome" type="text"', m.nome) + kmF +
           '<button type="button" class="icon-btn" data-act="del-marco" data-idx="' + i + '" aria-label="Remover marco ' + esc(m.nome) + '">' + ICON_TRASH + '</button></div>');
       });
       h.push('<div><button type="button" class="btn small danger" data-act="del-contract">Excluir este contrato</button></div>');
@@ -1207,9 +1487,13 @@
 
     var pts = sortedPoints(c), oae = isOae(c);
     if (oae) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
-    h.push('<div class="points-head"><h2>' + (oae ? 'Pontes' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ Ponte' : '+ Ponto') + '</button></div>');
-    h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
-      'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
+    // conservação: só a faixa por enquanto, sem botão de criar (pontos de um dado antigo continuam na lista, embaixo)
+    if (cons) h.push('<div class="an-note"><b>Faixa do contrato:</b> ' + esc(faixaTexto(c) || 'informe o km inicial e o final nos dados do contrato') + ' · os segmentos de vistoria entram numa próxima etapa.</div>');
+    else {
+      h.push('<div class="points-head"><h2>' + (oae ? 'Pontes' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ Ponte' : '+ Ponto') + '</button></div>');
+      h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
+        'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
+    }
     h.push('<div class="pt-list" id="ptList">');
     pts.forEach(function (p) { h.push(pointCard(p)); });
     h.push('</div>');
@@ -1217,7 +1501,8 @@
       h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
         '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
     } else if (isFiscal()) {
-      h.unshift('<div class="ro-note fiscal-note"><span>Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o estado de cada ponte e estime o dano (quanto e onde)' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.</span></div>');
+      h.unshift('<div class="ro-note fiscal-note"><span>' + (cons ? 'Você entrou como <b>fiscal de campo</b>. Neste contrato de conservação ainda não há o que marcar: a vistoria por segmento entra numa próxima etapa.' :
+        'Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o estado de cada ponte e estime o dano (quanto e onde)' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.') + '</span></div>');
     }
     $('editor').innerHTML = h.join('');
     lockEditor();
@@ -1816,6 +2101,7 @@
   function renderPagesCtl(c) {
     var sel = $('selPages'), n = c ? c.pontos.length : 0;
     if (!sel) return;
+    sel.closest('label').hidden = view === 'mapa' || !!(c && isConserva(c));   // como em setView; a folha da conservação é uma página só
     var auto = c ? autoPages(c, n) : 1, cur = c && pagesPref[c.id] ? pageCountFor(c, n) : 0;
     var sig = [c ? c.id : '', n, auto, cur].join('|');
     if (sig === pagesCtlSig) return; // não refaz a lista à toa (fecharia o seletor aberto no celular)
@@ -2000,12 +2286,17 @@
     var r = oaeResumo(c);
     return ' · ' + r.dn + (r.dn === 1 ? ' ponte com dano' : ' pontes com dano') + (r.exec ? ' · ' + r.exec + ' em execução' : '');
   }
+  // o contrato na linha sob o desenho: os pontos ou as pontes e a situação; na conservação, a faixa ("122,00 km · 3 segmentos do SNV")
+  function metaItens(c, tot) {
+    if (isConserva(c)) return faixaTexto(c) || 'sem o km inicial e o final';
+    return tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
+  }
   function renderPreview() {
     if (visaoOn && visao && !$('visaoHost').hidden) { if (!desenhaVisao()) renderAll(); return; }
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
       mapa.render();
-      $('previewMeta').textContent = 'Mapa pelo SNV/DNIT ' + window.SNV_BR230.versao + ' · ' + tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
+      $('previewMeta').textContent = 'Mapa pelo SNV/DNIT ' + window.SNV_BR230.versao + ' · ' + metaItens(c, tot);
       return;
     }
     var temAn = isOae(c) && !!anOf(c), sw = $('folhaSw');
@@ -2018,7 +2309,7 @@
     $('pages').innerHTML = sheets.map(function (svg, i) {
       return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + '</div>';
     }).join('');
-    $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
+    $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + metaItens(c, tot);
     if (viewer && viewer.isOpen()) viewer.update(sheets);
   }
 
@@ -2103,6 +2394,15 @@
       else el.value = k === 'pasta' ? ctPasta(c) : ctNome(c);
     });
   }
+  // avisos do formulário e km do contrato dos marcos acompanham o que é digitado (objeto, km do contrato e do site, km do marco)
+  function syncAvisos(c) {
+    var ed = $('editor');
+    ed.querySelectorAll('[data-aviso]').forEach(function (el) { el.textContent = el.getAttribute('data-aviso') === 'km' ? avisoKm(c) : avisoObjeto(c); });
+    ed.querySelectorAll('[data-mkc]').forEach(function (el) {
+      var m = c.marcos[Number(el.getAttribute('data-mkc'))], mc = marcoContr(c, m ? m.km : null);
+      el.textContent = mc.t; el.title = mc.g;
+    });
+  }
   function onInput(e) {
     var t = e.target, c = active();
     if (isFiscal() && !t.dataset.svcpct) return;
@@ -2112,9 +2412,21 @@
       else if (t.dataset.int) c[k] = clamp(parseInt(t.value, 10) || 9, 1, 14);
       else c[k] = t.value;
       if (k === 'numero' || k === 'lote') { renderTabs(); syncNomes(c); }
+      if (/^(objeto|kmIni|kmFim|kmIniContrato|kmFimContrato)$/.test(k)) syncAvisos(c);
     } else if (t.dataset.marco != null && t.dataset.mf) {
       var m = c.marcos[Number(t.dataset.marco)];
       if (m) m[t.dataset.mf] = t.dataset.mf === 'km' ? parseNum(t.value) : t.value;
+      if (m && t.dataset.mf === 'km') syncAvisos(c);
+    } else if ((t.dataset.prazo != null || t.dataset.valor != null) && t.dataset.pf) {
+      // prazos e valores (PI) da conservação: o item pela posição na lista; data vazia e "fim de" vazio = null
+      var lsI = t.dataset.prazo != null ? 'prazos' : 'valores', it = (Array.isArray(c[lsI]) ? c[lsI] : [])[Number(t.dataset.prazo != null ? t.dataset.prazo : t.dataset.valor)], pf = t.dataset.pf;
+      if (!it) return;
+      it[pf] = pf === 'data' || pf === 'fim' ? t.value || null : pf === 'valor' ? parseValor(t.value) : t.value;
+      // ao sair do campo, o valor aparece como ficou gravado; texto que não virou número avisa (e o campo fica vazio)
+      if (pf === 'valor' && e.type === 'change') {
+        if (it.valor == null && t.value.trim()) toast('Valor não entendido: digite só o número, como 1.500.000,00.', 5000);
+        t.value = fmt(it.valor, 2);
+      }
     } else if (t.dataset.p) {
       var p = findPoint(t.dataset.id);
       if (!p) return;
@@ -2145,7 +2457,7 @@
     } else {
       return;
     }
-    if (!t.dataset.c && t.dataset.marco == null) marcaVistoria(c);
+    if (!t.dataset.c && t.dataset.marco == null && t.dataset.pf == null) marcaVistoria(c);   // prazo e valor não são vistoria
     save();
     schedulePreview();
   }
@@ -2348,23 +2660,39 @@
           afterEdit('del-marco', cc);
         });
         return;
-      case 'new-contract':
-        var ref = active();
-        var nc = {
-          // o lote é o da licitação: fica vazio até alguém digitar (o nome de tela sai do tipo e do número)
-          id: uid('ct'), orgao: ref ? ref.orgao : '', numero: '', lote: '',
-          rodovia: ref ? ref.rodovia : '', objeto: ref ? ref.objeto : '', executora: '', supervisora: ref ? ref.supervisora : '',
-          ctSupervisao: ref ? ref.ctSupervisao : '', extensaoContrato: null, origem: '', destino: '', kmIni: null, kmFim: null,
-          plataforma: ref ? ref.plataforma : '', dataVistoria: todayIso(), porPagina: 9, marcos: [], pontos: []
-        };
-        state.contracts.push(nc);
-        state.activeId = nc.id;
-        ui.contractOpen = true; ui.open = {};
-        var ncVisao = visaoOn;
-        setVisao(false);
-        renderAll();
-        if (ncVisao) window.scrollTo(0, 0);
+      // prazos e valores (PI) da conservação: o item novo nasce "a confirmar"; um toque na situação troca o grupo
+      case 'add-prazo':
+      case 'add-valor':
+        var lsA = act === 'add-prazo' ? 'prazos' : 'valores';
+        if (!Array.isArray(c[lsA])) c[lsA] = [];
+        c[lsA].push(lsA === 'prazos' ? { rotulo: '', data: null, sit: 'prev', fim: null, fonte: '', nota: '' } : { rotulo: '', valor: null, sit: 'prev', data: null, fonte: '', nota: '' });
+        renderEditor();
         break;
+      case 'set-prazo-sit':
+      case 'set-valor-sit':
+        var lsS = act === 'set-prazo-sit' ? 'prazos' : 'valores', itS = (Array.isArray(c[lsS]) ? c[lsS] : [])[Number(b.dataset.idx)];
+        if (!itS) return;
+        itS.sit = itS.sit === 'conf' ? 'prev' : 'conf';
+        renderEditor();
+        break;
+      case 'del-prazo':
+      case 'del-valor':
+        var lsD = act === 'del-prazo' ? 'prazos' : 'valores', itD = (Array.isArray(c[lsD]) ? c[lsD] : [])[Number(b.dataset.idx)], cidD = c.id;
+        if (!itD) return;
+        confirmar({ titulo: lsD === 'prazos' ? 'Remover o prazo?' : 'Remover o valor?', texto: (itD.rotulo || 'Sem rótulo') + (lsD === 'prazos' ? (itD.data ? ' · ' + fmtDate(itD.data) : '') : (itD.valor != null ? ' · ' + fmtBRL(itD.valor) : '')) + '.', botao: 'Remover', perigo: true }).then(function (r) {
+          // a lista pode ter mudado no meio (atualização do banco): acha o item de novo
+          var cc = contractById(cidD), arr = cc && Array.isArray(cc[lsD]) ? cc[lsD] : [], i = arr.indexOf(itD);
+          if (i < 0) i = arr.findIndex(function (x) { return same(x, itD); });
+          if (!r || i < 0) return;
+          arr.splice(i, 1);
+          if (cc === active()) renderEditor();
+          afterEdit(act, cc);
+        });
+        return;
+      case 'new-contract':
+        // o contrato nasce no envio da janela (lá, o afterEdit com o contrato novo)
+        abrirNovoContrato(active());
+        return;
       case 'del-contract':
         if (state.contracts.length < 2) { toast('Este é o único contrato. Crie outro antes de excluir este.'); return; }
         excluirContrato(c);
@@ -2380,6 +2708,57 @@
     schedulePreview();
   }
   function contractById(id) { return state.contracts.find(function (x) { return x.id === id; }) || null; }
+
+  // ---------------- "+ Contrato": a janela pede o tipo (não muda depois), o nº e o lote. Do contrato aberto (ref) vêm só o órgão,
+  // a rodovia, a supervisora e o contrato dela, que são os mesmos, e a largura da plataforma, só de um contrato do mesmo tipo;
+  // o objeto é de cada contrato (sai no relatório fotográfico). Pontos críticos ficam sem tipo, como o 314 e o 315
+  function novoContrato(tipo, ref, numero, lote) {
+    var t = tipoDe(tipo), cons = t === 'conserva';
+    var nc = {
+      // o lote é o da licitação (o nome de tela sai do tipo e do número)
+      id: uid('ct'), orgao: ref ? ref.orgao : '', numero: numero || '', lote: lote || '', tipo: t,
+      rodovia: ref ? ref.rodovia : '', objeto: '', executora: '', supervisora: ref ? ref.supervisora : '',
+      ctSupervisao: ref ? ref.ctSupervisao : '', extensaoContrato: null, origem: '', destino: '', kmIni: null, kmFim: null,
+      plataforma: ref && ctTipo(ref) === t ? ref.plataforma : '', dataVistoria: cons ? null : todayIso(), porPagina: TIPOS[t].porPagina, marcos: [], pontos: []
+    };
+    if (t === 'pc') delete nc.tipo;
+    if (cons) {
+      // conservação: sem plataforma; km e SNV do contrato, prazos, valores (PI) e observações da folha vêm do formulário
+      delete nc.plataforma;
+      nc.kmIniContrato = null; nc.kmFimContrato = null; nc.snvContrato = ''; nc.prazos = []; nc.valores = []; nc.obsFolha = '';
+    }
+    return nc;
+  }
+  // nº igual ao de outro contrato (sem contar os espaços): o nome de tela e a pasta do Drive saem do número
+  function numeroRepetido(numero) {
+    var k = txtLimpo(numero).replace(/\s+/g, '');
+    return k ? state.contracts.find(function (x) { return txtLimpo(x.numero).replace(/\s+/g, '') === k; }) || null : null;
+  }
+  function abrirNovoContrato(ref) {
+    modal('<h2 id="modalTitle">Novo contrato</h2>' +
+      '<fieldset class="folha-op"><legend>Tipo do contrato</legend>' +
+      TIPO_ORDEM.map(function (t) { return '<label><input type="radio" name="tipo" value="' + t + '"> <span><b>' + esc(TIPOS[t].opcao) + '</b></span></label>'; }).join('') +
+      '</fieldset>' +
+      mField('ncNumero', 'Nº do contrato', false, '', 'off') + mField('ncLote', 'Lote (da licitação)', false, '', 'off') +
+      '<p class="hint">O tipo não pode ser trocado depois.</p>' +
+      MFOOT + '<button type="submit" class="btn primary">Criar</button></div>',
+    function (f) {
+      var tp = f.querySelector('input[name=tipo]:checked'), numero = f.querySelector('#ncNumero').value.trim(), lote = f.querySelector('#ncLote').value.trim();
+      if (!tp) { modalErr(f, 'Escolha o tipo do contrato.'); return; }
+      var dup = numeroRepetido(numero);
+      if (dup) { modalErr(f, 'Já existe o ' + ctNome(dup) + ' com este número.'); return; }
+      closeModal();
+      var nc = novoContrato(tp.value, ref, numero, lote);
+      state.contracts.push(nc);
+      state.activeId = nc.id;
+      ui.contractOpen = true; ui.open = {};
+      var ncVisao = visaoOn;
+      setVisao(false);
+      renderAll();
+      if (ncVisao) window.scrollTo(0, 0);
+      afterEdit('new-contract', nc);
+    });
+  }
 
   // ---------------- exclusões: sempre com confirmação na própria página; o ponto ainda pode ser desfeito na hora
   function excluirPonto(cid, p) {
@@ -2497,10 +2876,10 @@
       var JsPDF = window.jspdf.jsPDF;
       var doc = new JsPDF({ orientation: 'landscape', unit: 'pt', format: 'a3', compress: true });
       doc.setProperties({
-        title: 'Diagrama linear - Obra ' + (c.numero || ''),
+        title: (isConserva(c) ? 'Diagrama linear - Conservação - CT ' : 'Diagrama linear - Obra ') + (c.numero || ''),
         subject: nomeArquivo(c).concat(c.rodovia ? [c.rodovia] : []).join(' - '),
         author: c.supervisora || '',
-        creator: 'Diagrama linear dos pontos críticos'
+        creator: isConserva(c) ? 'Diagrama linear da conservação' : 'Diagrama linear dos pontos críticos'
       });
       var sheets = renderSheets(c, semAnalise), host = $('pdfHost');
       var chain = Promise.resolve();
@@ -2799,7 +3178,9 @@
     orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
-    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)'
+    kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)',
+    kmIniContrato: 'KM inicial do contrato', kmFimContrato: 'KM final do contrato', snvContrato: 'SNV do contrato', prazos: 'prazos', valores: 'valores (PI)',
+    obsFolha: 'observações da folha'
   };
   function fieldName(k) {
     if (k.indexOf('serv.') === 0) { var s = SERVICES.concat(OAE_SERVICES).find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
@@ -2807,6 +3188,43 @@
   }
   // nome de tela do contrato pelo id, buscado neste aparelho (histórico, conflitos, propostas, lixeira); sem ele, o texto que veio
   function loteOf(cid, senao) { var c = contractById(cid); return c ? ctNome(c) || 'Contrato' : senao || 'Contrato'; }
+  // prazos e valores (PI): rótulo aparado, cortado em 40 caracteres; situação por extenso
+  function rotCurto(x) { var r = String((x && x.rotulo) || '').trim() || 'sem rótulo'; return r.length > 40 ? r.slice(0, 39) + '…' : r; }
+  function sitNome(x) { return x && x.sit === 'conf' ? 'confirmado' : 'a confirmar'; }
+  // o que mudou numa lista de prazos ou de valores, item a item pelo rótulo (aparado; rótulos repetidos, na ordem): a situação,
+  // a data do prazo, o valor; novo, excluído ou só "alterado" (fonte, nota, fim de, data do valor). Trocar o rótulo dá um
+  // excluído e um novo; só a ordem mudou = nada. a e v: a lista de antes e a de agora (sem lista = vazia)
+  function listaDif(k, a, v) {
+    var A = Array.isArray(a) ? a : [], B = Array.isArray(v) ? v : [], usado = [], out = [];
+    function rot(x) { return String((x && x.rotulo) || '').trim(); }
+    function val(x, q) { return x && x[q] != null && x[q] !== '' ? x[q] : null; }
+    function brl(n) { return n == null ? 'sem valor' : 'R$ ' + fmt(n, 2); }
+    B.forEach(function (y) {
+      var i = A.findIndex(function (x, j) { return !usado[j] && rot(x) === rot(y); });
+      if (i < 0) { out.push(rotCurto(y) + ' (novo)'); return; }
+      usado[i] = true;
+      var x = A[i], d = [];
+      if (Object.keys(x || {}).concat(Object.keys(y || {})).every(function (q) { return same(val(x, q), val(y, q)); })) return;
+      if (sitNome(x) !== sitNome(y)) d.push(sitNome(x) + ' → ' + sitNome(y));
+      if (k === 'prazos' && val(x, 'data') !== val(y, 'data')) d.push('data ' + (fmtDate(val(x, 'data')) || 'sem data') + ' → ' + (fmtDate(val(y, 'data')) || 'sem data'));
+      if (k === 'valores' && val(x, 'valor') !== val(y, 'valor')) d.push(brl(val(x, 'valor')) + ' → ' + brl(val(y, 'valor')));
+      out.push(rotCurto(y) + (d.length ? ': ' + d.join(' e ') : ' (alterado)'));
+    });
+    A.forEach(function (x, j) { if (!usado[j]) out.push(rotCurto(x) + ' (excluído)'); });
+    return out;
+  }
+  // nomes dos campos alterados; prazos e valores com o que mudou pelo rótulo, no máximo 2 itens por operação (os dois
+  // campos juntos) e "e mais N" no fim: o banco guarda só 300 caracteres do resumo
+  function camposResumo(campos) {
+    var vagas = 2, resto = 0;
+    var s = Object.keys(campos).map(function (k) {
+      if (k !== 'prazos' && k !== 'valores') return fieldName(k);
+      var d = listaDif(k, campos[k].a, campos[k].v), mostra = d.slice(0, vagas);
+      vagas -= mostra.length; resto += d.length - mostra.length;
+      return fieldName(k) + (mostra.length ? ': ' + mostra.join(', ') : '');
+    }).join(', ');
+    return s + (resto ? ' e mais ' + resto : '');
+  }
   // texto curto do que mudou, para o histórico
   function opsResumo(ops) {
     var names = [];
@@ -2815,8 +3233,12 @@
       if (op.t === 'ponto_campos') t = loteOf(op.cid) + ' ' + (op.nome || 'ponto') + (f ? ': ' + f : '');
       else if (op.t === 'ponto') t = loteOf(op.cid) + ' ' + (op.dados.nome || 'ponto') + ' (novo ponto)';
       else if (op.t === 'apagar_ponto') t = loteOf(op.cid) + ' ' + (op.nome || '') + ': ponto excluído';
-      else if (op.t === 'contrato_campos') t = loteOf(op.id, op.nome) + ': ' + (f || 'ordem das abas');
-      else if (op.t === 'contrato') t = (ctNome(op.dados) || 'Contrato') + ' (novo contrato)';
+      else if (op.t === 'contrato_campos') {
+        t = loteOf(op.id, op.nome) + ': ' + (f || 'ordem das abas');
+        // prazos e valores: o que mudou pelo rótulo, quando o texto do contrato cabe nos 300 caracteres (senão, só os nomes)
+        var td = f && (op.campos.prazos || op.campos.valores) ? loteOf(op.id, op.nome) + ': ' + camposResumo(op.campos) : '';
+        if (td && td.length <= 300) t = td;
+      } else if (op.t === 'contrato') t = (ctNome(op.dados) || 'Contrato') + ' (novo contrato)';
       else if (op.t === 'apagar_contrato') t = 'Contrato excluído';
       else t = 'Configuração';
       if (names.indexOf(t) < 0) names.push(t);
@@ -2898,6 +3320,13 @@
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
       return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
     }
+    // prazos e valores (PI): os itens pelo rótulo e a situação, até cerca de 300 caracteres (um item novo entra no fim da lista)
+    if ((campo === 'prazos' || campo === 'valores') && Array.isArray(v)) {
+      if (!v.length) return '(nenhum)';
+      var its = v.map(function (x) { return rotCurto(x) + ' (' + sitNome(x) + ')'; }), nIt = 1;
+      while (nIt < its.length && its.slice(0, nIt + 1).join('; ').length <= 300) nIt++;
+      return its.slice(0, nIt).join('; ') + (its.length > nIt ? ' e mais ' + (its.length - nIt) : '');
+    }
     if (Array.isArray(v)) return v.length + (v.length === 1 ? ' item' : ' itens');
     if (typeof v === 'number') return fmt(v, v % 1 ? 2 : 0);
     var s = String(v);
@@ -2909,8 +3338,10 @@
     var secs = !!(x.em && x.seu_em && fmtWhen(x.em) === fmtWhen(x.seu_em));   // no mesmo minuto: mostra os segundos
     var campo = x.campo ? ' · ' + fieldName(x.campo) : '', quem = x.por || 'outra pessoa', quando = x.em ? ' (' + fmtWhen(x.em, secs) + ')' : '';
     var sua = autor ? 'a alteração de ' + autor : 'a sua alteração', seu = x.seu_em ? ' (' + fmtWhen(x.seu_em, secs) + ')' : '';
-    if (x.tipo === 'perdeu') return alvo + campo + ': ficou o valor de ' + quem + ', que alterou depois' + quando + ': ' + fmtValue(x.campo, x.valor) + '. ' + sua.charAt(0).toUpperCase() + sua.slice(1) + seu + ' não entrou.';
-    if (x.tipo === 'substituiu') return alvo + campo + ': ficou o ' + (autor ? 'valor de ' + autor : 'seu valor') + ', alterado por último' + seu + '. Substituiu o de ' + quem + quando + ': ' + fmtValue(x.campo, x.valor) + '.';
+    // prazos e valores (PI), com a lista que este aparelho enviou (flush): o que ficou comparado item a item com o que saiu
+    var dif = Array.isArray(x.enviado) ? listaDif(x.campo, x.tipo === 'perdeu' ? x.enviado : x.valor, x.tipo === 'perdeu' ? x.valor : x.enviado).join('; ') : '';
+    if (x.tipo === 'perdeu') return alvo + campo + ': ficou o valor de ' + quem + ', que alterou depois' + quando + (dif ? '; do que ' + (autor || 'você') + ' enviou para o que ficou: ' + dif : ': ' + fmtValue(x.campo, x.valor)) + '. ' + sua.charAt(0).toUpperCase() + sua.slice(1) + seu + ' não entrou.';
+    if (x.tipo === 'substituiu') return alvo + campo + ': ficou o ' + (autor ? 'valor de ' + autor : 'seu valor') + ', alterado por último' + seu + '. Substituiu o de ' + quem + quando + (dif ? '; do valor de ' + quem + ' para o que ficou: ' + dif : ': ' + fmtValue(x.campo, x.valor)) + '.';
     if (x.tipo === 'nao_excluido') return alvo + ': não foi excluído, porque ' + quem + ' alterou o ponto depois' + quando + '.';
     if (x.tipo === 'excluido') return alvo + ': ' + (x.alvo === 'ponto' ? 'o ponto' : 'o contrato') + ' já tinha sido excluído por outra pessoa; ' + sua + ' nele não entrou.';
     return alvo + campo;
@@ -2944,7 +3375,12 @@
   function flush() {
     if (!banco.on || banco.busy || !banco.pend.length || !banco.login) { syncStatus(); return; }
     if (banco.espera > Date.now()) { scheduleFlush(banco.espera - Date.now()); return; }   // o servidor falhou há pouco: espera
-    var ops = banco.pend.slice(0, banco.lote || 500), n = ops.length;
+    var ops = banco.pend.slice(0, banco.lote || 500), n = ops.length, envL = {};
+    // prazos e valores (PI) são um campo só (fica a lista inteira de quem alterou por último): guarda a lista como sai agora,
+    // para o aviso de conflito (a da fila é a mesma da tela e muda se alguém digitar durante o envio)
+    ops.forEach(function (o) {
+      if (o.t === 'contrato_campos' && o.campos) ['prazos', 'valores'].forEach(function (k) { if (o.campos[k] && 'v' in o.campos[k]) envL[o.id + '|' + k] = clone(o.campos[k].v); });
+    });
     banco.busy = true;
     banco.sending = n;
     syncStatus();
@@ -2965,6 +3401,7 @@
         return;
       }
       noteMeta(ops, conf);
+      conf.forEach(function (x) { var en = x.alvo === 'contrato' && envL[x.id + '|' + x.campo]; if (Array.isArray(en)) x.enviado = en; });
       if (conf.length) { showConflicts(conf); refresh(); }          // o banco ficou com outro valor em algum campo
       else if (v === banco.versao + 1) { banco.versao = v; refreshLastLines(); }
       else refresh();                                                // outra pessoa gravou no meio: recarrega
@@ -3816,7 +4253,8 @@
     if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
-  var EDIT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract'];
+  var EDIT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
+    'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit'];
   var POINT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }

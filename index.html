@@ -349,6 +349,23 @@ button.vg-tr.sel{background:var(--accent-soft)}
 .section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);margin-top:4px}
 .mini-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 36px;gap:6px;align-items:end}
 .dev-row{display:grid;grid-template-columns:minmax(0,1fr) 84px 92px 36px;gap:6px;align-items:end}
+/* conservação: prazos e valores (PI) em dois grupos, o "a confirmar" com a borda tracejada. Cada item numa grade (.full ocupa
+   a linha inteira); no celular, uma coluna. O botão da situação diz "confirmado" ou "a confirmar" */
+.pz-grupo{display:flex;flex-direction:column;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.pz-grupo.prev{border:1.5px dashed #C9A54A;background:#FFFCF3}
+.pz-gtit{font-size:12px;font-weight:600;color:var(--ink-2)}
+.pz-item{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 8px;align-items:end}
+.pz-item+.pz-item{padding-top:8px;border-top:1px solid var(--line-2)}
+.pz-item .full{grid-column:1/-1}
+.pz-acts{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pz-sit{min-height:32px;padding:4px 12px;border:1px dashed #C98A00;border-radius:999px;background:#FFF4D6;color:#7A5200;font-size:12px;font-weight:650}
+.pz-sit[aria-pressed="true"]{border:1px solid var(--ok);background:#E6F4EC;color:#14663A}
+@media (max-width:560px){.pz-item{grid-template-columns:minmax(0,1fr)}}
+/* aviso no formulário do contrato (km do site igual ao do contrato, objeto maior que as 2 linhas do relatório) */
+.hint.ct-aviso{padding:6px 9px;border:1px solid #E8C77A;border-radius:6px;background:#FDF6E3;color:#7A5200}
+.hint.ct-aviso:empty{display:none}
+/* conservação: km do contrato do marco, só para leitura, embaixo de "KM" */
+.mk-c{display:block;font-size:11px;font-weight:400;white-space:nowrap}
 .icon-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink-3)}
 .icon-btn:hover{color:var(--danger);border-color:#F0C7C2;background:#FDF1EF}
 .icon-btn svg{width:16px;height:16px}
@@ -424,11 +441,13 @@ body.ro .marca{cursor:default}
 .ro-note{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:10px 12px;border:1px solid #AFC2DA;border-radius:var(--radius);background:var(--accent-soft);font-size:13px;color:var(--ink-2)}
 .ro-note span{flex:1 1 200px;min-width:0}
 body.ro [data-act="add-point"],body.ro [data-act="dup-point"],body.ro [data-act="del-point"],body.ro [data-act="add-dev"],body.ro [data-act="del-dev"],
-body.ro [data-act="add-marco"],body.ro [data-act="del-marco"],body.ro [data-act="del-contract"],body.ro [data-act="new-contract"]{display:none}
+body.ro [data-act="add-marco"],body.ro [data-act="del-marco"],body.ro [data-act="del-contract"],body.ro [data-act="new-contract"],
+body.ro [data-act="add-prazo"],body.ro [data-act="del-prazo"],body.ro [data-act="set-prazo-sit"],body.ro [data-act="add-valor"],body.ro [data-act="del-valor"],body.ro [data-act="set-valor-sit"]{display:none}
 body.ro .seg button{cursor:default}
 /* fiscal de campo: só os botões de status e o % dos serviços */
 body.fiscal [data-act="add-point"],body.fiscal [data-act="dup-point"],body.fiscal [data-act="del-point"],body.fiscal [data-act="add-dev"],body.fiscal [data-act="del-dev"],
-body.fiscal [data-act="add-marco"],body.fiscal [data-act="del-marco"],body.fiscal [data-act="del-contract"],body.fiscal [data-act="new-contract"]{display:none}
+body.fiscal [data-act="add-marco"],body.fiscal [data-act="del-marco"],body.fiscal [data-act="del-contract"],body.fiscal [data-act="new-contract"],
+body.fiscal [data-act="add-prazo"],body.fiscal [data-act="del-prazo"],body.fiscal [data-act="set-prazo-sit"],body.fiscal [data-act="add-valor"],body.fiscal [data-act="del-valor"],body.fiscal [data-act="set-valor-sit"]{display:none}
 .fiscal-note{border-color:#E8C77A;background:#FDF6E3}
 /* mudanças de fiscais aguardando aprovação */
 .seg button.pend{box-shadow:inset 0 0 0 2px #C98A00;background:repeating-linear-gradient(135deg,#FFF4D6 0 6px,#fff 6px 12px);color:#7A5200}
