@@ -90,6 +90,18 @@
     [ctNome(c), ctLoteReal(c), ctNumeroCT(c)].forEach(function (s) { if (s && out.indexOf(s) < 0) out.push(s); });
     return out;
   }
+  // ---------------- tipos de contrato: o que cada tipo tem, pela chave de ctTipo (sem tipo, ou tipo desconhecido, = pontos
+  // críticos, como sempre). item/itens: o que o contrato lista (folha, lista, textos); porPagina: o padrão da folha;
+  // continuo: serviço contínuo (estado na vistoria, como nas pontes), que a conservação vai dividir com as pontes.
+  // isOae continua só para o que é das pontes (análise das medições, km final pela extensão, código OAE)
+  var TIPOS = {
+    pc: { item: 'ponto', itens: 'pontos', porPagina: 9, continuo: false },
+    conserva: { item: 'segmento', itens: 'segmentos', porPagina: 13, continuo: true },
+    oae: { item: 'ponte', itens: 'pontes', porPagina: 9, continuo: true }
+  };
+  function tipoInfo(c) { return TIPOS[ctTipo(c)]; }
+  function isConserva(c) { return ctTipo(c) === 'conserva'; }
+  function isContinuo(c) { return !!tipoInfo(c).continuo; }
   var STATUS = {
     OK: { tag: 'OK', name: 'Concluído', btn: 'OK', fill: '#1E9E55' },
     A: { tag: 'ATIVO', name: 'Ativo', btn: 'Ativo', fill: '#2B5797' },
@@ -3907,7 +3919,9 @@
   // acesso para testes no console
   window.Unifilar = {
     buildPdf: function () { return buildPdf(active()); },
-    renderSheets: function () { return renderSheets(active()); },
+    // cid: um contrato qualquer (sem cid, o aberto); semAnalise: a folha do 424 só com a vistoria (para comparar as folhas
+    // antes e depois de uma mudança, contrato por contrato)
+    renderSheets: function (cid, semAnalise) { var c = cid ? contractById(cid) : active(); return c ? renderSheets(c, semAnalise === true) : []; },
     state: function () { return state; },
     mapa: function () { return mapa; },
     banco: function () { return banco; },
