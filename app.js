@@ -102,6 +102,22 @@
   function tipoInfo(c) { return TIPOS[ctTipo(c)]; }
   function isConserva(c) { return ctTipo(c) === 'conserva'; }
   function isContinuo(c) { return !!tipoInfo(c).continuo; }
+  // km do contrato (o dos documentos: SNV 2020–2022 na conservação) de um km do site, pela régua de snv-conversao.js.
+  // Só nos contratos com kmIniContrato e kmFimContrato. Nas pontas do contrato vale o km do cadastro, com ast quando a
+  // régua discorda em mais de 0,01 km (o início do 437: 750,90 no cadastro, 751,94 pela geometria); no meio, a régua.
+  // Devolve { km, ast, geom } (geom: o km pela régua, para a nota) ou null: sem a régua (aparelho com o cache antigo),
+  // régua de outra versão do eixo (snv-br230.js trocou e a régua não foi gerada de novo) ou km fora dela
+  function kmDoContrato(c, s) {
+    var R = window.SNV_CONVERSAO, eixo = window.SNV_BR230;
+    if (!c || !R || typeof R.paraContrato !== 'function' || !eixo || R.para !== eixo.versao) return null;
+    var ki = c.kmIniContrato, kf = c.kmFimContrato;
+    if (typeof ki !== 'number' || typeof kf !== 'number' || !isFinite(ki) || !isFinite(kf)) return null;
+    if (s == null || s === '' || !isFinite(s = Number(s))) return null;
+    var geom = R.paraContrato(s);
+    if (geom == null) return null;
+    var ponta = typeof c.kmIni === 'number' && Math.abs(s - c.kmIni) < 0.001 ? ki : typeof c.kmFim === 'number' && Math.abs(s - c.kmFim) < 0.001 ? kf : null;
+    return ponta == null ? { km: geom, ast: false, geom: geom } : { km: ponta, ast: Math.abs(ponta - geom) > 0.01, geom: geom };
+  }
   var STATUS = {
     OK: { tag: 'OK', name: 'Concluído', btn: 'OK', fill: '#1E9E55' },
     A: { tag: 'ATIVO', name: 'Ativo', btn: 'Ativo', fill: '#2B5797' },

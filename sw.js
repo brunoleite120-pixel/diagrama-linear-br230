@@ -6,10 +6,10 @@
 // A prévia (/previa/) tem o próprio service worker e o próprio cache; o do site oficial não mexe nela.
 var PREVIA = /\/previa\/$/.test(self.registration.scope);
 var FAMILIA = (PREVIA ? 'previa-' : '') + 'diagrama-linear-';
-var CACHE = FAMILIA + 'v53';
+var CACHE = FAMILIA + 'v54';
 var PASTA_PREVIA = PREVIA ? null : self.registration.scope + 'previa/';
 var SHELL = [
-  './', 'index.html', 'app.js', 'banco.js', 'drive.js', 'galeria.js', 'foto.js', 'mapa.js', 'snv-br230.js', 'osm-br230.js', 'tela-cheia.js', 'logo.js', 'logo-dnit.js',
+  './', 'index.html', 'app.js', 'banco.js', 'drive.js', 'galeria.js', 'foto.js', 'mapa.js', 'snv-br230.js', 'snv-conversao.js', 'osm-br230.js', 'tela-cheia.js', 'logo.js', 'logo-dnit.js',
   'dados-iniciais.js', 'fundo-br230.js', 'lib/leaflet.js', 'manifest.webmanifest',
   'ambiente.js', 'atualizar.js', 'relatorio.js', 'visao.js', 'relatorio-logos.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'
 ];
