@@ -779,18 +779,32 @@
     ];
   }
   // indicadores da conservação: largura própria (k.w, padrão bw); o que é só previsto (k.prev) em caixa tracejada, com o número
-  // em cinza; o número e a linha de baixo diminuem (até 9 e 5,6 pt) em vez de serem cortados. Devolve o x da 1ª caixa
+  // em cinza; o número diminui (até 9 pt) em vez de ser cortado e a linha de baixo sai inteira (kpiSub). Devolve o x da 1ª caixa
   function drawKpisFaixa(o, kpis, bw, bg) {
     var x0 = G.x1 - kpis.reduce(function (s, k) { return s + (k.w || bw) + bg; }, -bg);
     kpis.reduce(function (x, k) {
-      var w = k.w || bw, vs = fitSize(k.v, w - 14, 14, true, 9), ss = fitSize(k.s, w - 14, 6.4, false, 5.6);
+      var w = k.w || bw, vs = fitSize(k.v, w - 14, 14, true, 9), sb = kpiSub(k.s, w - 14);
       o.push(k.prev ? R(x, 30, w, 56, { fill: '#FFFFFF', stroke: '#8E9792', sw: 0.9, rx: 3, dash: '3 2' }) : R(x, 30, w, 56, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(x + 8, 43, k.k, { size: 5.8, bold: true, fill: '#5C6661' }));
       o.push(T(x + 8, 63, fitText(k.v, w - 14, vs, true), { size: r2(vs), bold: true, fill: k.prev ? '#5C6661' : '#17201C' }));
-      if (k.s) o.push(T(x + 8, 77, fitText(k.s, w - 14, ss), { size: r2(ss), fill: '#5C6661' }));
+      if (k.s) sb.ls.forEach(function (ln, i) { o.push(T(x + 8, sb.ls.length > 1 ? 74 + i * 7 : 77, ln, { size: r2(sb.size), fill: '#5C6661' })); });
       return x + w + bg;
     }, x0);
     return x0;
+  }
+  // linha de baixo de um indicador da conservação, inteira, nunca com "...": a letra diminui de 6,4 até 5,6 pt e, se ainda não
+  // couber, o texto quebra em 2 linhas de 5,6 pt, no espaço que deixa as duas mais parecidas (o SNV do contrato do 437,
+  // "SNV 2020–2022 (citado como 202101A)"); só o texto que nem em 2 linhas cabe fica abaixo de 5,6 pt. { ls, size }
+  function kpiSub(s, w) {
+    s = String(s || '');
+    var ss = fitSize(s, w, 6.4, false, 5.6);
+    if (textW(s, ss) <= w) return { ls: [s], size: ss };
+    var p = s.split(' '), best = { ls: [s], m: textW(s, 5.6) };
+    for (var i = 1; i < p.length; i++) {
+      var ls = [p.slice(0, i).join(' '), p.slice(i).join(' ')], m = Math.max(textW(ls[0], 5.6), textW(ls[1], 5.6));
+      if (m < best.m) best = { ls: ls, m: m };
+    }
+    return { ls: best.ls, size: Math.min(5.6, 5.6 * w / best.m) };
   }
   // sentido: a origem e o destino quebram em até 2 linhas cada (a 2ª recuada), em vez de serem cortados na 1ª; o que passar
   // das 2 linhas termina em "..."
@@ -1426,7 +1440,9 @@
     var c = active(), cons = isConserva(c);
     var h = [];
     h.push('<section class="card">');
-    h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span></span>' + ICON_CHEV + '</button>');
+    // conservação: o tipo no título, numa linha embaixo, só para leitura (sem número, o nome de tela é o Lote, que não diz o tipo)
+    h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span>' +
+      (cons ? ' <span class="sub ct-tipo">Tipo: ' + esc(tipoInfo(c).opcao) + '</span>' : '') + '</span>' + ICON_CHEV + '</button>');
     if (ui.contractOpen) {
       h.push('<div class="card-body">' + (banco.on ? lastLine(metaKey(c.id)) : '') + '<div class="grid">');
       h.push(field('Nº da obra / contrato', 'data-c="numero" type="text"', c.numero));
@@ -2408,6 +2424,15 @@
     if (isFiscal() && !t.dataset.svcpct) return;
     if (t.dataset.c) {
       var k = t.dataset.c;
+      // nº de outro contrato (como no "+ Contrato"): não grava; ao sair do campo, avisa e volta ao número de antes da edição
+      if (k === 'numero') {
+        if (t.dataset.antes == null) t.dataset.antes = c.numero || '';
+        var dupN = numeroRepetido(t.value, c);
+        if (e.type === 'change') {
+          if (dupN) { toast('Já existe o ' + ctNome(dupN) + ' com este número.', 5000); t.value = t.dataset.antes; }
+          delete t.dataset.antes;
+        } else if (dupN) return;
+      }
       if (t.dataset.num) c[k] = parseNum(t.value);
       else if (t.dataset.int) c[k] = clamp(parseInt(t.value, 10) || 9, 1, 14);
       else c[k] = t.value;
@@ -2679,10 +2704,10 @@
       case 'del-valor':
         var lsD = act === 'del-prazo' ? 'prazos' : 'valores', itD = (Array.isArray(c[lsD]) ? c[lsD] : [])[Number(b.dataset.idx)], cidD = c.id;
         if (!itD) return;
-        confirmar({ titulo: lsD === 'prazos' ? 'Remover o prazo?' : 'Remover o valor?', texto: (itD.rotulo || 'Sem rótulo') + (lsD === 'prazos' ? (itD.data ? ' · ' + fmtDate(itD.data) : '') : (itD.valor != null ? ' · ' + fmtBRL(itD.valor) : '')) + '.', botao: 'Remover', perigo: true }).then(function (r) {
-          // a lista pode ter mudado no meio (atualização do banco): acha o item de novo
-          var cc = contractById(cidD), arr = cc && Array.isArray(cc[lsD]) ? cc[lsD] : [], i = arr.indexOf(itD);
-          if (i < 0) i = arr.findIndex(function (x) { return same(x, itD); });
+        confirmar({ titulo: lsD === 'prazos' ? 'Remover o prazo?' : 'Remover o valor?', texto: (itD.rotulo || 'Sem rótulo') + (lsD === 'prazos' ? (itD.data ? ' · ' + fmtDate(itD.data) : '') : (itD.valor != null ? ' · ' + fmtPI(itD.valor) : '')) + '.', botao: 'Remover', perigo: true }).then(function (r) {
+          // a lista pode ter mudado no meio (atualização do banco): acha o item de novo, pelo conteúdo (itemChave)
+          var cc = contractById(cidD), arr = cc && Array.isArray(cc[lsD]) ? cc[lsD] : [], i = arr.indexOf(itD), kD = itemChave(itD);
+          if (i < 0) i = arr.findIndex(function (x) { return itemChave(x) === kD; });
           if (!r || i < 0) return;
           arr.splice(i, 1);
           if (cc === active()) renderEditor();
@@ -2729,10 +2754,11 @@
     }
     return nc;
   }
-  // nº igual ao de outro contrato (sem contar os espaços): o nome de tela e a pasta do Drive saem do número
-  function numeroRepetido(numero) {
+  // nº igual ao de outro contrato (sem contar os espaços): o nome de tela e a pasta do Drive saem do número. exceto: o
+  // contrato que está sendo editado (campo "Nº" dos dados do contrato), que não conta
+  function numeroRepetido(numero, exceto) {
     var k = txtLimpo(numero).replace(/\s+/g, '');
-    return k ? state.contracts.find(function (x) { return txtLimpo(x.numero).replace(/\s+/g, '') === k; }) || null : null;
+    return k ? state.contracts.find(function (x) { return x !== exceto && txtLimpo(x.numero).replace(/\s+/g, '') === k; }) || null : null;
   }
   function abrirNovoContrato(ref) {
     modal('<h2 id="modalTitle">Novo contrato</h2>' +
@@ -3191,6 +3217,15 @@
   // prazos e valores (PI): rótulo aparado, cortado em 40 caracteres; situação por extenso
   function rotCurto(x) { var r = String((x && x.rotulo) || '').trim() || 'sem rótulo'; return r.length > 40 ? r.slice(0, 39) + '…' : r; }
   function sitNome(x) { return x && x.sit === 'conf' ? 'confirmado' : 'a confirmar'; }
+  // valor (PI) em reais, sempre com centavos ("R$ 35.398.999,93"; fmtBRL arredonda), no histórico, nos avisos e na confirmação
+  // de remover; sem número, "sem valor"
+  function fmtPI(n) { return n == null || !isFinite(n) ? 'sem valor' : 'R$ ' + fmt(n, 2); }
+  // o mesmo prazo ou valor pelo conteúdo (rótulo aparado, data, situação e valor), sem depender da ordem das chaves, que o
+  // jsonb do banco devolve trocada: acha o item de novo depois de uma atualização do banco
+  function itemChave(x) {
+    x = x || {};
+    return JSON.stringify([String(x.rotulo || '').trim(), x.data || null, x.sit === 'conf' ? 'conf' : 'prev', x.valor != null && x.valor !== '' ? x.valor : null]);
+  }
   // o que mudou numa lista de prazos ou de valores, item a item pelo rótulo (aparado; rótulos repetidos, na ordem): a situação,
   // a data do prazo, o valor; novo, excluído ou só "alterado" (fonte, nota, fim de, data do valor). Trocar o rótulo dá um
   // excluído e um novo; só a ordem mudou = nada. a e v: a lista de antes e a de agora (sem lista = vazia)
@@ -3198,7 +3233,6 @@
     var A = Array.isArray(a) ? a : [], B = Array.isArray(v) ? v : [], usado = [], out = [];
     function rot(x) { return String((x && x.rotulo) || '').trim(); }
     function val(x, q) { return x && x[q] != null && x[q] !== '' ? x[q] : null; }
-    function brl(n) { return n == null ? 'sem valor' : 'R$ ' + fmt(n, 2); }
     B.forEach(function (y) {
       var i = A.findIndex(function (x, j) { return !usado[j] && rot(x) === rot(y); });
       if (i < 0) { out.push(rotCurto(y) + ' (novo)'); return; }
@@ -3207,23 +3241,25 @@
       if (Object.keys(x || {}).concat(Object.keys(y || {})).every(function (q) { return same(val(x, q), val(y, q)); })) return;
       if (sitNome(x) !== sitNome(y)) d.push(sitNome(x) + ' → ' + sitNome(y));
       if (k === 'prazos' && val(x, 'data') !== val(y, 'data')) d.push('data ' + (fmtDate(val(x, 'data')) || 'sem data') + ' → ' + (fmtDate(val(y, 'data')) || 'sem data'));
-      if (k === 'valores' && val(x, 'valor') !== val(y, 'valor')) d.push(brl(val(x, 'valor')) + ' → ' + brl(val(y, 'valor')));
+      if (k === 'valores' && val(x, 'valor') !== val(y, 'valor')) d.push(fmtPI(val(x, 'valor')) + ' → ' + fmtPI(val(y, 'valor')));
       out.push(rotCurto(y) + (d.length ? ': ' + d.join(' e ') : ' (alterado)'));
     });
     A.forEach(function (x, j) { if (!usado[j]) out.push(rotCurto(x) + ' (excluído)'); });
     return out;
   }
   // nomes dos campos alterados; prazos e valores com o que mudou pelo rótulo, no máximo 2 itens por operação (os dois
-  // campos juntos) e "e mais N" no fim: o banco guarda só 300 caracteres do resumo
+  // campos juntos) e "e mais N" logo depois da última das duas listas, não depois de um campo que vem em seguida
+  // ("observações da folha"): o banco guarda só 300 caracteres do resumo
   function camposResumo(campos) {
-    var vagas = 2, resto = 0;
-    var s = Object.keys(campos).map(function (k) {
+    var vagas = 2, resto = 0, ult = -1;
+    var s = Object.keys(campos).map(function (k, i) {
       if (k !== 'prazos' && k !== 'valores') return fieldName(k);
       var d = listaDif(k, campos[k].a, campos[k].v), mostra = d.slice(0, vagas);
-      vagas -= mostra.length; resto += d.length - mostra.length;
+      vagas -= mostra.length; resto += d.length - mostra.length; ult = i;
       return fieldName(k) + (mostra.length ? ': ' + mostra.join(', ') : '');
-    }).join(', ');
-    return s + (resto ? ' e mais ' + resto : '');
+    });
+    if (resto) s[ult] += ' e mais ' + resto;
+    return s.join(', ');
   }
   // texto curto do que mudou, para o histórico
   function opsResumo(ops) {
