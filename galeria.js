@@ -459,13 +459,18 @@
         if (!all.length) return '';
         var pend = all.filter(function (x) { return x.situacao === 'fila'; }).length, soAp = all.filter(function (x) { return x.situacao === 'aparelho'; }).length;
         var env = all.filter(function (x) { return x.situacao === 'enviada'; }).length, bytes = all.reduce(function (a, x) { return a + (x.temArquivo ? x.tamanho || 0 : 0); }, 0);
-        var inf = o.drive ? o.drive.info() : {};
+        var inf = o.drive ? o.drive.info() : {}, pd = inf.prox ? new Date(inf.prox) : null, quando = pd ? '; tenta de novo às ' + pad(pd.getHours()) + ':' + pad(pd.getMinutes()) : '';
         var t = '<b>' + plural(all.length, 'foto guardada', 'fotos guardadas') + '</b> neste aparelho' + (bytes ? ' · ' + tam(bytes) : '');
         if (pend) {
           t += ' · <span class="gl-warn">' + plural(pend, 'esperando envio', 'esperando envio') + '</span>';
           if (!login()) t += ' (só vão para o Drive depois que você entrar com o seu código)';
+          else if (inf.erro === 'codigo') t += ' (seu acesso mudou: entre de novo para enviar)';
           else if (inf.busy) t += ' (enviando…)';
-          else if (inf.erro === 'rede' || navigator.onLine === false) t += ' (sem sinal; envia sozinho depois)';
+          else if (inf.erro === 'rede' || navigator.onLine === false) t += ' (sem sinal; envia sozinho depois' + quando + ')';
+          else if (inf.erro === 'tempo') t += ' (o envio demorou demais' + (quando || '; tenta de novo sozinho') + ')';
+          else if (inf.erro === 'recusado') t += ' (o envio foi recusado e o acesso não pôde ser conferido agora' + quando + ')';
+          else if (inf.erro === 'script') t += ' (o Drive recusou o envio, mas o seu acesso está certo' + quando + ')';
+          else if (inf.erro === 'banco') t += ' (o banco não aceitou o registro agora' + (quando || '; tenta de novo sozinho') + ')';
           else if (!(o.driveUrl && o.driveUrl())) t += ' (envio ao Drive não configurado)';
         } else if (!soAp) t += ' · todas já foram enviadas';
         if (soAp) t += ' · ' + plural(soAp, 'só no aparelho (não vai para o Drive)', 'só no aparelho (não vão para o Drive)');
@@ -522,7 +527,9 @@
         a.push({ k: todas ? 'tirar-rel' : 'por-rel', t: todas ? '☆ Tirar do relatório' : '★ Relatório' });
       }
       var ap = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'aparelho'; }).length;
-      var fi = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'fila' && locais[x.id].etapa !== 'registro'; }).length;
+      // a que está subindo agora não dá para segurar: o arquivo já vai a caminho do Drive
+      var sobe = o.drive && o.drive.info ? o.drive.info().emEnvio : null;
+      var fi = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'fila' && locais[x.id].etapa !== 'registro' && x.id !== sobe; }).length;
       var mov = aba !== 'deletadas' ? ls.filter(podeMover).length : 0;
       if (mov) a.push({ k: 'mover', t: 'Contrato e ponto' + (ls.length > 1 ? ' (' + mov + ')' : '') });
       if (ap) a.push({ k: 'enviar-drive', t: 'Enviar ao Drive' + (ls.length > 1 ? ' (' + ap + ')' : ''), c: 'primary' });
@@ -698,13 +705,17 @@
         nao = loc.filter(function (x) { return x.situacao !== 'enviada'; });
       }
       if (!loc.length) return;
-      var n = loc.length;
+      var n = loc.length, sobe = o.drive && o.drive.info ? o.drive.info().emEnvio : null;
+      // a que está subindo agora: o envio em curso não para (o arquivo, ou o registro, pode chegar do outro lado)
+      var subindo = sobe && loc.some(function (x) { return x.id === sobe && x.situacao === 'fila'; });
       o.confirmar({
         titulo: 'Apagar do celular ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar do celular',
-        html: nao.length
+        html: (nao.length
           ? '<p class="modal-err">' + (nao.length === n ? (n === 1 ? 'Esta foto ainda não foi enviada' : 'Nenhuma delas foi enviada ainda') : plural(nao.length, 'delas ainda não foi enviada', 'delas ainda não foram enviadas')) +
             ' ao Drive: ' + (nao.length === 1 ? 'ela se perde' : 'elas se perdem') + ' de vez.</p>'
-          : '<p>' + (n === 1 ? 'Ela continua' : 'Elas continuam') + ' no Drive e na galeria da equipe. Sai só deste aparelho, para liberar espaço.</p>',
+          : '<p>' + (n === 1 ? 'Ela continua' : 'Elas continuam') + ' no Drive e na galeria da equipe. Sai só deste aparelho, para liberar espaço.</p>') +
+          (subindo ? '<p class="modal-err">' + (n === 1 ? 'Ela' : 'Uma delas') + ' já está sendo enviada agora: pode chegar mesmo assim ao Drive e à galeria da equipe. ' +
+            'Se quiser, espere o envio terminar e apague depois pelo "Apagar do Drive".</p>' : ''),
         digitar: nao.length ? 'APAGAR' : (n > 20 ? 'APAGAR' : null)
       }).then(function (ok) {
         if (!ok) return;
@@ -720,10 +731,13 @@
     function enviarDrive(ls, sim) {
       var ids = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return x.id; });
       if (!ids.length || !o.drive || !o.drive.enviar) return;
+      var sobe = !sim && o.drive.info ? o.drive.info().emEnvio : null;
       o.drive.enviar(ids, sim).then(function (m) {
-        if (!m) return;
-        o.toast(sim ? plural(m, 'foto na fila', 'fotos na fila') + ' para o Drive' + (login() ? '.' : ': entre com o seu código para enviar.')
-          : plural(m, 'foto fica', 'fotos ficam') + ' só neste aparelho (não ' + (m === 1 ? 'vai' : 'vão') + ' para o Drive).', 5000);
+        // a que estava subindo não fica para trás (o drive.js não segura): avisa, em vez de dizer que ficou só no aparelho
+        var ja = sobe && ids.indexOf(sobe) >= 0 ? ' A que já estava subindo continua: ela chega ao Drive.' : '';
+        if (!m) { if (ja) o.toast(ja.slice(1), 6000); return; }
+        o.toast((sim ? plural(m, 'foto na fila', 'fotos na fila') + ' para o Drive' + (login() ? '.' : ': entre com o seu código para enviar.')
+          : plural(m, 'foto fica', 'fotos ficam') + ' só neste aparelho (não ' + (m === 1 ? 'vai' : 'vão') + ' para o Drive).') + ja, ja ? 7000 : 5000);
         if (ver >= 0) fecharVer();
         sel = {}; selecionando = false;
         carregar();
@@ -881,8 +895,11 @@
       var l = login();
       if (banIds.length && !l) { o.toast('Entre com o seu código para corrigir as fotos que já foram enviadas.', 6000); return; }
       var b = q('[data-g="mv-salvar"]'); if (b) { b.disabled = true; b.textContent = 'Salvando…'; }
-      var pLoc = locIds.length && o.drive && o.drive.corrigir ? o.drive.corrigir(locIds, meta, pastas) : Promise.resolve(0);
-      pLoc.then(function () {
+      var pLoc = locIds.length && o.drive && o.drive.corrigir ? o.drive.corrigir(locIds, meta, pastas) : Promise.resolve(null);
+      pLoc.then(function (res) {
+        // as que acabaram de chegar ao banco com o painel aberto (a tela ainda dizia "na fila"): o aparelho diz na própria gravação
+        ((res && res.enviadas) || []).forEach(function (id) { if (banIds.indexOf(id) < 0) banIds.push(id); });
+        if (banIds.length && !l) { var e = new Error('sem_login'); e.code = 'sem_login'; throw e; }
         return banIds.length ? o.Banco.fotosMover(l.codigo, banIds, cid, pid) : null;
       }).then(function () {
         ls.forEach(function (x) {
@@ -905,6 +922,7 @@
         if (b) { b.disabled = false; b.textContent = 'Salvar'; }
         var cd = e && (e.code || e.message);
         o.toast(cd === 'sem_permissao' ? 'Você só pode corrigir as fotos que você tirou.' : cd === 'sem_rede' ? 'Sem conexão: tente de novo com sinal.'
+          : cd === 'sem_login' ? 'A foto acabou de ser enviada: entre com o seu código e corrija de novo, para valer também na galeria da equipe.'
           : /fotos_mover|PGRST202/.test(cd || '') ? 'O banco ainda não tem esta correção.' : 'Não foi possível corrigir (' + (cd || 'erro') + ').', 6000);
       });
     }
@@ -1105,7 +1123,7 @@
       }
       else if (g === 'baixar-tudo') baixar(lista.slice());
       else if (g === 'rel-pdf') o.relatorioPdf({ itens: itens.slice(), arquivo: arquivo, cid: filtro.cid });
-      else if (g === 'enviar') { if (o.drive) o.drive.pump(); setTimeout(render, 300); }
+      else if (g === 'enviar') { if (o.drive) o.drive.pump(true); setTimeout(render, 300); }   // a pessoa pediu: não espera as pausas da fila
       else if (g === 'enviar-ap') enviarDrive(Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'aparelho'; }), true);
       else if (g === 'limpar') {
         var env = Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'enviada'; });

@@ -260,6 +260,8 @@
     '.ft-camgps{position:absolute;left:10px;right:10px;top:10px;padding:7px 11px;border-radius:8px;background:rgba(0,0,0,.62);font-size:13px;line-height:1.45;font-variant-numeric:tabular-nums}',
     '.ft-camgps b{color:#FFE81A}',
     '.ft-camgps .ft-warn{color:#FFB4A8}',
+    // aviso do limite de fotos da câmera (MAX_FOTOS), embaixo da imagem
+    '.ft-camlim{position:absolute;left:10px;right:10px;bottom:10px;padding:8px 11px;border-radius:8px;background:rgba(150,24,16,.9);font-size:14px;font-weight:650;line-height:1.4}',
     '.ft-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}',
     '.ft-flash.on{opacity:.7;transition:none}',
     '.ft-camctl{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 16px}',
@@ -423,7 +425,7 @@
             '<div class="ft-side ft-bside"></div>' +
           '</div>' +
           '<div class="ft-cam" hidden>' +
-            '<div class="ft-camview"><video playsinline muted autoplay aria-label="Prévia da câmera"></video><div class="ft-camgps" role="status"></div><div class="ft-flash"></div></div>' +
+            '<div class="ft-camview"><video playsinline muted autoplay aria-label="Prévia da câmera"></video><div class="ft-camgps" role="status"></div><div class="ft-camlim" role="alert" hidden></div><div class="ft-flash"></div></div>' +
             '<div class="ft-camctl">' +
               '<button type="button" class="ft-camb" data-ft="cam-cancel">Fechar</button>' +
               '<button type="button" class="ft-shot" data-ft="cam-shot" aria-label="Fotografar"></button>' +
@@ -1006,7 +1008,9 @@
       var files = Array.prototype.slice.call(list || []);
       if (files.length <= 1) { onFile(files[0], from, presets && presets[0]); return; }
       startMsg('');
-      var extra = files.length - MAX_FOTOS;
+      // só os arquivos do celular são cortados (eles continuam lá para abrir depois); a câmera do app já trava em MAX_FOTOS,
+      // e as fotos dela só existem na memória: nenhuma pode ficar de fora
+      var extra = from === 'camapp' ? 0 : files.length - MAX_FOTOS;
       if (extra > 0) files = files.slice(0, MAX_FOTOS);
       clearBatch();
       var b = batch = { common: '', ver: 0, out: null, busy: false, items: files.map(function (f, i) {
@@ -1415,9 +1419,13 @@
     function renderCam() {
       if (!cam) return;
       renderCamGps();
-      var n = cam.shots.length, last = q('.ft-camlast');
+      var n = cam.shots.length, last = q('.ft-camlast'), cheio = n >= MAX_FOTOS, lim = q('.ft-camlim');
       q('[data-ft="cam-done"]').disabled = !n;
-      q('.ft-camn').textContent = n ? 'Concluir (' + n + ')' : 'Concluir';
+      // no limite do lote, o botão de fotografar trava: as fotos da câmera só existem na memória até salvar
+      q('[data-ft="cam-shot"]').disabled = cam.busy || cheio;
+      q('.ft-camn').textContent = cheio ? 'Concluir (' + n + ' de ' + MAX_FOTOS + ')' : n ? 'Concluir (' + n + ')' : 'Concluir';
+      lim.hidden = !cheio;
+      lim.textContent = cheio ? 'Limite de ' + MAX_FOTOS + ' fotos: toque em Concluir para salvar estas; depois continue fotografando.' : '';
       q('[data-ft="cam-cancel"]').textContent = n ? 'Descartar' : 'Fechar';
       last.hidden = !n;
       last.innerHTML = n && cam.lastUrl ? '<img alt="" src="' + cam.lastUrl + '">' : '';
@@ -1467,7 +1475,7 @@
     }
     function shoot() {
       var c = cam, v = q('.ft-cam video');
-      if (!c || c.busy || !v.videoWidth) return;
+      if (!c || c.busy || !v.videoWidth || c.shots.length >= MAX_FOTOS) return;
       var fix = camFix(), when = new Date(), btn = q('[data-ft="cam-shot"]'), fl = q('.ft-flash');
       c.busy = true;
       btn.disabled = true;
@@ -1484,7 +1492,8 @@
         c.lastUrl = URL.createObjectURL(blob);
         c.sure = 0;
         renderCam();
-        if (!fix) notify('Foto sem local: o GPS ainda não respondeu.');
+        if (c.shots.length >= MAX_FOTOS) notify('Limite de ' + MAX_FOTOS + ' fotos: toque em Concluir para salvar estas; depois continue fotografando.');
+        else if (!fix) notify('Foto sem local: o GPS ainda não respondeu.');
       });
     }
     function camDone() {

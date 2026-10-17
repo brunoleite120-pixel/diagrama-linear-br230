@@ -3028,7 +3028,7 @@
     else if (banco.at) t = (window.AMBIENTE && AMBIENTE.previa ? 'Banco de teste · ' : 'Banco da equipe · ') + hhmm(banco.at);
     else t = 'Conectando ao banco…';
     var dq = driveQ && driveReady() ? driveQ.info() : null;
-    if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo'; }
+    if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo' || dq.erro === 'recusado' || dq.erro === 'script'; }
     el.textContent = t;
     el.classList.toggle('warn', warn);
   }
@@ -3591,12 +3591,18 @@
   function driveReady() { return !!(banco.on && banco.cfg.driveFotos && banco.cfg.driveFotos.url); }
   function driveStatus() {
     if (!driveQ || !driveReady()) return '';
-    var i = driveQ.info(), n = i.n, fotos = n + (n === 1 ? ' foto' : ' fotos');
+    var i = driveQ.info(), n = i.n, fotos = n + (n === 1 ? ' foto' : ' fotos'), quando = i.prox ? ' Tenta de novo às ' + hhmm(new Date(i.prox)) + '.' : '';
     if (!n) return i.enviadas ? 'Fotos enviadas ao Drive da equipe.' : 'As fotos marcadas vão para o Drive da equipe.';
     if (!banco.login) return fotos + ' esperando para o Drive: entre com o código da equipe.';
-    if (i.erro === 'codigo') return fotos + ' esperando para o Drive: o código mudou, entre de novo.';
+    // 'codigo': o banco confirmou que o acesso não vale mais; 'recusado': o script recusou e o banco não respondeu (não diz que o
+    // código mudou); 'script': o script recusou, mas o banco confirmou que o acesso vale; 'banco': o banco não aceitou o registro
+    if (i.erro === 'codigo') return 'Seu acesso mudou: entre de novo para enviar as fotos (' + fotos + ' esperando).';
     if (i.busy) return 'Enviando ao Drive… (' + fotos + ' na fila)';
-    if (i.erro === 'rede' || navigator.onLine === false) return 'Sem sinal: ' + fotos + ' esperando para o Drive.';
+    if (i.erro === 'rede' || navigator.onLine === false) return 'Sem sinal: ' + fotos + ' esperando para o Drive.' + quando;
+    if (i.erro === 'tempo') return 'O envio demorou demais (sinal fraco ou o Drive ocupado): ' + fotos + ' esperando para o Drive.' + quando;
+    if (i.erro === 'recusado') return fotos + ' esperando para o Drive: o envio foi recusado e o acesso não pôde ser conferido agora.' + quando;
+    if (i.erro === 'script') return fotos + ' esperando para o Drive: o Drive recusou o envio, mas o seu acesso está certo.' + quando;
+    if (i.erro === 'banco') return fotos + ' esperando para o Drive: o banco não aceitou o registro agora.' + (quando || ' Tenta de novo sozinho.');
     if (i.erro) return fotos + ' esperando para o Drive (o Google recusou; tenta de novo sozinho).';
     return fotos + ' na fila para o Drive.';
   }
@@ -3608,6 +3614,8 @@
       getLogin: function () { return banco.login; },
       ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
       registrar: function (cred, f, mini) { return window.Banco.fotoRegistrar(cred, f, mini); },
+      // o envio foi recusado pelo acesso: a mesma conferência da sessão (null = não vale mais; falha = banco ou rede fora)
+      conferir: function (cred) { return window.Banco.sessao(cred).then(function (x) { return !!x; }); },
       onChange: onDriveChange
     });
   }
