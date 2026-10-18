@@ -2092,19 +2092,32 @@
     var l = ctLoteReal(c);
     return l && l !== ctNome(c) ? l : ctNumeroCT(c) || 'sem número';
   }
+  // os contratos ficam num botão só, com o nome do contrato aberto; a lista desce separada por tipo, com "+ Contrato" no fim
+  // (com muitos contratos a barra não quebra em várias linhas). Os itens têm data-tab: o onClick de sempre abre o contrato
+  var GRUPOS_MENU = [['pc', 'Pontos críticos'], ['oae', 'Pontes (Proarte)'], ['conserva', 'Conservação (P.A.T.O.)']];
+  var ICON_DESCE = '<svg class="ctm-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   function renderTabs() {
-    var nav = $('tabs');
+    var nav = $('tabs'), at = !visaoOn ? active() : null;
+    var lista = GRUPOS_MENU.map(function (g) {
+      var cs = state.contracts.filter(function (c) { return ctTipo(c) === g[0]; });
+      if (!cs.length) return '';
+      return '<div class="ctm-g">' + g[1] + '</div>' + cs.map(function (c) {
+        return '<button type="button" class="ctm-i" data-tab="' + esc(c.id) + '" aria-current="' + (!!at && c.id === at.id) + '">' +
+          esc(ctNome(c)) + '<small>' + esc(abaSub(c)) + '</small></button>';
+      }).join('');
+    }).join('');
     nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-current="' + visaoOn + '">' + ICON_VISAO + 'Visão geral</button>' : '') +
-      state.contracts.map(function (c) {
-      return '<button type="button" class="tab" data-tab="' + esc(c.id) + '" aria-current="' + (!visaoOn && c.id === state.activeId) + '">' +
-        esc(ctNome(c)) + '<small>' + esc(abaSub(c)) + '</small></button>';
-    }).join('') + '<button type="button" class="tab add" data-act="new-contract">+ Contrato</button>';
-    // celular: as abas rolam para o lado; a aba aberta fica à vista
-    var at = nav.querySelector('[aria-current="true"]');
-    if (at && nav.scrollWidth > nav.clientWidth) {
-      var rn = nav.getBoundingClientRect(), ra = at.getBoundingClientRect();
-      if (ra.left < rn.left || ra.right > rn.right) nav.scrollLeft += ra.left - rn.left - 16;
-    }
+      '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-haspopup="true" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
+      (at ? esc(ctNome(at)) + '<small>' + esc(abaSub(at)) + '</small>' : 'Contratos') + ICON_DESCE + '</button>' +
+      '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
+      '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>';
+  }
+  function ctMenu(abrir) {
+    var pop = $('ctmPop'), b = document.querySelector('[data-act="ct-menu"]');
+    if (!pop || !b) return;
+    pop.hidden = !abrir;
+    b.setAttribute('aria-expanded', String(!!abrir));
+    if (abrir) { var f = pop.querySelector('.ctm-i[aria-current="true"]') || pop.querySelector('.ctm-i'); if (f) f.focus(); }
   }
   // a barra do topo é fixa: as rolagens até um elemento (ponto, mapa, desenho) param logo abaixo dela
   function syncTopbar() {
@@ -3494,6 +3507,8 @@
     var b = e.target.closest('[data-act]');
     if (!b) return;
     var act = b.dataset.act, c = active(), p;
+    if (act === 'ct-menu') { ctMenu($('ctmPop') && $('ctmPop').hidden); return; }
+    if (b.closest && b.closest('#ctmPop')) ctMenu(false);
     if (act === 'visao') { setVisao(true); renderAll(); window.scrollTo(0, 0); return; }
     if (act === 'login') { openLogin(); return; }
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
@@ -5433,6 +5448,7 @@
     ed.addEventListener('change', onInput);
     document.addEventListener('click', function (e) {
       if (!e.target.closest('.menu')) closeMenu();
+      if (!e.target.closest('.ctmenu')) ctMenu(false);
     });
     $('tabs').addEventListener('click', onClick);
     ed.addEventListener('click', onClick);
@@ -5471,7 +5487,11 @@
       if (f) openBackup(f);
       e.target.value = '';
     });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      closeMenu();
+      if ($('ctmPop') && !$('ctmPop').hidden) { ctMenu(false); var b = document.querySelector('[data-act="ct-menu"]'); if (b) b.focus(); }
+    });
     if (!window.VisaoGeral || !$('visaoHost')) visaoOn = false;
     syncTopbar();
     var tbar = document.querySelector('.topbar');

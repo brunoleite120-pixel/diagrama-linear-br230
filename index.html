@@ -49,6 +49,21 @@ button{cursor:pointer}
 .tab[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
 .tab[aria-current="true"] small{color:#C9D0CC}
 .tab.add{border-style:dashed;color:var(--ink-2)}
+/* contratos: um botão com o nome do contrato aberto; a lista desce separada por tipo, com "+ Contrato" no fim */
+.ctmenu{position:relative}
+.ctm-btn{display:inline-flex;align-items:center;gap:2px}
+.ctm-seta{width:15px;height:15px;margin-left:6px;flex:none}
+.ctm-btn[aria-expanded="true"] .ctm-seta{transform:rotate(180deg)}
+.ctm-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:40;min-width:290px;max-width:calc(100vw - 32px);max-height:min(70vh,560px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column}
+.ctm-pop[hidden]{display:none}
+.ctm-g{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:9px 10px 3px}
+.ctm-i{border:0;background:none;text-align:left;padding:9px 10px;border-radius:5px;font-size:13.5px;display:flex;justify-content:space-between;align-items:baseline;gap:14px;white-space:nowrap}
+.ctm-i small{color:var(--ink-3);font-size:12px}
+.ctm-i:hover{background:var(--ground)}
+.ctm-i[aria-current="true"]{background:var(--ground);font-weight:650;box-shadow:inset 3px 0 0 var(--ink)}
+.ctm-i.add{color:var(--accent);font-weight:550}
+.ctm-add hr{border:0;border-top:1px solid var(--line-2);margin:4px 0}
+body.ro .ctm-add,body.fiscal .ctm-add{display:none}
 .actions{display:flex;align-items:center;gap:8px;margin-left:auto}
 .save-state{font-size:12px;color:var(--ink-3);min-width:110px;text-align:right}
 .save-state.warn{color:var(--danger)}
@@ -79,7 +94,11 @@ button{cursor:pointer}
 .layout{display:grid;grid-template-columns:minmax(380px,460px) minmax(0,1fr);gap:0;min-height:calc(100vh - var(--topbar-h,61px))}
 .layout.wide{grid-template-columns:minmax(0,1fr)}
 @media (max-width:700px){
-  .tabs{flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 24px),transparent)}
+  .tabs{flex:1 1 100%;flex-wrap:nowrap}   /* só 2 botões (Visão geral e o de contratos): sem rolagem, e a lista que desce não é cortada */
+  .tabs{position:relative}
+  .ctmenu{min-width:0;flex:0 1 auto;position:static}   /* a lista desce na largura da barra inteira, sem sair da tela */
+  .ctm-pop{left:0;right:0;min-width:0;max-width:none}
+  .ctm-btn{max-width:100%;overflow:hidden;text-overflow:ellipsis}
   .tabs::-webkit-scrollbar{display:none}
   .tab{flex:none}
   .tab small{display:none}   /* no celular a aba leva só o nome ("Pontos Críticos 314"); o Lote ou o nº fica no computador */
