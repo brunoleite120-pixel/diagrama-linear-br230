@@ -227,8 +227,9 @@
     '.mp-full .mp-bottom{bottom:calc(22px + env(safe-area-inset-bottom,0px));left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px))}',
     '.mp-full .leaflet-bottom{bottom:env(safe-area-inset-bottom,0px)}',
     '@media (max-width:560px){.mp-btn .t{display:none}.mp-btn{padding:5px 8px}.mp-title b{font-size:12.5px}.mp-legend{display:none}.mp-find label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.mp-find input{width:104px}}',
-    /* dedo: botões, busca e pontos de baixo com 44 px; o nome do contrato quebra em 2 linhas em vez de cortar */
-    '@media (pointer:coarse),(max-width:700px){.mp-bottom{bottom:40px}.mp-btn{min-height:44px;min-width:44px;justify-content:center}.mp-find input{min-height:44px;font-size:16px}.mp-chip{min-height:44px;padding:4px 14px 4px 10px}.mp-title b{white-space:normal}}',
+    /* dedo: botões, busca e pontos de baixo com 44 px; o nome do contrato quebra em 2 linhas em vez de cortar. Os pontos de baixo
+       descem para a borda e os créditos e a escala sobem para cima deles (sem um cobrir o outro) */
+    '@media (pointer:coarse),(max-width:700px){.mp-bottom{bottom:8px}.mp-full .mp-bottom{bottom:calc(8px + env(safe-area-inset-bottom,0px))}.mp .leaflet-bottom.leaflet-right{margin-bottom:62px}.mp-btn{min-height:44px;min-width:44px;justify-content:center}.mp-find input{min-height:44px;font-size:16px}.mp-chip{min-height:44px;padding:4px 14px 4px 10px}.mp-title b{white-space:normal}}',
     /* celular deitado: pouca altura. Fica a tela cheia e um botão que mostra as outras ferramentas; o nome do contrato já está na barra do topo */
     '.mp-mais{display:none}',
     '@media (max-height:500px) and (orientation:landscape) and (max-width:1100px){.mp-mais{display:inline-flex}.mp-tools:not(.abertas)>*:not([data-mp="full"]):not(.mp-mais){display:none}.mp-title,.mp-legend{display:none}}',

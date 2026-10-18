@@ -2111,7 +2111,8 @@
     // comuns (aria-expanded/aria-controls), sem a semântica de menu (aria-haspopup), que pediria setas e outro anúncio
     nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-label="Visão geral" aria-current="' + visaoOn + '">' + ICON_VISAO + '<span class="tv-txt">Visão geral</span></button>' : '') +
       '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
-      (at ? esc(ctNome(at)) + '<small>' + esc(abaSub(at)) + '</small>' : 'Contratos') + ICON_DESCE + '</button>' +
+      '<span class="ctm-nome"><span class="ctm-n">' + (at ? esc(ctNome(at)) + '</span><small>' + esc(abaSub(at)) + '</small>' : 'Contratos</span>') +
+      (window.AMBIENTE && window.AMBIENTE.previa ? '<span class="ctm-prev">Prévia</span>' : '') + '</span>' + ICON_DESCE + '</button>' +
       '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
       '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>';
     var cc = $('ctCurto');
@@ -2122,6 +2123,8 @@
       var bp = atl.querySelector('[data-ir="pontos"]');
       if (bp && at) bp.textContent = isConserva(at) ? 'Segmentos' : isOae(at) ? 'Pontes' : 'Pontos';
     }
+    var np = document.querySelector('#pgNav [data-pg="pontos"] .pg-t');
+    if (np && at) np.textContent = isConserva(at) ? 'Segmentos' : isOae(at) ? 'Pontes' : 'Pontos';
   }
   function ctCurto(c) { var n = ctNumeroCurto(c); return n ? CT_CURTO[ctTipo(c)] + ' ' + n : ctNome(c); }
 
@@ -2147,7 +2150,7 @@
   function listaAberta() { return ($('ctmPop') && !$('ctmPop').hidden) || !$('menuPop').hidden; }
   function aoRolar() {
     var y = window.scrollY || 0, d = y - rolY;
-    if (!mmEmPe || !mmEmPe.matches || visaoOn || y < 140) { topoMini(false); rolY = y; }
+    if (!mmEmPe || !mmEmPe.matches || visaoOn || y < 140 || document.body.hasAttribute('data-pg')) { topoMini(false); rolY = y; }
     else if (Math.abs(d) >= 8) {
       if (d > 0 && !listaAberta()) topoMini(true);
       else if (d < 0) topoMini(false);
@@ -2192,6 +2195,61 @@
   function syncTopbar() {
     var tb = document.querySelector('.topbar');
     if (tb) document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+  }
+
+  // ---------------- celular: páginas separadas (Pontos · Diagrama · Mapa · Galeria) e a barra das páginas, com a Foto no meio.
+  // Em pé a barra fica embaixo; deitado, no topo (index.html). O Diagrama é a primeira; a escolhida fica guardada neste aparelho.
+  // Cada troca entra no histórico: o Voltar do Android (e do navegador) volta para a página anterior. Fora do celular
+  // (tablet e computador), tudo como antes: editor e folha juntos, com os atalhos
+  var PG_KEY = 'diagrama-linear.pagina';
+  var mmCel = window.matchMedia ? window.matchMedia('(max-width:700px),(max-height:500px) and (orientation:landscape) and (max-width:1100px)') : null;
+  var pg = (function () { try { var v = localStorage.getItem(PG_KEY); return v === 'pontos' || v === 'mapa' || v === 'galeria' ? v : 'diagrama'; } catch (e) { return 'diagrama'; } })();
+  var pgRolY = {};   // onde cada página estava rolada, para voltar ao mesmo lugar
+  function temMapa() { return !!(window.MapaSNV && window.L && window.SNV_BR230); }
+  function pgAtivo() { return !!(mmCel && mmCel.matches) && !visaoOn && !$('layout').hidden; }
+  function aplicaPg() {
+    var nav = $('pgNav'), on = pgAtivo();
+    if (!nav) return;
+    nav.hidden = !on;
+    if (!on) { document.body.removeAttribute('data-pg'); fechaGaleriaPg(); return; }
+    if ((pg === 'galeria' && !galeriaOn()) || (pg === 'mapa' && !temMapa())) pg = 'diagrama';
+    document.body.setAttribute('data-pg', pg);
+    nav.querySelectorAll('[data-pg]').forEach(function (b) { if (b.dataset.pg === pg) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    topoMini(false);
+    if (ui.wide) toggleWide(false);
+    if ((pg === 'diagrama' || pg === 'mapa') && (pg === 'mapa') !== (view === 'mapa')) setView(pg);
+    if (pg === 'galeria') abreGaleriaPg(); else fechaGaleriaPg();
+  }
+  // semHist: veio do Voltar (popstate), não entra de novo no histórico
+  function irPg(novo, semHist) {
+    if (novo === 'foto') { openFoto(''); return; }
+    if (!pgAtivo()) return;
+    if (novo === pg && document.body.getAttribute('data-pg') === pg) {   // tocar na página aberta: volta ao começo dela
+      if (novo !== 'mapa' && novo !== 'galeria') window.scrollTo(0, 0);
+      return;
+    }
+    pgRolY[pg] = window.scrollY || 0;
+    pg = novo;
+    try { localStorage.setItem(PG_KEY, pg); } catch (e) { /* sem armazenamento */ }
+    aplicaPg();
+    if (pg === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); }   // o mapa estava escondido: mede de novo
+    window.scrollTo(0, pg === 'mapa' || pg === 'galeria' ? 0 : pgRolY[pg] || 0);
+    if (!semHist) try { history.pushState({ pg: pg }, ''); } catch (e) { /* segue sem histórico */ }
+  }
+  // a galeria como página: entre as duas barras, do contrato aberto (galeria.js, opção pagina). Sair dela pelo Esc ou pelo
+  // "Entrar" volta ao Diagrama
+  var glPgCid = null, glPend = null;   // contrato da galeria aberta como página (null = fechada); filtro pedido para a próxima abertura
+  function abreGaleriaPg() {
+    var c = active(), f = glPend || {};
+    glPend = null;
+    if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba)) return;
+    glPgCid = c.id;
+    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg('diagrama'); } });
+  }
+  function fechaGaleriaPg() {
+    if (glPgCid === null) return;
+    glPgCid = null;
+    if (galeria) galeria.close(true);
   }
 
   // ------------------------------------------------------------------ interface: editor
@@ -3423,6 +3481,8 @@
     // na visão não há contrato na tela: imprimir pegaria o contrato escondido
     var pr = document.querySelector('#menuPop [data-act="print"]');
     if (pr) pr.hidden = on;
+    if ($('menuPdf')) $('menuPdf').hidden = on;
+    aplicaPg();
     return on;
   }
   // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
@@ -3437,12 +3497,14 @@
     syncTopbar();   // o PDF voltou à barra, que pode ter mudado de altura: mede antes de rolar (o observer só avisa depois)
     if (noMapa) {
       setView('mapa');
+      if (pgAtivo()) irPg('mapa');
       if (p && mapa && mapa.foco) setTimeout(function () { mapa.foco(p.id); }, 200);
       var mh = $('mapHost');
-      if (mh) mh.scrollIntoView({ block: 'start' });
+      if (mh && !pgAtivo()) mh.scrollIntoView({ block: 'start' });
     } else if (p) {
+      if (pgAtivo()) irPg('pontos');
       if (ui.wide) toggleWide(false);
-      scrollToPoint(p.id);
+      scrollToPoint(p.id, pgAtivo());
     } else window.scrollTo(0, 0);
   }
 
@@ -3999,9 +4061,10 @@
     undoTimer = setTimeout(function () { bar.remove(); }, 12000);
   }
 
-  function scrollToPoint(id) {
+  // na troca de página do celular o ponto aparece direto (a página acabou de abrir: não há de onde deslizar)
+  function scrollToPoint(id, direto) {
     var el = document.querySelector('.pt[data-id="' + CSS.escape(id) + '"]');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) el.scrollIntoView(direto ? { block: 'start' } : { behavior: 'smooth', block: 'start' });
   }
 
   // clique no desenho abre o ponto no editor; "Abrir para ler" (celular) abre a tela cheia nessa página
@@ -4012,10 +4075,12 @@
     var g = e.target.closest('[data-pid]');
     if (!g) return;
     var id = g.getAttribute('data-pid');
+    var trocou = pgAtivo() && pg !== 'pontos';
+    if (pgAtivo()) irPg('pontos');
     if (ui.wide) toggleWide(false);
     ui.open = {}; ui.open[id] = true;
     renderEditor();
-    scrollToPoint(id);
+    scrollToPoint(id, trocou);
   }
 
   function toggleWide(force) {
@@ -4163,6 +4228,7 @@
     closeMenu();
     var act = b.dataset.act;
     if (act === 'login') { openLogin(); return; }
+    if (act === 'pdf') { exportPdf(); return; }
     if (act === 'backup') downloadBackup();
     else if (act === 'restore') {
       if (banco.on && !isResp()) { toast('Só o Administrador pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
@@ -5387,6 +5453,15 @@
   function galeriaOn() { return !!(banco.on && driveQ && window.Galeria); }
   function abrirGaleria(f) {
     if (!galeriaOn()) return;
+    var c = active();
+    if (pgAtivo() && c && (!f || !f.cid || f.cid === c.id)) {
+      glPend = f || {};
+      if (pg === 'galeria') { glPgCid = null; abreGaleriaPg(); } else irPg('galeria');
+      return;
+    }
+    abrirGaleriaJa(f);
+  }
+  function abrirGaleriaJa(f) {
     if (!galeria) {
       galeria = window.Galeria({
         drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; }, nomes: NOMES,
@@ -5448,6 +5523,14 @@
     var n = driveQ ? driveQ.info().n : 0, el = b.querySelector('.gl-pend');
     if (el) { el.textContent = n; el.hidden = !n; }
     b.title = n ? n + (n === 1 ? ' foto esperando envio' : ' fotos esperando envio') : 'Fotos deste aparelho e da equipe';
+    var nb = document.querySelector('#pgNav [data-pg="galeria"]');
+    if (nb) {
+      var era = nb.hidden, ep = nb.querySelector('.gl-pend');
+      nb.hidden = !galeriaOn();
+      nb.title = b.title;
+      if (ep) { ep.textContent = n; ep.hidden = !n; }
+      if (era !== nb.hidden) aplicaPg();
+    }
   }
   // logo da equipe no carimbo das fotos: vai direto ao banco (só o responsável)
   function saveTeamLogo(op) {
@@ -5564,6 +5647,20 @@
     });
     $('btnFoto').addEventListener('click', function () { openFoto(''); });
     if (!window.FotoCarimbo || !window.SNV_BR230) $('btnFoto').hidden = true;
+    $('btnPdfPg').addEventListener('click', exportPdf);
+    $('pgNav').addEventListener('click', function (e) { var x = e.target.closest('[data-pg]'); if (x) irPg(x.dataset.pg); });
+    $('pgNav').querySelector('[data-pg="foto"]').hidden = $('btnFoto').hidden;
+    $('pgNav').querySelector('[data-pg="mapa"]').hidden = !temMapa();
+    try { history.replaceState({ pg: pg }, ''); } catch (e) { /* segue sem histórico */ }
+    window.addEventListener('popstate', function (e) { var s = e.state && e.state.pg; if (s && s !== pg && pgAtivo()) irPg(s, true); });
+    if (mmCel && mmCel.addEventListener) mmCel.addEventListener('change', function () { aplicaPg(); if (view === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); } });
+    // dedo: com um campo de texto em uso (teclado aberto), a barra das páginas some para não ficar no meio da tela
+    var mmDedo = window.matchMedia ? window.matchMedia('(pointer:coarse)') : null;
+    function campoTexto(t) { return !!(t && t.matches && t.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=button]):not([type=submit]),textarea')); }
+    document.addEventListener('focusin', function (e) { if (mmDedo && mmDedo.matches && campoTexto(e.target)) document.body.classList.add('teclado'); });
+    document.addEventListener('focusout', function (e) {
+      if (campoTexto(e.target)) setTimeout(function () { if (!campoTexto(document.activeElement)) document.body.classList.remove('teclado'); }, 120);
+    });
     $('viewMapa').addEventListener('click', function () { setView('mapa'); });
     if (!window.MapaSNV || !window.L || !window.SNV_BR230) $('viewMapa').closest('.view-sw').hidden = true;
     if (window.TelaCheia) {

@@ -16,6 +16,9 @@
  *
  *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar, nomes });
  *   g.open({ cid, pid })   abre (opcional: já filtrada num ponto)      g.changed()   a fila do aparelho mudou
+ *   g.open({ cid, pagina: true, aoFechar })   celular: a galeria vira uma página entre a barra do topo e a das páginas (app.js),
+ *                          sem o "Voltar" e sem a fila de contratos (vale o contrato aberto no app); aoFechar avisa quando ela
+ *                          fecha sozinha (Esc, "Entrar"). g.close(true) fecha sem avisar
  * nomes: funções de nome do contrato do app.js (nome de tela, formal, pasta do Drive); sem elas, vale a cópia curta daqui.
  */
 (function () {
@@ -105,6 +108,12 @@
     '.gl-mv-acts{display:flex;gap:8px;justify-content:flex-end}',
     // lista das pastas do Drive (janela "Pastas do Drive pelo nº do contrato")
     '.gl-pastas{margin:6px 0 10px;padding-left:18px;max-height:40vh;overflow:auto;font-size:13px;line-height:1.45;overflow-wrap:anywhere}',
+    // como página do celular: entre as barras do app (--topbar-h e --pgnav-h vêm do app.js e do index.html), por baixo das listas
+    // que descem da barra do topo; a foto aberta e o painel de contrato e ponto voltam a cobrir a tela toda
+    '.gl.gl-pag{top:var(--topbar-h,61px);bottom:var(--pgnav-h,0px);z-index:10;padding-top:0;padding-bottom:0}',
+    '.gl-pag .gl-top,.gl-pag .gl-cts{display:none}',
+    '.gl-pag .gl-body{padding-bottom:84px}',
+    '.gl.gl-pag:has(.gl-ver),.gl.gl-pag:has(.gl-mv){top:0;bottom:0;z-index:3000;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}',
     '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-cts,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
     '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}'
   ].join('\n');
@@ -1412,14 +1421,13 @@
       else if (ver >= 0 && e.key === 'ArrowRight' && ver < lista.length - 1) abrir(ver + 1);
     }
 
+    var aoFechar = null;
     function open(f) {
       f = f || {};
       if (!document.getElementById('glCss')) { var st = document.createElement('style'); st.id = 'glCss'; st.textContent = CSS; document.head.appendChild(st); }
       if (!root) {
         root = document.createElement('div');
         root.className = 'gl';
-        root.setAttribute('role', 'dialog');
-        root.setAttribute('aria-modal', 'true');
         root.setAttribute('aria-label', 'Fotos');
         root.innerHTML = '<div class="gl-top"><button type="button" class="btn small" data-g="fechar">← Voltar</button><h2>Fotos</h2></div>' +
           '<div class="gl-tabs" role="tablist"></div><div class="gl-cts" role="group" aria-label="Contrato"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
@@ -1427,8 +1435,14 @@
         root.addEventListener('change', onChange);
         document.addEventListener('keydown', onKey);
         document.body.appendChild(root);
-        document.body.style.overflow = 'hidden';
       }
+      // página do celular: uma região da tela (o app continua em volta); janela: cobre tudo e trava a rolagem de trás
+      var pagina = !!f.pagina;
+      aoFechar = pagina && f.aoFechar ? f.aoFechar : null;
+      root.classList.toggle('gl-pag', pagina);
+      root.setAttribute('role', pagina ? 'region' : 'dialog');
+      if (pagina) root.removeAttribute('aria-modal'); else root.setAttribute('aria-modal', 'true');
+      document.body.style.overflow = pagina ? '' : 'hidden';
       filtro = { cid: f.cid || '', pid: f.pid || '', autor: '', mes: '' };
       cidAuto = !f.cid;
       fecharMover();
@@ -1437,7 +1451,7 @@
       sel = {}; selecionando = false; ver = -1; itens = [];
       carregar();
     }
-    function close() {
+    function close(semAviso) {
       if (!root) return;
       cancelar = true;
       if (obs) obs.disconnect();
@@ -1445,6 +1459,9 @@
       document.removeEventListener('keydown', onKey);
       root.remove(); root = null; ver = -1;
       document.body.style.overflow = '';
+      var cb = aoFechar;
+      aoFechar = null;
+      if (cb && semAviso !== true) cb();
     }
     var mudouT = null;
     function changed() {
