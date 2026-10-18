@@ -581,7 +581,8 @@
     return o.join('');
   }
 
-  function drawHeader(o, c, tot, an) {
+  // kpisProprios (opcional): os indicadores da folha, no lugar dos do tipo (só a folha de colunas da conservação passa)
+  function drawHeader(o, c, tot, an, kpisProprios) {
     var logo = window.UNIFILAR_LOGO, tx = 34;
     if (logo) {
       var lh = 56, lw = lh * logo.w / logo.h;
@@ -589,12 +590,12 @@
       tx = 32 + lw + 14;
     }
     // indicadores à direita
-    var cons = isConserva(c), kpis = isOae(c) ? oaeKpis(c, tot, an) : cons ? faixaKpis(c) : [
+    var cons = isConserva(c), kpis = kpisProprios || (isOae(c) ? oaeKpis(c, tot, an) : cons ? faixaKpis(c) : [
       { k: 'EXTENSÃO DO CONTRATO', v: c.extensaoContrato != null ? fmt(c.extensaoContrato, 2) + ' km' : '-', s: '' },
       { k: 'PONTOS CRÍTICOS', v: String(tot.n), s: fmt(tot.len, 2) + ' km somados' },
       { k: 'AVANÇO MÉDIO', v: fmtPct(tot.avg), s: 'média dos pontos' },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
-    ];
+    ]);
     var bw = 98, bg = 6, bx0 = G.x1 - (kpis.length * bw + (kpis.length - 1) * bg);
     if (cons) bx0 = drawKpisFaixa(o, kpis, bw, bg);
     else kpis.forEach(function (k, i) {
@@ -806,15 +807,27 @@
   }
 
   // ------------------------------------------------------------------ folhas da conservação
-  // As folhas do contrato de conservação, na ordem em que saem: cada uma é uma função (i, n) que desenha a página i de n (o
-  // "Página i de n" conta todas). Cada folha tem o seu código; para tirar uma, basta tirar a linha dela
+  // folhas da conservação, na ordem das páginas. 'colunas' = o modelo de sempre (uma coluna por segmento, página 1);
+  // 'escala' = a faixa em escala do passo 1.4. Tirar um nome daqui tira a folha (o usuário decide depois qual fica)
+  var FOLHAS_CONSERVA = ['colunas', 'escala'];
+  // As páginas do contrato de conservação numa passada só, cada folha desenhada uma vez: cada página é uma função (i, n) que
+  // desenha a página i de n (o "Página i de n" conta todas as folhas, na ordem de FOLHAS_CONSERVA). As colunas sem segmento só
+  // saem quando são a única folha da lista (F-5 a: até gerar os segmentos, fica só a folha em escala, como antes); a lista
+  // nunca sai vazia (sem nome conhecido em FOLHAS_CONSERVA, saem as colunas)
   function folhasConserva(c) {
-    var q = quadrosFaixa(c), folhas = [];
-    // PONTO DE ENCAIXE da folha das colunas por segmento (o modelo das outras folhas, adaptado; vem num passo seguinte): ela
-    // entra aqui, como página 1, ANTES da folha em escala, numa linha como esta: folhas.push(function (i, n) { ... });
-    folhas.push(function (i, n) { return renderFaixa(c, i, n, q); });   // folha em escala (passo 1.4)
-    // continuação da folha em escala, logo depois dela, só quando os prazos e valores não couberam nos quadros (E-3)
-    q.cont.forEach(function (pg) { folhas.push(function (i, n) { return quadrosCont(c, i, n, q, pg); }); });
+    var L = FOLHAS_CONSERVA.filter(function (k) { return k === 'colunas' || k === 'escala'; }), folhas = [];
+    if (!L.length) L = ['colunas'];
+    var soColunas = L.indexOf('escala') < 0;
+    L.forEach(function (k) {
+      if (k === 'colunas') {
+        if (c.pontos.length || soColunas) folhas = folhas.concat(paginasColunas(c, soColunas));   // página 1 (passo 2.3)
+        return;
+      }
+      var q = quadrosFaixa(c);
+      folhas.push(function (i, n) { return renderFaixa(c, i, n, q); });   // folha em escala (passo 1.4)
+      // continuação da folha em escala, logo depois dela, só quando os prazos e valores não couberam nos quadros (E-3)
+      q.cont.forEach(function (pg) { folhas.push(function (i, n) { return quadrosCont(c, i, n, q, pg); }); });
+    });
     return folhas.map(function (f, i) { return f(i, folhas.length); });
   }
 
@@ -1716,6 +1729,278 @@
       o.push(T(G.x1, y + 13, 'Continua na página ' + (pageIdx + 2), { size: 7.4, fill: gray, anchor: 'end' }));
     }
     o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página ' + (pageIdx + 1) + ' de ' + pageCount + '   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
+  }
+
+  // ------------------------------------------------------------------ folha de colunas da conservação (página 1, passo 2.3)
+  // O modelo de sempre, no desenho das pontes do 424: uma coluna por segmento, em ordem de km, com o km Atualizado e, em cima, o do
+  // contrato; o bloco do segmento (código do SNV, nome e descrição), a extensão, o estado (resumo dos 7 grupos) com a última
+  // vistoria, a trafegabilidade numa linha própria, os 7 grupos e as observações; no alto, as localidades. Bloco próprio: para
+  // tirar a folha, apagar este bloco e o nome 'colunas' de FOLHAS_CONSERVA. Todo texto digitado passa por txtPdf (a fonte do PDF).
+  // Sem hachura, recorte, transparência nem itálico, que o PDF não passa a limpo; o tracejado passa.
+
+  // as páginas de colunas, cada uma uma função (i, n) para folhasConserva: paginate reparte os segmentos pelo "segmentos por
+  // página" do contrato (13 no padrão: o 437 e o 438 cabem numa folha) e o total sai na última página de colunas. soColunas: a
+  // folha em escala não sai, e a página leva a faixa das Observações gerais do contrato quando o obsFolha tem texto (4.10, F-9 c)
+  function paginasColunas(c, soColunas) {
+    var pg = paginate(c), r = resumoSegs(c), faixa = !!(soColunas && txtLimpo(c.obsFolha)), nPag = pg.chunks.length;
+    return pg.chunks.map(function (ch, j) {
+      return function (i, n) { return renderColunas(c, pg, j, { pag: i + 1, total: n, ultima: j === nPag - 1 }, r, faixa); };
+    });
+  }
+  // uma página de colunas: a j-ésima de paginate (pg); num = { pag, total, ultima } ("Página pag de total"; ultima: a última
+  // página de colunas, com o total); r = resumoSegs(c); faixa: com as Observações gerais do contrato embaixo das colunas
+  function renderColunas(c, pg, j, num, r, faixa) {
+    var o = [], ch = pg.chunks[j], g = colunasGeom(faixa), gm = geom(pg.slots);
+    o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
+    o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
+    o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
+    drawHeader(o, c, null, null, colunasKpis(c, r));
+    drawLabelsSeg(o, c, g);
+    // sem segmento (só quando as colunas são a única folha): o aviso no lugar das colunas, nunca uma página em branco
+    if (!ch.length) o.push(T((G.x0 + G.x1) / 2, 300, 'Nenhum segmento neste contrato. Os segmentos saem dos limites dos trechos (dados do contrato).', { size: 8, fill: '#5C6661', anchor: 'middle' }));
+    else {
+      // eixo da rodovia passando pelos segmentos (antes dos blocos, que ficam por cima)
+      o.push(L(G.x0, g.yBand + g.bandH / 2, G.x0 + gm.slot * ch.length, g.yBand + g.bandH / 2, { stroke: '#9AA29E', sw: 0.8, dash: '7 4' }));
+      ch.forEach(function (p, i) { drawSegmento(o, c, p, gm.bx(i), gm.bw, g); });
+    }
+    bandeirasCol(o, c, pg, j, g);
+    if (faixa) drawObsContrato(o, c, g);
+    drawFooterSeg(o, c, r, num);
+    o.push('</svg>');
+    return o.join('');
+  }
+  // alturas da folha de colunas (pt; da maquete): as das pontes até o estado, a trafegabilidade em 275 e os 7 grupos a partir de
+  // 305; as observações até 748, ou até 700 com a faixa das Observações gerais do contrato (faixa)
+  function colunasGeom(faixa) {
+    var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yTraf: 275, servH: 19, yServ: 305, servStep: 23 };
+    g.yObs = g.yServ + CONS_SERVICES.length * g.servStep + 6;
+    g.obsEnd = G.yFoot - (faixa ? 60 : 12);
+    return g;
+  }
+  // contagens do contrato para a folha: as de oaeResumo (segmentos com defeito, em execução, sem vistoria, com prioridade e os
+  // grupos, para o total) e mais o número de segmentos (n), os interrompidos (interr; a trafegabilidade fica à parte do estado,
+  // plano 4.2) e a extensão somada dos segmentos (ext; null quando nenhum tem os dois km)
+  function resumoSegs(c) {
+    var r = oaeResumo(c), ext = null;
+    r.n = c.pontos.length;
+    r.interr = c.pontos.filter(function (p) { return trafSt(p.serv && p.serv.trafeg) === 'I'; }).length;
+    c.pontos.forEach(function (p) { var l = pointLen(p); if (l != null) ext = (ext || 0) + l; });
+    r.ext = ext;
+    return r;
+  }
+  // os 4 indicadores (F-6 a): SEGMENTOS (com os sem vistoria embaixo), COM DEFEITO (embaixo, o primeiro que valer: interrompidos,
+  // F-7 a; com prioridade; em execução), EXECUÇÃO / VIGÊNCIA (a caixa da folha em escala) e ÚLTIMA VISTORIA
+  function colunasKpis(c, r) {
+    var ev = execVig(c);
+    return [
+      { k: 'SEGMENTOS', v: String(r.n), s: !r.n ? '' : r.nv ? r.nv + ' sem vistoria' : 'todos vistoriados' },
+      { k: 'COM DEFEITO', v: r.dn + (r.dn === 1 ? ' segmento' : ' segmentos'),
+        s: r.interr ? r.interr + (r.interr === 1 ? ' interrompido' : ' interrompidos') : r.pri ? r.pri + ' com prioridade' : r.exec ? r.exec + ' em execução' : 'observado na vistoria' },
+      { k: 'EXECUÇÃO / VIGÊNCIA', v: ev.v, s: ev.s, prev: ev.prev, w: 160 },
+      { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
+    ];
+  }
+  // coluna da esquerda: o sentido (o da folha em escala) e o nome de cada linha das colunas
+  function drawLabelsSeg(o, c, g) {
+    var x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661';
+    sentidoFaixa(o, c, x, w, gray);
+    o.push(T(x, g.yKm + 3, fitText('km Atualizado (contr. em cima)', w, 6.2), { size: 6.2, fill: gray }));
+    o.push(T(x, g.yBand + 24, 'SEGMENTO', { size: 7, bold: true }));
+    o.push(T(x, g.yBand + 35, 'código e segmento SNV', { size: 6.4, fill: gray }));
+    o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
+    o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
+    o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
+    o.push(T(x, g.yTraf + 12.8, 'TRAFEGABILIDADE', { size: 7.2, bold: true }));
+    o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
+    servicesOf(c).forEach(function (s, i) {
+      var y = g.yServ + i * g.servStep + g.servH / 2 + 3.3, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
+      o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
+      if (s.un) o.push(T(x + w, y, s.un, { size: 6.4, fill: gray, anchor: 'end' }));
+    });
+    o.push(T(x, g.yObs + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
+    o.push(L(G.colLine, 106, G.colLine, g.obsEnd, { stroke: '#C9CECB', sw: 0.6 }));
+  }
+  // uma coluna (o segmento p), no molde de drawPonte
+  function drawSegmento(o, c, p, bx, bw, g) {
+    var cx = bx + bw / 2, sv = p.serv || {};
+    function km(v) { return typeof v === 'number' && isFinite(v) ? fmtKm(v) : '-'; }
+    o.push('<g data-pid="' + esc(p.id) + '">');
+    // km Atualizado e, em cima, pequeno, o do contrato pela régua (sem a régua, a linha não sai: a nota do rodapé explica)
+    var kmt = km(p.kmIni) + ' – ' + km(p.kmFim), kc = segContrTxt(c, p);
+    o.push(T(cx, g.yKm, kmt, { size: r2(fitSize(kmt, bw - 4, 7.6, true, 5)), bold: true, anchor: 'middle' }));
+    if (kc) {
+      var kcs = fitSize(kc, bw - 4, 5.8, false, 4.4);
+      o.push(T(cx, g.yKm - 9, fitText(kc, bw - 4, kcs), { size: r2(kcs), fill: '#6B4E16', anchor: 'middle' }));
+    }
+
+    // bloco do segmento (a cor da pista da folha em escala): o código do SNV em cima, o nome grande e a descrição embaixo
+    o.push(R(bx, g.yBand, bw, g.bandH, { fill: '#E8DCBF', stroke: '#7D8581', sw: 0.7, cls: 'blk' }));
+    var snv = txtPdf(snvDoSegmento(p));
+    if (snv) o.push(T(cx, g.yBand + 13, fitText(snv, bw - 6, 6.4, true), { size: 6.4, bold: true, fill: '#5C6661', anchor: 'middle' }));
+    var nome = txtPdf(txtLimpo(p.nome)) || '?', ns = fitSize(nome, bw - 6, 19, true, 9), ds = txtPdf(txtLimpo(p.descricao));
+    o.push(T(cx, g.yBand + 38, fitText(nome, bw - 6, ns, true), { size: r2(ns), bold: true, anchor: 'middle' }));
+    if (ds) o.push(T(cx, g.yBand + 50, fitText(ds, bw - 6, 6), { size: 6, fill: '#3B4540', anchor: 'middle' }));
+
+    // extensão
+    var len = pointLen(p), et = len != null ? fmt(len, 2) + ' km' : '-';
+    o.push(R(bx, g.yExt, bw, g.extH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(cx, g.yExt + 12.4, et, { size: r2(fitSize(et, bw - 4, 8.4, true, 5)), bold: true, anchor: 'middle' }));
+
+    // estado do segmento (resumo dos 7 grupos; a trafegabilidade não entra) e a última vistoria: quando e quem marcou (com o banco)
+    var nn = oaeNec(p, c), vis = vistoriaPonte(c, p);
+    var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
+    // coluna estreita (12 ou 13 por folha): "· 1 em execução" vira "· 1 em exec." quando não cabe a 4,6 pt (como a maquete), e a
+    // letra pode descer até 4,2 pt (a das células), para o resumo não sair cortado
+    var ntx = oaeNecTxt(nn, c);
+    if (textW(ntx, 4.6, true) > bw - 4) ntx = ntx.replace(/ em execução$/, ' em exec.');
+    var nsz = fitSize(ntx, bw - 4, 7.6, true, 4.2);
+    o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
+    if (vis) {
+      var vt = txtPdf('vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : ''));
+      o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
+    }
+
+    // trafegabilidade (linha própria: trafegável, com restrição, interrompido) e os 7 grupos, com as células das pontes
+    var kt = trafSt(sv.trafeg);
+    celEstado(o, TRAFEG, sv.trafeg, kt, TRAF_STATUS[kt], bx, g.yTraf, bw, g.servH);
+    servicesOf(c).forEach(function (s, i) {
+      var x = sv[s.key], k = oaeSt(x);
+      celEstado(o, s, x, k, oaeStOf(s, k), bx, g.yServ + i * g.servStep, bw, g.servH);
+    });
+
+    // observações: as do engenheiro e as notas "onde/o quê" (F-4 b), com a letra que diminui com a coluna, como no 424
+    var oh = g.obsEnd - g.yObs;
+    o.push(R(bx, g.yObs, bw, oh, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(bx + 5, g.yObs + 12, 'Observações gerais', { size: r2(fitSize('Observações gerais', bw - 10, 7, true, 4.2)), bold: true }));
+    var k = clamp((bw - 10) / 89.6, 0.62, 1), fs = r2(7 * k), lh = 8.9 * k, maxLines = Math.floor((oh - 26) / lh);
+    var lines = linhasNotas(notasCol(c, p), function (t) { return wrap(t, bw - 10, fs); });
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      lines[maxLines - 1] = { t: fitText(lines[maxLines - 1].t + '...', bw - 10, fs) };
+    }
+    lines.forEach(function (ln, i) { if (ln.t) o.push(T(bx + 5, g.yObs + 25 + i * lh, ln.t, { size: fs, fill: '#2B3430' })); });
+    o.push('</g>');
+  }
+  // os parágrafos da caixa de observações da coluna, sem quebrar em linhas (F-4 b): as observações do engenheiro (obs) e, depois
+  // (notas), a nota "onde/o quê" da trafegabilidade com restrição ou interrompida e a de cada grupo com defeito ou em execução, na
+  // ordem dos grupos ("Pista: atoleiro no km ~790")
+  function notasCol(c, p) {
+    var sv = p.serv || {}, notas = [], t = sv.trafeg, nt = txtLimpo(t && t.n), kt = trafSt(t);
+    if (nt && (kt === 'R' || kt === 'I')) notas.push(TRAFEG.short + ': ' + nt);
+    servicesOf(c).forEach(function (s) {
+      var x = sv[s.key], n = txtLimpo(x && x.n);
+      if (n && comQtd(oaeSt(x))) notas.push((s.tot || s.short) + ': ' + n);
+    });
+    return { obs: p.obs || '', notas: notas };
+  }
+  // as linhas da caixa, como drawPonte: as do obs, uma linha em branco quando há obs e notas, e as de cada nota. Montadas aqui, e
+  // não num texto só com "\n\n", porque wrap descarta parágrafo vazio (a linha em branco sumiria). quebra: texto -> [linhas]
+  function linhasNotas(nc, quebra) {
+    var ls = quebra(txtPdf(nc.obs)).map(function (t) { return { t: t }; });
+    if (ls.length && nc.notas.length) ls.push({ t: '' });
+    nc.notas.forEach(function (n) { quebra(txtPdf(n)).forEach(function (t) { ls.push({ t: t }); }); });
+    return ls;
+  }
+  // localidades (marcos) da página j: só as de dentro do contrato, sem as pontas (o limite 437/438 já é a ponta da 1ª ou da última
+  // coluna), na posição de placeMarcos (a grade das colunas: um marco no limite entre dois segmentos fica na borda direita do bloco
+  // da esquerda, como no 424), com o km duplo de bandeiraFaixa ("KM 776,80 · CONTR. 783,90"). Caixa verde em y 100, presa entre x0
+  // e x1; a seta desce até a ponta em 138, acima do "contr." da coluna. Duas caixas que se encostariam: a de trás anda para a
+  // direita (presa em x1); a seta continua no km. As setas antes das caixas, que ficam por cima
+  function bandeirasCol(o, c, pg, j, g) {
+    if (typeof c.kmIni !== 'number' || typeof c.kmFim !== 'number') return;
+    var ms = (c.marcos || []).filter(function (m) { return m && typeof m.km === 'number' && isFinite(m.km) && m.km > c.kmIni + 0.001 && m.km < c.kmFim - 0.001; });
+    var fl = placeMarcos({ marcos: ms }, pg).filter(function (m) { return m.pageIdx === j; }).map(function (m) {
+      return bandeiraFaixa(c, txtLimpo(m.marco.nome).toUpperCase() || 'MARCO', m.marco.km, function () { return m.x; }, '#5E8C2E');
+    }).sort(function (a, b) { return a.x - b.x; });
+    var ya = g.yKm - 12, fim = -Infinity, h = 25;   // ya - 1 = 138: a ponta da seta
+    fl.forEach(function (f) { f.bx = Math.min(Math.max(clamp(f.x - f.w / 2, G.x0, G.x1 - f.w), fim + 4), G.x1 - f.w); fim = f.bx + f.w; });
+    fl.forEach(function (f) {
+      o.push(L(f.x, G.yMarco + h, f.x, ya - 8, { stroke: '#2B5797', sw: 1.8 }));
+      o.push(P([[f.x - 4.5, ya - 9], [f.x + 4.5, ya - 9], [f.x, ya - 1]], '#2B5797'));
+    });
+    fl.forEach(function (f) {
+      o.push(R(f.bx, G.yMarco, f.w, h, { fill: f.cor, rx: 2 }));
+      o.push(T(f.bx + f.w / 2, G.yMarco + 10, f.nome, { size: r2(f.ns), bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+      o.push(T(f.bx + f.w / 2, G.yMarco + 20, f.sub, { size: 6.4, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+    });
+  }
+  // Observações gerais do contrato (obsFolha), numa faixa embaixo das colunas, só quando a folha em escala não sai (4.10, F-9 c):
+  // até 3 linhas de 6,4 pt; o que não couber faz a letra diminuir até 5,6 pt e, depois, a última linha termina em "..."
+  function drawObsContrato(o, c, g) {
+    var x = G.labelX, w = G.x1 - G.labelX, y = g.obsEnd + 6, t = txtPdf(c.obsFolha), s = 6.4, ls = wrap(t, w - 12, s);
+    while (ls.length > 3 && s > 5.6) { s = Math.max(5.6, r2(s - 0.1)); ls = wrap(t, w - 12, s); }
+    if (ls.length > 3) { ls = ls.slice(0, 3); ls[2] = fitText(ls[2] + '...', w - 12, s); }
+    o.push(R(x, y, w, 46, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(x + 6, y + 10, 'OBSERVAÇÕES GERAIS DO CONTRATO', { size: 6.4, bold: true }));
+    ls.forEach(function (ln, i) { o.push(T(x + 6, y + 20 + i * 8.4, ln, { size: r2(s), fill: '#2B3430' })); });
+  }
+  // notas do rodapé da folha de colunas, cada uma só quando vale: o serviço contínuo (sempre); o km Atualizado e o do contrato,
+  // quando a régua dá o "contr." de algum segmento, com o "*" da ponta do contrato pelo cadastro (só os números: E-5 A); ou, com
+  // segmentos e sem o "contr." em nenhum, o motivo (sem o km do contrato no cadastro, ou sem a tabela de conversão no aparelho)
+  function notasColunas(c) {
+    var out = ['Serviço contínuo: estado de cada grupo na última vistoria da supervisão. ~ = estimativa da supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.'];
+    if (c.pontos.some(function (p) { return segContrTxt(c, p); })) {
+      var sc = txtPdf(txtLimpo(c.snvContrato)), ast = [[c.kmIni, 'no início'], [c.kmFim, 'no fim']].map(function (k) {
+        var usa = c.pontos.some(function (p) { return Math.abs(p.kmIni - k[0]) < 0.001 || Math.abs(p.kmFim - k[0]) < 0.001; }), r = usa ? kmDoContrato(c, k[0]) : null;
+        return r && r.ast ? '* ' + fmtKm(r.km) + ' = km do contrato ' + k[1] + ', pelo cadastro; pela geometria, ' + fmtKm(r.geom) + '.' : '';
+      }).filter(Boolean);
+      out.push('KM Atualizado: SNV ' + window.SNV_BR230.versao + ' (DNIT); contr. = km do contrato' + (sc ? ', ' + sc + ',' : '') + ' pela tabela de conversão do SNV.' + (ast.length ? ' ' + ast.join(' ') : ''));
+    } else if (c.pontos.length) {
+      out.push(reguaStatus(c) === 'semCadastro' ? 'Sem o km do contrato no cadastro: a folha mostra só o km Atualizado.' : 'Sem a tabela de conversão do SNV neste aparelho: o km do contrato não aparece.');
+    }
+    return out;
+  }
+  // rodapé, no molde de drawFooterOae (que não muda): a legenda dos estados e das marcas e, na 2ª linha, a da trafegabilidade; as
+  // notas (notasColunas) quebradas em 598 pt, a 6,1 pt, no máximo 3 linhas (a letra diminui até 5,4 pt e, depois, a última linha
+  // termina em "..."); o TOTAL GERAL na última página de colunas (nas outras, "Continua na página X") e a página (num)
+  function drawFooterSeg(o, c, r, num) {
+    var y = G.yFoot, x = G.labelX, gray = '#5C6661', lx = x + 40, fs = 6.8;
+    o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
+    o.push(T(x, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
+    function item(desenho, txt, yy) {
+      desenho(lx, yy);
+      o.push(T(lx + 19, yy + 8, txt, { size: fs }));
+      lx += 19 + textW(txt, fs) + 10;
+    }
+    function caixa(st, nv) {
+      return function (xx, yy) { o.push(st.fill === 'none' ? R(xx, yy, 15, 10, { fill: nv ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }) : R(xx, yy, 15, 10, { fill: st.fill, rx: 1.5 })); };
+    }
+    [['OK', 'Sem defeito'], ['DN', 'Defeito observado'], ['EX', 'Em execução'], ['NA', 'Não se aplica (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
+      item(caixa(OAE_STATUS[it[0]], it[0] === 'NV'), it[1], y + 2);
+    });
+    item(function (xx, yy) { marcaPri(o, xx + 7.5, yy + 5); }, 'Prioridade', y + 2);
+    item(function (xx, yy) { marcaCi(o, xx + 7.5, yy + 5); }, 'Conclusão informada', y + 2);
+    lx = x + 40;
+    o.push(T(lx, y + 24, 'Trafegabilidade:', { size: fs, bold: true }));
+    lx += textW('Trafegabilidade:', fs, true) + 8;
+    TRAF_ORDER.forEach(function (k) { item(caixa(TRAF_STATUS[k]), TRAF_STATUS[k].name, y + 16); });
+    var ns = notasColunas(c), s = 6.1, ls;
+    function linhas(z) { return ns.reduce(function (a, t) { return a.concat(wrap(t, 598, z)); }, []); }
+    ls = linhas(s);
+    while (ls.length > 3 && s > 5.4) { s = Math.max(5.4, r2(s - 0.1)); ls = linhas(s); }
+    if (ls.length > 3) { ls = ls.slice(0, 3); ls[2] = fitText(ls[2] + '...', 598, s); }
+    ls.forEach(function (ln, i) { o.push(T(x, y + 38 + i * 8.2, ln, { size: r2(s), fill: gray })); });
+
+    var bx = 640;
+    if (num.ultima) {
+      var falta = oaeFaltaTxt(r, c), parts = [['Segmentos', String(r.n)], ['Extensão', r.ext != null ? fmt(r.ext, 2) + ' km' : '-'], ['Segmentos com defeito', String(r.dn)]];
+      if (r.interr) parts.push(['Interrompidos', String(r.interr)]);
+      o.push(R(bx, y, G.x1 - bx, falta ? 46 : 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
+      o.push(T(bx + 10, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
+      if (falta) o.push(T(bx + 10, y + 39, fitText(palavrasDe(c).total + ': ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
+      var px = bx + 10;
+      parts.forEach(function (pt) {
+        var lbl = pt[0] + ': ';
+        o.push(T(px, y + 26, lbl, { size: 8, fill: '#3B4540' }));
+        px += textW(lbl, 8);
+        o.push(T(px, y + 26, pt[1], { size: 8.2, bold: true }));
+        px += textW(pt[1], 8.2, true) + 22;
+      });
+    } else {
+      o.push(T(G.x1, y + 13, 'Continua na página ' + (num.pag + 1), { size: 7.4, fill: gray, anchor: 'end' }));
+    }
+    o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página ' + num.pag + ' de ' + num.total + '   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
   }
 
   // ------------------------------------------------------------------ estado
@@ -2978,8 +3263,13 @@
     return ' · ' + r.dn + (r.dn === 1 ? ' ponte com dano' : ' pontes com dano') + (r.exec ? ' · ' + r.exec + ' em execução' : '');
   }
   // o contrato na linha sob o desenho: os pontos ou as pontes e a situação; na conservação, a faixa ("122,00 km · 3 segmentos do SNV")
-  function metaItens(c, tot) {
-    if (isConserva(c)) return faixaTexto(c) || 'sem o km inicial e o final';
+  // folha: o texto sob as folhas (na conservação com segmentos e com a folha de colunas, "12 segmentos de vistoria · 8 com defeito ·
+  // " antes da faixa); sem folha, o do mapa, que fica como antes (os segmentos não aparecem no mapa)
+  function metaItens(c, tot, folha) {
+    if (isConserva(c)) {
+      var n = c.pontos.length, dn = folha && n && FOLHAS_CONSERVA.indexOf('colunas') >= 0 ? oaeResumo(c).dn : -1;
+      return (dn < 0 ? '' : n + (n === 1 ? ' segmento de vistoria · ' : ' segmentos de vistoria · ') + (dn ? dn + ' com defeito · ' : '')) + (faixaTexto(c) || 'sem o km inicial e o final');
+    }
     return tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
   }
   function renderPreview() {
@@ -3000,7 +3290,7 @@
     $('pages').innerHTML = sheets.map(function (svg, i) {
       return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + '</div>';
     }).join('');
-    $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + metaItens(c, tot);
+    $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + metaItens(c, tot, true);
     if (viewer && viewer.isOpen()) viewer.update(sheets);
   }
 
