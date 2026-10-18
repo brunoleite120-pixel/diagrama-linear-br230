@@ -346,19 +346,24 @@
   // indicador EXECUÇÃO / VIGÊNCIA da folha da conservação, pelos prazos que são fim (fim 'exec', 'vig' ou 'ambos', com data;
   // plano, seção 3): o número é o último fim de execução confirmado, com " · vig. <data>" quando a vigência confirmada vai além,
   // e embaixo o fim previsto (a confirmar) quando é mais tarde. Sem fim confirmado, o número é o previsto, com "a confirmar"
-  // embaixo e prev (caixa tracejada, número em cinza). { v, s, prev }
+  // embaixo e prev (caixa tracejada, número em cinza). O previsto que é só de vigência sai com "vig." ("prev. vig. 28/11/2026",
+  // ou "30/08/2027 · vig. 28/11/2027" quando a vigência prevista vai além da execução prevista), para não ser lido como fim da
+  // execução. Sem sit conta como a confirmar. { v, s, prev }
   function execVig(c) {
-    var E = '', V = '', P = '';
+    var E = '', V = '', Pe = '', Pv = '';
     (Array.isArray(c.prazos) ? c.prazos : []).forEach(function (x) {
-      if (!x || !x.fim || !/^\d{4}-\d{2}-\d{2}$/.test(x.data || '')) return;
-      if (x.sit !== 'conf') { if (x.data > P) P = x.data; return; }
-      if ((x.fim === 'exec' || x.fim === 'ambos') && x.data > E) E = x.data;
-      if ((x.fim === 'vig' || x.fim === 'ambos') && x.data > V) V = x.data;
+      if (!x || ['exec', 'vig', 'ambos'].indexOf(x.fim) < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(x.data || '')) return;
+      var ex = x.fim !== 'vig', vg = x.fim !== 'exec';
+      if (x.sit === 'conf') { if (ex && x.data > E) E = x.data; if (vg && x.data > V) V = x.data; }
+      else { if (ex && x.data > Pe) Pe = x.data; if (vg && x.data > Pv) Pv = x.data; }
     });
-    var s = P > E && P > V ? 'prev. ' + fmtDate(P) + ' · a confirmar' : '';
+    // o previsto só entra quando é mais tarde que o confirmado; a vigência prevista, só quando vai além da execução prevista
+    var M = E > V ? E : V, pe = Pe > M ? Pe : '', pv = Pv > M && Pv > pe ? Pv : '';
+    var p = pe ? fmtDate(pe) + (pv ? ' · vig. ' + fmtDate(pv) : '') : pv ? 'vig. ' + fmtDate(pv) : '';
+    var s = p ? 'prev. ' + p + ' · a confirmar' : '';
     if (E) return { v: fmtDate(E) + (V > E ? ' · vig. ' + fmtDate(V) : ''), s: s, prev: false };
     if (V) return { v: 'vig. ' + fmtDate(V), s: s, prev: false };
-    if (P) return { v: fmtDate(P), s: 'a confirmar', prev: true };
+    if (p) return { v: p, s: 'a confirmar', prev: true };
     return { v: '-', s: '', prev: false };
   }
 
@@ -491,7 +496,7 @@
   // ------------------------------------------------------------------ desenho da folha
   // semAnalise: folha só com a vistoria, mesmo para quem vê a análise das medições (PDF e impressão perguntam)
   function renderSheets(c, semAnalise) {
-    if (isConserva(c)) return [renderFaixa(c)];   // conservação: por enquanto, a faixa do contrato numa página só
+    if (isConserva(c)) return folhasConserva(c);   // conservação: as folhas dela (folhasConserva), com o código à parte
     var pg = paginate(c), tot = totals(c), marcos = placeMarcos(c, pg);
     return pg.chunks.map(function (chunk, i) {
       return renderSheet(c, chunk, i, pg.chunks.length, pg.slots, tot, marcos.filter(function (m) { return m.pageIdx === i; }), semAnalise);
@@ -560,7 +565,7 @@
     o.push(T(tx, 41, fitText(String(c.orgao || '').toUpperCase(), maxW, 6.6), { size: 6.6, fill: '#5C6661' }));
     if (cons) {
       // conservação: o título inteiro, com a letra diminuindo (até 13 pt) em vez de ser cortado
-      var tit = 'DIAGRAMA LINEAR · CONSERVAÇÃO (P.A.T.O.) · CT ' + (pdfTxt(c.numero) || '[Nº DO CONTRATO]'), ts = fitSize(tit, maxW, 17, true, 13);
+      var tit = 'DIAGRAMA LINEAR · CONSERVAÇÃO (P.A.T.O.) · CT ' + (txtPdf(c.numero) || '[Nº DO CONTRATO]'), ts = fitSize(tit, maxW, 17, true, 13);
       o.push(T(tx, 62, fitText(tit, maxW, ts, true), { size: r2(ts), bold: true }));
     } else o.push(T(tx, 62, fitText((isOae(c) ? 'DIAGRAMA DE OAEs · CT ' : 'DIAGRAMA LINEAR · OBRA ') + (c.numero || '[Nº DA OBRA]'), maxW, 17, true), { size: 17, bold: true }));
     var sub = [
@@ -757,15 +762,195 @@
     o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página ' + (pageIdx + 1) + ' de ' + pageCount + '   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
   }
 
-  // ------------------------------------------------------------------ folha da conservação (por enquanto, só a faixa)
-  // Uma página: o cabeçalho da conservação (drawHeader) e a faixa do contrato em escala, do km inicial ao final (km Atualizado),
-  // com as localidades (marcos) e o km duplo, os segmentos do SNV (snv-br230.js), a pista e a régua do km; embaixo, as
-  // Observações gerais (obsFolha). Sem os outros contratos e sem as pontes. As duas faixas por folha, a régua do km do contrato
-  // e os quadros de prazos e de notas vêm depois (plano, passo 1.4). Sem hachura, recorte, transparência nem itálico, que o
-  // PDF não passa a limpo; o tracejado passa
-  var GF = { yFlag: 108, flagH: 25, flagStep: 29, lanes: 3, ySeg: 206, segH: 20, yBand: 232, bandH: 30, yRule: 270, yObs: 304 };
-  // texto digitado que vai à folha: o PDF sai sem fonte embutida (buildPdf), e a Helvetica dele não tem "≈", "→" nem "−"
-  function pdfTxt(s) { return String(s == null ? '' : s).replace(/≈\s*/g, 'aprox. ').replace(/\s*→\s*/g, ' para ').replace(/−/g, '-'); }
+  // ------------------------------------------------------------------ folhas da conservação
+  // As folhas do contrato de conservação, na ordem em que saem: cada uma é uma função (i, n) que desenha a página i de n (o
+  // "Página i de n" conta todas). Cada folha tem o seu código; para tirar uma, basta tirar a linha dela
+  function folhasConserva(c) {
+    var q = quadrosFaixa(c), folhas = [];
+    // PONTO DE ENCAIXE da folha das colunas por segmento (o modelo das outras folhas, adaptado; vem num passo seguinte): ela
+    // entra aqui, como página 1, ANTES da folha em escala, numa linha como esta: folhas.push(function (i, n) { ... });
+    folhas.push(function (i, n) { return renderFaixa(c, i, n, q); });   // folha em escala (passo 1.4)
+    // continuação da folha em escala, logo depois dela, só quando os prazos e valores não couberam nos quadros (E-3)
+    q.cont.forEach(function (pg) { folhas.push(function (i, n) { return quadrosCont(c, i, n, q, pg); }); });
+    return folhas.map(function (f, i) { return f(i, folhas.length); });
+  }
+
+  // Folha em escala: o cabeçalho da conservação (drawHeader) e o contrato em escala, em duas faixas empilhadas (cada uma com a
+  // metade do km Atualizado), com as localidades (marcos) e as pontas do contrato com o km duplo, os segmentos do SNV
+  // (snv-br230.js), a pista e as réguas do km Atualizado e do km do contrato (snv-conversao.js); embaixo, os quadros de prazos e
+  // valores (CONFIRMADOS e PREVISTOS, A CONFIRMAR) e as Observações gerais (obsFolha) e, no rodapé, a legenda, as notas e o TOTAL
+  // GERAL. Sem os outros contratos e sem as pontes (decisões 0.8 e 0.10). Sem hachura, recorte, transparência nem itálico, que o
+  // PDF não passa a limpo; o tracejado passa.
+  // Geometria (pt; opção B da E-1): faixas de 222 pt a partir de y 104, com 10 pt entre elas; dentro da faixa, a partir do topo y0,
+  // as distâncias da maquete: bandeiras em y0 + 4 (a 2ª e a 3ª linha de 29 em 29 pt, no vão que era das pontes), SNV em y0 + 102,
+  // pista em y0 + 128, régua do km Atualizado em y0 + 166 e régua do km do contrato em y0 + 194. Embaixo das faixas, a linha dos
+  // quadros, de 172 pt; rodapé em y 744 (16 pt acima do G.yFoot das outras folhas, para caber as notas)
+  var GF = { yTop: 104, H: 222, gap: 10, flagY: 4, flagH: 25, flagStep: 29, ySeg: 102, segH: 20, yBand: 128, bandH: 30, yRule: 166, yRuleC: 194, yF: 744 };
+  // texto que vai à folha da conservação: o PDF sai sem fonte embutida (buildPdf), e a Helvetica dele só tem o Latin-1 e os extras
+  // do Windows-1252 (– — ‘ ’ “ ” • … € ™ e outros). "≈" vira "aprox. ", "→" vira " para ", os traços U+2212, U+2010 e U+2011
+  // viram "-", "≤" e "≥" viram "<=" e ">=", "′" e "″" viram ' e "; tabulação e espaço não separável viram espaço e os espaços
+  // repetidos, um só (sem tocar nas quebras de linha do formulário, que o wrap respeita); qualquer outro caractere (emoji
+  // inclusive, um "?" por caractere) vira "?". A tela mostra o mesmo que o PDF: quem digitou vê o "?" e corrige. Vem DEPOIS do
+  // toUpperCase (o "µ" em maiúscula é o "Μ" grego, que a fonte não tem). Só nas funções da conservação: não entra em T(), que é
+  // das outras folhas
+  function txtPdf(s) {
+    s = String(s == null ? '' : s);
+    if (s.normalize) s = s.normalize('NFC');   // "c" + cedilha separada (texto colado de outro sistema) vira o "ç" da fonte
+    return s.replace(/\r\n?/g, '\n').replace(/\u2248[ \t\u00A0]*/g, 'aprox. ').replace(/[ \t\u00A0]*\u2192[ \t\u00A0]*/g, ' para ')
+      .replace(/[\u2212\u2010\u2011]/g, '-').replace(/\u2264/g, '<=').replace(/\u2265/g, '>=').replace(/\u2032/g, "'").replace(/\u2033/g, '"')
+      .replace(/[ \t\u00A0]+/g, ' ')
+      .replace(/[^\n\u0020-\u007E\u00A0-\u00FF\u0152\u0153\u0160\u0161\u0178\u017D\u017E\u0192\u02C6\u02DC\u2013\u2014\u2018-\u201A\u201C-\u201E\u2020-\u2022\u2026\u2030\u2039\u203A\u20AC\u2122]/gu, '?');
+  }
+  // as duas faixas da folha em escala, [[kA, kB], [kB, kC]], cada uma com a metade do contrato (km Atualizado); null sem os km ou
+  // com o contrato de até 0,01 km (no lugar das faixas, o aviso)
+  function faixasDe(c) {
+    if (!kmFaixaOk(c) || c.kmFim <= c.kmIni + 0.01) return null;
+    var m = Math.round((c.kmIni + c.kmFim) / 2 * 1e6) / 1e6;
+    return [[c.kmIni, m], [m, c.kmFim]];
+  }
+  // escala da faixa na folha A3 impressa sem ajuste de tamanho (E-6), pelos pt por km (1 pt = 25,4/72 mm): "1 km = 5,9 mm (A3)"
+  function escalaFaixa(ppk) {
+    var mm = ppk * 25.4 / 72;
+    return '1 km = ' + fmt(mm, mm < 1 ? 2 : 1) + ' mm (A3)';
+  }
+  // passos das réguas pela escala (pt por km): o 1º par [maior, menor], em km, com o maior a 60 pt ou mais e o menor a 4 pt ou
+  // mais (437 e 438: 5 e 1, como a maquete). Sem par que sirva (contrato de milhares de km, como um km final digitado errado), o
+  // último vezes 10 até servir: a régua nunca fica sem passo, e o menor a 4 pt ou mais limita os traços (cerca de 255 por régua)
+  function passoRegua(ppk) {
+    var P = [[0.1, 0.02], [0.2, 0.05], [0.5, 0.1], [1, 0.2], [2, 0.5], [5, 1], [10, 2], [20, 5], [50, 10], [100, 20]];
+    var p = P.find(function (q) { return q[0] * ppk >= 60 && q[1] * ppk >= 4; });
+    if (p) return p;
+    var a = 1000, b = 200;
+    while (a < 1e12 && !(a * ppk >= 60 && b * ppk >= 4)) { a *= 10; b *= 10; }
+    return [a, b];
+  }
+  // traços de uma régua de kA a kB, sem as pontas, com o par de passoRegua: contados por índice inteiro (i · menor), para não
+  // errar o múltiplo somando decimais; o traço maior é o de i múltiplo de maior/menor. [{ k, maior }]
+  function tracosRegua(kA, kB, par) {
+    var me = par[1], n = Math.round(par[0] / me), out = [];
+    for (var i = Math.floor(kA / me + 1e-9) + 1; i * me < kB - 1e-9; i++) out.push({ k: Math.round(i * me * 1e6) / 1e6, maior: i % n === 0 });
+    return out;
+  }
+  // por que a régua do km do contrato sai ou não na folha, nesta ordem: 'semFaixa' (sem os km para desenhar as faixas),
+  // 'semCadastro' (sem os dois km do contrato no cadastro), 'semRegua' (snv-conversao.js não carregou: o index.html antigo
+  // guardado no aparelho), 'semEixo' (snv-br230.js não carregou, ou veio sem a versão), 'outraVersao' (o eixo mudou de versão e a
+  // régua não foi gerada de novo), 'foraDominio' (ponta do contrato fora do domínio da régua) ou 'ok'
+  function reguaStatus(c) {
+    var conv = window.SNV_CONVERSAO, eixo = window.SNV_BR230;
+    if (!faixasDe(c)) return 'semFaixa';
+    if (typeof c.kmIniContrato !== 'number' || typeof c.kmFimContrato !== 'number' || !isFinite(c.kmIniContrato) || !isFinite(c.kmFimContrato)) return 'semCadastro';
+    if (!conv || typeof conv.paraContrato !== 'function') return 'semRegua';
+    if (!eixo || !eixo.versao) return 'semEixo';
+    if (conv.para !== eixo.versao) return 'outraVersao';
+    if (!kmDoContrato(c, c.kmIni) || !kmDoContrato(c, c.kmFim)) return 'foraDominio';
+    return 'ok';
+  }
+  // texto no lugar da régua do km do contrato, na faixa em que ela não sai
+  var REGUA_SEM = {
+    semCadastro: 'km do contrato não informado no cadastro',
+    semRegua: 'km do contrato indisponível neste aparelho (ver nota)',
+    semEixo: 'km do contrato indisponível neste aparelho (ver nota)',
+    outraVersao: 'km do contrato indisponível neste aparelho (ver nota)',
+    foraDominio: 'km do contrato fora do domínio da régua (ver nota)'
+  };
+  // linha (r: 0 a 2) e posição da caixa (bx) de cada bandeira de uma faixa, para duas ou três bandeiras perto uma da outra não se
+  // cobrirem. itens: [{ x, w }] (x da haste e largura da caixa, já medidas). Para cada bandeira, a 1ª linha e a 1ª posição
+  // (centrada na haste, presa à direita dela ou presa à esquerda, sempre entre x0 e x1) em que a caixa não encosta (folga de
+  // 4 pt) noutra da mesma linha nem cobre (2 pt) a haste de uma bandeira de linha de cima, e em que a haste não passa (2 pt) por
+  // caixa de linha de baixo; sem lugar, linha 2, centrada, e a bandeira vai para a reserva (fica sobreposta). Tenta na ordem
+  // crescente e na decrescente de x (junto de cada borda, uma das duas falha) e fica com a que deixar menos bandeiras na reserva
+  // (empate: a crescente). { pos: [{ bx, r }] na ordem de itens, reserva: [índices de itens] }
+  function linhasBandeiras(itens, x0, x1) {
+    function tentar(desc) {
+      var postos = [], pos = [], reserva = [];
+      itens.map(function (b, i) { return i; }).sort(function (a, b) { return desc ? itens[b].x - itens[a].x : itens[a].x - itens[b].x; }).forEach(function (i) {
+        var x = itens[i].x, w = itens[i].w, achou = null;
+        var cands = [x - w / 2, x - 3, x - w + 3].map(function (bx) { return clamp(bx, x0, x1 - w); });
+        for (var r = 0; r < 3 && !achou; r++) {
+          for (var k = 0; k < cands.length && !achou; k++) {
+            var bx = cands[k];
+            if (postos.every(function (p) {
+              if (p.r === r) return bx + w + 4 <= p.bx || p.bx + p.w + 4 <= bx;   // caixa da mesma linha
+              if (p.r < r) return !(bx - 2 <= p.x && p.x <= bx + w + 2);           // haste de uma bandeira de cima
+              return !(p.bx - 2 <= x && x <= p.bx + p.w + 2);                      // caixa de baixo no caminho da haste
+            })) achou = { bx: bx, r: r };
+          }
+        }
+        if (!achou) { achou = { bx: clamp(x - w / 2, x0, x1 - w), r: 2 }; reserva.push(i); }
+        postos.push({ x: x, w: w, bx: achou.bx, r: achou.r });
+        pos[i] = achou;
+      });
+      return { pos: pos, reserva: reserva };
+    }
+    var a = tentar(false), d = tentar(true);
+    return d.reserva.length < a.reserva.length ? d : a;
+  }
+  // nomes das bandeiras das pontas do contrato (pretas), em maiúsculas: a inicial "INÍCIO CT 437 · <nome>" e a final "<nome>". O
+  // nome é o do marco que está na ponta (a até 0,001 km, como em kmDoContrato; ele vira a bandeira da ponta) ou, sem ele, a
+  // origem ou o destino sem o "(km ...)" do fim; sem os dois, "INÍCIO CT 437" e "FIM CT 437" (sem o número, "DO CONTRATO")
+  function pontasFaixa(c) {
+    var n = ctNumeroCurto(c);
+    function nome(k, txt) {
+      var m = (c.marcos || []).find(function (q) { return q && typeof q.km === 'number' && Math.abs(q.km - k) < 0.001; });
+      return (m && txtLimpo(m.nome)) || txtLimpo(String(txt || '').replace(/\s*\(km [^)]*\)\s*$/i, ''));
+    }
+    var ni = nome(c.kmIni, c.origem), nf = nome(c.kmFim, c.destino);
+    return {
+      ini: ((n ? 'INÍCIO CT ' + n : 'INÍCIO DO CONTRATO') + (ni ? ' · ' + ni : '')).toUpperCase(),
+      fim: (nf || (n ? 'FIM CT ' + n : 'FIM DO CONTRATO')).toUpperCase()
+    };
+  }
+  // nome do SNV (em maiúsculas no snv-br230.js) em caixa de título, como a maquete: "Fim da Pavimentação", "Entr. PA-370",
+  // "Entr. BR-163/230 (Rurópolis)"
+  function snvTitulo(s) {
+    return String(s || '').toLowerCase().replace(/(^|[\s(\/])([^\s(\/])/g, function (a, b, l) { return b + l.toUpperCase(); })
+      .replace(/(^|\s)([A-Z][a-z])-(?=\d)/g, function (a, b, p) { return b + p.toUpperCase() + '-'; })
+      .replace(/\bEntr(?=\s)/g, 'Entr.').replace(/\s(Da|De|Do|Das|Dos|E)(?=\s)/g, function (a) { return a.toLowerCase(); });
+  }
+  // notas do rodapé da folha em escala, nesta ordem e cada uma só quando vale: conversão do km (quando a régua do km do contrato
+  // sai em alguma faixa), asterisco das pontas (quando o cadastro discorda da régua), régua indisponível ou fora do domínio
+  // (reguaStatus) e a da pista (sempre). Sem as faixas, só a da pista. Os números e as versões vêm da régua e do eixo
+  function notasConserva(c) {
+    var st = reguaStatus(c), conv = window.SNV_CONVERSAO, eixo = window.SNV_BR230, out = [];
+    var pista = 'Pista: revestimento primário (predominante). Os trechos pavimentados, quando houver, não são desenhados: os perímetros e as extensões estão nas Observações gerais.';
+    if (st === 'semFaixa') return [pista];
+    if (faixasDe(c).some(function (f) { return kmDoContrato(c, f[0]) && kmDoContrato(c, f[1]); })) {
+      var sc = txtPdf(txtLimpo(c.snvContrato)), dp = [conv.de ? 'de ' + conv.de : '', conv.para ? 'para ' + conv.para : ''].filter(Boolean).join(' ');
+      out.push('KM Atualizado: SNV ' + eixo.versao + ' (DNIT). KM do contrato' + (sc ? ': ' + sc + ',' : '') + ' pela tabela de conversão do SNV' + (dp ? ' (' + dp + ')' : '') + ': ' +
+        trechoConversao(c, conv) + '. A conversão vale de SNV para SNV, não para hodômetro.');
+    }
+    var ast = [[c.kmIni, 'no início'], [c.kmFim, 'no fim']].map(function (p) {
+      var r = kmDoContrato(c, p[0]);
+      return r && r.ast ? '* ' + fmtKm(r.km) + ' = km do contrato ' + p[1] + ', pelo cadastro, adotado no km Atualizado ' + fmtKm(p[0]) + '; pela geometria do SNV, o km Atualizado ' + fmtKm(p[0]) + ' é o ' + fmtKm(r.geom) + ' do contrato.' : '';
+    }).filter(Boolean);
+    if (ast.length) out.push(ast.join(' '));
+    if (st === 'semCadastro') out.push('Sem o km do contrato no cadastro: a folha mostra só o km Atualizado.');
+    else if (st === 'semRegua') out.push('A régua do km do contrato não foi carregada neste aparelho (versão antiga do app guardada sem internet): a folha saiu sem o km do contrato. Abra o app com internet e gere a folha de novo.');
+    else if (st === 'semEixo') out.push('O eixo do SNV (km Atualizado) não foi carregado inteiro neste aparelho: a folha saiu sem o km do contrato. Abra o app com internet e gere a folha de novo.');
+    else if (st === 'outraVersao') out.push('A régua do km do contrato é ' + (conv.para ? 'do SNV ' + conv.para : 'de outra versão do SNV') + ', e o km Atualizado é do SNV ' + eixo.versao + ': a folha saiu sem o km do contrato.');
+    else if (st === 'foraDominio') {
+      var q = conv.quebras || [], dom = conv.dominio && conv.dominio.site || (q.length ? [q[0][1], q[q.length - 1][1]] : null);
+      out.push(dom ? 'O km do contrato só é calculado do km Atualizado ' + fmtKm(dom[0]) + ' ao ' + fmtKm(dom[1]) + ' (domínio da régua).' : 'O km do contrato só é calculado dentro do domínio da régua.');
+    }
+    out.push(pista);
+    return out;
+  }
+  // a relação entre o km Atualizado e o km do contrato, pelos pontos de quebra da régua: a diferença (contrato − Atualizado) na
+  // ponta inicial, em cada quebra dentro do contrato e na ponta final; igual (a 0,005 km) em todos: "em todo o contrato, km
+  // Atualizado = km do contrato - 7,10" (438); igual só de uma quebra em diante: "do km 783,90 do contrato em diante, ...; antes
+  // disso a conversão segue a geometria" (437); nunca igual: "a conversão segue a geometria do SNV". Só os pontos dentro do
+  // domínio da régua contam
+  function trechoConversao(c, conv) {
+    var qs = (conv.quebras || []).map(function (q) { return q[1]; }).filter(function (s) { return s > c.kmIni + 0.001 && s < c.kmFim - 0.001; });
+    var todos = [c.kmIni].concat(qs, [c.kmFim]), p = todos.map(function (s) { var k = conv.paraContrato(s); return k == null ? null : { k: k, d: k - s }; }).filter(Boolean);
+    if (p.length < 2) return 'a conversão segue a geometria do SNV';
+    var d = p[p.length - 1].d, j = p.length - 1;
+    while (j > 0 && Math.abs(p[j - 1].d - d) <= 0.005) j--;
+    var rel = 'km Atualizado = km do contrato' + (Math.abs(d) < 0.005 ? '' : (d > 0 ? ' - ' : ' + ') + fmtKm(Math.abs(d)));
+    if (!j) return (p.length === todos.length ? 'em todo o contrato, ' : 'dentro do domínio da régua, ') + rel;
+    if (j < p.length - 1) return 'do km ' + fmtKm(p[j].k) + ' do contrato em diante, ' + rel + '; antes disso a conversão segue a geometria';
+    return 'a conversão segue a geometria do SNV';
+  }
   function faixaKpis(c) {
     var ki = c.kmIniContrato, kf = c.kmFimContrato, e = extensaoFaixa(c), ev = execVig(c);
     function num(k) { return typeof k === 'number' && isFinite(k); }
@@ -773,7 +958,7 @@
     function contr(k, s) { var r = kmDoContrato(c, s); return num(k) ? fmtKm(k) + (r && r.ast ? '*' : '') : '?'; }
     return [
       { k: 'EXTENSÃO DO CONTRATO', v: e != null ? fmt(e, 2) + ' km' : '-', s: kmFaixaOk(c) ? 'km Atualizado ' + fmtKm(c.kmIni) + '–' + fmtKm(c.kmFim) : '' },
-      { k: 'KM DO CONTRATO', v: num(ki) || num(kf) ? contr(ki, c.kmIni) + ' a ' + contr(kf, c.kmFim) : '-', s: pdfTxt(txtLimpo(c.snvContrato)) },
+      { k: 'KM DO CONTRATO', v: num(ki) || num(kf) ? contr(ki, c.kmIni) + ' a ' + contr(kf, c.kmFim) : '-', s: txtPdf(txtLimpo(c.snvContrato)) },
       { k: 'EXECUÇÃO / VIGÊNCIA', v: ev.v, s: ev.s, prev: ev.prev, w: 160 },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
     ];
@@ -812,7 +997,7 @@
     var y = 114;
     o.push(T(x, 104, 'SENTIDO', { size: 6, bold: true, fill: gray }));
     [['De: ', c.origem], ['Para: ', c.destino]].forEach(function (d) {
-      var ind = textW(d[0], 7.4, true), ls = wrap(d[0] + (pdfTxt(txtLimpo(d[1])) || '-'), w, 7.4, true);
+      var ind = textW(d[0], 7.4, true), ls = wrap(d[0] + (txtPdf(txtLimpo(d[1])) || '-'), w, 7.4, true);
       if (ls.length > 1) ls = [ls[0], fitText(ls.slice(1).join(' '), w - ind, 7.4, true)];
       ls.forEach(function (ln, i) { o.push(T(x + (i ? ind : 0), y, ln, { size: 7.4, bold: true })); y += 8.4; });
     });
@@ -820,92 +1005,310 @@
     o.push(L(x, ya, x + 70, ya, { stroke: '#B42318', sw: 1.4 }));
     o.push(P([[x + 76, ya], [x + 68, ya - 4], [x + 68, ya + 4]], '#B42318'));
   }
-  function renderFaixa(c) {
-    var o = [], x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661', versao = window.SNV_BR230 && window.SNV_BR230.versao;
+  // q: os quadros de prazos e valores, já medidos e repartidos (quadrosFaixa)
+  function renderFaixa(c, pageIdx, pageCount, q) {
+    var o = [], x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661', fx = faixasDe(c);
+    var yq = GF.yTop + 2 * GF.H + GF.gap + 4, hq = GF.yF - 10 - yq;   // linha dos quadros, embaixo das faixas: y 562, 172 pt
+    q = q || quadrosFaixa(c);
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
     drawHeader(o, c);
     sentidoFaixa(o, c, x, w, gray);
 
-    if (!kmFaixaOk(c)) {
-      o.push(T((G.x0 + G.x1) / 2, GF.yBand + 4, 'Informe o KM inicial e o final (km Atualizado) nos dados do contrato para desenhar a faixa.', { size: 12, fill: gray, anchor: 'middle' }));
+    if (!fx) {
+      o.push(T((G.x0 + G.x1) / 2, GF.yTop + GF.yBand + 4, 'Informe o KM inicial e o final (km Atualizado) nos dados do contrato para desenhar a faixa.', { size: 12, fill: gray, anchor: 'middle' }));
     } else {
-      var k0 = c.kmIni, k1 = c.kmFim, ppk = (G.x1 - G.x0) / (k1 - k0), segs = snvDaFaixa(c), lim = [];
-      var X = function (k) { return G.x0 + (k - k0) * ppk; };
-      o.push(T(x, 166, 'FAIXA DO CONTRATO', { size: 6, bold: true, fill: gray }));
-      o.push(T(x, 176, 'km ' + fmtKm(k0) + ' a ' + fmtKm(k1), { size: 6.6, fill: gray }));
-      o.push(T(x, 188, fmt(ppk, 1) + ' pt por km', { size: 6, fill: gray }));
-      if (segs.length) o.push(T(x, GF.ySeg + 13, 'SEGMENTO SNV', { size: 7, bold: true }));
-      o.push(T(x, GF.yBand + 12, 'PISTA', { size: 7, bold: true }));
-      o.push(T(x, GF.yRule + 8, 'KM ATUALIZADO', { size: 7, bold: true }));
-      if (versao) o.push(T(x, GF.yRule + 16, 'SNV ' + versao, { size: 5.8, fill: gray }));
-
-      // segmentos do SNV que entram na faixa: código e de onde a onde
-      segs.forEach(function (g) {
-        var xa = X(Math.max(g.kmIni, k0)), xb = X(Math.min(g.kmFim, k1));
-        o.push(R(xa, GF.ySeg, xb - xa, GF.segH, { fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }));
-        if (xb - xa > 24) o.push(T((xa + xb) / 2, GF.ySeg + 13, fitText(pdfTxt(g.codigo + ' · ' + g.de + ' – ' + g.ate), xb - xa - 8, 6.6, true), { size: 6.6, bold: true, anchor: 'middle' }));
-        [g.kmIni, g.kmFim].forEach(function (k) {
-          if (k > k0 + 0.001 && k < k1 - 0.001 && !lim.some(function (q) { return Math.abs(q - k) < 0.001; })) lim.push(k);
-        });
-      });
-      // pista, com o eixo tracejado, e os limites dos segmentos tracejados até a régua
-      o.push(R(G.x0, GF.yBand, G.x1 - G.x0, GF.bandH, { fill: '#E8DCBF' }));
-      o.push(L(G.x0, GF.yBand + GF.bandH / 2, G.x1, GF.yBand + GF.bandH / 2, { stroke: '#30353A', sw: 0.8, dash: '7 4' }));
-      o.push(R(G.x0, GF.yBand, G.x1 - G.x0, GF.bandH, { stroke: '#7D8581', sw: 0.8 }));
-      lim.forEach(function (k) { o.push(L(X(k), GF.ySeg, X(k), GF.yRule, { stroke: '#7D8581', sw: 0.7, dash: '3 2' })); });
-
-      // régua do km Atualizado: número a cada pn km e traço a cada pt km, pelo espaço que a escala dá (no 437, 5 e 1)
-      var PASSOS = [1, 2, 5, 10, 20, 50, 100, 200, 500], yR = GF.yRule, la = fmtKm(k0), lb = fmtKm(k1);
-      var pn = PASSOS.find(function (p) { return p * ppk >= 28; }) || 1000, pt = PASSOS.find(function (p) { return p * ppk >= 3.5 && pn % p === 0; }) || pn;
-      o.push(L(G.x0, yR, G.x1, yR, { stroke: '#17201C', sw: 0.7 }));
-      for (var i = Math.floor(k0 / pt + 1e-9) + 1; i * pt < k1 - 1e-9; i++) {
-        var km = i * pt, xx = X(km), big = km % pn === 0;
-        o.push(L(xx, yR, xx, yR + (big ? 6 : 3), { stroke: '#17201C', sw: 0.6 }));
-        if (big && xx - G.x0 > textW(la, 6.4, true) + 10 && G.x1 - xx > textW(lb, 6.4, true) + 10) o.push(T(xx, yR + 14, fmt(km, 0), { size: 6.2, anchor: 'middle' }));
-      }
-      o.push(T(G.x0 + 1, yR + 14, la, { size: 6.4, bold: true }));
-      o.push(T(G.x1 - 1, yR + 14, lb, { size: 6.4, bold: true, anchor: 'end' }));
-
-      // localidades (marcos) da faixa, com o km duplo (fora da faixa, omitidas). A bandeira que encostaria numa anterior desce
-      // uma linha (até 3); as setas vão antes das bandeiras, que ficam por cima
-      var lanes = [], fl = (c.marcos || []).filter(function (m) {
-        return m && typeof m.km === 'number' && m.km >= k0 - 0.001 && m.km <= k1 + 0.001;
-      }).map(function (m) {
-        var r = kmDoContrato(c, m.km), nome = fitText(pdfTxt(txtLimpo(m.nome) || 'Marco').toUpperCase(), 260, 7.2, true);
-        var sub = 'KM ' + fmtKm(m.km) + (r ? ' · CONTR. ' + fmtKm(r.km) + (r.ast ? '*' : '') : ''), xm = clamp(X(m.km), G.x0 + 1, G.x1 - 1);
-        var bw = Math.max(textW(nome, 7.2, true), textW(sub, 6.4, true)) + 14;
-        return { x: xm, nome: nome, sub: sub, w: bw, bx: clamp(xm - bw / 2, G.x0, G.x1 - bw) };
-      }).sort(function (a, b) { return a.bx - b.bx; });
-      fl.forEach(function (f) {
-        var li = lanes.findIndex(function (fim) { return fim + 4 <= f.bx; });
-        if (li < 0) li = lanes.length < GF.lanes ? lanes.length : lanes.indexOf(Math.min.apply(null, lanes));
-        lanes[li] = f.bx + f.w;
-        f.y = GF.yFlag + li * GF.flagStep;
-      });
-      fl.forEach(function (f) {
-        o.push(L(f.x, f.y + GF.flagH, f.x, GF.yBand - 8, { stroke: '#2B5797', sw: 1.8 }));
-        o.push(P([[f.x - 4.5, GF.yBand - 9], [f.x + 4.5, GF.yBand - 9], [f.x, GF.yBand - 1]], '#2B5797'));
-      });
-      fl.forEach(function (f) {
-        o.push(R(f.bx, f.y, f.w, GF.flagH, { fill: '#5E8C2E', rx: 2 }));
-        o.push(T(f.bx + f.w / 2, f.y + 10, f.nome, { size: 7.2, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
-        o.push(T(f.bx + f.w / 2, f.y + 20, f.sub, { size: 6.4, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
-      });
+      var st = reguaStatus(c), segs = snvDaFaixa(c), pontas = pontasFaixa(c);
+      fx.forEach(function (f, i) { faixaEscala(o, c, f[0], f[1], i, fx.length, st, segs, pontas); });
     }
 
-    // Observações gerais (obsFolha): o quadro cresce com o texto, até o rodapé
-    var yO = GF.yObs, wO = G.x1 - G.x0, lh = 9, maxL = Math.floor((G.yFoot - 14 - yO - 31) / lh);
-    var ls = wrap(pdfTxt(c.obsFolha), wO - 12, 7), hO;
-    if (ls.length > maxL) { ls = ls.slice(0, maxL); ls[maxL - 1] = fitText(ls[maxL - 1] + '...', wO - 12, 7); }
-    hO = Math.max(48, 31 + ls.length * lh);
-    o.push(T(x, yO + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
-    o.push(R(G.x0, yO, wO, hO, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
-    o.push(T(G.x0 + 6, yO + 12, 'Observações gerais', { size: 7, bold: true }));
-    ls.forEach(function (ln, i) { o.push(T(G.x0 + 6, yO + 25 + i * lh, ln, { size: 7, fill: '#2B3430' })); });
-    o.push(L(G.colLine, 106, G.colLine, yO + hO, { stroke: '#C9CECB', sw: 0.6 }));
-    o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página 1 de 1   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
+    // quadros de prazos e valores: o que coube inteiro; o resto vai para a folha seguinte (quadrosCont)
+    o.push(T(x, yq + 12, 'PRAZOS E VALORES', { size: 7, bold: true }));
+    o.push(T(x, yq + 22, 'do contrato', { size: 6.2, fill: gray }));
+    quadroItens(o, true, QX.conf, yq, hq, q.conf, 0, q.n1.conf);
+    quadroItens(o, false, QX.prev, yq, hq, q.prev, 0, q.n1.prev);
+    obsFaixa(o, c, yq, hq);
+    o.push(L(G.colLine, 106, G.colLine, GF.yF - 10, { stroke: '#C9CECB', sw: 0.6 }));
+    rodapeFaixa(o, c, GF.yF);
+    o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página ' + (pageIdx + 1) + ' de ' + pageCount + '   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
+    o.push('</svg>');
+    return o.join('');
+  }
+  // uma faixa da folha em escala, de kA a kB (km Atualizado), a i-ésima de n, num <g data-faixa> com os km da faixa (para conferir
+  // no console): os rótulos da coluna da esquerda e, nesta ordem, os segmentos do SNV, a pista, as réguas e as bandeiras (as
+  // hastes e as setas antes das caixas, que ficam por cima). st: reguaStatus(c); segs: snvDaFaixa(c); pontas: pontasFaixa(c)
+  function faixaEscala(o, c, kA, kB, i, n, st, segs, pontas) {
+    var y0 = GF.yTop + i * (GF.H + GF.gap), yB = y0 + GF.yBand, x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661';
+    var ppk = (G.x1 - G.x0) / (kB - kA), X = function (k) { return G.x0 + (k - kA) * ppk; }, ultima = i === n - 1;
+    var versao = window.SNV_BR230 && window.SNV_BR230.versao, pedacos = [], lim = [];
+    segs.forEach(function (g) {
+      var a = Math.max(g.kmIni, kA), b = Math.min(g.kmFim, kB);
+      if (b - a > 0.001) pedacos.push({ g: g, a: a, b: b });
+      [g.kmIni, g.kmFim].forEach(function (k) {
+        if (k > kA + 0.001 && k < kB - 0.001 && !lim.some(function (q) { return Math.abs(q - k) < 0.001; })) lim.push(k);
+      });
+    });
+    o.push('<g data-faixa="' + (i + 1) + '" data-ka="' + kA + '" data-kb="' + kB + '">');
+    if (i) o.push(L(G.frame, y0 - 6, PAGE_W - G.frame, y0 - 6, { stroke: '#C9CECB', sw: 0.6 }));
+
+    // coluna da esquerda: a faixa, a escala e o nome de cada linha do desenho
+    o.push(T(x, y0 + 62, 'FAIXA ' + (i + 1) + ' DE ' + n, { size: 6, bold: true, fill: gray }));
+    o.push(T(x, y0 + 72, 'km ' + fmtKm(kA) + ' a ' + fmtKm(kB), { size: 6.6, fill: gray }));
+    o.push(T(x, y0 + 84, escalaFaixa(ppk), { size: 6, fill: gray }));
+    if (pedacos.length) o.push(T(x, y0 + 115, 'SEGMENTO SNV', { size: 7, bold: true }));
+    o.push(T(x, y0 + 140, 'PISTA', { size: 7, bold: true }));
+    o.push(T(x, y0 + 150, 'revestimento primário', { size: 6.2, fill: gray }));
+    o.push(T(x, y0 + 158, '(predominante)', { size: 6.2, fill: gray }));
+    o.push(T(x, y0 + 178, 'KM ATUALIZADO', { size: 7, bold: true }));
+    if (versao) o.push(T(x, y0 + 186, 'SNV ' + versao, { size: 5.8, fill: gray }));
+    o.push(T(x, y0 + 206, 'KM DO CONTRATO', { size: 7, bold: true, fill: '#6B4E16' }));
+    var sc = txtPdf(txtLimpo(c.snvContrato)), ss = fitSize(sc, w, 5.8, false, 4.8);
+    if (sc) o.push(T(x, y0 + 214, fitText(sc, w, ss), { size: r2(ss), fill: gray }));
+
+    // segmentos do SNV que entram na faixa: código, de onde a onde e a extensão nominal (no pedaço de menos de 30 pt, sem texto)
+    pedacos.forEach(function (p) {
+      var xa = X(p.a), xb = X(p.b), g = p.g;
+      o.push(R(xa, y0 + GF.ySeg, xb - xa, GF.segH, { fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }));
+      if (xb - xa < 30) return;
+      var t = txtPdf([txtLimpo(g.codigo), snvTitulo(g.de) + ' – ' + snvTitulo(g.ate), typeof g.extensao === 'number' ? fmt(g.extensao, 1) + ' km nominais' : ''].filter(Boolean).join(' · '));
+      o.push(T((xa + xb) / 2, y0 + GF.ySeg + 13, fitText(t, xb - xa - 8, 6.6, true), { size: 6.6, bold: true, anchor: 'middle' }));
+    });
+    // pista, com o eixo tracejado; os limites dos segmentos tracejados até a régua do contrato; o traço vermelho nas pontas do
+    // contrato (o início na 1ª faixa, o fim na última)
+    o.push(R(G.x0, yB, G.x1 - G.x0, GF.bandH, { fill: '#E8DCBF' }));
+    o.push(L(G.x0, yB + GF.bandH / 2, G.x1, yB + GF.bandH / 2, { stroke: '#30353A', sw: 0.8, dash: '7 4' }));
+    o.push(R(G.x0, yB, G.x1 - G.x0, GF.bandH, { stroke: '#7D8581', sw: 0.8 }));
+    lim.forEach(function (k) { o.push(L(X(k), y0 + GF.ySeg, X(k), y0 + 218, { stroke: '#7D8581', sw: 0.7, dash: '3 2' })); });
+    [i ? null : c.kmIni, ultima ? c.kmFim : null].forEach(function (k) {
+      if (k == null) return;
+      var xx = clamp(X(k), G.x0 + 1, G.x1 - 1);
+      o.push(L(xx, yB - 4, xx, yB + GF.bandH + 4, { stroke: '#B42318', sw: 2.4 }));
+    });
+
+    // régua do km Atualizado e régua do km do contrato, com os traços pela régua de conversão (nunca por um deslocamento fixo:
+    // no antigo 1530 os do contrato ficam mais espaçados) e, nas pontas, o km do contrato como nas bandeiras ("750,90*"). Sem o
+    // km do contrato nas duas pontas da faixa, a régua não sai e o motivo fica no lugar dela, na mesma altura (nada sobe)
+    var par = passoRegua(ppk), conv = window.SNV_CONVERSAO, ra = kmDoContrato(c, kA), rb = kmDoContrato(c, kB);
+    reguaFaixa(o, 'site', y0 + GF.yRule, '#17201C', tracosRegua(kA, kB, par).map(function (t) { return { x: X(t.k), k: t.k, maior: t.maior }; }), fmtKm(kA), fmtKm(kB));
+    if (ra && rb) {
+      var tc = typeof conv.paraSite !== 'function' ? [] : tracosRegua(ra.geom, rb.geom, par).map(function (t) {
+        var s = conv.paraSite(t.k);
+        return s != null && s > kA && s < kB ? { x: X(s), k: t.k, maior: t.maior } : null;
+      }).filter(Boolean);
+      reguaFaixa(o, 'contrato', y0 + GF.yRuleC, '#6B4E16', tc, fmtKm(ra.km) + (ra.ast ? '*' : ''), fmtKm(rb.km) + (rb.ast ? '*' : ''));
+    } else o.push(T(G.x0 + 4, y0 + GF.yRuleC + 4, REGUA_SEM[st] || REGUA_SEM.foraDominio, { size: 6.4, fill: gray }));
+
+    // bandeiras: as pontas do contrato (pretas; a inicial só na 1ª faixa, a final só na última) e as localidades (marcos) da faixa,
+    // com o km duplo. O marco na ponta já é a bandeira dela; o de fora do contrato não sai; o do km que divide as faixas sai uma
+    // vez só, no começo da faixa de baixo. A linha e a posição de cada caixa vêm de linhasBandeiras
+    var fl = [];
+    if (!i) fl.push(bandeiraFaixa(c, pontas.ini, c.kmIni, X, '#17201C'));
+    (c.marcos || []).forEach(function (m) {
+      if (!m || typeof m.km !== 'number' || !isFinite(m.km) || m.km < c.kmIni - 0.001 || m.km > c.kmFim + 0.001) return;
+      if (Math.abs(m.km - c.kmIni) < 0.001 || Math.abs(m.km - c.kmFim) < 0.001 || m.km < kA || (ultima ? m.km > kB : m.km >= kB)) return;
+      fl.push(bandeiraFaixa(c, txtLimpo(m.nome).toUpperCase() || 'MARCO', m.km, X, '#5E8C2E'));
+    });
+    if (ultima) fl.push(bandeiraFaixa(c, pontas.fim, c.kmFim, X, '#17201C'));
+    var lb = linhasBandeiras(fl, G.x0, G.x1);
+    if (lb.reserva.length) console.warn('Folha da conservação, faixa ' + (i + 1) + ': sem lugar livre para ' + lb.reserva.map(function (j) { return fl[j].nome; }).join(', ') + ' (a bandeira fica sobreposta)');
+    fl.forEach(function (f, j) {
+      var yt = y0 + GF.flagY + lb.pos[j].r * GF.flagStep;
+      o.push(L(f.x, yt + GF.flagH, f.x, yB - 8, { stroke: '#2B5797', sw: 1.8 }));
+      o.push(P([[f.x - 4.5, yB - 9], [f.x + 4.5, yB - 9], [f.x, yB - 1]], '#2B5797'));
+    });
+    fl.forEach(function (f, j) {
+      var yt = y0 + GF.flagY + lb.pos[j].r * GF.flagStep, bx = lb.pos[j].bx;
+      o.push(R(bx, yt, f.w, GF.flagH, { fill: f.cor, rx: 2 }));
+      o.push(T(bx + f.w / 2, yt + 10, f.nome, { size: r2(f.ns), bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+      o.push(T(bx + f.w / 2, yt + 20, f.sub, { size: 6.4, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+    });
+    o.push('</g>');
+  }
+  // bandeira da folha em escala, medida (a linha e a posição da caixa vêm de linhasBandeiras): o nome em maiúsculas, numa caixa de
+  // até 220 pt (a letra diminui até 6 pt e, depois, o nome é cortado) e, embaixo, o km duplo, "KM 776,80 · CONTR. 783,90" (o
+  // "CONTR." só quando a régua dá o km do contrato; nas pontas, o do cadastro, com "*" quando a régua discorda: "CONTR. 750,90*")
+  function bandeiraFaixa(c, nome, km, X, cor) {
+    var r = kmDoContrato(c, km), sub = 'KM ' + fmtKm(km) + (r ? ' · CONTR. ' + fmtKm(r.km) + (r.ast ? '*' : '') : '');
+    nome = txtPdf(nome).replace(/\b(para|aprox\.)/g, function (s) { return s.toUpperCase(); });   // o nome já vem em maiúsculas
+    var ns = fitSize(nome, 206, 7.2, true, 6);
+    nome = fitText(nome, 206, ns, true);
+    return { x: clamp(X(km), G.x0 + 1, G.x1 - 1), nome: nome, ns: ns, sub: sub, cor: cor, w: Math.min(220, Math.max(textW(nome, ns, true), textW(sub, 6.4, true)) + 14) };
+  }
+  // uma régua da folha em escala, num <g data-regua="site"> ou "contrato": a linha, os traços (o maior com o número, menos perto das
+  // pontas, onde ficam os km da ponta, la e lb, em negrito). tracos: [{ x, k, maior }]
+  function reguaFaixa(o, nome, y, cor, tracos, la, lb) {
+    var ma = textW(la, 6.4, true) + 10, mb = textW(lb, 6.4, true) + 10;
+    o.push('<g data-regua="' + nome + '">');
+    o.push(L(G.x0, y, G.x1, y, { stroke: cor, sw: 0.7 }));
+    tracos.forEach(function (t) {
+      o.push(L(t.x, y, t.x, y + (t.maior ? 6 : 3), { stroke: cor, sw: 0.6 }));
+      if (t.maior && t.x - G.x0 > ma && G.x1 - t.x > mb) o.push(T(t.x, y + 14, fmtN(t.k), { size: 6.2, fill: cor, anchor: 'middle' }));
+    });
+    o.push(T(G.x0 + 1, y + 14, la, { size: 6.4, bold: true, fill: cor }));
+    o.push(T(G.x1 - 1, y + 14, lb, { size: 6.4, bold: true, fill: cor, anchor: 'end' }));
+    o.push('</g>');
+  }
+  // Observações gerais (obsFolha), na linha dos quadros, à direita (de x 712 até x1): 6,6 pt, de 8,6 em 8,6 pt; o que não couber
+  // faz a letra diminuir até 5,4 pt (a entrelinha junto) e, depois, a última linha termina em "..."
+  function obsFaixa(o, c, yq, hq) {
+    var xo = 712, wo = G.x1 - xo, t = txtPdf(c.obsFolha), s = 6.6, lh, max, ls;
+    function cabe(z) { lh = 8.6 * z / 6.6; max = Math.floor((hq - 30) / lh) + 1; ls = wrap(t, wo - 12, z); return ls.length <= max; }
+    while (!cabe(s) && s > 5.4) s = Math.max(5.4, r2(s - 0.1));
+    if (ls.length > max) { ls = ls.slice(0, max); ls[max - 1] = fitText(ls[max - 1] + '...', wo - 12, s); }
+    o.push(R(xo, yq, wo, hq, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(xo + 6, yq + 12, 'Observações gerais', { size: 7, bold: true }));
+    ls.forEach(function (ln, i) { o.push(T(xo + 6, yq + 25 + i * lh, ln, { size: r2(s), fill: '#2B3430' })); });
+  }
+  // itens dos quadros de prazos e valores (PI) da folha em escala, com os textos já montados (sem medir): { conf, prev }, cada lista
+  // com os prazos e depois os valores, na ordem do formulário. sit 'conf' vai para CONFIRMADOS; qualquer outra coisa ('prev' ou sem
+  // sit, dado digitado à mão no banco), para PREVISTOS, A CONFIRMAR: um item sem sit nunca sai como confirmado. O item sem nada que
+  // a folha mostre (o "+ Prazo" recém-tocado) não sai. A fonte fica só no formulário (E-4). Cada item: { g ('prazos' ou 'valores'),
+  // rot, dir (a data ou o valor, à direita), vazio (dir é "sem data" ou "sem valor"), det (no prazo, de que é o fim e a nota; no
+  // valor, "ref. <data>" e a nota) }
+  var FIM_TXT = { exec: 'fim da execução', vig: 'fim da vigência', ambos: 'fim da execução e da vigência' };
+  function itensQuadros(c) {
+    var out = { conf: [], prev: [] };
+    ['prazos', 'valores'].forEach(function (g) {
+      var pz = g === 'prazos';
+      (Array.isArray(c[g]) ? c[g] : []).forEach(function (x) {
+        if (!x) return;
+        var rot = txtPdf(txtLimpo(x.rotulo)), nota = txtPdf(txtLimpo(x.nota)), data = txtLimpo(x.data), temV = typeof x.valor === 'number' && isFinite(x.valor);
+        var fim = pz && FIM_TXT[x.fim] || '';
+        if (!rot && !data && !nota && (pz ? !fim : !temV)) return;
+        var det = (pz ? [fim, nota] : [data ? 'ref. ' + txtPdf(fmtDate(data)) : '', nota]).filter(Boolean).join('. ');
+        var dir = pz ? (data ? txtPdf(fmtDate(data)) : 'sem data') : temV ? fmtPI(x.valor) : 'sem valor';
+        out[x.sit === 'conf' ? 'conf' : 'prev'].push({ g: g, rot: rot, dir: dir, vazio: pz ? !data : !temV, det: det });
+      });
+    });
+    return out;
+  }
+  // caixas dos quadros, na linha de baixo da folha em escala (como a maquete): CONFIRMADOS em x 142 e PREVISTOS, A CONFIRMAR em
+  // x 426, com 276 pt de largura cada; a altura é a do lugar (172 pt na folha em escala, até o rodapé na folha de continuação)
+  var QX = { conf: G.x0, prev: G.x0 + 284 }, QW = 276;
+  // um item dos quadros, medido: o rótulo em até 2 linhas ao lado da data ou do valor (a 2ª linha cortada com "...") e o detalhe
+  // em até 3 linhas (confirmados) ou 4 (previstos), a última cortada; h: a altura dele (9 pt por linha do rótulo, 8 por linha do
+  // detalhe e 3 depois do item)
+  function medeItem(it, conf) {
+    var wl = QW - 12 - textW(it.dir, 6.6, !it.vazio) - 8, wd = QW - 18, max = conf ? 3 : 4, rl = wrap(it.rot, wl, 6.6, true), dl = wrap(it.det, wd, 6.2);
+    if (rl.length > 2) rl = [rl[0], fitText(rl.slice(1).join(' '), wl, 6.6, true)];
+    if (!rl.length) rl = [''];
+    if (dl.length > max) dl = dl.slice(0, max - 1).concat(fitText(dl.slice(max - 1).join(' '), wd, 6.2));
+    return { it: it, rl: rl, dl: dl, h: 9 * rl.length + 8 * dl.length + 3 };
+  }
+  // altura dos itens medidos numa caixa, com o subtítulo (PRAZOS, VALORES (PI)) de cada grupo que tem item ali: 9 pt, e 2 pt entre
+  // os dois grupos
+  function alturaItens(ms) {
+    var h = 0, g = null;
+    ms.forEach(function (m) { if (m.it.g !== g) { h += (g ? 2 : 0) + 9; g = m.it.g; } h += m.h; });
+    return h;
+  }
+  // quantos itens de ms, a partir de ini, cabem inteiros numa caixa de altura hq, com o 1º item topo pt abaixo do alto da caixa e
+  // 4 pt de margem embaixo; quando não cabem todos, fica lugar (9 pt) para a linha "Continua na folha seguinte (mais N itens)"
+  function cabemItens(ms, ini, topo, hq) {
+    var livre = hq - topo - 4, k = 0;
+    if (alturaItens(ms.slice(ini)) <= livre) return ms.length - ini;
+    while (ini + k < ms.length && alturaItens(ms.slice(ini, ini + k + 1)) + 9 <= livre) k++;
+    return k;
+  }
+  // os quadros de prazos e valores, medidos e repartidos pelas folhas (E-3). A letra é sempre a normal: o que não couber inteiro na
+  // caixa da folha em escala fica de fora, com "Continua na folha seguinte (mais N itens)" na última linha da caixa, e a folha
+  // seguinte (quadrosCont) traz as duas caixas com a lista completa (se nem ela couber, mais uma folha, do mesmo jeito). { conf,
+  // prev: os itens medidos; n1: { conf, prev }, quantos saem na folha em escala; cont: [{ conf: [de, até], prev: [de, até] }], a
+  // parte de cada lista em cada folha de continuação (nenhuma quando tudo coube, o caso do 437 e do 438) }
+  var Q_TOPO = { conf: 24, prev: 26 }, Q_CONT_Y = GF.yTop;
+  function quadrosFaixa(c) {
+    var iq = itensQuadros(c), hq = GF.yF - 10 - (GF.yTop + 2 * GF.H + GF.gap + 4), hc = GF.yF - 10 - Q_CONT_Y, ks = ['conf', 'prev'];
+    var q = { conf: iq.conf.map(function (it) { return medeItem(it, true); }), prev: iq.prev.map(function (it) { return medeItem(it, false); }), n1: {}, cont: [] };
+    ks.forEach(function (k) { q.n1[k] = cabemItens(q[k], 0, Q_TOPO[k], hq); });
+    if (q.n1.conf === q.conf.length && q.n1.prev === q.prev.length) return q;
+    var ini = { conf: 0, prev: 0 };
+    while (ini.conf < q.conf.length || ini.prev < q.prev.length) {
+      var pg = {};
+      ks.forEach(function (k) {
+        var n = ini[k] < q[k].length ? Math.max(1, cabemItens(q[k], ini[k], Q_TOPO[k], hc)) : 0;   // ao menos 1 por folha: sempre acaba
+        pg[k] = [ini[k], ini[k] + n];
+        ini[k] += n;
+      });
+      q.cont.push(pg);
+    }
+    return q;
+  }
+  // uma caixa dos quadros em bx, de yq a yq + hq: CONFIRMADOS (cheia) ou PREVISTOS, A CONFIRMAR (tracejada, com a etiqueta), com os
+  // itens medidos ms[de] a ms[ate - 1] e, quando a lista continua depois deles, a linha "Continua na folha seguinte (mais N itens)"
+  function quadroItens(o, conf, bx, yq, hq, ms, de, ate) {
+    var cor = conf ? '#17201C' : '#3B4540', cd = conf ? '#2B3430' : '#5C6661', gray = '#5C6661', y = yq + Q_TOPO[conf ? 'conf' : 'prev'], g = null, resto = ms.length - ate;
+    if (conf) {
+      o.push(R(bx, yq, QW, hq, { fill: '#F4F6F5', stroke: '#7D8581', sw: 0.6 }));
+      o.push(T(bx + 6, yq + 12, 'CONFIRMADOS', { size: 6.6, bold: true, fill: '#146C3B' }));
+    } else {
+      var tag = 'PREVISTOS, A CONFIRMAR';
+      o.push(R(bx, yq, QW, hq, { fill: '#FFFFFF', stroke: '#8E9792', sw: 0.9, dash: '3 2' }));
+      o.push(R(bx + 6, yq + 4, textW(tag, 6.4, true) + 10, 11, { fill: '#FFFFFF', stroke: '#5C6661', sw: 0.7, rx: 5.5, dash: '2 1.5' }));
+      o.push(T(bx + 11, yq + 12, tag, { size: 6.4, bold: true, fill: '#3B4540' }));
+    }
+    if (!ms.length) { o.push(T(bx + 6, y, conf ? 'Nenhum item.' : 'Nada a confirmar.', { size: 6.2, fill: gray })); return; }
+    if (de >= ate) { o.push(T(bx + 6, y, 'A lista deste quadro termina na folha anterior.', { size: 6.2, fill: gray })); return; }
+    ms.slice(de, ate).forEach(function (m) {
+      if (m.it.g !== g) {
+        if (g) y += 2;
+        g = m.it.g;
+        o.push(T(bx + 6, y, g === 'prazos' ? 'PRAZOS' : 'VALORES (PI)', { size: 6, bold: true, fill: gray }));
+        y += 9;
+      }
+      o.push(T(bx + QW - 6, y, m.it.dir, m.it.vazio ? { size: 6.6, fill: gray, anchor: 'end' } : { size: 6.6, bold: true, fill: cor, anchor: 'end' }));
+      m.rl.forEach(function (ln) { if (ln) o.push(T(bx + 6, y, ln, { size: 6.6, bold: true, fill: cor })); y += 9; });
+      m.dl.forEach(function (ln) { o.push(T(bx + 10, y, ln, { size: 6.2, fill: cd })); y += 8; });
+      y += 3;
+    });
+    if (resto > 0) o.push(T(bx + 6, y + 6, 'Continua na folha seguinte (mais ' + resto + (resto === 1 ? ' item)' : ' itens)'), { size: 6.2, bold: true, fill: gray }));
+  }
+  // rodapé da folha em escala, a partir de y: a linha de cima; a legenda; as notas (notasConserva), da esquerda até antes do TOTAL
+  // GERAL (x 640): cada uma quebrada em 598 pt, a 6,1 pt, de 8,2 em 8,2 pt a partir de y + 24, no máximo 6 linhas (o que não couber
+  // faz a letra diminuir até 5,4 pt e, depois, a última linha termina em "..."); e o TOTAL GERAL, com a extensão e os segmentos do
+  // SNV. A legenda e o total não têm ponte nem outro contrato (decisões 0.10 e 0.8)
+  function rodapeFaixa(o, c, y) {
+    var ns = notasConserva(c), s = 6.1, ls, gray = '#5C6661', lx = G.labelX + 40, px = 650, e = extensaoFaixa(c), n = snvDaFaixa(c).length;
+    function linhas(z) { return ns.reduce(function (a, t) { return a.concat(wrap(t, 598, z)); }, []); }
+    o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
+    o.push(T(G.labelX, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
+    [[{ fill: '#5E8C2E', rx: 1.5 }, 'Localidade'], [{ fill: '#17201C', rx: 1.5 }, 'Início / fim do contrato'],
+      [{ fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }, 'Segmento do SNV'], [{ fill: '#E8DCBF', stroke: '#7D8581', sw: 0.6 }, 'Revestimento primário (predominante)'],
+      [{ fill: '#FFFFFF', stroke: '#8E9792', sw: 0.9, dash: '3 2' }, 'Previsto, a confirmar']].forEach(function (l) {
+      o.push(R(lx, y + 2, 15, 10, l[0]));
+      o.push(T(lx + 19, y + 10, l[1], { size: 6.6 }));
+      lx += 19 + textW(l[1], 6.6) + 10;
+    });
+    ls = linhas(s);
+    while (ls.length > 6 && s > 5.4) { s = Math.max(5.4, r2(s - 0.1)); ls = linhas(s); }
+    if (ls.length > 6) { ls = ls.slice(0, 6); ls[5] = fitText(ls[5] + '...', 598, s); }
+    ls.forEach(function (ln, i) { o.push(T(G.labelX, y + 24 + i * 8.2, ln, { size: r2(s), fill: gray })); });
+    o.push(R(640, y, G.x1 - 640, 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
+    o.push(T(650, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
+    [['Extensão: ', e != null ? fmt(e, 2) + ' km' : '-'], ['Segmentos do SNV: ', n ? String(n) : '-']].forEach(function (t) {
+      o.push(T(px, y + 26, t[0], { size: 8, fill: '#3B4540' }));
+      px += textW(t[0], 8);
+      o.push(T(px, y + 26, t[1], { size: 8.2, bold: true }));
+      px += textW(t[1], 8.2, true) + 22;
+    });
+  }
+  // continuação da folha em escala (E-3), só quando os prazos e valores não couberam nos quadros dela: o cabeçalho e as duas caixas
+  // com a lista completa, sem as faixas, do alto da folha (y 104) até o lugar do rodapé. pg: a parte das listas desta folha
+  // (quadrosFaixa)
+  function quadrosCont(c, pageIdx, pageCount, q, pg) {
+    var o = [], x = G.labelX, gray = '#5C6661', yq = Q_CONT_Y, hq = GF.yF - 10 - yq;
+    o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
+    o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
+    o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
+    drawHeader(o, c);
+    o.push(T(x, yq + 12, 'PRAZOS E VALORES', { size: 7, bold: true }));
+    o.push(T(x, yq + 22, 'do contrato', { size: 6.2, fill: gray }));
+    o.push(T(x, yq + 34, 'continuação da', { size: 6.2, fill: gray }));
+    o.push(T(x, yq + 42, 'folha anterior', { size: 6.2, fill: gray }));
+    quadroItens(o, true, QX.conf, yq, hq, q.conf, pg.conf[0], pg.conf[1]);
+    quadroItens(o, false, QX.prev, yq, hq, q.prev, pg.prev[0], pg.prev[1]);
+    o.push(L(G.colLine, 106, G.colLine, GF.yF - 10, { stroke: '#C9CECB', sw: 0.6 }));
+    o.push(T(G.x1, PAGE_H - G.frame - 6, 'Página ' + (pageIdx + 1) + ' de ' + pageCount + '   ·   Gerado em ' + fmtDate(todayIso()), { size: 6.4, fill: gray, anchor: 'end' }));
     o.push('</svg>');
     return o.join('');
   }
@@ -2117,7 +2520,7 @@
   function renderPagesCtl(c) {
     var sel = $('selPages'), n = c ? c.pontos.length : 0;
     if (!sel) return;
-    sel.closest('label').hidden = view === 'mapa' || !!(c && isConserva(c));   // como em setView; a folha da conservação é uma página só
+    sel.closest('label').hidden = view === 'mapa' || !!(c && isConserva(c));   // como em setView; as folhas da conservação são as de folhasConserva, sem escolha
     var auto = c ? autoPages(c, n) : 1, cur = c && pagesPref[c.id] ? pageCountFor(c, n) : 0;
     var sig = [c ? c.id : '', n, auto, cur].join('|');
     if (sig === pagesCtlSig) return; // não refaz a lista à toa (fecharia o seletor aberto no celular)
