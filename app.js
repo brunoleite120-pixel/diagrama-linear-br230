@@ -2862,7 +2862,7 @@
   function analiseResumoHtml(c) {
     if (!banco.on) return '';
     if (!isEng()) {
-      return '<div class="an-note">Os valores medidos e os alertas da análise das medições aparecem para engenheiros e para o Administrador.' +
+      return '<div class="an-note">Os valores medidos e os alertas da análise das medições aparecem para engenheiros, auxiliares de engenharia e o Administrador.' +
         (banco.login ? '' : ' Entre para ver.') + '</div>';
     }
     var an = anOf(c), e = analise.estado[c.id];
@@ -2879,7 +2879,7 @@
     ];
     if (E) kp.push(['Pontes atendidas', cob[E].atend + ' de ' + cob[E].total, cob[E].falta.length ? cob[E].falta.length + ' sem serviço nesta etapa' : 'todas tiveram serviço nesta etapa']);
     var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' +
-      (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros e o Administrador</span></div>';
+      (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros, auxiliares de engenharia e o Administrador</span></div>';
     var ets = an.etapas || [];
     h += '<div class="an-jan"><span id="anEtTit">Mostrar</span><div class="seg an-etapas" role="group" aria-labelledby="anEtTit" style="grid-template-columns:repeat(' + (ets.length + 1) + ',minmax(0,1fr))">' +
       '<button type="button" data-act="an-etapa" data-v="0" aria-pressed="' + !E + '">Todas<small>' + esc((r.de || '') + ' a ' + (r.ate || '')) + '</small></button>' +
@@ -2953,7 +2953,7 @@
       });
 
       if (a) h += ponteAnaliseHtml(an, a, p.id);
-      else if (banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros e para o Administrador.</div>';
+      else if (banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros, auxiliares de engenharia e o Administrador.</div>';
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
@@ -4269,10 +4269,10 @@
   function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
   function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas }); }
   function readOnly() { return banco.on && !banco.login; }
-  // papéis: criador (tudo), engenheiro (edita, aprova, lixeira) e fiscal de campo (só status dos serviços, com aprovação).
-  // Os códigos gerais antigos valem como criador ("responsavel") e engenheiro ("equipe").
-  var NIVEL = { criador: 3, responsavel: 3, engenheiro: 2, equipe: 2, fiscal: 1 };
-  var PAPEL_NOME = { criador: 'Administrador', responsavel: 'Administrador', engenheiro: 'engenheiro', equipe: 'engenheiro', fiscal: 'fiscal de campo' };
+  // papéis: criador (tudo), engenheiro e auxiliar de engenharia (edita, aprova, lixeira, medições) e fiscal de campo
+  // (só status dos serviços, com aprovação). Os códigos gerais antigos valem como criador ("responsavel") e engenheiro ("equipe").
+  var NIVEL = { criador: 3, responsavel: 3, engenheiro: 2, auxiliar: 2, equipe: 2, fiscal: 1 };
+  var PAPEL_NOME = { criador: 'Administrador', responsavel: 'Administrador', engenheiro: 'engenheiro', auxiliar: 'auxiliar de engenharia', equipe: 'engenheiro', fiscal: 'fiscal de campo' };
   function nivel() { return banco.on && banco.login ? (NIVEL[banco.login.papel] || 0) : 0; }
   function isResp() { return nivel() >= 3; }
   function isEng() { return nivel() >= 2; }
@@ -5108,6 +5108,7 @@
   // ---------------- usuários e acessos (só o criador)
   var PAPEIS = [
     { k: 'engenheiro', nome: 'Engenheiro', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira e vê as fotos de todos.' },
+    { k: 'auxiliar', nome: 'Auxiliar de engenharia', desc: 'O mesmo que o engenheiro: edita tudo, aprova as mudanças dos fiscais, restaura da lixeira, vê as medições e as fotos de todos.' },
     { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Só muda o status e o % dos serviços (fica aguardando aprovação) e vê só as fotos que tirou.' },
     { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas e voltar os dados para uma cópia.' }
   ];
@@ -5218,7 +5219,7 @@
   // contrato deste aparelho do ponto na lixeira (para dizer "segmento" na conservação); sem ele, null, e fica "ponto"
   function lxDono(x) { return x && x.contrato_id ? contractById(x.contrato_id) : null; }
   function openLixeira() {
-    if (!isEng()) { toast('A lixeira e as cópias são para engenheiros e o Administrador.'); return; }
+    if (!isEng()) { toast('A lixeira e as cópias são para engenheiros, auxiliares de engenharia e o Administrador.'); return; }
     var f = modal('<h2 id="modalTitle">Lixeira e cópias de segurança</h2><div class="lx" aria-live="polite">Carregando…</div>' +
       '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'wide');
     var dados = null;
@@ -5373,7 +5374,7 @@
     });
   }
   function decidirPropostas(ids, aprovar) {
-    if (!isEng()) { toast('Só engenheiro ou Administrador aprova.'); return; }
+    if (!isEng()) { toast('Só engenheiro, auxiliar de engenharia ou Administrador aprova.'); return; }
     var go = function (motivo) {
       window.Banco.decidir(banco.login.codigo, ids, aprovar, motivo).then(function (r) {
         var n = (r && r.n) || 0;
