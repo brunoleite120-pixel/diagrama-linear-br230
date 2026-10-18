@@ -1719,7 +1719,7 @@
   }
 
   // ------------------------------------------------------------------ estado
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {} };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, trechosErro: '' };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -1859,6 +1859,53 @@
     var v = window.SNV_BR230 && window.SNV_BR230.versao;
     return 'O km Atualizado está igual ao do contrato. O km Atualizado' + (v ? ' (SNV ' + v + ')' : '') + ' é cerca de 7,1 km menor: confira.';
   }
+  // limites dos trechos e dos segmentos da conservação (c.trechos: os km Atualizado, do km inicial ao final do contrato).
+  // Hoje só o "Gerar segmentos" usa; o relatório por trechos vai ler o mesmo campo. Listas validadas (decisão 0.12), pelo nº
+  // do contrato sem espaços, para o botão "Preencher com a lista validada"
+  var TRECHOS_PADRAO = {
+    '0200437/2021': [743.8, 754.8, 765.8, 776.8, 786.8, 796.8, 806.8, 816.8, 826.8, 836.8, 848.8, 857.3, 865.8],
+    '0200438/2021': [865.8, 876.8, 887.8, 898.8, 909.8, 919.8, 929.8, 939.8, 949.8, 959.8, 969.8, 979.8, 989.8, 999.8]
+  };
+  function trechosPadrao(c) {
+    var k = txtLimpo(c && c.numero).replace(/\s+/g, '');
+    return Object.prototype.hasOwnProperty.call(TRECHOS_PADRAO, k) ? TRECHOS_PADRAO[k] : null;
+  }
+  function trechosTxt(lista) { return (Array.isArray(lista) ? lista : []).map(fmtKm).join('; '); }
+  // texto -> { lista: [números] } ou { erro: 'texto' }; vazio -> { lista: [] }
+  function trechosLer(txt) {
+    var partes = String(txt || '').split(/[;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean), lista = [];
+    for (var i = 0; i < partes.length; i++) {
+      var k = parseNum(partes[i]);
+      if (k == null) return { erro: 'Não entendi o km "' + partes[i] + '". Separe os km por ponto e vírgula, como 743,80; 754,80.' };
+      lista.push(k);
+    }
+    return { lista: lista };
+  }
+  // a lista gravada (ou a lida) vale para este contrato? { ok, lista, erro }
+  function trechosValidos(c, lista) {
+    lista = lista || (Array.isArray(c.trechos) ? c.trechos : []);
+    var ini = c.kmIni, fim = c.kmFim;
+    if (!lista.length) return { ok: false, lista: lista, erro: '' };   // sem limites: sem aviso, mas "Gerar segmentos" não roda
+    if (lista.length < 2) return { ok: false, lista: lista, erro: 'São precisos pelo menos 2 limites (o km inicial e o final do contrato).' };
+    for (var i = 1; i < lista.length; i++) if (!(lista[i] > lista[i - 1] + 0.001))
+      return { ok: false, lista: lista, erro: 'Os limites têm de crescer, sem repetir: ' + fmtKm(lista[i]) + ' vem depois de ' + fmtKm(lista[i - 1]) + '.' };
+    if (typeof ini !== 'number' || Math.abs(lista[0] - ini) > 0.001) return { ok: false, lista: lista, erro: 'O primeiro limite tem de ser o km inicial do contrato (' + (fmtKm(ini) || '?') + ').' };
+    if (typeof fim !== 'number' || Math.abs(lista[lista.length - 1] - fim) > 0.001) return { ok: false, lista: lista, erro: 'O último limite tem de ser o km final do contrato (' + (fmtKm(fim) || '?') + ').' };
+    return { ok: true, lista: lista, erro: '' };
+  }
+  // aviso dos limites, nesta ordem: a última lista digitada e recusada (ui.trechosErro); a lista gravada que não vale (quando
+  // ela só não bate com o km inicial ou final do contrato, que mudou depois, o aviso diz isso na frente); os segmentos já
+  // existentes; senão, vazio
+  function avisoTrechos(c) {
+    if (!isConserva(c)) return '';
+    if (ui.trechosErro) return ui.trechosErro;
+    var v = trechosValidos(c), l = v.lista;
+    if (v.erro) {
+      var ponta = l.length >= 2 && trechosValidos({ kmIni: l[0], kmFim: l[l.length - 1] }, l).ok;
+      return (ponta ? 'Os limites gravados não batem com o km inicial ou final do contrato: corrija. ' : '') + v.erro;
+    }
+    return c.pontos && c.pontos.length ? 'Os segmentos já existem e não mudam com estes limites.' : '';
+  }
   // km do contrato de um marco da conservação, só para leitura ("(contr. 783,90)"; "*" quando a régua discorda do cadastro
   // na ponta do contrato); sem a régua, nada
   function marcoContr(c, km) {
@@ -1895,6 +1942,7 @@
   function renderEditor() {
     var c = active(), cons = isConserva(c);
     var h = [];
+    ui.trechosErro = '';   // o erro da lista de limites recusada vale até o editor ser refeito
     h.push('<section class="card">');
     // conservação: o tipo no título, numa linha embaixo, só para leitura (sem número, o nome de tela é o Lote, que não diz o tipo)
     h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span>' +
@@ -1941,6 +1989,13 @@
         h.push(listaHtml(c, 'valores'));
         var obsId = 'obsf-' + Math.random().toString(36).slice(2, 9);
         h.push('<div class="field"><label for="' + obsId + '">Observações da folha</label><textarea id="' + obsId + '" data-c="obsFolha" rows="4">' + esc(c.obsFolha) + '</textarea></div>');
+        // limites dos trechos e dos segmentos: data-trechos (não data-c), gravado só ao sair do campo e só quando a lista vale
+        // (onInput). O botão da lista validada só no 437 e no 438, com o campo vazio (hidden acompanha a gravação)
+        var trId = 'trch-' + Math.random().toString(36).slice(2, 9), trPad = trechosPadrao(c), trLst = Array.isArray(c.trechos) ? c.trechos : [];
+        h.push('<div class="field"><label for="' + trId + '">Limites dos trechos e dos segmentos (km Atualizado)</label><textarea id="' + trId + '" data-trechos="1" rows="2">' + esc(trechosTxt(trLst)) + '</textarea></div>');
+        h.push('<div class="hint">Os km separados por ponto e vírgula, do km inicial ao final do contrato.</div>');
+        h.push('<div class="hint ct-aviso full" data-aviso="trechos">' + esc(avisoTrechos(c)) + '</div>');
+        if (trPad) h.push('<div data-trpad="1"' + (trLst.length ? ' hidden' : '') + '><button type="button" class="btn small" data-act="preencher-trechos">Preencher com a lista validada</button></div>');
       }
       h.push('<div class="section-title">Marcos no diagrama<button type="button" class="btn small" data-act="add-marco">+ Marco</button></div>');
       if (!c.marcos.length) h.push('<div class="empty">Nenhum marco. Use para pedreira, cidade, ponte etc.</div>');
@@ -2867,10 +2922,15 @@
       else el.value = k === 'pasta' ? ctPasta(c) : ctNome(c);
     });
   }
-  // avisos do formulário e km do contrato dos marcos acompanham o que é digitado (objeto, km do contrato e do site, km do marco)
+  // avisos do formulário e km do contrato dos marcos acompanham o que é digitado (objeto, km do contrato e do site, km do marco,
+  // limites dos trechos). Cada aviso pelo seu nome (data-aviso); um nome sem função fica como está
+  var AVISOS = { km: avisoKm, objeto: avisoObjeto, trechos: avisoTrechos };
   function syncAvisos(c) {
     var ed = $('editor');
-    ed.querySelectorAll('[data-aviso]').forEach(function (el) { el.textContent = el.getAttribute('data-aviso') === 'km' ? avisoKm(c) : avisoObjeto(c); });
+    ed.querySelectorAll('[data-aviso]').forEach(function (el) {
+      var f = AVISOS[el.getAttribute('data-aviso')];
+      if (f) el.textContent = f(c);
+    });
     ed.querySelectorAll('[data-mkc]').forEach(function (el) {
       var m = c.marcos[Number(el.getAttribute('data-mkc'))], mc = marcoContr(c, m ? m.km : null);
       el.textContent = mc.t; el.title = mc.g;
@@ -2879,6 +2939,21 @@
   function onInput(e) {
     var t = e.target, c = active();
     if (isFiscal() && !t.dataset.svcpct) return;
+    // limites dos trechos: só ao sair do campo. Lista que não vale não grava (o aviso diz por quê); vazia apaga; não é vistoria
+    if (t.dataset.trechos) {
+      if (e.type !== 'change') return;
+      var lt = trechosLer(t.value), vt = lt.erro ? null : lt.lista.length ? trechosValidos(c, lt.lista) : { ok: true };
+      if (lt.erro || !vt.ok) { ui.trechosErro = lt.erro || vt.erro; syncAvisos(c); return; }
+      ui.trechosErro = '';
+      if (lt.lista.length) c.trechos = lt.lista; else delete c.trechos;
+      t.value = trechosTxt(c.trechos);
+      var tp = $('editor').querySelector('[data-trpad]');
+      if (tp) tp.hidden = !!lt.lista.length;
+      syncAvisos(c);
+      save();
+      schedulePreview();
+      return;
+    }
     if (t.dataset.c) {
       var k = t.dataset.c;
       // nº de outro contrato (como no "+ Contrato"): não grava; ao sair do campo, avisa e volta ao número de antes da edição
@@ -3129,6 +3204,16 @@
         return;
       case 'add-marco':
         c.marcos.push({ nome: '', km: null });
+        renderEditor();
+        break;
+      // conservação: os limites validados (437 e 438) no campo vazio, se batem com o km inicial e o final do contrato
+      case 'preencher-trechos':
+        var trP = trechosPadrao(c);
+        if (!isConserva(c) || !trP) return;
+        if (Array.isArray(c.trechos) && c.trechos.length) { toast('Os limites dos trechos já estão gravados.'); return; }
+        var vP = trechosValidos(c, trP.slice());
+        if (!vP.ok) { toast('A lista validada não bate com este contrato: ' + vP.erro, 6000); return; }
+        c.trechos = trP.slice();
         renderEditor();
         break;
       case 'del-marco':
@@ -3663,7 +3748,7 @@
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
     kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)',
     kmIniContrato: 'KM inicial do contrato', kmFimContrato: 'KM final do contrato', snvContrato: 'SNV do contrato', prazos: 'prazos', valores: 'valores (PI)',
-    obsFolha: 'observações da folha'
+    obsFolha: 'observações da folha', trechos: 'limites dos trechos'
   };
   function fieldName(k) {
     if (k.indexOf('serv.') === 0) { var s = GRUPOS_TODOS.find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
@@ -3821,6 +3906,8 @@
       while (nIt < its.length && its.slice(0, nIt + 1).join('; ').length <= 300) nIt++;
       return its.slice(0, nIt).join('; ') + (its.length > nIt ? ' e mais ' + (its.length - nIt) : '');
     }
+    // limites dos trechos (conservação): os km, como no formulário
+    if (campo === 'trechos' && Array.isArray(v)) return v.length ? v.map(fmtKm).join('; ') : '(nenhum)';
     if (Array.isArray(v)) return v.length + (v.length === 1 ? ' item' : ' itens');
     if (typeof v === 'number') return fmt(v, v % 1 ? 2 : 0);
     var s = String(v);
@@ -4748,7 +4835,7 @@
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
   var EDIT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
-    'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit'];
+    'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit', 'preencher-trechos'];
   var POINT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }
