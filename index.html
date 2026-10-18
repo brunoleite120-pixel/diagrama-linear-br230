@@ -679,6 +679,17 @@ body.fiscal [data-act="add-prazo"],body.fiscal [data-act="del-prazo"],body.fisca
 .an-pchips{display:flex;flex-wrap:wrap;gap:6px}
 .an-pchip{font:inherit;font-size:12.5px;padding:5px 10px;min-height:32px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
 .an-pchip small{color:var(--ink-3)}
+/* última medição da ponte (etiqueta na linha), pontes por medição e medido × vistoriado */
+.pt-ult{display:inline-block;margin-left:4px;padding:0 6px;border:1px solid;border-radius:4px;font-size:11px;font-weight:700;line-height:17px;white-space:nowrap;vertical-align:1px}
+.pt-ult.u-rec{background:#DDF1E5;border-color:#8CCBA6;color:#0F5A31}
+.pt-ult.u-med{background:#FFF4D6;border-color:#E8C77A;color:#7A5200}
+.pt-ult.u-ant{background:#FDF1EF;border-color:#F0C7C2;color:#B42318}
+.pt-ult.u-nunca{background:transparent;border-color:#E0A39C;border-style:dashed;color:#B42318}
+.pt-ult.u-sel{background:#F1EAF7;border-color:#C9B2DE;color:#5B2C8F}
+.an-medsel select{width:100%;min-height:44px;font:inherit;font-size:14px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.an-ult-leg{line-height:2}
+.an-pch-l{align-self:center;font-size:11px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.svc-med.cmp{color:#B42318;font-weight:600}
 .an-mais{display:grid;gap:6px}
 .an-mais summary{cursor:pointer;font-size:12.5px;color:var(--accent);padding:6px 0}
 .an-bar.fora{opacity:.28}

@@ -2005,7 +2005,7 @@
   }
 
   // ------------------------------------------------------------------ estado
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, trechosErro: '' };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '' };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -2534,6 +2534,13 @@
       if (pts.length) h.push('<div class="hint">Ordenados por km, como no diagrama. Toque num segmento (aqui ou no desenho) para marcar o estado.</div>');
       else h.push('<div class="empty" data-segvazio="1">' + esc(segVazioTxt(c)) + '</div>');
       h.push('<div class="hint ct-aviso" data-aviso="segmentos">' + esc(avisoSegmentosTxt(c)) + '</div>');
+    } else if (oae && medGlobalDe(c, anOf(c))) {
+      // pontes de uma medição: só as que tiveram serviço nela, da maior para a menor
+      var anL = anOf(c), gL = medGlobalDe(c, anL), vL = function (p) { var a = anL.pontes && anL.pontes[p.id]; return a ? Number(a.meses[String(gL)]) || 0 : 0; };
+      var nTot = pts.length;
+      pts = pts.filter(function (p) { return vL(p) > 0; }).sort(function (x, y) { return vL(y) - vL(x); });
+      h.push('<div class="points-head"><h2>Pontes<span class="count">' + pts.length + ' de ' + nTot + '</span></h2><button type="button" class="btn small" data-act="an-med" data-v="0">Todas por km</button></div>');
+      h.push('<div class="hint">Só as pontes com serviço na ' + esc(medTxt(anL, gL)) + ', da maior para a menor. Ao abrir uma, o gráfico já mostra essa medição.</div>');
     } else {
       h.push('<div class="points-head"><h2>' + (oae ? 'Pontes' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ Ponte' : '+ Ponto') + '</button></div>');
       h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
@@ -2766,7 +2773,7 @@
       total += als.length;
       pontes[pid] = Object.assign({}, a, { alertas: als, aa: als.length, al: als.length, grupos: grupos, et: et, mx: Object.keys(mx).map(Number).sort(function (x, y) { return x - y; }) });
     });
-    return Object.assign({}, raw, { pontes: pontes, etapas: etapas, resumo: Object.assign({}, raw.resumo, { altos: total, alertas: total, pontesAlerta: comAlerta }) });
+    return Object.assign({}, raw, { medicoes: meds, pontes: pontes, etapas: etapas, resumo: Object.assign({}, raw.resumo, { altos: total, alertas: total, pontesAlerta: comAlerta }) });
   }
   // etapa mostrada na tela (0 = todas), se existir nesta análise
   function etapaDe(an) { return etapaSel && an && (an.etapas || []).some(function (e) { return e.etapa === etapaSel; }) ? etapaSel : 0; }
@@ -2826,9 +2833,10 @@
 
   // no resumo: com "Todas", uma linha por etapa; com uma etapa, as pontes sem serviço, as atendidas mais de uma vez e
   // (na 1ª etapa) o executado × estimado do Anexo VI. Tocar numa ponte abre o cartão dela.
+  function anPChip(p) { return '<button type="button" class="an-pchip" data-act="an-ir" data-id="' + esc(p.id) + '">' + esc(p.nome || p.codigo || '?') + (p.kmIni != null ? ' <small>km ' + esc(fmtKm(p.kmIni)) + '</small>' : '') + '</button>'; }
   function etapasHtml(an, cob, E) {
     var h = '';
-    function pChip(p) { return '<button type="button" class="an-pchip" data-act="an-ir" data-id="' + esc(p.id) + '">' + esc(p.nome || p.codigo || '?') + (p.kmIni != null ? ' <small>km ' + esc(fmtKm(p.kmIni)) + '</small>' : '') + '</button>'; }
+    var pChip = anPChip;
     function estRow(y) {
       return '<button type="button" class="an-prow" data-act="an-ir" data-id="' + esc(y.p.id) + '"><span><b>' + esc(nomePonte(y.p)) + '</b><small>executado ' + fmtBRL(y.v) + ' de ' + fmtBRL(y.est) + ' estimados' + (y.v > y.est ? ' · <span class="an-over">' + fmtBRL(y.v - y.est) + ' acima</span>' : '') + '</small></span>' +
         '<span class="an-v"><b' + (y.pct > 100 ? ' class="an-over"' : '') + '>' + pctTxt(y.pct) + '</b></span></button>';
@@ -2887,7 +2895,9 @@
     h += '<div class="an-kpis">' + kp.map(function (k) {
       return '<div class="an-kpi"><span>' + esc(k[0]) + '</span><b>' + esc(k[1]) + '</b><small>' + esc(k[2]) + '</small></div>';
     }).join('') + '</div>';
+    h += medListaHtml(c, an, E);
     h += etapasHtml(an, cob, E);
+    h += cmpResumoHtml(c, an);
     if (sobre.fonte) h += '<div class="an-src">Fonte: ' + esc(sobre.fonte) + '.</div>';
     // as notas de critérios que não valem mais na tela (garantia, carta das juntas, comprimento das juntas, vegetação) saem
     var notas = [{ assunto: 'Alertas desta tela', texto: 'Alerta por ponte: atendida mais de uma vez na mesma etapa (uma passagem = medições seguidas com serviço); o PTO prevê uma passagem por estrutura em cada etapa. ' +
@@ -2914,7 +2924,7 @@
     var badge = (n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '') +
       (function () { var k = alertasEm(a, etapaDe(an)).length; return k ? '<b class="pt-al" title="' + k + (k === 1 ? ' alerta' : ' alertas') + ' na análise das medições">' + k + '</b>' : ''; })();
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n, c)) + '">' + nt + '</span>' + ICON_CHEV;
+      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') + (a ? ultTagHtml(c, an, a) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n, c)) + '">' + nt + '</span>' + ICON_CHEV;
   }
 
   function ponteCard(p, c) {
@@ -2937,10 +2947,11 @@
       h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       // com a análise: a última restauração do grupo (verde) e o alerta; o estado continua sendo o da vistoria
       h += servHtml(p, servicesOf(c), function (s) {
-        var gi = a && a.grupos ? a.grupos[s.key] : null;
-        if (!gi) return '';
+        var gi = a && a.grupos ? a.grupos[s.key] : null, cm = a ? cmpGrupo(c, p, s.key, an, gi) : null;
+        var cmH = cm ? '<small class="svc-med cmp">' + esc(cm.t) + '</small>' : '';
+        if (!gi) return cmH;
         var mm = gi.ult ? mesMed(an, gi.ult) : '';
-        return (gi.ult ? ' <span class="svc-rest" title="Última medição com este serviço nesta ponte">restaurado ' + esc((mm ? mm + ' · ' : '') + gi.ult + 'ª') + '</span>' : '') +
+        return cmH + (gi.ult ? ' <span class="svc-rest" title="Última medição com este serviço nesta ponte">restaurado ' + esc((mm ? mm + ' · ' : '') + gi.ult + 'ª') + '</span>' : '') +
           (gi.altos ? '<small class="svc-med al">' + esc(comMes(an, gi.alerta || 'alerta')) + '</small>' : '');
       }, function (s, cur) {
         // medido sem execução: marca interna, gravada à parte (Banco.analiseMarcar), só para quem vê a análise.
@@ -3116,6 +3127,114 @@
   // medição citada sempre com o mês e o ano: "25ª (mar/26)" (os meses vêm da análise)
   function mesMed(an, n) { var m = null; ((an && an.medicoes) || []).forEach(function (x) { if (x.n === Number(n)) m = x; }); return m && m.mes ? m.mes : ''; }
   function medTxt(an, n) { var mm = mesMed(an, n); return n + 'ª' + (mm ? ' (' + mm + ')' : ''); }
+
+  // ---------------- última medição da ponte, pontes por medição e medido × vistoriado
+  // mês da medição como número (ano × 12 + mês). A idade da última medição da ponte é contada até a última medição do
+  // contrato, não até hoje: a análise só vai até a medição mais recente que foi lida
+  function medIdx(an, n) {
+    var r = null;
+    ((an && an.medicoes) || []).forEach(function (m) { if (m.n === Number(n) && /^\d{4}-\d{2}/.test(m.ref || '')) r = Number(m.ref.slice(0, 4)) * 12 + Number(m.ref.slice(5, 7)); });
+    return r;
+  }
+  var ULT_REC = 2, ULT_MED = 6;   // verde até 2 meses antes da última do contrato, amarelo até 6, vermelho depois (ou nunca)
+  function ultMedDe(an, a) {
+    var ms = (an && an.medicoes) || [], fim = ms.length ? ms[ms.length - 1] : null, u = null;
+    if (!fim) return null;
+    ms.forEach(function (m) { if (a && a.meses && Number(a.meses[String(m.n)]) > 0) u = m; });
+    var id = u ? medIdx(an, fim.n) - medIdx(an, u.n) : null;
+    return { m: u, fim: fim, idade: id, cls: !u ? 'nunca' : !isFinite(id) || id <= ULT_REC ? 'rec' : id <= ULT_MED ? 'med' : 'ant' };
+  }
+  // etiqueta na linha da ponte: a última medição com serviço (cor pela idade) ou, com uma medição escolhida na lista,
+  // o valor medido nela
+  function ultTagHtml(c, an, a) {
+    var g = medGlobalDe(c, an);
+    if (g) {
+      var v = Number(a.meses && a.meses[String(g)]) || 0;
+      return v ? ' <span class="pt-ult u-sel" title="' + esc('Medido nesta ponte na ' + medTxt(an, g)) + '">' + esc(g + 'ª · ' + fmtBRLc(v)) + '</span>' : '';
+    }
+    var u = ultMedDe(an, a);
+    if (!u) return '';
+    var tip = !u.m ? 'Nenhuma medição com serviço nesta ponte' : 'Última medição com serviço nesta ponte: ' + medTxt(an, u.m.n) +
+      (u.idade ? ', ' + u.idade + (u.idade === 1 ? ' mês' : ' meses') + ' antes da ' + medTxt(an, u.fim.n) + ', a última do contrato' : ', a última do contrato');
+    return ' <span class="pt-ult u-' + u.cls + '" title="' + esc(tip) + '">' + esc(u.m ? 'Última ' + u.m.n + 'ª · ' + u.m.mes : 'Nunca medida') + '</span>';
+  }
+  // medição escolhida na lista (por contrato), se existir nesta análise
+  function medGlobalDe(c, an) {
+    var n = c && ui.medGlobal[c.id];
+    return n && an && (an.medicoes || []).some(function (m) { return m.n === n; }) ? n : null;
+  }
+  // medição mostrada no cartão da ponte: a tocada no gráfico (null = todas) ou, sem toque, a escolhida na lista
+  function medSelDe(pid) {
+    if (Object.prototype.hasOwnProperty.call(ui.medSel, pid)) return ui.medSel[pid];
+    var c = active();
+    return medGlobalDe(c, anOf(c));
+  }
+  // resumo: seletor "Pontes por medição"; com uma escolhida, o total dela e quem entrou e saiu em relação à anterior
+  function medListaHtml(c, an, E) {
+    var ps = sortedPoints(c), g = medGlobalDe(c, an), sid = 'anMed-' + c.id, todas = an.medicoes || [];
+    var ms = todas.filter(function (m) { return !E || m.etapa === E || m.n === g; }).slice().reverse();
+    function medidas(n) { return ps.filter(function (p) { var a = an.pontes && an.pontes[p.id]; return a && Number(a.meses[String(n)]) > 0; }); }
+    var fim = todas[todas.length - 1];
+    var h = '<div class="an-sec an-medsel"><h4><label for="' + sid + '">Pontes por medição</label></h4>' +
+      '<select id="' + sid + '" data-anmed="1"><option value="">Todas as pontes, por km</option>' + ms.map(function (m) {
+        var k = medidas(m.n).length;
+        return '<option value="' + m.n + '"' + (g === m.n ? ' selected' : '') + '>' + esc(m.n + 'ª · ' + m.mes + ' · ' + k + (k === 1 ? ' ponte' : ' pontes')) + '</option>';
+      }).join('') + '</select>';
+    if (g) {
+      var cur = medidas(g), ant = null;
+      todas.forEach(function (m) { if (m.n < g && (!ant || m.n > ant.n)) ant = m; });
+      var v = cur.reduce(function (t, p) { return t + (Number(an.pontes[p.id].meses[String(g)]) || 0); }, 0);
+      var nal = cur.filter(function (p) { return (an.pontes[p.id].mx || []).indexOf(g) >= 0; }).length;
+      h += '<div class="an-line"><b>' + cur.length + (cur.length === 1 ? ' ponte' : ' pontes') + '</b> com serviço na ' + esc(medTxt(an, g)) + ' · ' + fmtBRL(v) + ' nas pontes' +
+        (nal ? ' · <span class="an-over">' + nal + ' com alerta</span>' : '') + '</div>';
+      if (ant) {
+        var pa = medidas(ant.n), idsC = cur.map(function (p) { return p.id; }), idsA = pa.map(function (p) { return p.id; });
+        var entr = cur.filter(function (p) { return idsA.indexOf(p.id) < 0; }), sai = pa.filter(function (p) { return idsC.indexOf(p.id) < 0; });
+        h += '<div class="an-line">Em relação à ' + esc(medTxt(an, ant.n)) + ': ' + (entr.length ? entr.length + (entr.length === 1 ? ' entrou' : ' entraram') : 'nenhuma entrou') +
+          ' · ' + (sai.length ? sai.length + (sai.length === 1 ? ' saiu' : ' saíram') : 'nenhuma saiu') + '</div>';
+        if (entr.length) h += '<div class="an-pchips"><span class="an-pch-l">Entraram</span>' + entr.map(anPChip).join('') + '</div>';
+        if (sai.length) h += '<div class="an-pchips"><span class="an-pch-l">Saíram</span>' + sai.map(anPChip).join('') + '</div>';
+      }
+    } else if (fim) {
+      h += '<div class="an-line an-ult-leg">Etiqueta de cada ponte: a última medição com serviço, contando até a ' + esc(medTxt(an, fim.n)) + ', a última do contrato. ' +
+        '<span class="pt-ult u-rec">até ' + ULT_REC + ' meses</span> <span class="pt-ult u-med">' + (ULT_REC + 1) + ' a ' + ULT_MED + ' meses</span> ' +
+        '<span class="pt-ult u-ant">mais de ' + ULT_MED + ' meses</span> <span class="pt-ult u-nunca">nunca medida</span></div>';
+    }
+    return h + '</div>';
+  }
+  // medido × vistoriado de um grupo: só os casos para conferir. Dano observado num grupo que nenhuma medição pagou, ou
+  // dano observado até 6 meses depois da medição que pagou o serviço (mês da vistoria do grupo; sem ela, a data da vistoria
+  // do contrato)
+  var CMP_MESES = 6;
+  function vistIdx(c, p, key) {
+    var x = banco.on && banco.meta[metaKey(c.id, p.id)], f = x && x.m && x.m['serv.' + key], d = f ? new Date(f.em) : null;
+    if (!d || !isFinite(d)) d = c.dataVistoria ? new Date(c.dataVistoria + 'T12:00:00') : null;
+    return d && isFinite(d) ? d.getFullYear() * 12 + d.getMonth() + 1 : null;
+  }
+  function cmpGrupo(c, p, key, an, gi) {
+    if (oaeSt(p.serv[key]) !== 'DN') return null;
+    if (!gi || !gi.ult) return { k: 'nunca', t: 'dano observado e nenhuma medição deste serviço nesta ponte' };
+    var vi = vistIdx(c, p, key), mi = medIdx(an, gi.ult), d = vi != null && mi != null ? vi - mi : null;
+    if (d == null || d < 0 || d > CMP_MESES) return null;
+    return { k: 'logo', t: 'dano observado ' + (d === 0 ? 'no mesmo mês da ' : d + (d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, gi.ult) + ', que mediu este serviço' };
+  }
+  // resumo: os grupos com dano observado que pedem conferência com as medições
+  function cmpResumoHtml(c, an) {
+    var rows = [];
+    sortedPoints(c).forEach(function (p) {
+      var a = an.pontes && an.pontes[p.id];
+      if (!a) return;
+      servicesOf(c).forEach(function (s) {
+        var cm = cmpGrupo(c, p, s.key, an, a.grupos ? a.grupos[s.key] : null);
+        if (cm) rows.push({ p: p, s: s, cm: cm });
+      });
+    });
+    var h = '<div class="an-sec"><h4>Medido × vistoriado (' + rows.length + ')</h4>';
+    if (!rows.length) return h + '<div class="empty">Nenhum grupo com dano observado sem medição ou até ' + CMP_MESES + ' meses depois de medido.</div></div>';
+    return h + rows.map(function (r) {
+      return '<button type="button" class="an-prow" data-act="an-ir" data-id="' + esc(r.p.id) + '"><span><b>' + esc(nomePonte(r.p) + ' · ' + r.s.short) + '</b><small>' + esc(r.cm.t) + '</small></span></button>';
+    }).join('') + '</div>';
+  }
   // nos textos que vêm prontos da análise: cada "Nª" de medição ganha o mês (etapa e o que já tem mês ficam como estão)
   function comMes(an, t) {
     return String(t == null ? '' : t).replace(/(\d+)ª(?!\s*(etapa|\(|saída))/g, function (x, n) { var mm = mesMed(an, n); return mm ? x + ' (' + mm + ')' : x; });
@@ -3164,12 +3283,12 @@
     var pid = art && art.dataset.id, an = anOf(active()), a = an && an.pontes ? an.pontes[pid] : null;
     if (!a) return;
     var box = art.querySelector('.abc-box'), topo = art.querySelector('.an-topo');
-    if (box) box.innerHTML = abcHtml(an, a, ui.medSel[pid]);
-    if (topo) topo.innerHTML = topoHtml(an, a, ui.medSel[pid]);
+    if (box) box.innerHTML = abcHtml(an, a, medSelDe(pid));
+    if (topo) topo.innerHTML = topoHtml(an, a, medSelDe(pid));
   }
   // medições da ponte (barras por medição), serviços pela curva ABC e alertas
   function ponteAnaliseHtml(an, a, pid) {
-    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = ui.medSel[pid] || null, E = etapaDe(an);
+    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = medSelDe(pid) || null, E = etapaDe(an);
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
     // só o histórico: total, por etapa e as últimas medições com serviço (sem comparar com o estimado do Anexo VI)
@@ -3535,6 +3654,17 @@
   function onInput(e) {
     var t = e.target, c = active();
     if (isFiscal() && !t.dataset.svcpct) return;
+    // pontes por medição (análise das medições): só muda a tela
+    if (t.dataset.anmed) {
+      if (e.type !== 'change') return;
+      var nm = Number(t.value) || null;
+      if (nm) ui.medGlobal[c.id] = nm; else delete ui.medGlobal[c.id];
+      ui.medSel = {};
+      renderEditor();
+      var sm = document.querySelector('[data-anmed]');
+      if (sm) sm.focus();
+      return;
+    }
     // limites dos trechos: só ao sair do campo. Lista que não vale não grava (o aviso diz por quê); vazia apaga; não é vistoria
     if (t.dataset.trechos) {
       if (e.type !== 'change') return;
@@ -3656,8 +3786,8 @@
       var art = b.closest('article.pt'), gr = art && art.querySelector('.an-graf'), det = gr && gr.querySelector('.an-det');
       if (!art || !gr) return;
       var pidSel = art.dataset.id, n = act === 'med-bar' ? Number(b.dataset.n) : null;
-      if (n && ui.medSel[pidSel] === n) n = null;
-      if (n) ui.medSel[pidSel] = n; else delete ui.medSel[pidSel];
+      if (n && medSelDe(pidSel) === n) n = null;
+      ui.medSel[pidSel] = n;   // null = todas, mesmo com uma medição escolhida na lista
       gr.querySelectorAll('.an-bar').forEach(function (x) {
         var on = n != null && Number(x.dataset.n) === n;
         x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on));
@@ -3670,6 +3800,7 @@
     if (act === 'an-etapa') {
       var ev = Number(b.dataset.v) || 0;
       ui.medSel = {};
+      if (c) delete ui.medGlobal[c.id];
       if (ev !== etapaSel) { etapaSel = ev; lsPut(ETAPA_KEY, ev || null); }
       renderEditor();
       return;
@@ -3714,9 +3845,18 @@
       });
       return;
     }
+    // lista das pontes: só as medidas numa medição (da maior para a menor) ou todas por km
+    if (act === 'an-med') {
+      var nv = Number(b.dataset.v) || null;
+      if (nv) ui.medGlobal[c.id] = nv; else delete ui.medGlobal[c.id];
+      ui.medSel = {};
+      renderEditor();
+      return;
+    }
     // ponte citada no resumo da análise: abre o cartão dela
     if (act === 'an-ir') {
-      var pidIr = b.dataset.id;
+      var pidIr = b.dataset.id, anIr = anOf(c), gIr = medGlobalDe(c, anIr), aIr = anIr && anIr.pontes ? anIr.pontes[pidIr] : null;
+      if (gIr && !(aIr && Number(aIr.meses[String(gIr)]) > 0)) delete ui.medGlobal[c.id];
       ui.open[pidIr] = true;
       renderEditor();
       var alvo = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(pidIr) : pidIr) + '"]');
