@@ -2833,7 +2833,7 @@
     }).join('');
     var n = oaeNec(p, c), kt = trafSt(p.serv[TRAFEG.key]), len = pointLen(p), contr = segContrTxt(c, p), snv = snvDoSegmento(p);
     var km = 'km ' + (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?') + (contr ? ' (' + contr + ')' : '') +
-      (len != null ? ' · ' + fmt(len, 2) + ' km' : '') + (snv ? ' · ' + snv : '');
+      (len != null ? ' · ' + fmt(len, 2) + ' km' : '') + (snv ? ' · ' + snv : '');
     var np = banco.on ? propsDo(c.id, p.id).length : 0, nome = (p.nome || '?') + (p.descricao ? ' · ' + p.descricao : '');
     var badge = n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '';
     return '<span class="pt-name" title="' + esc(nome) + '">' + esc(nome) + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
@@ -3784,6 +3784,8 @@
         ui.open = {};
         if (c === active() && !visaoOn) renderEditor();
         afterEdit('gerar-segmentos', c);
+        // envia já (sem a espera de 1,2 s): enquanto os segmentos estão só neste aparelho, outro aparelho pode gerar de novo
+        trackChanges(); scheduleFlush(0);
       });
     });
   }

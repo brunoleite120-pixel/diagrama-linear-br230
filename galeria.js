@@ -352,7 +352,7 @@
     if (!r.em && (m = /(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})/.exec(n))) r.em = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString();
     var c = ligarContrato(cs, nm, { numero: numero, nomes: nomes, pastas: ps, km: r.km }), p = null;
     if (c) {
-      p = r.pnome ? (c.pontos || []).find(function (x) { return x.nome === r.pnome; }) : null;
+      p = r.pnome ? pontosDe(c).find(function (x) { return x.nome === r.pnome; }) : null;
       if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= 0.05) p = pp.p; }
     }
     return { id: r.idApp && r.idApp.length >= 4 ? r.idApp.slice(0, 80) : 'drv_' + f.id, drive_id: f.id, drive_url: f.url || null, nome_arquivo: n || 'foto.jpg',
