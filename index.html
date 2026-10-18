@@ -466,7 +466,6 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .preview-tools .btn.small,.ro-note .btn{min-height:44px}
   .view-sw button{min-height:44px}
   .pages-ctl select{min-height:44px}
-  [data-act="add-point"]{min-height:44px}
 }
 /* dica de instalação no iPhone/iPad: no fim da lista, sem cobrir nada (app.js dicaInstalar) */
 .dica-inst{display:flex;align-items:flex-start;gap:10px;padding:10px 4px 10px 12px;border:1px dashed #9AA39E;border-radius:var(--radius);background:var(--panel);font-size:13px;color:var(--ink-2)}
@@ -831,6 +830,18 @@ span.an-chip{cursor:default}
   .print-sheet{width:420mm;height:297mm;break-after:page;page-break-after:always;overflow:hidden}
   .print-sheet:last-child{break-after:auto;page-break-after:auto}
   .print-sheet svg{width:420mm;height:297mm;display:block}
+}
+/* dedo: o ponto aberto com alvos de 44 px (no fim, para valer sobre as regras do editor). No celular em pé, os botões de
+   situação descem para uma linha inteira embaixo do nome e do percentual (ao lado deles, 5 botões ficavam com 36 px) */
+@media (pointer:coarse),(max-width:700px){
+  .field input,.field select,.pct-in input,.svc-nota{min-height:44px}
+  .seg button,.svc.oae .seg button,.svc-marcas button,.pt .btn,.section-title .btn,[data-act="add-point"]{min-height:44px}
+}
+@media (max-width:700px){
+  .svc:not(.oae){grid-template-columns:minmax(0,1fr) 80px;row-gap:6px}
+  .svc:not(.oae) .svc-name{grid-column:1;grid-row:1}
+  .svc:not(.oae) .pct-in{grid-column:2;grid-row:1}
+  .svc:not(.oae) .seg{grid-column:1/-1;grid-row:2}
 }
 </style>
 </head>
