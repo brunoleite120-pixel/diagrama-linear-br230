@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Diagrama Linear · Pontos Críticos</title>
 <meta name="description" content="Pontos críticos da BR-230/PA: diagrama linear, mapa SNV com GPS e foto com carimbo.">
 <meta name="theme-color" content="#FFFFFF">
@@ -18,7 +18,7 @@ html{scroll-padding-top:calc(var(--topbar-h,0px) + 8px)}
 :root{
   --ground:#F1F3F1; --panel:#FFFFFF; --ink:#17201C; --ink-2:#3B4540; --ink-3:#5C6661;
   --line:#D5DAD6; --line-2:#E6E9E6; --accent:#1D4F91; --accent-ink:#FFFFFF; --accent-soft:#E7EEF7;
-  --ok:#1E9E55; --ativo:#2B5797; --parado:#D93025; --danger:#B42318;
+  --ok:#178245; --ativo:#2B5797; --parado:#D93025; --danger:#B42318;
   --danificado:#F2A93B; --danificado-ink:#3D2800; --alerta:#7B3FA0;
   --radius:8px; --shadow:0 1px 2px rgba(23,32,28,.06),0 6px 24px rgba(23,32,28,.08);
   font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
@@ -304,7 +304,7 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg-busca input{font-size:16px;min-height:44px}
   .vg-chip{min-height:38px}
   .vg-leg{font-size:11.5px}
-  .vg-card{position:fixed;left:0;right:0;bottom:0;max-width:none;max-height:min(58vh,calc(100vh - var(--topbar-h,170px) - 16px));overflow-y:auto;overscroll-behavior:contain;z-index:15;border-radius:16px 16px 0 0;border-bottom:0;gap:10px;
+  .vg-card{position:fixed;left:0;right:0;bottom:0;max-width:none;max-height:min(58vh,calc(100vh - var(--topbar-h,170px) - 16px));max-height:min(58dvh,calc(100dvh - var(--topbar-h,170px) - 16px));overflow-y:auto;overscroll-behavior:contain;z-index:15;border-radius:16px 16px 0 0;border-bottom:0;gap:10px;
     padding:10px 16px calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 24px rgba(23,32,28,.18)}
   .vg-card::before{content:"";justify-self:center;width:40px;height:4px;border-radius:2px;background:#C9D0CC}
   .vg-acoes .btn{flex:1 1 0;justify-content:center;min-height:44px}
@@ -349,6 +349,82 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .actions .menu{justify-self:stretch}
   #btnMenu{width:100%;justify-content:center}
 }
+
+/* ---------- atalhos Pontos · Diagrama · Mapa: no tablet e no celular, onde o editor fica em cima da folha (app.js irPara) ---------- */
+.atalhos,.ctm-curto,.btn .ic-menu,.so-compacto,.ler-btn{display:none}
+@media (max-width:1100px){
+  .atalhos{display:inline-flex;flex:0 1 260px;border:1px solid var(--line);border-radius:8px;background:var(--ground)}
+  .atalhos button{flex:1 1 0;min-width:0;min-height:40px;padding:0 6px;border:0;border-radius:7px;background:none;font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+  .atalhos button[aria-pressed="true"]{background:var(--panel);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+}
+/* ---------- celular (em pé ou deitado): barra do topo compacta, botões de 44 px.
+   Em pé, 2 linhas: [logo] [Visão geral] [contrato ▾] [PRÉVIA] / [Pontos · Diagrama · Mapa] [PDF] [Dados]. Deitado, 1 linha.
+   O texto "Banco de teste · 09:12" e o "Entrar" vão para o menu Dados; um aviso (sem sinal, alterações não enviadas)
+   continua na barra, numa 3ª linha. Rolando para baixo, em pé, a barra encolhe para a 2ª linha (body.topo-mini, app.js) ---------- */
+@media (max-width:700px),(max-height:500px) and (orientation:landscape) and (max-width:1100px){
+  .topbar{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:"logo tabs tabs selo" "atal atal pdf menu" "est est est est";gap:8px;align-items:center;
+    padding:calc(8px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) 8px calc(12px + env(safe-area-inset-left,0px))}
+  .brand,.actions{display:contents}
+  .brand img{grid-area:logo;height:32px}
+  .brand > div{display:none}
+  .selo-previa{grid-area:selo;padding:2px 6px;font-size:9.5px}
+  .tabs{grid-area:tabs;min-width:0;gap:8px}
+  .tabs .tab{min-height:44px;font-size:13.5px}
+  .tab-visao{width:44px;padding:0;justify-content:center}
+  .tab-visao .tv-txt{display:none}
+  .tab-visao svg{width:18px;height:18px}
+  .ctmenu{flex:1 1 auto}
+  .ctm-btn{width:100%;justify-content:space-between}
+  /* a lista dos contratos desce embaixo da barra inteira, na largura da tela (também quando aberta pela barra encolhida) */
+  .tabs{position:static}
+  .ctm-pop{left:calc(12px + env(safe-area-inset-left,0px));right:calc(12px + env(safe-area-inset-right,0px));top:calc(100% + 4px)}
+  .ctm-i{min-height:44px;align-items:center}
+  .atalhos{grid-area:atal;display:flex}
+  .atalhos button{min-height:42px;padding:0 4px}
+  #btnPdf{grid-area:pdf;width:44px;min-height:44px;padding:0;justify-content:center}
+  .actions .menu{grid-area:menu;justify-self:end}
+  #btnMenu{width:44px;min-height:44px;padding:0;justify-content:center}
+  #btnPdf svg,#btnMenu svg{width:18px;height:18px}
+  #btnPdf .btn-txt,#btnMenu .btn-txt,#btnMenu .ic-desce,.topbar #btnLogin{display:none}
+  #btnMenu .ic-menu{display:block}
+  .save-state{grid-area:est;display:none;min-width:0;text-align:left}
+  .save-state.warn{display:block}
+  .so-compacto{display:block}
+  .menu-estado{padding:6px 10px 2px;font-size:12px;color:var(--ink-3)}
+  .menu-pop{max-width:calc(100vw - 24px)}
+  .menu-pop button{min-height:44px}
+  body.topo-mini .topbar{grid-template-areas:"curto atal atal menu" "est est est est"}
+  body.topo-mini .brand img,body.topo-mini .selo-previa,body.topo-mini .tabs,body.topo-mini #btnPdf{display:none}
+  body.topo-mini .ctm-curto{grid-area:curto;display:inline-flex;align-items:center;gap:2px;min-height:44px;padding:0 8px 0 12px;background:var(--ink);border-color:var(--ink);color:#fff;font-size:13px}
+  .ctm-curto svg{width:14px;height:14px;margin-left:2px}
+  #btnWide,#viewSw{display:none}
+  /* o mapa ocupa a tela abaixo da barra (o atalho Mapa rola até ele) */
+  .map-host{height:calc(100vh - 125px);height:calc(100dvh - 125px);min-height:300px}
+  /* a folha inteira cabe na largura, mas a letra fica pequena: "Abrir para ler" abre a tela cheia nesta página */
+  .sheet{position:relative}
+  .ler-btn{display:inline-flex;position:absolute;left:50%;bottom:10px;transform:translateX(-50%);align-items:center;gap:6px;min-height:44px;padding:0 18px;border:0;border-radius:999px;
+    background:var(--accent);color:#fff;font-size:14px;font-weight:600;box-shadow:0 4px 14px rgba(23,32,28,.25);white-space:nowrap}
+  .ler-btn svg{width:18px;height:18px}
+}
+/* deitado: tudo numa linha, sem encolher ao rolar; o mapa ocupa a altura que sobra */
+@media (max-height:500px) and (orientation:landscape) and (max-width:1100px){
+  .topbar{grid-template-columns:auto auto minmax(0,300px) 1fr auto auto auto;grid-template-areas:"logo tabs atal . pdf menu selo" "est est est est est est est";padding-top:calc(6px + env(safe-area-inset-top,0px));padding-bottom:6px}
+  .ctm-btn{width:auto}
+  .map-host{height:calc(100vh - 69px);height:calc(100dvh - 69px);min-height:220px}
+}
+/* dedo: botões das ferramentas da folha, do aviso "Só consulta" e da troca Diagrama/Mapa com 44 px */
+@media (pointer:coarse),(max-width:700px){
+  .topbar .tab,.topbar .btn,.atalhos button,.pt-head{min-height:44px}
+  .preview-tools .btn.small,.ro-note .btn{min-height:44px}
+  .view-sw button{min-height:44px}
+  .pages-ctl select{min-height:44px}
+}
+/* dica de instalação no iPhone/iPad: no fim da lista, sem cobrir nada (app.js dicaInstalar) */
+.dica-inst{display:flex;align-items:flex-start;gap:10px;padding:10px 4px 10px 12px;border:1px dashed #9AA39E;border-radius:var(--radius);background:var(--panel);font-size:13px;color:var(--ink-2)}
+.dica-inst svg{flex:none;width:20px;height:20px;margin-top:1px;color:var(--accent)}
+.dica-inst span{flex:1;min-width:0}
+.dica-inst b{color:var(--ink)}
+.dica-inst button{flex:none;width:44px;height:44px;margin:-10px 0;border:0;background:none;font-size:20px;color:var(--ink-3)}
 
 /* ---------- editor ---------- */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius)}
@@ -406,6 +482,14 @@ button.vg-tr.sel{background:var(--accent-soft)}
 .dot.OK{background:var(--ok)} .dot.A{background:var(--ativo)} .dot.P{background:var(--parado)} .dot.NA{background:#fff;box-shadow:inset 0 0 0 1px #B9C0BC}
 .dot.DN{background:var(--danificado)} .dot.EX{background:var(--ativo)} .dot.NV{background:#E6E9E6;box-shadow:inset 0 0 0 1px #C9CECB}
 .pt-pct{font-weight:650;font-variant-numeric:tabular-nums;text-align:right}
+@media (max-width:560px){
+  .pt:not(.oae) .pt-head{grid-template-columns:minmax(0,1fr) auto 46px 16px;row-gap:1px}
+  .pt:not(.oae) .pt-name{grid-column:1;grid-row:1}
+  .pt:not(.oae) .pt-km{grid-column:1;grid-row:2;overflow:visible}
+  .pt:not(.oae) .pt-dots{grid-column:2;grid-row:1 / span 2}
+  .pt:not(.oae) .pt-pct{grid-column:3;grid-row:1 / span 2}
+  .pt:not(.oae) .pt-head > .chev{grid-column:4;grid-row:1 / span 2}
+}
 .pt-body{padding:2px 12px 14px;display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line-2)}
 .pt-body .grid{margin-top:10px}
 
@@ -482,6 +566,12 @@ body.fiscal [data-act="add-prazo"],body.fiscal [data-act="del-prazo"],body.fisca
 .pt.oae .pt-head{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) auto 54px 16px}
 .pt.oae .pt-name{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pt.oae .pt-pct{font-size:11.5px;white-space:nowrap}
+.pt.oae:not(.cons) .pt-head{grid-template-columns:minmax(0,1fr) auto 16px;row-gap:2px}
+.pt.oae:not(.cons) .pt-name{grid-column:1;grid-row:1;white-space:normal;overflow:visible;line-height:1.25}
+.pt.oae:not(.cons) .pt-pct{grid-column:2;grid-row:1}
+.pt.oae:not(.cons) .pt-km{grid-column:1;grid-row:2;white-space:normal;overflow:visible}
+.pt.oae:not(.cons) .pt-dots{grid-column:2;grid-row:2;justify-content:flex-end}
+.pt.oae:not(.cons) .pt-head > .chev{grid-column:3;grid-row:1 / span 2}
 .pt-pct.nec-dn{color:#9A5B00} .pt-pct.nec-exec{color:var(--ativo)} .pt-pct.nec-ok{color:var(--ok)} .pt-pct.nec-nv{color:var(--ink-3);font-weight:500}
 .pt-pri{display:inline-block;min-width:18px;padding:0 5px;margin-right:6px;border-radius:9px;background:#B42318;color:#fff;font-size:11px;font-weight:800;text-align:center;line-height:18px}
 /* segmentos da conservação (437, 438): trafegabilidade com 3 botões; as regras de .pt.cons vêm DEPOIS das de .pt.oae (o cartão
@@ -705,19 +795,27 @@ span.an-chip{cursor:default}
     </div>
   </div>
   <nav class="tabs" id="tabs" aria-label="Contratos"></nav>
+  <button type="button" class="tab ctm-curto" id="ctCurto" aria-label="Trocar de contrato"></button>
+  <div class="atalhos" id="atalhos" role="group" aria-label="Ir para">
+    <button type="button" data-ir="pontos" aria-pressed="true">Pontos</button><button type="button" data-ir="diagrama" aria-pressed="false">Diagrama</button><button type="button" data-ir="mapa" aria-pressed="false">Mapa</button>
+  </div>
   <div class="actions">
     <span class="save-state" id="saveState" aria-live="polite"></span>
     <button class="btn" id="btnLogin" type="button" hidden>Entrar para editar</button>
-    <button class="btn primary" id="btnPdf" type="button">
+    <button class="btn primary" id="btnPdf" type="button" aria-label="Exportar PDF">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-      Exportar PDF
+      <span class="btn-txt">Exportar PDF</span>
     </button>
     <div class="menu">
-      <button class="btn" id="btnMenu" type="button" aria-haspopup="true" aria-expanded="false">
-        Dados
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      <button class="btn" id="btnMenu" type="button" aria-expanded="false" aria-controls="menuPop" aria-label="Dados">
+        <svg class="ic-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span class="btn-txt">Dados</span>
+        <svg class="ic-desce" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="menu-pop" id="menuPop" hidden>
+        <div class="menu-estado so-compacto" id="menuEstado" hidden></div>
+        <button type="button" class="so-compacto" data-act="login" id="menuLogin" hidden>Entrar</button>
+        <hr class="so-compacto" id="menuLoginHr" hidden>
         <button type="button" data-act="backup">Salvar backup (.json)</button>
         <button type="button" data-act="restore">Abrir backup…</button>
         <button type="button" data-act="lixeira" hidden>Lixeira e cópias de segurança</button>
@@ -740,7 +838,7 @@ span.an-chip{cursor:default}
     <div class="preview-bar">
       <div class="meta" id="previewMeta"></div>
       <div class="preview-tools">
-        <div class="view-sw" role="group" aria-label="Visualização"><button type="button" id="viewDiagrama" data-view="diagrama" aria-pressed="true">Diagrama</button><button type="button" id="viewMapa" data-view="mapa" aria-pressed="false">Mapa</button></div>
+        <div class="view-sw" id="viewSw" role="group" aria-label="Visualização"><button type="button" id="viewDiagrama" data-view="diagrama" aria-pressed="true">Diagrama</button><button type="button" id="viewMapa" data-view="mapa" aria-pressed="false">Mapa</button></div>
         <div class="view-sw" id="folhaSw" role="group" aria-label="O que aparece na folha" hidden><button type="button" data-folha="vistoria" aria-pressed="false">Só vistoria</button><button type="button" data-folha="analise" aria-pressed="true">Com análise</button></div>
         <label class="pages-ctl" for="selPages">Páginas <select id="selPages" disabled><option>Automático</option></select></label>
         <button class="btn small" id="btnFoto" type="button" title="Foto com logo e legenda (km, coordenadas, ponto)">
@@ -792,10 +890,20 @@ span.an-chip{cursor:default}
 <script src="visao.js"></script>
 <script src="app.js"></script>
 <script>
-  // app instalado (iPhone: Compartilhar > Adicionar à Tela de Início): abre sem internet depois da primeira visita
-  if ('serviceWorker' in navigator && location.protocol === 'https:') {
-    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* segue sem modo offline */ }); });
-  }
+  // app instalado (iPhone: Compartilhar > Adicionar à Tela de Início): abre sem internet depois da primeira visita.
+  // No app nativo (Capacitor) os arquivos já vêm no pacote e a atualização é a do atualizar.js: sem service worker
+  // (no Android o app roda em https://localhost e registraria um), e um registrado por versão antiga sai
+  (function () {
+    if (!('serviceWorker' in navigator)) return;
+    var C = window.Capacitor, nativo = !!(C && C.isNativePlatform && C.isNativePlatform());
+    if (nativo) {
+      if (navigator.serviceWorker.getRegistrations) navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }, function () {});
+      return;
+    }
+    if (location.protocol === 'https:') {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* segue sem modo offline */ }); });
+    }
+  })();
 </script>
 </body>
 </html>

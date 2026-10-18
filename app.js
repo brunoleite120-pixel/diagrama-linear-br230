@@ -70,6 +70,7 @@
   // sem o app.js, e por isso cada módulo tem uma cópia curta da mesma regra
   var NOME_PALAVRA = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
   var NOME_CURTO = { pc: 'p. críticos', conserva: 'conserv.', oae: 'pontes' };   // rótulo pequeno da raia no celular
+  var CT_CURTO = { pc: 'PC', conserva: 'Cons.', oae: 'Proarte' };   // botão do contrato na barra encolhida do celular ("PC 314")
   var TIPO_ORDEM = ['pc', 'conserva', 'oae'];
   function txtLimpo(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
   function ctTipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
@@ -2106,11 +2107,79 @@
           esc(ctNome(c)) + '<small>' + esc(abaSub(c)) + '</small></button>';
       }).join('');
     }).join('');
-    nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-current="' + visaoOn + '">' + ICON_VISAO + 'Visão geral</button>' : '') +
-      '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-haspopup="true" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
+    // no celular a Visão geral fica só com o ícone (aria-label mantém o nome). O botão dos contratos abre uma lista de botões
+    // comuns (aria-expanded/aria-controls), sem a semântica de menu (aria-haspopup), que pediria setas e outro anúncio
+    nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-label="Visão geral" aria-current="' + visaoOn + '">' + ICON_VISAO + '<span class="tv-txt">Visão geral</span></button>' : '') +
+      '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
       (at ? esc(ctNome(at)) + '<small>' + esc(abaSub(at)) + '</small>' : 'Contratos') + ICON_DESCE + '</button>' +
       '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
       '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>';
+    var cc = $('ctCurto');
+    if (cc) cc.innerHTML = esc(at ? ctCurto(at) : 'Contratos') + ICON_DESCE;
+    var atl = $('atalhos');
+    if (atl) {
+      atl.hidden = visaoOn;
+      var bp = atl.querySelector('[data-ir="pontos"]');
+      if (bp && at) bp.textContent = isConserva(at) ? 'Segmentos' : isOae(at) ? 'Pontes' : 'Pontos';
+    }
+  }
+  function ctCurto(c) { var n = ctNumeroCurto(c); return n ? CT_CURTO[ctTipo(c)] + ' ' + n : ctNome(c); }
+
+  // ---------------- celular e tablet: atalhos Pontos · Diagrama · Mapa (o editor fica em cima da folha) e, no celular em pé,
+  // a barra do topo que encolhe ao rolar para baixo (fica só a 2ª linha, com o contrato curto) e volta ao rolar para cima.
+  // Ao encolher, a margem de baixo da barra guarda a altura que saiu: o resto da página não sobe (sem pulo na tela)
+  var mmEmPe = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
+  var mmAtalhos = window.matchMedia ? window.matchMedia('(max-width:1100px)') : null;
+  var rolY = 0;
+  function topoMini(on) {
+    var tb = document.querySelector('.topbar');
+    if (!tb || document.body.classList.contains('topo-mini') === !!on) return;
+    if (on) {
+      var h0 = tb.offsetHeight;
+      document.body.classList.add('topo-mini');
+      tb.style.marginBottom = Math.max(0, h0 - tb.offsetHeight) + 'px';
+    } else {
+      document.body.classList.remove('topo-mini');
+      tb.style.marginBottom = '';
+    }
+    syncTopbar();
+  }
+  function listaAberta() { return ($('ctmPop') && !$('ctmPop').hidden) || !$('menuPop').hidden; }
+  function aoRolar() {
+    var y = window.scrollY || 0, d = y - rolY;
+    if (!mmEmPe || !mmEmPe.matches || visaoOn || y < 140) { topoMini(false); rolY = y; }
+    else if (Math.abs(d) >= 8) {
+      if (d > 0 && !listaAberta()) topoMini(true);
+      else if (d < 0) topoMini(false);
+      rolY = y;
+    }
+    marcaAtalho();
+  }
+  function marcaAtalho(em) {
+    var atl = $('atalhos');
+    if (!atl || atl.hidden) return;
+    if (!em) {
+      var pv = document.querySelector('.preview'), tb = document.querySelector('.topbar');
+      em = pv && (ui.wide || pv.getBoundingClientRect().top <= (tb ? tb.offsetHeight : 0) + 80) ? (view === 'mapa' ? 'mapa' : 'diagrama') : 'pontos';
+    }
+    atl.querySelectorAll('[data-ir]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.ir === em)); });
+  }
+  function irPara(onde) {
+    var alvo;
+    if (onde === 'pontos') {
+      if (ui.wide) toggleWide(false);
+      alvo = $('editor').querySelector('.points-head') || $('editor');
+    } else {
+      if ((onde === 'mapa') !== (view === 'mapa')) setView(onde);
+      alvo = view === 'mapa' ? $('mapHost') : document.querySelector('.preview');
+    }
+    if (!alvo) return;
+    // a barra já fica no tamanho de chegada (encolhida se o destino está mais abaixo), para a rolagem parar logo abaixo dela
+    var r = alvo.getBoundingClientRect();
+    topoMini(!!(mmEmPe && mmEmPe.matches) && r.top + (window.scrollY || 0) > 140 && r.top > 0);
+    alvo.scrollIntoView({ block: 'start' });
+    rolY = window.scrollY || 0;
+    marcaAtalho(onde === 'pontos' ? 'pontos' : view === 'mapa' ? 'mapa' : 'diagrama');
   }
   function ctMenu(abrir) {
     var pop = $('ctmPop'), b = document.querySelector('[data-act="ct-menu"]');
@@ -2423,6 +2492,7 @@
         'Você entrou como <b>fiscal de campo</b>. Este contrato de conservação ainda não tem segmentos: um engenheiro precisa gerá-los.') :
         'Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o estado de cada ponte e estime o dano (quanto e onde)' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.') + '</span></div>');
     }
+    h.push(dicaInstalarHtml());
     $('editor').innerHTML = h.join('');
     lockEditor();
   }
@@ -3209,19 +3279,15 @@
     (document.fullscreenElement || document.body).appendChild(bar);
   }
   // no Safari do iPhone não há botão de instalar: mostra o caminho uma vez
-  function installHint() {
+  // fica no fim da lista do editor (não cobre os pontos nem a tela cheia), até a pessoa dispensar; nunca no app nem já instalado
+  var ICON_INSTALAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 12v8h14v-8"/></svg>';
+  function dicaInstalarHtml() {
     var standalone = navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    if (!isIOS() || standalone || location.protocol !== 'https:') return;
-    try { if (localStorage.getItem('diagrama-linear.dica-instalar')) return; } catch (e) { return; }
-    var bar = document.createElement('div');
-    bar.className = 'share-ready';
-    bar.setAttribute('role', 'note');
-    bar.innerHTML = '<span>Para instalar no iPhone: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.</span><button type="button" class="btn" aria-label="Fechar">×</button>';
-    bar.querySelector('button').addEventListener('click', function () {
-      bar.remove();
-      try { localStorage.setItem('diagrama-linear.dica-instalar', '1'); } catch (e) { /* sem armazenamento */ }
-    });
-    document.body.appendChild(bar);
+    if (!isIOS() || standalone || isNativeApp() || location.protocol !== 'https:') return '';
+    try { if (localStorage.getItem('diagrama-linear.dica-instalar')) return ''; } catch (e) { return ''; }
+    var ipad = /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    return '<div class="dica-inst" role="note">' + ICON_INSTALAR + '<span><b>Use como app no ' + (ipad ? 'iPad' : 'iPhone') + '.</b> Toque em Compartilhar e depois em Adicionar à Tela de Início.</span>' +
+      '<button type="button" data-act="dica-fechar" aria-label="Dispensar a dica">×</button></div>';
   }
   function saveText(name, text, mime) { return saveBlob(name, new Blob([text], { type: mime || 'text/plain' })); }
   var foto = null;
@@ -3301,7 +3367,7 @@
     var sheets = renderSheets(c, temAn && folhaVistoria);
     renderPagesCtl(c);
     $('pages').innerHTML = sheets.map(function (svg, i) {
-      return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + '</div>';
+      return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + (viewer ? '<button type="button" class="ler-btn" data-ler="' + i + '">' + ICON_LER + 'Abrir para ler</button>' : '') + '</div>';
     }).join('');
     $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + metaItens(c, tot, true);
     if (viewer && viewer.isOpen()) viewer.update(sheets);
@@ -3350,6 +3416,7 @@
   }
   function mostraVisao() {
     var vh = $('visaoHost'), on = visaoOn && !!vh && !!ensureVisao();
+    if (on) topoMini(false);
     $('layout').hidden = on;
     if (vh) vh.hidden = !on;
     $('btnPdf').hidden = on;
@@ -3495,13 +3562,14 @@
     var tab = e.target.closest('[data-tab]');
     if (tab) {
       if (analise.estado[tab.dataset.tab] === 'erro') delete analise.estado[tab.dataset.tab];
-      var veioDaVisao = visaoOn;
+      var veioDaVisao = visaoOn, daLista = !!tab.closest('#ctmPop');
       setVisao(false);
       state.activeId = tab.dataset.tab;
       ui.open = {};
       save();
       renderAll();
       if (veioDaVisao) window.scrollTo(0, 0);
+      if (daLista) { var nb = document.querySelector('[data-act="ct-menu"]'); if (nb) nb.focus({ preventScroll: true }); }
       return;
     }
     var b = e.target.closest('[data-act]');
@@ -3510,6 +3578,12 @@
     if (act === 'ct-menu') { ctMenu($('ctmPop') && $('ctmPop').hidden); return; }
     if (b.closest && b.closest('#ctmPop')) ctMenu(false);
     if (act === 'visao') { setVisao(true); renderAll(); window.scrollTo(0, 0); return; }
+    if (act === 'dica-fechar') {
+      try { localStorage.setItem('diagrama-linear.dica-instalar', '1'); } catch (err) { /* sem armazenamento */ }
+      var dica = b.closest('.dica-inst');
+      if (dica) dica.remove();
+      return;
+    }
     if (act === 'login') { openLogin(); return; }
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
@@ -3930,8 +4004,11 @@
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  // clique no desenho abre o ponto no editor
+  // clique no desenho abre o ponto no editor; "Abrir para ler" (celular) abre a tela cheia nessa página
+  var ICON_LER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/><path d="M11 8.5v5M8.5 11h5"/></svg>';
   function onPreviewClick(e) {
+    var lb = e.target.closest('.ler-btn');
+    if (lb) { if (viewer) viewer.open(Number(lb.dataset.ler) || 0); return; }
     var g = e.target.closest('[data-pid]');
     if (!g) return;
     var id = g.getAttribute('data-pid');
@@ -4085,6 +4162,7 @@
     if (!b) return;
     closeMenu();
     var act = b.dataset.act;
+    if (act === 'login') { openLogin(); return; }
     if (act === 'backup') downloadBackup();
     else if (act === 'restore') {
       if (banco.on && !isResp()) { toast('Só o Administrador pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
@@ -4705,6 +4783,8 @@
     if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo' || dq.erro === 'recusado' || dq.erro === 'script'; }
     el.textContent = t;
     el.classList.toggle('warn', warn);
+    var me = $('menuEstado');
+    if (me) { me.textContent = t; me.hidden = false; }
   }
 
   // ---------------- acesso: cada pessoa entra com o próprio código (criador, engenheiro ou fiscal de campo).
@@ -4727,6 +4807,9 @@
       b.textContent = banco.login ? (banco.login.nome || 'Equipe') + ' · ' + papelNome(banco.login.papel) : 'Entrar';
       b.classList.toggle('primary', !banco.login);
     }
+    var ml = $('menuLogin'), mh = $('menuLoginHr');
+    if (ml) { ml.hidden = !banco.on; ml.textContent = b ? b.textContent : 'Entrar'; }
+    if (mh) mh.hidden = !banco.on;
     // itens do menu Dados conforme o papel
     var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn() };
     Object.keys(show).forEach(function (k) {
@@ -5448,7 +5531,21 @@
     ed.addEventListener('change', onInput);
     document.addEventListener('click', function (e) {
       if (!e.target.closest('.menu')) closeMenu();
-      if (!e.target.closest('.ctmenu')) ctMenu(false);
+      if (!e.target.closest('.ctmenu') && !e.target.closest('#ctCurto')) ctMenu(false);
+    });
+    $('atalhos').addEventListener('click', function (e) { var x = e.target.closest('[data-ir]'); if (x) irPara(x.dataset.ir); });
+    // barra encolhida: o contrato curto devolve a barra inteira e abre a lista de contratos
+    $('ctCurto').addEventListener('click', function () { topoMini(false); ctMenu(true); });
+    window.addEventListener('scroll', aoRolar, { passive: true });
+    if (mmEmPe && mmEmPe.addEventListener) mmEmPe.addEventListener('change', aoRolar);
+    // celular: o teclado aberto encolhe a tela; o campo tocado vai para o meio da área que sobra
+    if (window.visualViewport) document.addEventListener('focusin', function (e) {
+      var t = e.target;
+      if (!mmAtalhos || !mmAtalhos.matches || !t.matches || !t.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea')) return;
+      setTimeout(function () {
+        var r = t.getBoundingClientRect();
+        if (document.activeElement === t && (r.bottom > window.visualViewport.height - 8 || r.top < 0)) t.scrollIntoView({ block: 'center' });
+      }, 350);
     });
     $('tabs').addEventListener('click', onClick);
     ed.addEventListener('click', onClick);
@@ -5501,7 +5598,6 @@
     renderAll();
     if (view === 'mapa') setView('mapa');
     save();
-    installHint();
   }
 
   // acesso para testes no console

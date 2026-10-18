@@ -227,6 +227,11 @@
     '.mp-full .mp-bottom{bottom:calc(22px + env(safe-area-inset-bottom,0px));left:calc(10px + env(safe-area-inset-left,0px));right:calc(10px + env(safe-area-inset-right,0px))}',
     '.mp-full .leaflet-bottom{bottom:env(safe-area-inset-bottom,0px)}',
     '@media (max-width:560px){.mp-btn .t{display:none}.mp-btn{padding:5px 8px}.mp-title b{font-size:12.5px}.mp-legend{display:none}.mp-find label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.mp-find input{width:104px}}',
+    /* dedo: botões, busca e pontos de baixo com 44 px; o nome do contrato quebra em 2 linhas em vez de cortar */
+    '@media (pointer:coarse),(max-width:700px){.mp-bottom{bottom:40px}.mp-btn{min-height:44px;min-width:44px;justify-content:center}.mp-find input{min-height:44px;font-size:16px}.mp-chip{min-height:44px;padding:4px 14px 4px 10px}.mp-title b{white-space:normal}}',
+    /* celular deitado: pouca altura. Fica a tela cheia e um botão que mostra as outras ferramentas; o nome do contrato já está na barra do topo */
+    '.mp-mais{display:none}',
+    '@media (max-height:500px) and (orientation:landscape) and (max-width:1100px){.mp-mais{display:inline-flex}.mp-tools:not(.abertas)>*:not([data-mp="full"]):not(.mp-mais){display:none}.mp-title,.mp-legend{display:none}}',
     '@media (prefers-reduced-motion:reduce){.mp-car svg{transition:none}}'
   ].join('\n');
 
@@ -249,6 +254,8 @@
     dot: '<svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="9" fill="#1D63D8" stroke="#FFFFFF" stroke-width="3"/></svg>',
     layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>',
     rota: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z"/></svg>',
+    busca: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
+    mais: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
     pin: '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 37S3 26 3 16a12 12 0 0 1 24 0c0 10-12 21-12 21z" fill="#B42318" stroke="#FFFFFF" stroke-width="2.5"/><circle cx="15" cy="15.5" r="4.5" fill="#FFFFFF"/></svg>'
   };
   // setas das manobras (traço branco, sobre o verde da instrução)
@@ -295,7 +302,7 @@
           '<div class="mp-navtop" role="status" aria-live="polite" hidden></div>' +
           '<div class="mp-left">' +
             '<div class="mp-title"><b class="mp-t1"></b><span class="mp-t2"></span></div>' +
-            '<form class="mp-find" novalidate><label for="mpFindKm">Ir para km</label><input id="mpFindKm" inputmode="decimal" autocomplete="off" placeholder="km 812,40"><button class="mp-btn" type="submit">Ir</button></form>' +
+            '<form class="mp-find" novalidate><label for="mpFindKm">Ir para km</label><input id="mpFindKm" inputmode="decimal" autocomplete="off" placeholder="km 812,40"><button class="mp-btn mp-ir" type="submit">' + ICON.busca + 'Ir</button></form>' +
           '</div>' +
           '<div class="mp-tools">' +
             '<button class="mp-btn" type="button" data-mp="full" title="Tela cheia">' + ICON.full + '<span class="t">Tela cheia</span></button>' +
@@ -305,6 +312,7 @@
             '<button class="mp-btn" type="button" data-mp="kml" title="Baixar KML">' + ICON.kml + '<span class="t">KML</span></button>' +
             (opts.tiles ? '<div class="mp-layers"><button class="mp-btn" type="button" data-mp="bases" aria-expanded="false" aria-haspopup="true" title="Fundo do mapa">' + ICON.layers + '<span class="t mp-base-nome"></span></button>' +
               '<div class="mp-bases" role="group" aria-label="Fundo do mapa" hidden></div></div>' : '') +
+            '<button class="mp-btn mp-mais" type="button" data-mp="mais" aria-expanded="false" aria-label="Mais ferramentas do mapa">' + ICON.mais + '</button>' +
           '</div>' +
         '</div>' +
         '<div class="mp-bottom">' +
@@ -530,6 +538,26 @@
       if (!on && map.hasLayer(locLayer)) map.removeLayer(locLayer);
     }
     map.on('zoomend', function () { drawKm(); toggleLabels(); toggleLoc(); });
+    // rótulos que se encostam: fica o mais importante (nome do ponto, depois localidade, km, cidade e rio) e os que caem
+    // embaixo das caixas do mapa (título, busca, botões, pontos de baixo) somem até o mapa mexer de novo
+    var arrumaPedido = false;
+    function arrumaRotulos() {
+      arrumaPedido = false;
+      var caixas = Array.prototype.map.call(root.querySelectorAll('.mp-left>*:not([hidden]),.mp-tools>*,.mp-chips,.mp-legend:not([hidden]),.mp-card:not([hidden])'), function (el) { return el.getBoundingClientRect(); })
+        .filter(function (r) { return r.width && r.height; });
+      var vistos = caixas.slice();
+      ['.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'].forEach(function (sel) {
+        root.querySelectorAll(sel).forEach(function (el) {
+          el.style.visibility = '';
+          var r = el.getBoundingClientRect();
+          if (!r.width) return;
+          var bate = vistos.some(function (o) { return r.left < o.right + 2 && r.right > o.left - 2 && r.top < o.bottom + 2 && r.bottom > o.top - 2; });
+          if (bate) el.style.visibility = 'hidden'; else vistos.push(r);
+        });
+      });
+    }
+    function pedeArrumar() { if (!arrumaPedido) { arrumaPedido = true; requestAnimationFrame(arrumaRotulos); } }
+    map.on('moveend', pedeArrumar);
 
     function render() {
       var c = opts.getContract();
@@ -586,6 +614,7 @@
       drawKm();
       toggleLabels();
       if (live.loc) updateLive();
+      pedeArrumar();
     }
 
     function renderChips() {
@@ -762,7 +791,9 @@
       setGpsBtn();
     }
     function onFixError(e) {
-      live.err = e && e.code === 1 ? 'A localização foi bloqueada. Libere a localização para este site nas permissões do navegador e toque em Ao vivo de novo.'
+      var nat = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      live.err = e && e.code === 1 ? (nat ? 'A localização foi bloqueada. Libere nos Ajustes do aparelho, nas permissões do app VIA-230, e toque em Ao vivo de novo.'
+        : 'A localização foi bloqueada. Libere a localização para este site nas permissões do navegador e toque em Ao vivo de novo.')
         : e && e.code === 3 ? 'O GPS ainda não respondeu. Fique em local aberto; a busca continua.'
         : 'Sem sinal de localização no momento.';
       if (e && e.code === 1) { if (live.watch != null) navigator.geolocation.clearWatch(live.watch); live.watch = null; setGpsBtn(); }
@@ -1092,6 +1123,7 @@
       if (act === 'nav-fim') { navStop(); return; }
       if (act === 'nav-ver') { visaoGeral(); return; }
       if (act === 'nav-voz') { if (nav) { nav.voz = !nav.voz; lsSet(VOZ_KEY, nav.voz ? '1' : '0'); if (!nav.voz) try { window.speechSynthesis.cancel(); } catch (e2) { /* nada */ } navUi(); } return; }
+      if (act === 'mais') { var tl = q('.mp-tools'), ab = !tl.classList.contains('abertas'); tl.classList.toggle('abertas', ab); b.setAttribute('aria-expanded', String(ab)); pedeArrumar(); return; }
       if (act === 'full') { if (isFull) closeFull(); else openFull(); }
       else if (act === 'fit') fit();
       else if (act === 'kml') exportKml();

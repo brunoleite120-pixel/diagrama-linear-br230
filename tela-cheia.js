@@ -6,7 +6,9 @@
 //
 // Gestos: pinça (dois dedos) dá zoom no ponto entre os dedos; com zoom, um dedo arrasta; sem zoom, deslizar troca
 // de página; toque duplo aproxima onde tocou (ou volta ao tamanho inteiro); toque simples mostra/esconde os botões.
-// No computador: roda do mouse dá zoom, setas trocam de página, +/- aproximam, 0 volta, Esc fecha.
+// No computador: roda do mouse dá zoom, setas trocam de página, +/- aproximam, 0 volta, Esc fecha. Pelo teclado (Tab), os
+// botões não somem e o foco não sai da tela cheia.
+// v.open(n) abre na página n (0 = a primeira).
 // Com o celular em pé, a folha gira 90° para aproveitar o comprimento da tela.
 (function (global) {
   'use strict';
@@ -17,14 +19,14 @@
     '.tc[hidden]{display:none}',
     '.tc-sheet{position:absolute;left:50%;top:50%;background:#FFFFFF;transform-origin:50% 50%;box-shadow:0 4px 30px rgba(0,0,0,.5);will-change:transform}',
     '.tc-sheet svg{display:block;width:100%;height:100%}',
-    '.tc-btn{min-width:40px;height:40px;border:0;border-radius:20px;background:rgba(18,22,20,.8);color:#FFFFFF;font:600 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}',
+    '.tc-btn{min-width:44px;height:44px;border:0;border-radius:22px;background:rgba(18,22,20,.8);color:#FFFFFF;font:600 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}',
     '.tc-btn:disabled{opacity:.4;cursor:default}',
     '.tc-btn:focus-visible{outline:2px solid #86AEE6;outline-offset:2px}',
     '.tc-btn svg{width:18px;height:18px}',
-    '.tc-close{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:calc(10px + env(safe-area-inset-right,0px));width:40px;padding:0}',
+    '.tc-close{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:calc(10px + env(safe-area-inset-right,0px));width:44px;padding:0}',
     '.tc-bar{position:absolute;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;white-space:nowrap}',
     '.tc-row{display:flex;gap:6px;align-items:center}',
-    '.tc-page{color:#FFFFFF;background:rgba(18,22,20,.8);border-radius:20px;padding:0 12px;height:40px;display:inline-flex;align-items:center;font:600 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}',
+    '.tc-page{color:#FFFFFF;background:rgba(18,22,20,.8);border-radius:22px;padding:0 12px;height:44px;display:inline-flex;align-items:center;font:600 13px/1 system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}',
     '.tc-hint{color:#FFFFFF;background:rgba(18,22,20,.8);border-radius:8px;padding:6px 10px;font:500 12px/1.3 system-ui,-apple-system,"Segoe UI",sans-serif;transition:opacity .4s}',
     '.tc-hint.gone{opacity:0}',
     '.tc.rot .tc-close{top:auto;bottom:calc(10px + env(safe-area-inset-bottom,0px))}',
@@ -43,7 +45,7 @@
 
   function TelaCheia(opts) {
     var pageW = opts.pageW, pageH = opts.pageH;
-    var st = { open: false, page: 0, sheets: [], z: 1, tx: 0, ty: 0, rot: 'auto', uiTimer: null, hintTimer: null, lastTap: 0, tapTimer: null, returnFocus: null };
+    var st = { open: false, page: 0, sheets: [], z: 1, tx: 0, ty: 0, rot: 'auto', uiTimer: null, hintTimer: null, lastTap: 0, tapTimer: null, returnFocus: null, teclado: false };
     var pts = {}, gesture = null;
     var el = null, sheetEl = null, $ = {};
 
@@ -87,6 +89,9 @@
       el.addEventListener('pointercancel', onUp);
       el.addEventListener('wheel', onWheel, { passive: false });
       el.addEventListener('keydown', onKey);
+      // usando o teclado, os botões ficam à vista; um toque ou o mouse volta ao normal (somem depois de 3,5 s)
+      el.addEventListener('focusin', function () { if (st.teclado) showUi(); });
+      el.addEventListener('pointerdown', function () { st.teclado = false; }, true);
       // Safari (iOS) ainda dispara os gestos próprios dele; sem isso a pinça daria zoom na página inteira
       ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) { el.addEventListener(t, function (e) { e.preventDefault(); }); });
       window.addEventListener('resize', layout);
@@ -149,7 +154,7 @@
     function showUi() {
       el.classList.remove('hide-ui');
       clearTimeout(st.uiTimer);
-      st.uiTimer = setTimeout(function () { el.classList.add('hide-ui'); }, 3500);
+      st.uiTimer = setTimeout(function () { if (!st.teclado) el.classList.add('hide-ui'); }, 3500);
     }
     function toggleUi() {
       if (el.classList.contains('hide-ui')) showUi();
@@ -233,9 +238,19 @@
       zoomAt(clamp(st.z * f, 1, MAX_ZOOM), p.x, p.y);
       if (st.z < 1.03) resetView();
     }
+    // Tab fica dentro da tela cheia (a página embaixo está coberta): do último botão volta ao primeiro, e vice-versa
+    function prendeTab(e) {
+      var bs = Array.prototype.filter.call(el.querySelectorAll('.tc-btn'), function (b) { return !b.disabled; });
+      if (!bs.length) return;
+      var i = bs.indexOf(document.activeElement), n = e.shiftKey ? (i <= 0 ? bs.length - 1 : i - 1) : (i < 0 || i >= bs.length - 1 ? 0 : i + 1);
+      bs[n].focus();
+    }
     function onKey(e) {
       var g, handled = true;
-      if (e.key === 'Escape') close();
+      st.teclado = true;
+      if (el.classList.contains('hide-ui')) showUi();
+      if (e.key === 'Tab') prendeTab(e);
+      else if (e.key === 'Escape') close();
       else if (e.key === 'ArrowRight' || e.key === 'PageDown') go(1);
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(-1);
       else if (e.key === '+' || e.key === '=') { g = geom(); zoomAt(clamp(st.z * 1.4, 1, MAX_ZOOM), g.W / 2, g.H / 2); }
@@ -246,12 +261,12 @@
     }
 
     // ---------------------------------------------------------------- abrir / fechar
-    function open() {
+    function open(pagina) {
       var sheets = opts.getSheets() || [];
       if (!sheets.length) return;
       build();
       st.returnFocus = document.activeElement;
-      st.sheets = sheets; st.page = 0; st.rot = 'auto'; st.open = true;
+      st.sheets = sheets; st.page = clamp(Number(pagina) || 0, 0, sheets.length - 1); st.rot = 'auto'; st.open = true; st.teclado = false;
       pts = {}; gesture = null;
       el.hidden = false;
       showPage();

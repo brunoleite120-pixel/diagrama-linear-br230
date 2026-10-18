@@ -52,6 +52,12 @@
   var GRUPO_TITULO = { leg: 'O que aparece na legenda', apa: 'Aparência', logo: 'Logo', arq: 'Tamanho do arquivo' };
 
   function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  // no app (Capacitor) a permissão é do app, nos Ajustes do aparelho; no site, do navegador
+  function nativo() { var C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); }
+  function bloqueado(oque) {
+    return nativo() ? oque + ' está bloqueada para o app. Libere nos Ajustes do aparelho, nas permissões do app VIA-230'
+      : oque + ' está bloqueada para este site. Libere nas permissões do navegador';
+  }
   function opcao(lista, k) { for (var i = 0; i < lista.length; i++) if (lista[i][0] === k) return lista[i]; return null; }
   function rotulo(lista, k) { var o = opcao(lista, k); return o ? o[1] : ''; }
   function defaults() {
@@ -230,6 +236,8 @@
     '  position:fixed;inset:0;z-index:3000;display:flex;flex-direction:column;background:var(--ft-bg);color:var(--ft-ink);font-size:14px;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}',
     '.ft-head{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--ft-panel);border-bottom:1px solid var(--ft-line)}',
     '.ft-head h2{margin:0;font-size:16px;font-weight:650;white-space:nowrap}',
+    /* celular: o contrato desce para baixo do título, com até 2 linhas, em vez de sair cortado */
+    '@media (max-width:560px){.ft-head{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:1px}.ft-head h2{grid-column:1;grid-row:1}.ft-head .ft-ct{grid-column:1;grid-row:2;white-space:normal;overflow:visible;line-height:1.3}.ft-head .ft-x{grid-column:2;grid-row:1 / span 2;min-width:44px;min-height:44px}}',
     '.ft-ct{font-size:12.5px;color:var(--ft-ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}',
     '.ft-x{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink);border-radius:8px;min-width:40px;min-height:40px;font-size:20px;line-height:1;cursor:pointer}',
     '.ft-body{flex:1;overflow:auto;padding:16px}',
@@ -245,7 +253,7 @@
     '.ft-gps b{font-family:var(--font-mono,ui-monospace,Consolas,monospace)}',
     '.ft-work{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}',
     '.ft-prev{position:sticky;top:0;background:#000;border-radius:8px;overflow:hidden;display:flex;justify-content:center}',
-    '.ft-prev canvas{display:block;max-width:100%;max-height:calc(100vh - 150px);width:auto;height:auto}',
+    '.ft-prev canvas{display:block;max-width:100%;max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);width:auto;height:auto}',
     '.ft-side{display:flex;flex-direction:column;gap:12px;min-width:0}',
     '.ft-sec{background:var(--ft-panel);border:1px solid var(--ft-line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}',
     '.ft-sec h4{margin:0;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ft-ink-3)}',
@@ -936,7 +944,7 @@
         if (root && !q('.ft-start').hidden) renderGps();
         if (cam) renderCamGps();
       }, function (e) {
-        lastFixErr = e && e.code === 1 ? 'A localização está bloqueada para este site. Libere nas permissões do navegador ou informe o km depois.' : 'Sem sinal de GPS no momento.';
+        lastFixErr = e && e.code === 1 ? bloqueado('A localização') + ' ou informe o km depois.' : 'Sem sinal de GPS no momento.';
         if (root && !q('.ft-start').hidden) renderGps();
         if (cam) renderCamGps();
       }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 });
@@ -1065,7 +1073,7 @@
           lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, t: Date.now() };
           resolve(lastFix);
         }, function (e) {
-          if (e && e.code === 1) lastFixErr = 'A localização está bloqueada para este site. Libere nas permissões do navegador.';
+          if (e && e.code === 1) lastFixErr = bloqueado('A localização') + '.';
           resolve(null);
         }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
       });
@@ -1789,7 +1797,7 @@
         renderCam();
       }, function (e) {
         startMsg(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
-          ? 'A câmera está bloqueada para este site. Libere a câmera nas permissões do navegador, ou use "Câmera do celular".'
+          ? bloqueado('A câmera') + ', ou use "Câmera do celular".'
           : 'Não foi possível abrir a câmera aqui. Use "Câmera do celular".');
       });
     }
