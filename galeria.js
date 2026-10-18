@@ -250,8 +250,10 @@
   function chaveNome(s) { return String(s == null ? '' : s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().toLowerCase(); }
 
   // ---------------------------------------------------------------- pontos e trecho do contrato (km)
+  // conservação: vazio até o passo 2.5 (os segmentos não entram na sugestão pelo km, na lista do "Contrato e ponto" nem no trecho,
+  // que vem do km do contrato)
   function pontosDe(c) {
-    return ((c && c.pontos) || []).slice().sort(function (a, b) {
+    return (c && c.tipo === 'conserva' ? [] : (c && c.pontos) || []).slice().sort(function (a, b) {
       var ka = a.kmIni != null ? a.kmIni : 1e9, kb = b.kmIni != null ? b.kmIni : 1e9;
       return ka - kb || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
     });

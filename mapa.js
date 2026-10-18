@@ -553,7 +553,8 @@
           .bindTooltip(esc(m.nome || 'Marco') + ' · km ' + km2(m.km), { direction: 'top', offset: [0, -6], className: 'mp-lbl' })
           .addTo(ctLayer);
       });
-      var sorted = c.pontos.filter(function (p) { return p.kmIni != null; }).sort(function (a, b) { return a.kmIni - b.kmIni; });
+      // conservação: os segmentos não entram no mapa até o passo 2.4 (só a linha do contrato e os marcos)
+      var sorted = (c.tipo === 'conserva' ? [] : c.pontos).filter(function (p) { return p.kmIni != null; }).sort(function (a, b) { return a.kmIni - b.kmIni; });
       sorted.forEach(function (p) {
         var info = opts.pointInfo(p), kf = p.kmFim != null ? p.kmFim : p.kmIni;
         var line = ref.slice(p.kmIni, kf), mid = ref.at((p.kmIni + kf) / 2);

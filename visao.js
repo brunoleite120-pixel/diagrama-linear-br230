@@ -125,7 +125,8 @@
         if (ativo && vistosM && !vistosM[c.id] && !ok) novos[c.id] = true;
         // km do contrato fora da rodovia: não entra na faixa (faixaDe), mas entra no aviso
         if (ok && [c.kmIni, c.kmFim].some(function (v) { var n = num(v); return n != null && !noKm(n); })) foraC++;
-        c.pontos.forEach(function (p) {
+        // conservação: os segmentos ficam fora da Visão geral até o passo 2.4 (a raia só com a faixa, como antes deles)
+        (N.tipo(c) === 'conserva' ? [] : c.pontos).forEach(function (p) {
           var km = num(p.kmIni), kf = num(p.kmFim);
           if (km == null) { if (ok) semKm++; return; }
           if (!noKm(km)) { if (ok) fora++; return; }
@@ -362,7 +363,7 @@
       h += '<section class="vg-cards" aria-label="Resumo dos contratos mostrados">' + cs.map(function (c) {
         var tp = N.tipo(c), oae = tp === 'oae', xs = d.por[c.id] || [], sits = oae ? SIT_O : SIT_C, n = {}, f = d.fx[c.id];
         xs.forEach(function (x) { n[x.st] = (n[x.st] || 0) + 1; });
-        var tot = c.pontos.length, ext = oae ? c.pontos.reduce(function (t, p) { return t + (Number(p.extensao) || 0); }, 0) / 1000 : uniao(xs);
+        var tot = tp === 'conserva' ? xs.length : c.pontos.length, ext = oae ? c.pontos.reduce(function (t, p) { return t + (Number(p.extensao) || 0); }, 0) / 1000 : uniao(xs);
         var segs = sits.filter(function (s) { return n[s[0]]; }).map(function (s) { return '<i style="flex:' + n[s[0]] + ' 1 0;background:' + s[1] + '"></i>'; }).join('');
         var txt = sits.filter(function (s) { return n[s[0]]; }).map(function (s) { return n[s[0]] + ' ' + (n[s[0]] === 1 ? s[2] : s[3]); }).join(' · ');
         var pad = f ? Math.max((f[1] - f[0]) * 0.03, 0.5) : 0, nome = N.nome(c) || 'Contrato', formal = N.formal(c);

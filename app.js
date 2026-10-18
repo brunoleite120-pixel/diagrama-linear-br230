@@ -1728,12 +1728,14 @@
     s.contracts.forEach(function (c) {
       c.id = c.id || uid('ct');
       c.marcos = Array.isArray(c.marcos) ? c.marcos : [];
-      var list = servicesOf(c), cont = isContinuo(c);
+      var list = servicesOf(c), cont = isContinuo(c), cons = isConserva(c);
       c.pontos.forEach(function (p) {
         p.id = p.id || uid('pt');
         p.serv = p.serv || {};
         // serviço contínuo (pontes, conservação): grupo que falta = sem vistoria; pontos críticos: N/A
         list.forEach(function (k) { if (!p.serv[k.key]) p.serv[k.key] = cont ? { st: 'NV' } : { st: 'NA', pct: 0 }; });
+        // segmento da conservação sem a trafegabilidade (backup antigo, por exemplo): nasce sem vistoria
+        if (cons && !p.serv[TRAFEG.key]) p.serv[TRAFEG.key] = { st: 'NV' };
         p.disp = Array.isArray(p.disp) ? p.disp : [];
       });
     });
@@ -1912,6 +1914,90 @@
     var k = isConserva(c) ? kmDoContrato(c, km) : null;
     return k ? { t: '(contr. ' + fmtKm(k.km) + (k.ast ? '*' : '') + ')', g: k.ast ? 'Pela régua: ' + fmtKm(k.geom) : '' } : { t: '', g: '' };
   }
+  // ---------------- segmentos da conservação (os pontos do contrato, como as pontes do 424): funções puras, para o teste em node
+  // um segmento por par de limites, contíguos, S01, S02…; todos sem vistoria (os 7 grupos e a trafegabilidade)
+  function segmentosDosTrechos(lista, uidFn) {
+    var out = [];
+    for (var i = 0; i + 1 < lista.length; i++) {
+      var serv = {};
+      CONS_SERVICES.forEach(function (s) { serv[s.key] = { st: 'NV' }; });
+      serv[TRAFEG.key] = { st: 'NV' };
+      out.push({ id: uidFn('pt'), classe: 'segmento', nome: 'S' + String(i + 1).padStart(2, '0'), descricao: '', kmIni: lista[i], kmFim: lista[i + 1], serv: serv, disp: [], obs: '' });
+    }
+    return out;
+  }
+  // avisos da lista "Segmentos" (lista de textos; vazia = tudo certo): segmento sem km, km final antes do inicial, fora do
+  // contrato, buraco (no começo, no meio ou no fim), sobreposição e nome repetido. Tolerância de 0,001 km
+  function avisosSegmentos(c) {
+    if (!isConserva(c) || !c.pontos || !c.pontos.length) return [];
+    var out = [], ok = [], E = 0.001, nomes = {};
+    function num(v) { return typeof v === 'number' && isFinite(v); }
+    function nm(p) { return txtLimpo(p.nome) || '?'; }
+    sortedPoints(c).forEach(function (p) {
+      var a = num(p.kmIni), b = num(p.kmFim);
+      if (!a || !b) out.push(nm(p) + ' está sem o km ' + (!a && !b ? 'inicial e o final' : !a ? 'inicial' : 'final'));
+      else if (p.kmFim < p.kmIni - E) out.push(nm(p) + ': o km final vem antes do inicial');
+      if (a && num(c.kmIni) && p.kmIni < c.kmIni - E) out.push(nm(p) + ' começa antes do km inicial do contrato (' + fmtKm(c.kmIni) + ')');
+      if (b && num(c.kmFim) && p.kmFim > c.kmFim + E) out.push(nm(p) + ' passa do km final do contrato (' + fmtKm(c.kmFim) + ')');
+      if (a && b && p.kmFim >= p.kmIni - E) ok.push(p);
+      nomes[nm(p)] = (nomes[nm(p)] || 0) + 1;
+    });
+    // buracos e sobreposições: da ponta inicial do contrato (ou do primeiro segmento) à final, pelo km que já está coberto
+    ok.sort(function (x, y) { return x.kmIni - y.kmIni || x.kmFim - y.kmFim; });
+    var cob = num(c.kmIni) ? c.kmIni : ok.length ? ok[0].kmIni : null, ant = null;
+    ok.forEach(function (p) {
+      if (p.kmIni > cob + E) out.push('Entre ' + fmtKm(cob) + ' e ' + fmtKm(p.kmIni) + ' não há segmento');
+      else if (ant && p.kmIni < cob - E) out.push(nm(ant) + ' e ' + nm(p) + ' se sobrepõem entre ' + fmtKm(p.kmIni) + ' e ' + fmtKm(Math.min(cob, p.kmFim)));
+      if (p.kmFim > cob) { cob = p.kmFim; ant = p; }
+    });
+    if (ok.length && num(c.kmFim) && cob < c.kmFim - E) out.push('Entre ' + fmtKm(cob) + ' e ' + fmtKm(c.kmFim) + ' não há segmento');
+    Object.keys(nomes).forEach(function (n) { if (nomes[n] > 1) out.push('Há ' + nomes[n] + ' segmentos com o nome ' + n); });
+    return out;
+  }
+  // o aviso da lista, uma linha por aviso (syncAvisos, data-aviso="segmentos")
+  function avisoSegmentosTxt(c) { return avisosSegmentos(c).join('\n'); }
+  // a lista sem nenhum segmento: o caminho é gravar os limites e gerar (acompanha os limites e o km do contrato: syncAvisos)
+  function segVazioTxt(c) {
+    return trechosValidos(c).ok ? 'Nenhum segmento. Eles saem dos limites dos trechos gravados nos dados do contrato: toque em Gerar segmentos.' :
+      'Para gerar os segmentos, grave os limites dos trechos nos dados do contrato.';
+  }
+  // km do segmento novo ("+ Segmento"): contíguo ao que termina mais longe (o maior km final, não o último da lista por km, que
+  // pode ser um sem km), com até 10 km, sem passar do km final do contrato. Sem espaço, ou sem km final nenhum: os dois vazios
+  function kmNovoSegmento(c) {
+    var fins = c.pontos.map(function (p) { return p.kmFim; }).filter(function (v) { return typeof v === 'number' && isFinite(v); });
+    if (!fins.length || typeof c.kmFim !== 'number') return { kmIni: null, kmFim: null };
+    var ini = Math.max.apply(null, fins);
+    if (!(ini < c.kmFim - 0.001)) return { kmIni: null, kmFim: null };
+    return { kmIni: ini, kmFim: Math.round(Math.min(ini + 10, c.kmFim) * 1000) / 1000 };
+  }
+  // nome do segmento novo: o primeiro "Snn" livre a partir do número de segmentos + 1
+  function nomeNovoSegmento(c) {
+    var usados = {};
+    c.pontos.forEach(function (p) { usados[txtLimpo(p.nome).toUpperCase()] = true; });
+    for (var i = c.pontos.length + 1; ; i++) { var n = 'S' + String(i).padStart(2, '0'); if (!usados[n]) return n; }
+  }
+  // toque num botão da trafegabilidade: T, R ou I; tocar de novo no marcado volta a sem vistoria. A nota fica sempre (q, pri, ci
+  // e pct não existem aqui)
+  function trafToque(sv, st) {
+    var r = { st: TRAF_ORDER.indexOf(st) >= 0 && trafSt(sv) !== st ? st : 'NV' };
+    if (sv && sv.n) r.n = sv.n;
+    return r;
+  }
+  // km do contrato do segmento, pela régua ("contr. 750,90* – 762,59"); sem a régua ou sem um dos km, vazio (nunca "NaN")
+  function segContrTxt(c, p) {
+    var a = kmDoContrato(c, p.kmIni), b = kmDoContrato(c, p.kmFim);
+    return a && b ? 'contr. ' + fmtKm(a.km) + (a.ast ? '*' : '') + ' – ' + fmtKm(b.km) + (b.ast ? '*' : '') : '';
+  }
+  // código do SNV do segmento: os segmentos do eixo que cruzam o dele; um só, o código ("230BPA1530"); mais de um, o primeiro e
+  // o número do último ("230BPA1530/1540"); sem o eixo ou sem km, vazio
+  function snvDoSegmento(p) {
+    var eixo = window.SNV_BR230;
+    if (!eixo || !Array.isArray(eixo.segmentos) || typeof p.kmIni !== 'number' || typeof p.kmFim !== 'number') return '';
+    var ss = eixo.segmentos.filter(function (s) { return s.kmFim > p.kmIni + 0.001 && s.kmIni < p.kmFim - 0.001; });
+    if (!ss.length) return '';
+    var a = String(ss[0].codigo || ''), z = String(ss[ss.length - 1].codigo || ''), m = /\d+$/.exec(z);
+    return ss.length === 1 || a === z ? a : a + '/' + (m ? m[0] : z);
+  }
   // prazos e valores (PI) da conservação em dois grupos: confirmados e previstos, a confirmar (tracejado). Cada item na ordem
   // da lista; data-prazo/data-valor e data-idx são a posição na lista, não no grupo. Um toque na situação troca o grupo
   var FIM_OPC = [['', '-'], ['exec', 'execução'], ['vig', 'vigência'], ['ambos', 'execução e vigência']];
@@ -2014,9 +2100,16 @@
 
     var pts = sortedPoints(c), oae = isOae(c);
     if (oae) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
-    // conservação: só a faixa por enquanto, sem botão de criar (pontos de um dado antigo continuam na lista, embaixo)
-    if (cons) h.push('<div class="an-note"><b>Faixa do contrato:</b> ' + esc(faixaTexto(c) || 'informe o km inicial e o final nos dados do contrato') + ' · os segmentos de vistoria entram numa próxima etapa.</div>');
-    else {
+    // conservação: a lista "Segmentos". Sem nenhum, só "Gerar segmentos" (pelos limites dos trechos); com pelo menos um, só
+    // "+ Segmento" (os dois nunca juntos: um segmento solto num contrato vazio esconderia o "Gerar")
+    if (cons) {
+      h.push('<div class="points-head"><h2>Segmentos<span class="count">' + pts.length + '</span></h2>' + (pts.length ? '<button type="button" class="btn small" data-act="add-point">+ Segmento</button>' :
+        '<button type="button" class="btn small" data-act="gerar-segmentos">Gerar segmentos</button>') + '</div>');
+      h.push('<div class="hint"><b>Faixa do contrato:</b> ' + esc(faixaTexto(c) || 'informe o km inicial e o final nos dados do contrato') + '</div>');
+      if (pts.length) h.push('<div class="hint">Ordenados por km, como no diagrama. Toque num segmento (aqui ou no desenho) para marcar o estado.</div>');
+      else h.push('<div class="empty" data-segvazio="1">' + esc(segVazioTxt(c)) + '</div>');
+      h.push('<div class="hint ct-aviso" data-aviso="segmentos">' + esc(avisoSegmentosTxt(c)) + '</div>');
+    } else {
       h.push('<div class="points-head"><h2>' + (oae ? 'Pontes' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ Ponte' : '+ Ponto') + '</button></div>');
       h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
         'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
@@ -2028,7 +2121,8 @@
       h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
         '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
     } else if (isFiscal()) {
-      h.unshift('<div class="ro-note fiscal-note"><span>' + (cons ? 'Você entrou como <b>fiscal de campo</b>. Neste contrato de conservação ainda não há o que marcar: a vistoria por segmento entra numa próxima etapa.' :
+      h.unshift('<div class="ro-note fiscal-note"><span>' + (cons ? (pts.length ? 'Você entrou como <b>fiscal de campo</b>: em cada segmento, marque a trafegabilidade e o estado de cada grupo, com a estimativa (quanto e onde). A mudança fica aguardando a aprovação de um engenheiro.' :
+        'Você entrou como <b>fiscal de campo</b>. Este contrato de conservação ainda não tem segmentos: um engenheiro precisa gerá-los.') :
         'Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o estado de cada ponte e estime o dano (quanto e onde)' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.') + '</span></div>');
     }
     $('editor').innerHTML = h.join('');
@@ -2038,6 +2132,7 @@
   function pointHead(p) {
     var c = ownerOf(p);
     if (isOae(c)) return ponteHead(p, c);
+    if (isConserva(c)) return segHead(p, c);
     var dots = SERVICES.map(function (s) {
       var st = (p.serv[s.key] || {}).st || 'NA';
       return '<span class="dot ' + st + '" title="' + esc(s.short + ': ' + STATUS[st].name) + '"></span>';
@@ -2051,8 +2146,9 @@
   // Serviço contínuo (pontes, conservação, pelo tipo do contrato do ponto): estado na vistoria (sem dano aparente, dano
   // observado, em execução, N/A), estimativa do dano, onde, e as marcas de prioridade e de conclusão informada
   // mais(s, estado): botões a mais na linha das marcas (pontes, quem vê a análise: medido sem execução)
-  function servHtml(p, list, extra, mais) {
-    var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), cont = isContinuo(ownerOf(p));
+  // antes: HTML que entra logo depois das mudanças aguardando aprovação e antes dos grupos (a trafegabilidade do segmento)
+  function servHtml(p, list, extra, mais, antes) {
+    var id = esc(p.id), h = propHtml(active().id, p) + (antes || ''), prop = propServ(active().id, p.id), cont = isContinuo(ownerOf(p));
     list.forEach(function (s) {
       var sv = p.serv[s.key] || (cont ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = cont ? oaeSt(sv) : sv.st;
       var segs = (cont ? OAE_STATUS_ORDER : STATUS_ORDER).map(function (k) {
@@ -2084,6 +2180,7 @@
 
   function pointCard(p) {
     if (isOae(ownerOf(p))) return ponteCard(p, ownerOf(p));
+    if (isConserva(ownerOf(p))) return segCard(p, ownerOf(p));
     var open = !!ui.open[p.id];
     var h = '<article class="pt' + (open ? ' open' : '') + '" data-id="' + esc(p.id) + '">';
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + pointHead(p) + '</button>';
@@ -2129,6 +2226,13 @@
     if (art) art.innerHTML = pointHead(p);
     var art2 = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] input[readonly]');
     if (art2) { var len = pointLen(p); art2.value = len != null ? fmt(len, 2) + ' km' : ''; }
+    // segmento: o km do contrato e o código do SNV acompanham o km digitado
+    var art3 = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"]');
+    if (art3 && art3.classList.contains('cons')) {
+      var c = ownerOf(p);
+      art3.querySelectorAll('[data-segc]').forEach(function (el) { el.value = segContrTxt(c, p).replace(/^contr\. /, ''); });
+      art3.querySelectorAll('[data-segsnv]').forEach(function (el) { el.value = snvDoSegmento(p); });
+    }
   }
   function rerenderPoint(p) {
     var art = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"]');
@@ -2432,6 +2536,65 @@
       h += '</div>';
     }
     return h + '</article>';
+  }
+
+  // ---------------- segmento da conservação (no molde da ponte): linha fechada, cartão aberto e a trafegabilidade
+  // linha fechada, como no esboço do plano: nome e descrição; km Atualizado, km do contrato, extensão e código do SNV (com a
+  // marca de prioridade na frente); as 7 bolinhas dos grupos; à direita, a trafegabilidade por extenso (o resumo dos grupos no title)
+  function segHead(p, c) {
+    var dots = servicesOf(c).map(function (s) {
+      var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
+      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
+    }).join('');
+    var n = oaeNec(p, c), kt = trafSt(p.serv[TRAFEG.key]), len = pointLen(p), contr = segContrTxt(c, p), snv = snvDoSegmento(p);
+    var km = 'km ' + (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?') + (contr ? ' (' + contr + ')' : '') +
+      (len != null ? ' · ' + fmt(len, 2) + ' km' : '') + (snv ? ' · ' + snv : '');
+    var np = banco.on ? propsDo(c.id, p.id).length : 0, nome = (p.nome || '?') + (p.descricao ? ' · ' + p.descricao : '');
+    var badge = n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '';
+    return '<span class="pt-name" title="' + esc(nome) + '">' + esc(nome) + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
+      '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(km) + '</span><span class="pt-dots">' + dots + '</span>' +
+      '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c)) + '">' + (kt === 'NV' ? '–' : TRAF_STATUS[kt].tag) + '</span>' + ICON_CHEV;
+  }
+  // cartão aberto (classe oae só pelo leiaute dos cartões das pontes; cons para as regras próprias): nome, descrição, extensão
+  // (o 1º campo só de leitura, que refreshPointHead atualiza), km Atualizado, km do contrato e SNV (só de leitura, acompanham o
+  // km); o estado com a trafegabilidade em cima dos grupos; observações; só "Excluir segmento" (sem "Duplicar")
+  function segCard(p, c) {
+    var open = !!ui.open[p.id];
+    var h = '<article class="pt oae cons' + (open ? ' open' : '') + '" data-id="' + esc(p.id) + '">';
+    h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + segHead(p, c) + '</button>';
+    if (open) {
+      var id = esc(p.id), len = pointLen(p), snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '', kmR = ' · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '');
+      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '') + '<div class="grid">';
+      h += field('Nome', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
+      h += field('Descrição (opcional)', 'data-p="descricao" data-id="' + id + '" type="text"', p.descricao);
+      h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
+      h += field('KM inicial' + kmR, 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
+      h += field('KM final' + kmR, 'data-p="kmFim" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmFim));
+      h += field('KM do contrato', 'data-segc="1" type="text" readonly tabindex="-1"', segContrTxt(c, p).replace(/^contr\. /, ''));
+      h += field('Segmento do SNV', 'data-segsnv="1" type="text" readonly tabindex="-1"', snvDoSegmento(p));
+      h += '</div>';
+      var vis = vistoriaPonte(c, p);
+      h += '<div class="section-title">Estado do segmento' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
+      h += servHtml(p, servicesOf(c), null, null, trafHtml(p));
+      var tid = 'obs-' + id;
+      h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
+      h += '<div class="pt-foot"><span class="pt-foot-l"></span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir segmento</button></div>';
+      h += '</div>';
+    }
+    return h + '</article>';
+  }
+  // trafegabilidade do segmento: Trafegável, Com restrição, Interrompido (tocar de novo desmarca) e a nota, sempre à vista e com
+  // data-svcpct (o fiscal escreve); sem estimativa nem marcas. "pend" = proposta de um fiscal com outro estado
+  function trafHtml(p) {
+    var id = esc(p.id), sv = p.serv[TRAFEG.key] || { st: 'NV' }, cur = trafSt(sv), pv = propServ(active().id, p.id)[TRAFEG.key];
+    var segs = TRAF_ORDER.map(function (k) {
+      var pend = pv && pv.st === k && cur !== k ? ' pend' : '';
+      return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + TRAFEG.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + TRAF_STATUS[k].btn + '</button>';
+    }).join('');
+    return '<div class="svc oae traf"><div class="svc-name">' + esc(TRAFEG.short) + (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + '</div>' +
+      '<div class="seg" role="group" aria-label="' + esc(TRAFEG.short) + '">' + segs + '</div>' +
+      '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + TRAFEG.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="Onde ou o quê: trafegabilidade">' +
+      '</div>';
   }
 
   // curva ABC dos serviços medidos na ponte: A = os que somam os primeiros 80% do valor, B = até 95%, C = o resto.
@@ -2923,14 +3086,15 @@
     });
   }
   // avisos do formulário e km do contrato dos marcos acompanham o que é digitado (objeto, km do contrato e do site, km do marco,
-  // limites dos trechos). Cada aviso pelo seu nome (data-aviso); um nome sem função fica como está
-  var AVISOS = { km: avisoKm, objeto: avisoObjeto, trechos: avisoTrechos };
+  // limites dos trechos, km e nome dos segmentos). Cada aviso pelo seu nome (data-aviso); um nome sem função fica como está
+  var AVISOS = { km: avisoKm, objeto: avisoObjeto, trechos: avisoTrechos, segmentos: avisoSegmentosTxt };
   function syncAvisos(c) {
     var ed = $('editor');
     ed.querySelectorAll('[data-aviso]').forEach(function (el) {
       var f = AVISOS[el.getAttribute('data-aviso')];
       if (f) el.textContent = f(c);
     });
+    ed.querySelectorAll('[data-segvazio]').forEach(function (el) { el.textContent = segVazioTxt(c); });
     ed.querySelectorAll('[data-mkc]').forEach(function (el) {
       var m = c.marcos[Number(el.getAttribute('data-mkc'))], mc = marcoContr(c, m ? m.km : null);
       el.textContent = mc.t; el.title = mc.g;
@@ -2993,6 +3157,8 @@
         p.kmFim = p.kmIni != null ? Math.round((p.kmIni + (Number(p.extensao) || 0) / 1000) * 1000) / 1000 : null;
       }
       refreshPointHead(p);
+      // segmento: os avisos da lista (buraco, sobreposição, nome repetido) acompanham o km e o nome, sem refazer o editor
+      if (isConserva(c) && /^(kmIni|kmFim|nome)$/.test(t.dataset.p)) syncAvisos(c);
     } else if (t.dataset.svcpct) {
       var p2 = findPoint(t.dataset.id);
       if (!p2) return;
@@ -3000,6 +3166,7 @@
       if (!sv2) return;
       if (isContinuo(c)) {
         if (t.dataset.nota) { if (t.value.trim()) sv2.n = t.value; else delete sv2.n; }
+        else if (t.dataset.svcpct === TRAFEG.key) return;   // a trafegabilidade só tem a nota
         else {
           var so = servicesOf(c).find(function (x) { return x.key === t.dataset.svcpct; }), q = parseNum(t.value);
           if (q == null) delete sv2.q; else sv2.q = so && so.un === '%' ? clamp(q, 0, 100) : Math.max(0, q);
@@ -3014,7 +3181,9 @@
     } else {
       return;
     }
-    if (!t.dataset.c && t.dataset.marco == null && t.dataset.pf == null) marcaVistoria(c);   // prazo e valor não são vistoria
+    // prazo e valor não são vistoria; no segmento, nome, descrição, km e observações também não (só o que se viu: estado,
+    // estimativa e nota, ramo data-svcpct)
+    if (!t.dataset.c && t.dataset.marco == null && t.dataset.pf == null && !(isConserva(c) && t.dataset.p)) marcaVistoria(c);
     save();
     schedulePreview();
   }
@@ -3130,6 +3299,14 @@
         if (!p) return;
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
         if (!sv) return;
+        // trafegabilidade do segmento: só T, R e I (tocar de novo volta a sem vistoria); a nota nunca é apagada (trafToque)
+        if (b.dataset.svc === TRAFEG.key) {
+          if (!isConserva(c) || TRAF_ORDER.indexOf(st) < 0) return;
+          p.serv[TRAFEG.key] = trafToque(sv, st);
+          rerenderPoint(p);
+          break;
+        }
+        if (isConserva(c) && !OAE_STATUS[st]) return;   // estado da trafegabilidade num grupo: ignorado
         if (isContinuo(c)) {
           if (oaeSt(sv) === st) st = 'NV';   // tocar de novo no status marcado desmarca (volta para sem vistoria)
           // serviço contínuo: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
@@ -3145,7 +3322,7 @@
         p = findPoint(b.dataset.id);
         if (!p) return;
         var svm = p.serv[b.dataset.svc], mk = b.dataset.m;
-        if (!svm || !OAE_MARCAS[mk] || !comQtd(oaeSt(svm))) return;
+        if (b.dataset.svc === TRAFEG.key || !svm || !OAE_MARCAS[mk] || !comQtd(oaeSt(svm))) return;   // a trafegabilidade não tem marcas
         if (svm[mk]) delete svm[mk]; else svm[mk] = true;
         rerenderPoint(p);
         break;
@@ -3153,7 +3330,13 @@
         var pts = sortedPoints(c), last = pts[pts.length - 1];
         var base = last && last.kmFim != null ? Math.round((last.kmFim + 1) * 100) / 100 : null;
         var serv = {};
-        if (isOae(c)) {
+        if (isConserva(c)) {
+          // "+ Segmento" (o botão só existe com pelo menos um): no fim, contíguo ao que termina mais longe (kmNovoSegmento)
+          if (!c.pontos.length) { toast('Para começar, grave os limites dos trechos e toque em Gerar segmentos.', 5000); return; }
+          var kmN = kmNovoSegmento(c);
+          p = segmentosDosTrechos([0, 0], uid)[0];
+          p.nome = nomeNovoSegmento(c); p.kmIni = kmN.kmIni; p.kmFim = kmN.kmFim;
+        } else if (isOae(c)) {
           servicesOf(c).forEach(function (s) { serv[s.key] = { st: 'NV' }; });
           p = { id: uid('pt'), nome: 'Nova ponte', codigo: 'OAE ' + String(c.pontos.length + 1).padStart(2, '0'), kmIni: null, kmFim: null, extensao: null, largura: null, municipio: '', serv: serv, disp: [], obs: '' };
         } else {
@@ -3167,7 +3350,7 @@
         break;
       case 'dup-point':
         p = findPoint(b.dataset.id);
-        if (!p) return;
+        if (!p || isConserva(c)) return;   // segmento não tem "Duplicar"
         var cp = clone(p);
         cp.id = uid('pt');
         cp.nome = (p.nome || 'P') + ' (cópia)';
@@ -3216,6 +3399,10 @@
         c.trechos = trP.slice();
         renderEditor();
         break;
+      // conservação: os segmentos pelos limites dos trechos (com confirmação e, com o banco, a conferência de outro aparelho)
+      case 'gerar-segmentos':
+        gerarSegmentos(c);
+        return;
       case 'del-marco':
         var mk = c.marcos[Number(b.dataset.idx)], cidMk = c.id;
         if (!mk) return;
@@ -3269,10 +3456,46 @@
     }
     afterEdit(act, c);
   }
+  // na conservação, só marcar o estado conta como vistoria: gerar, acrescentar, excluir e desfazer a exclusão não contam
   function afterEdit(act, c) {
-    if (POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
+    if (isConserva(c) ? act === 'set-st' || act === 'set-marca' : POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
     save();
     schedulePreview();
+  }
+  // "Gerar segmentos": só num contrato de conservação sem segmentos e com os limites dos trechos válidos. Com o banco, depois da
+  // confirmação, lê o banco antes de criar (outro aparelho pode ter acabado de gerar): sem resposta (banco.at não mudou, porque
+  // refresh engole o erro), não cria. Na volta, acha o contrato de novo pelo id (refresh troca o estado) e confere outra vez
+  function gerarSegmentos(c0) {
+    var cid = c0.id;
+    function recusa(c) {
+      if (!c || !isConserva(c)) return 'Só os contratos de conservação têm segmentos.';
+      if (c.pontos.length) return 'Este contrato já tem segmentos.';
+      var v = trechosValidos(c);
+      return v.ok ? '' : v.erro || 'Grave os limites dos trechos nos dados do contrato antes de gerar os segmentos.';
+    }
+    var e0 = recusa(c0);
+    if (e0) { toast(e0, 6000); return; }
+    var l0 = c0.trechos, n0 = l0.length - 1, ult = 'S' + String(n0).padStart(2, '0');
+    confirmar({
+      titulo: 'Gerar ' + n0 + (n0 === 1 ? ' segmento?' : ' segmentos?'),
+      texto: 'De ' + fmtKm(l0[0]) + ' a ' + fmtKm(l0[n0]) + ', pelos limites dos trechos gravados no contrato (' + (n0 === 1 ? 'S01' : 'S01 a ' + ult) + '). ' +
+        (n0 === 1 ? 'Ele começa' : 'Todos começam') + ' sem vistoria; a data da última vistoria não muda.',
+      botao: 'Gerar'
+    }).then(function (r) {
+      if (!r) return;
+      var antes = banco.at;
+      (banco.on ? refresh(true) : Promise.resolve()).then(function () {
+        if (banco.on && banco.at === antes) { toast('Sem sinal: conecte-se para gerar os segmentos (antes de criar, o app confere se outro aparelho já gerou).', 7000); return; }
+        var c = contractById(cid);
+        if (c && isConserva(c) && c.pontos.length) { toast('Os segmentos deste contrato já foram gerados em outro aparelho.', 6000); return; }
+        var e = recusa(c);
+        if (e) { toast(e, 6000); return; }
+        c.pontos = c.pontos.concat(segmentosDosTrechos(c.trechos, uid));
+        ui.open = {};
+        if (c === active() && !visaoOn) renderEditor();
+        afterEdit('gerar-segmentos', c);
+      });
+    });
   }
   function contractById(id) { return state.contracts.find(function (x) { return x.id === id; }) || null; }
 
@@ -3329,14 +3552,18 @@
   }
 
   // ---------------- exclusões: sempre com confirmação na própria página; o ponto ainda pode ser desfeito na hora
+  // na conservação, "segmento" (itemTxt); nos outros tipos, "ponto", como sempre (inclusive nas pontes)
+  function itemTxt(c) { return isConserva(c) ? tipoInfo(c).item : 'ponto'; }
+  function itensTxt(c) { return isConserva(c) ? tipoInfo(c).itens : 'pontos'; }
+  function itemCap(c) { var t = itemTxt(c); return t.charAt(0).toUpperCase() + t.slice(1); }
   function excluirPonto(cid, p) {
-    var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
+    var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?'), c0 = contractById(cid), it = itemTxt(c0), It = itemCap(c0);
     confirmar({
-      titulo: 'Excluir o ponto ' + (p.nome || '') + '?',
+      titulo: 'Excluir o ' + it + ' ' + (p.nome || '') + '?',
       html: '<p>KM ' + esc(km) + ' · ' + esc(loteOf(cid)) + '.</p><p>' + (banco.on
-        ? 'O ponto sai do diagrama de todos. Fica 30 dias na lixeira (menu Dados › Lixeira e cópias), de onde um engenheiro ou o Administrador pode restaurar.'
+        ? 'O ' + it + ' sai do diagrama de todos. Fica 30 dias na lixeira (menu Dados › Lixeira e cópias), de onde um engenheiro ou o Administrador pode restaurar.'
         : 'Neste aparelho não há lixeira: só dá para recuperar por um backup.') + '</p>',
-      botao: 'Excluir ponto', perigo: true
+      botao: 'Excluir ' + it, perigo: true
     }).then(function (r) {
       var c = contractById(cid);
       if (!r || !c) return;
@@ -3344,14 +3571,14 @@
       c.pontos = c.pontos.filter(function (x) { return x.id !== p.id; });
       if (c === active()) renderEditor();
       afterEdit('del-point', c);
-      offerUndo('Ponto ' + (p.nome || '') + ' excluído.', function () {
+      offerUndo(It + ' ' + (p.nome || '') + ' excluído.', function () {
         var cc = contractById(cid);
-        if (!cc) { toast('O contrato deste ponto não existe mais.'); return; }
+        if (!cc) { toast('O contrato deste ' + it + ' não existe mais.'); return; }
         if (cc.pontos.some(function (x) { return x.id === copia.id; })) return;
         cc.pontos.push(clone(copia));
         if (cc === active()) { ui.open = {}; ui.open[copia.id] = true; renderEditor(); scrollToPoint(copia.id); }
         afterEdit('add-point', cc);
-        toast('Ponto ' + (copia.nome || '') + ' de volta.');
+        toast(It + ' ' + (copia.nome || '') + ' de volta.');
       });
     });
   }
@@ -3359,7 +3586,7 @@
     var nome = ctNome(c) || 'Contrato', cid = c.id;
     confirmar({
       titulo: 'Excluir o contrato ' + nome + ' inteiro?',
-      html: '<p>Sai o contrato <b>' + esc(ctCompleto(c)) + '</b> com os <b>' + c.pontos.length + ' pontos</b>, para todos.</p><p>' +
+      html: '<p>Sai o contrato <b>' + esc(ctCompleto(c)) + '</b> com os <b>' + c.pontos.length + ' ' + itensTxt(c) + '</b>, para todos.</p><p>' +
         (banco.on ? 'Fica 30 dias na lixeira (menu Dados › Lixeira e cópias) e o banco guarda uma cópia antes de excluir.' : 'Neste aparelho só dá para recuperar por um backup.') + '</p>',
       digitar: nome, botao: 'Excluir contrato', perigo: true
     }).then(function (r) {
@@ -3748,7 +3975,7 @@
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
     kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)',
     kmIniContrato: 'KM inicial do contrato', kmFimContrato: 'KM final do contrato', snvContrato: 'SNV do contrato', prazos: 'prazos', valores: 'valores (PI)',
-    obsFolha: 'observações da folha', trechos: 'limites dos trechos'
+    obsFolha: 'observações da folha', trechos: 'limites dos trechos', descricao: 'descrição', classe: 'classe do item'
   };
   function fieldName(k) {
     if (k.indexOf('serv.') === 0) { var s = GRUPOS_TODOS.find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
@@ -3803,14 +4030,20 @@
     if (resto) s[ult] += ' e mais ' + resto;
     return s.join(', ');
   }
-  // texto curto do que mudou, para o histórico
+  // texto curto do que mudou, para o histórico. Na conservação, os segmentos novos do mesmo contrato num envio viram uma frase só
+  // ("Conservação 437: 12 segmentos novos (S01 a S12)"; um só: "Conservação 437: segmento S13 (novo)") e a exclusão diz
+  // "segmento excluído"; nos outros tipos, como sempre (o "(novo ponto)" das pontes também)
   function opsResumo(ops) {
-    var names = [];
+    var names = [], segNovos = {};
     ops.forEach(function (op) {
-      var t, f = op.campos ? Object.keys(op.campos).map(fieldName).join(', ') : '';
+      if (op.t === 'ponto' && isConserva(contractById(op.cid))) (segNovos[op.cid] = segNovos[op.cid] || []).push(op.dados.nome || '?');
+    });
+    ops.forEach(function (op) {
+      var t, f = op.campos ? Object.keys(op.campos).map(fieldName).join(', ') : '', sg = segNovos[op.cid];
       if (op.t === 'ponto_campos') t = loteOf(op.cid) + ' ' + (op.nome || 'ponto') + (f ? ': ' + f : '');
+      else if (op.t === 'ponto' && sg) t = loteOf(op.cid) + ': ' + (sg.length === 1 ? 'segmento ' + sg[0] + ' (novo)' : sg.length + ' segmentos novos (' + sg[0] + ' a ' + sg[sg.length - 1] + ')');
       else if (op.t === 'ponto') t = loteOf(op.cid) + ' ' + (op.dados.nome || 'ponto') + ' (novo ponto)';
-      else if (op.t === 'apagar_ponto') t = loteOf(op.cid) + ' ' + (op.nome || '') + ': ponto excluído';
+      else if (op.t === 'apagar_ponto') t = loteOf(op.cid) + ' ' + (op.nome || '') + ': ' + itemTxt(contractById(op.cid)) + ' excluído';
       else if (op.t === 'contrato_campos') {
         t = loteOf(op.id, op.nome) + ': ' + (f || 'ordem das abas');
         // prazos e valores: o que mudou pelo rótulo, quando o texto do contrato cabe nos 300 caracteres (senão, só os nomes)
@@ -3842,12 +4075,14 @@
     });
     return { por: best.por, em: best.em, campos: campos };
   }
+  // última vistoria da ponte ou do segmento: o grupo marcado (fora de sem vistoria) alterado por último; no segmento, também a
+  // trafegabilidade (com trafSt: oaeSt dá sem vistoria para T, R e I)
   function vistoriaPonte(c, p) {
     var x = banco.on && banco.meta[metaKey(c.id, p.id)], best = null;
     if (!x) return null;
-    servicesOf(c).forEach(function (s) {
-      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em);
-      if (isFinite(t) && oaeSt(p.serv[s.key]) !== 'NV' && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
+    servicesOf(c).concat(isConserva(c) ? [TRAFEG] : []).forEach(function (s) {
+      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em), marcado = s === TRAFEG ? trafSt(p.serv[s.key]) !== 'NV' : oaeSt(p.serv[s.key]) !== 'NV';
+      if (isFinite(t) && marcado && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
     });
     return best;
   }
@@ -3889,6 +4124,8 @@
   // ---------------- avisos de alterações que se cruzaram (ficam até a pessoa dispensar)
   function fmtValue(campo, v) {
     if (v == null || v === '') return '(vazio)';
+    // trafegabilidade do segmento: o estado e a nota ("Com restrição (atoleiro no km 790)")
+    if (campo === 'serv.' + TRAFEG.key && typeof v === 'object') return TRAF_STATUS[trafSt(v)].name + (v.n ? ' (' + v.n + ')' : '');
     if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
       // grupo do serviço contínuo (pontes ou conservação), pela chave, que não se repete entre os tipos
       var so = OAE_SERVICES.concat(CONS_SERVICES).find(function (x) { return x.key === campo.slice(5); });
@@ -3923,8 +4160,10 @@
     var dif = Array.isArray(x.enviado) ? listaDif(x.campo, x.tipo === 'perdeu' ? x.enviado : x.valor, x.tipo === 'perdeu' ? x.valor : x.enviado).join('; ') : '';
     if (x.tipo === 'perdeu') return alvo + campo + ': ficou o valor de ' + quem + ', que alterou depois' + quando + (dif ? '; do que ' + (autor || 'você') + ' enviou para o que ficou: ' + dif : ': ' + fmtValue(x.campo, x.valor)) + '. ' + sua.charAt(0).toUpperCase() + sua.slice(1) + seu + ' não entrou.';
     if (x.tipo === 'substituiu') return alvo + campo + ': ficou o ' + (autor ? 'valor de ' + autor : 'seu valor') + ', alterado por último' + seu + '. Substituiu o de ' + quem + quando + (dif ? '; do valor de ' + quem + ' para o que ficou: ' + dif : ': ' + fmtValue(x.campo, x.valor)) + '.';
-    if (x.tipo === 'nao_excluido') return alvo + ': não foi excluído, porque ' + quem + ' alterou o ponto depois' + quando + '.';
-    if (x.tipo === 'excluido') return alvo + ': ' + (x.alvo === 'ponto' ? 'o ponto' : 'o contrato') + ' já tinha sido excluído por outra pessoa; ' + sua + ' nele não entrou.';
+    // "o segmento" na conservação (pelo contrato de x.cid neste aparelho); nos outros tipos, "o ponto"
+    var it = itemTxt(x.cid ? contractById(x.cid) : null);
+    if (x.tipo === 'nao_excluido') return alvo + ': não foi excluído, porque ' + quem + ' alterou o ' + it + ' depois' + quando + '.';
+    if (x.tipo === 'excluido') return alvo + ': ' + (x.alvo === 'ponto' ? 'o ' + it : 'o contrato') + ' já tinha sido excluído por outra pessoa; ' + sua + ' nele não entrou.';
     return alvo + campo;
   }
   function showConflicts(list) {
@@ -4520,6 +4759,8 @@
   function lxContrato(x, senao) {
     return x.tipo === 'ponto' ? loteOf(x.contrato_id, x.lote || senao || 'contrato') : loteOf(x.item_id, x.nome || x.item_id);
   }
+  // contrato deste aparelho do ponto na lixeira (para dizer "segmento" na conservação); sem ele, null, e fica "ponto"
+  function lxDono(x) { return x && x.contrato_id ? contractById(x.contrato_id) : null; }
   function openLixeira() {
     if (!isEng()) { toast('A lixeira e as cópias são para engenheiros e o Administrador.'); return; }
     var f = modal('<h2 id="modalTitle">Lixeira e cópias de segurança</h2><div class="lx" aria-live="polite">Carregando…</div>' +
@@ -4531,7 +4772,7 @@
       h += '<div class="section-title">Excluídos · ficam 30 dias</div>';
       h += lx.length ? lx.map(function (x) {
         var km = x.km && (x.km[0] != null || x.km[1] != null) ? ' · KM ' + fmtKm(x.km[0]) + ' – ' + fmtKm(x.km[1]) : '';
-        var titulo = x.tipo === 'ponto' ? 'Ponto ' + (x.nome || x.item_id) + ' · ' + lxContrato(x) + km : 'Contrato ' + lxContrato(x) + ' · ' + (x.pontos || 0) + ' pontos';
+        var titulo = x.tipo === 'ponto' ? itemCap(lxDono(x)) + ' ' + (x.nome || x.item_id) + ' · ' + lxContrato(x) + km : 'Contrato ' + lxContrato(x) + ' · ' + (x.pontos || 0) + ' pontos';
         return '<div class="lx-row"><div class="lx-txt"><b>' + esc(titulo) + '</b><small>Excluído por ' + esc(x.apagado_por || '—') + ' em ' + esc(fmtWhen(x.apagado_em)) +
           (x.tipo === 'ponto' && !x.contrato_existe ? ' · o contrato também foi excluído' : '') + '</small></div>' +
           '<button type="button" class="btn small" data-lx="rest" data-id="' + x.id + '">Restaurar</button></div>';
@@ -4552,12 +4793,12 @@
       if (b.dataset.lx === 'rest') {
         var x = dados.lixeira.find(function (y) { return y.id === id; });
         if (!x) return;
-        confirmar({ titulo: 'Restaurar ' + (x.tipo === 'ponto' ? 'o ponto ' + (x.nome || '') : 'o contrato ' + lxContrato(x)) + '?',
+        confirmar({ titulo: 'Restaurar ' + (x.tipo === 'ponto' ? 'o ' + itemTxt(lxDono(x)) + ' ' + (x.nome || '') : 'o contrato ' + lxContrato(x)) + '?',
           texto: x.tipo === 'ponto' ? 'Ele volta para ' + lxContrato(x, 'o contrato') + ' com os dados de quando foi excluído.' : 'Ele volta com os ' + (x.pontos || 0) + ' pontos que tinha.',
           botao: 'Restaurar' }).then(function (r) {
           if (!r) { openLixeira(); return; }
           window.Banco.restaurarLixeira(banco.login.codigo, id).then(function () {
-            toast((x.tipo === 'ponto' ? 'Ponto ' + (x.nome || '') : 'Contrato ' + lxContrato(x)) + ' restaurado.', 5000);
+            toast((x.tipo === 'ponto' ? itemCap(lxDono(x)) + ' ' + (x.nome || '') : 'Contrato ' + lxContrato(x)) + ' restaurado.', 5000);
             if (x.tipo === 'contrato') state.activeId = x.item_id;
             refresh(true);
             openLixeira();
@@ -4835,7 +5076,7 @@
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
   var EDIT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
-    'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit', 'preencher-trechos'];
+    'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit', 'preencher-trechos', 'gerar-segmentos'];
   var POINT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }

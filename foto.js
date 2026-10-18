@@ -1006,11 +1006,13 @@
     }
     // as funções de desenho e de texto leem `st`: no lote, cada foto passa por aqui
     function withItem(it, fn) { var old = st; st = it; try { return fn(); } finally { st = old; } }
-    function findPoint(id) { var c = contract(); return c && id ? (c.pontos || []).find(function (p) { return p.id === id; }) || null : null; }
+    // pontos do contrato que a foto pode ter; a conservação fica "sem ponto" até o passo 2.5 (os segmentos não entram na foto)
+    function pontosDe(c) { return !c || c.tipo === 'conserva' ? [] : c.pontos || []; }
+    function findPoint(id) { var c = contract(); return c && id ? pontosDe(c).find(function (p) { return p.id === id; }) || null : null; }
     function identify(km) {
       var c = contract(), best = null;
       if (!c || km == null) return null;
-      (c.pontos || []).forEach(function (p) {
+      pontosDe(c).forEach(function (p) {
         if (p.kmIni == null) return;
         var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni, d = km < a ? a - km : km > b ? km - b : 0;
         if (!best || d < best.d) best = { p: p, d: d };
@@ -1039,7 +1041,7 @@
     }
     function renderPontos() { q('#ftPonto').innerHTML = pontoOptions(); }
     function pontoOptions() {
-      var c = contract(), list = c ? (c.pontos || []).filter(function (p) { return p.kmIni != null; }).slice() : [];
+      var c = contract(), list = c ? pontosDe(c).filter(function (p) { return p.kmIni != null; }).slice() : [];
       list.sort(function (a, b) { return a.kmIni - b.kmIni; });
       var h = '<option value="">Nenhum</option>';
       list.forEach(function (p) {
@@ -1175,7 +1177,7 @@
     // ponto do lote c que fica no km (até 50 m)
     function pointNear(c, km) {
       var best = null;
-      (c.pontos || []).forEach(function (p) {
+      pontosDe(c).forEach(function (p) {
         if (p.kmIni == null) return;
         var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni, d = km < a ? a - km : km > b ? km - b : 0;
         if (d <= 0.05 && (!best || d < best.d)) best = { p: p, d: d };
