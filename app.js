@@ -29,8 +29,38 @@
       DN: { tag: 'VEGETAÇÃO OU SUJEIRA OBSERVADA', name: 'Vegetação ou sujeira observada', btn: 'Vegetação ou sujeira observada' } } },
     { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'm de guarda-corpo ou pista com dano' }
   ];
+  // conservação (437, 438): mesmos estados das pontes, com os nomes da conservação (oaeStOf junta s.nomes por cima de OAE_STATUS).
+  // tot = nome do grupo no total da folha; as chaves não repetem as dos pontos críticos nem as das pontes (fieldName e
+  // fmtValue acham o grupo só pela chave)
+  var CONS_NOMES = {
+    OK: { tag: 'SEM DEFEITO', name: 'Sem defeito', btn: 'Sem defeito' },
+    DN: { tag: 'DEFEITO OBSERVADO', name: 'Defeito observado', btn: 'Defeito observado' },
+    NA: { name: 'Não se aplica neste segmento' }     // tag e btn continuam "N/A"
+  };
+  var CONS_SERVICES = [
+    { key: 'revprim', label: 'Pista (revestimento primário)', short: 'Pista (revest. primário)', tot: 'Pista', un: 'km', q: 'km de pista com defeito', nomes: CONS_NOMES },
+    { key: 'drenoac', label: 'Drenagem e OAC', short: 'Drenagem e OAC', un: 'un', q: 'nº de dispositivos com defeito', nomes: CONS_NOMES },
+    { key: 'erosao', label: 'Aterros e erosões', short: 'Aterros e erosões', un: 'm³', q: 'm³ a recompor', nomes: CONS_NOMES },
+    { key: 'faixadom', label: 'Faixa de domínio (roçada e capina)', short: 'Faixa de domínio', un: 'km', q: 'km a roçar ou capinar', nomes: CONS_NOMES },
+    { key: 'pontesmad', label: 'Pontes de madeira', short: 'Pontes de madeira', un: 'un', q: 'nº de pontes com defeito', nomes: CONS_NOMES },
+    { key: 'pavurb', label: 'Pavimento urbano', short: 'Pavimento urbano', un: 'm²', q: 'm² de pavimento com defeito', nomes: CONS_NOMES },
+    { key: 'sinal', label: 'Sinalização', short: 'Sinalização', un: 'un', q: 'nº de placas ou elementos com defeito', nomes: CONS_NOMES }
+  ];
+  // trafegabilidade do segmento: linha própria, com estados próprios (interrompido é vermelho e nunca conta como em execução)
+  var TRAFEG = { key: 'trafeg', label: 'Trafegabilidade', short: 'Trafegabilidade' };
+  var TRAF_STATUS = {
+    NV: { tag: 'SEM VISTORIA', name: 'Sem vistoria', fill: 'none' },
+    T: { tag: 'TRAFEGÁVEL', name: 'Trafegável', btn: 'Trafegável', fill: '#1E9E55', ink: '#FFFFFF' },
+    R: { tag: 'COM RESTRIÇÃO', name: 'Com restrição', btn: 'Com restrição', fill: '#F2A93B', ink: '#3D2800' },
+    I: { tag: 'INTERROMPIDO', name: 'Interrompido', btn: 'Interrompido', fill: '#D93025', ink: '#FFFFFF' }
+  };
+  var TRAF_ORDER = ['T', 'R', 'I'];
+  function trafSt(sv) { var st = sv && sv.st; return TRAF_STATUS[st] ? st : 'NV'; }
+  // todos os grupos de todos os tipos, para achar o nome pela chave (histórico, propostas, conflitos)
+  var GRUPOS_TODOS = SERVICES.concat(OAE_SERVICES, CONS_SERVICES, [TRAFEG]);
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
-  function servicesOf(c) { return isOae(c) ? OAE_SERVICES : SERVICES; }
+  // grupos de serviço do tipo do contrato (TIPOS[...].servicos): pontos críticos, conservação ou pontes
+  function servicesOf(c) { return tipoInfo(c).servicos; }
 
   // ---------------- nomes do contrato. O campo Lote é o lote da licitação ("Lote 01"): fica na folha A3, no carimbo da foto
   // e no título do relatório. O nome de tela sai do tipo e do número do contrato ("Pontos Críticos 314", "Conservação 437",
@@ -92,17 +122,22 @@
   }
   // ---------------- tipos de contrato: o que cada tipo tem, pela chave de ctTipo (sem tipo, ou tipo desconhecido, = pontos
   // críticos, como sempre). item/itens: o que o contrato lista (folha, lista, textos); porPagina: o padrão da folha;
-  // continuo: serviço contínuo (estado na vistoria, como nas pontes), que a conservação vai dividir com as pontes;
-  // opcao: o texto do tipo na janela do "+ Contrato".
+  // continuo: serviço contínuo (estado na vistoria, como nas pontes), que a conservação divide com as pontes;
+  // opcao: o texto do tipo na janela do "+ Contrato"; palavras: as do resumo do serviço contínuo ("dano"/"defeito"),
+  // lidas sempre por palavrasDe; servicos: os grupos de serviço (logo depois de STATUS, fora deste literal).
   // isOae continua só para o que é das pontes (análise das medições, km final pela extensão, código OAE)
   var TIPOS = {
     pc: { item: 'ponto', itens: 'pontos', porPagina: 9, continuo: false, opcao: 'Pontos Críticos (obra emergencial)' },
-    conserva: { item: 'segmento', itens: 'segmentos', porPagina: 13, continuo: true, opcao: 'Conservação (P.A.T.O.)' },
-    oae: { item: 'ponte', itens: 'pontes', porPagina: 9, continuo: true, opcao: 'Proarte (pontes, OAE)' }
+    conserva: { item: 'segmento', itens: 'segmentos', porPagina: 13, continuo: true, opcao: 'Conservação (P.A.T.O.)',
+      palavras: { dano: 'defeito', danos: 'defeitos', semDano: 'sem defeito', semDanoCurto: 's/ defeito', total: 'Defeitos estimados' } },
+    oae: { item: 'ponte', itens: 'pontes', porPagina: 9, continuo: true, opcao: 'Proarte (pontes, OAE)',
+      palavras: { dano: 'dano', danos: 'danos', semDano: 'sem dano aparente', semDanoCurto: 's/ dano', total: 'Danos estimados' } }
   };
   function tipoInfo(c) { return TIPOS[ctTipo(c)]; }
   function isConserva(c) { return ctTipo(c) === 'conserva'; }
   function isContinuo(c) { return !!tipoInfo(c).continuo; }
+  // palavras do resumo do tipo; os pontos críticos (sem palavras) e o contrato que falta ficam com as das pontes
+  function palavrasDe(c) { var t = tipoInfo(c); return (t && t.palavras) || TIPOS.oae.palavras; }
   // km do contrato (o dos documentos: SNV 2020–2022 na conservação) de um km do site, pela régua de snv-conversao.js.
   // Só nos contratos com kmIniContrato e kmFimContrato. Nas pontas do contrato vale o km do cadastro, com ast quando a
   // régua discorda em mais de 0,01 km (o início do 437: 750,90 no cadastro, 751,94 pela geometria); no meio, a régua.
@@ -126,6 +161,10 @@
     NA: { tag: 'N/A', name: 'Não se aplica', btn: 'N/A', fill: 'none' }
   };
   var STATUS_ORDER = ['OK', 'A', 'P', 'NA'];
+  // grupos de serviço de cada tipo (servicesOf). Ficam fora do literal de TIPOS, que os testes em node leem sozinho, sem as listas
+  TIPOS.pc.servicos = SERVICES;
+  TIPOS.conserva.servicos = CONS_SERVICES;
+  TIPOS.oae.servicos = OAE_SERVICES;
   // pontes: serviço contínuo de conservação. O estado é o que a supervisão viu na vistoria (sem dano aparente,
   // dano observado, em execução) com a ESTIMATIVA do dano, e não o avanço de uma obra feita uma vez só, como nos pontos críticos
   var OAE_STATUS = {
@@ -160,10 +199,11 @@
     if (q == null || q === '' || !s.un || !isFinite(q)) return '';
     return '~' + (s.un === '%' ? fmtPct(Number(q)) : fmtN(Number(q)) + ' ' + s.un);
   }
-  // resumo da ponte: grupos com dano, em execução, sem dano e sem vistoria (N/A não conta); marcas de prioridade e conclusão informada
-  function oaeNec(p) {
+  // resumo da ponte (ou do segmento): grupos com dano, em execução, sem dano e sem vistoria (N/A não conta); marcas de
+  // prioridade e conclusão informada. Os grupos são os do tipo do contrato (sem c, o dono do ponto)
+  function oaeNec(p, c) {
     var r = { dn: 0, exec: 0, ok: 0, nv: 0, aval: 0, pri: 0, ci: 0 };
-    OAE_SERVICES.forEach(function (s) {
+    servicesOf(c || ownerOf(p)).forEach(function (s) {
       var sv = p.serv[s.key], st = oaeSt(sv);
       if (st === 'NA') return;
       r.aval++;
@@ -176,23 +216,25 @@
     });
     return r;
   }
-  function oaeNecTxt(n) {
-    if (n.dn) return 'dano em ' + n.dn + (n.dn === 1 ? ' grupo' : ' grupos') + (n.exec ? ' · ' + n.exec + ' em execução' : '');
+  // texto do resumo, com as palavras do tipo ("dano em 2 grupos" nas pontes, "defeito em 2 grupos" na conservação)
+  function oaeNecTxt(n, c) {
+    var w = palavrasDe(c);
+    if (n.dn) return w.dano + ' em ' + n.dn + (n.dn === 1 ? ' grupo' : ' grupos') + (n.exec ? ' · ' + n.exec + ' em execução' : '');
     if (n.exec) return n.exec + (n.exec === 1 ? ' grupo' : ' grupos') + ' em execução';
     if (!n.aval || n.nv === n.aval) return 'sem vistoria';
-    return n.nv ? 'sem dano aparente · ' + n.nv + ' sem vistoria' : 'sem dano aparente';
+    return n.nv ? w.semDano + ' · ' + n.nv + ' sem vistoria' : w.semDano;
   }
   // contrato: pontes com dano e, por grupo, quantas pontes e quanto (soma só das estimativas informadas)
   function oaeResumo(c) {
-    var r = { dn: 0, exec: 0, nv: 0, pri: 0, grupos: {} };
-    OAE_SERVICES.forEach(function (s) { r.grupos[s.key] = { pontes: 0, q: 0, semQ: 0 }; });
+    var r = { dn: 0, exec: 0, nv: 0, pri: 0, grupos: {} }, lista = servicesOf(c);
+    lista.forEach(function (s) { r.grupos[s.key] = { pontes: 0, q: 0, semQ: 0 }; });
     c.pontos.forEach(function (p) {
-      var n = oaeNec(p);
+      var n = oaeNec(p, c);
       if (n.dn) r.dn++;
       if (n.exec) r.exec++;
       if (n.pri) r.pri++;
       if (!n.aval || n.nv === n.aval) r.nv++;
-      OAE_SERVICES.forEach(function (s) {
+      lista.forEach(function (s) {
         var sv = p.serv[s.key], gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
         if (oaeSt(sv) !== 'DN') return;
         gr.pontes++;
@@ -201,13 +243,14 @@
     });
     return r;
   }
-  function oaeFaltaTxt(r) {
-    var asterisco = false, t = OAE_SERVICES.filter(function (s) { return r.grupos[s.key].pontes; }).map(function (s) {
+  // total por grupo ("Juntas: ~12 m em 3 pontes"), com os grupos e o item do tipo; sem c (folha das pontes, que não muda), os das pontes
+  function oaeFaltaTxt(r, c) {
+    var ti = c ? tipoInfo(c) : TIPOS.oae, asterisco = false, t = ti.servicos.filter(function (s) { return r.grupos[s.key].pontes; }).map(function (s) {
       var gr = r.grupos[s.key], q = s.un && s.un !== '%' && gr.q ? '~' + fmtN(gr.q) + ' ' + s.un + (gr.semQ ? '*' : '') + ' em ' : '';
       if (q && gr.semQ) asterisco = true;
-      return s.short + ': ' + q + gr.pontes + (gr.pontes === 1 ? ' ponte' : ' pontes');
+      return (s.tot || s.short) + ': ' + q + gr.pontes + ' ' + (gr.pontes === 1 ? ti.item : ti.itens);
     }).join(' · ');
-    return t ? t + (asterisco ? '  (* há pontes sem a estimativa)' : '') : '';
+    return t ? t + (asterisco ? '  (* há ' + ti.itens + ' sem a estimativa)' : '') : '';
   }
   var DEVICE_COLORS = {
     vermelho: { name: 'Vermelho', hex: '#E02424' },
@@ -1332,10 +1375,11 @@
     return fmtBRL(n);
   }
   // com a análise, a linha do estado da ponte sai e cada grupo mostra a última restauração (células mais altas, duas linhas)
-  function oaeGeom(an) {
+  // n = número de grupos (sem n, os das pontes: renderSheet só chama esta função no 424)
+  function oaeGeom(an, n) {
     var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yServ: 281, servH: 19, servStep: 23 };
     if (an) { g.yNec = null; g.yServ = 257; g.servH = 22; g.servStep = 26; }
-    var after = g.yServ + OAE_SERVICES.length * g.servStep;
+    var after = g.yServ + (n || TIPOS.oae.servicos.length) * g.servStep;
     if (an) { g.yConc = after + 4; g.concH = 21; g.yMed = g.yConc + g.concH + 4; g.medH = 30; g.yAl = g.yMed + g.medH + 6; g.alH = 16; g.yObs = g.yAl + g.alH + 8; }
     else g.yObs = after + 6;
     g.obsEnd = G.yFoot - 12;
@@ -1376,7 +1420,7 @@
       o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
       o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
     }
-    OAE_SERVICES.forEach(function (s, i) {
+    servicesOf(c).forEach(function (s, i) {
       var y = g.yServ + i * g.servStep + g.servH / 2 + 3.3, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
       o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
       if (s.un) o.push(T(x + w, y, s.un, { size: 6.4, fill: gray, anchor: 'end' }));
@@ -1422,9 +1466,9 @@
 
     // estado da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou (só na folha da vistoria)
     if (g.yNec != null) {
-      var nn = oaeNec(p), vis = c ? vistoriaPonte(c, p) : null;
+      var nn = oaeNec(p, c), vis = c ? vistoriaPonte(c, p) : null;
       var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
-      var ntx = oaeNecTxt(nn), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
+      var ntx = oaeNecTxt(nn, c), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
       o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
       o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
       if (vis) {
@@ -1435,33 +1479,11 @@
 
     // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições.
     // Com a análise, a célula mostra a última restauração e, por cima, o que a vistoria viu depois (celRest)
-    OAE_SERVICES.forEach(function (s, i) {
+    servicesOf(c || ownerOf(p)).forEach(function (s, i) {
       var sv = p.serv[s.key], k = oaeSt(sv), st = oaeStOf(s, k), y = g.yServ + i * g.servStep;
       var gi = a && a.grupos ? a.grupos[s.key] : null;
       if (an) celRest(o, an, a, p, s, sv, k, bx, y, bw, g.servH);
-      else if (st.fill === 'none') {
-        o.push(R(bx, y, bw, g.servH, { fill: k === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
-        var vz = fitSize(st.tag, bw - 6, 6.8, true, 4.4);
-        o.push(T(cx, y + 12.6, fitText(st.tag, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
-      } else {
-        var qt = comQtd(k) ? fmtQtd(s, sv.q) : '', label = st.tag + (qt ? ' · ' + qt : '');
-        o.push(R(bx, y, bw, g.servH, { fill: st.fill, rx: 2 }));
-        var ls = fitSize(label, bw - 6, 7.4, true, 4.4);
-        if (ls >= 6) o.push(T(cx, y + 12.8, fitText(label, bw - 6, ls, true), { size: r2(ls), bold: true, fill: st.ink, anchor: 'middle' }));
-        else {
-          // não cabe numa linha: estado em cima e estimativa embaixo (ou o nome em duas linhas)
-          var l2 = qt ? [st.tag, qt] : wrap(st.tag, bw - 6, 6, true);
-          if (l2.length > 2) l2 = [l2[0], l2.slice(1).join(' ')];
-          var s2 = Math.min.apply(null, l2.map(function (t) { return fitSize(t, bw - 6, 6.2, true, 4.2); }));
-          l2.forEach(function (t, j) {
-            o.push(T(cx, y + (l2.length > 1 ? 8.3 + j * 7.4 : 12.6), fitText(t, bw - 6, s2, true), { size: r2(s2), bold: true, fill: st.ink, anchor: 'middle' }));
-          });
-        }
-        // marcas no canto: "!" = prioridade; visto = conclusão informada pela contratada (a supervisão ainda confere)
-        var mk = 0;
-        if (comQtd(k) && sv.pri) marcaPri(o, bx + 3.5 + 10 * mk++, y + 0.5);
-        if (comQtd(k) && sv.ci) marcaCi(o, bx + 3.5 + 10 * mk++, y + 0.5);
-      }
+      else celEstado(o, s, sv, k, st, bx, y, bw, g.servH);
       if (gi && gi.altos) {
         o.push(R(bx - 0.8, y - 0.8, bw + 1.6, g.servH + 1.6, { stroke: ALERTA_COR, sw: 1.6, rx: 2.6 }));
         var bt = String(gi.altos), bwid = Math.max(10, textW(bt, 6, true) + 6);
@@ -1519,6 +1541,36 @@
     }
     lines.forEach(function (ln, i) { if (ln.t) o.push(T(bx + 5, g.yObs + 25 + i * lh, ln.t, { size: fs, bold: !!ln.b, fill: ln.cor || '#2B3430' })); });
     o.push('</g>');
+  }
+
+  // célula do estado de um grupo na vistoria (folha sem a análise): s = o grupo, sv = o que está gravado, k = o código do
+  // estado, st = o estado com os nomes da linha (oaeStOf, ou TRAF_STATUS na trafegabilidade). Sem vistoria e N/A: caixa
+  // tracejada; os outros: caixa cheia com o rótulo e a estimativa, em uma ou duas linhas, e as marcas no canto
+  function celEstado(o, s, sv, k, st, bx, y, bw, h) {
+    var cx = bx + bw / 2;
+    if (st.fill === 'none') {
+      o.push(R(bx, y, bw, h, { fill: k === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
+      var vz = fitSize(st.tag, bw - 6, 6.8, true, 4.4);
+      o.push(T(cx, y + 12.6, fitText(st.tag, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
+      return;
+    }
+    var qt = comQtd(k) ? fmtQtd(s, sv.q) : '', label = st.tag + (qt ? ' · ' + qt : '');
+    o.push(R(bx, y, bw, h, { fill: st.fill, rx: 2 }));
+    var ls = fitSize(label, bw - 6, 7.4, true, 4.4);
+    if (ls >= 6) o.push(T(cx, y + 12.8, fitText(label, bw - 6, ls, true), { size: r2(ls), bold: true, fill: st.ink, anchor: 'middle' }));
+    else {
+      // não cabe numa linha: estado em cima e estimativa embaixo (ou o nome em duas linhas)
+      var l2 = qt ? [st.tag, qt] : wrap(st.tag, bw - 6, 6, true);
+      if (l2.length > 2) l2 = [l2[0], l2.slice(1).join(' ')];
+      var s2 = Math.min.apply(null, l2.map(function (t) { return fitSize(t, bw - 6, 6.2, true, 4.2); }));
+      l2.forEach(function (t, j) {
+        o.push(T(cx, y + (l2.length > 1 ? 8.3 + j * 7.4 : 12.6), fitText(t, bw - 6, s2, true), { size: r2(s2), bold: true, fill: st.ink, anchor: 'middle' }));
+      });
+    }
+    // marcas no canto: "!" = prioridade; visto = conclusão informada pela contratada (a supervisão ainda confere)
+    var mk = 0;
+    if (comQtd(k) && sv.pri) marcaPri(o, bx + 3.5 + 10 * mk++, y + 0.5);
+    if (comQtd(k) && sv.ci) marcaCi(o, bx + 3.5 + 10 * mk++, y + 0.5);
   }
 
   function marcaPri(o, x, y) {
@@ -1676,11 +1728,12 @@
     s.contracts.forEach(function (c) {
       c.id = c.id || uid('ct');
       c.marcos = Array.isArray(c.marcos) ? c.marcos : [];
-      var list = servicesOf(c);
+      var list = servicesOf(c), cont = isContinuo(c);
       c.pontos.forEach(function (p) {
         p.id = p.id || uid('pt');
         p.serv = p.serv || {};
-        list.forEach(function (k) { if (!p.serv[k.key]) p.serv[k.key] = isOae(c) ? { st: 'NV' } : { st: 'NA', pct: 0 }; });
+        // serviço contínuo (pontes, conservação): grupo que falta = sem vistoria; pontos críticos: N/A
+        list.forEach(function (k) { if (!p.serv[k.key]) p.serv[k.key] = cont ? { st: 'NV' } : { st: 'NA', pct: 0 }; });
         p.disp = Array.isArray(p.disp) ? p.disp : [];
       });
     });
@@ -1940,18 +1993,18 @@
   }
 
   // botões de status de cada serviço. Pontos críticos (obra feita uma vez): OK, Ativo, Parado, N/A e o % executado.
-  // Pontes (serviço contínuo): estado na vistoria (sem dano aparente, dano observado, em execução, N/A), estimativa do
-  // dano, onde, e as marcas de prioridade e de conclusão informada
+  // Serviço contínuo (pontes, conservação, pelo tipo do contrato do ponto): estado na vistoria (sem dano aparente, dano
+  // observado, em execução, N/A), estimativa do dano, onde, e as marcas de prioridade e de conclusão informada
   // mais(s, estado): botões a mais na linha das marcas (pontes, quem vê a análise: medido sem execução)
   function servHtml(p, list, extra, mais) {
-    var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), oae = list === OAE_SERVICES;
+    var id = esc(p.id), h = propHtml(active().id, p), prop = propServ(active().id, p.id), cont = isContinuo(ownerOf(p));
     list.forEach(function (s) {
-      var sv = p.serv[s.key] || (oae ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = oae ? oaeSt(sv) : sv.st;
-      var segs = (oae ? OAE_STATUS_ORDER : STATUS_ORDER).map(function (k) {
+      var sv = p.serv[s.key] || (cont ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = cont ? oaeSt(sv) : sv.st;
+      var segs = (cont ? OAE_STATUS_ORDER : STATUS_ORDER).map(function (k) {
         var pend = pv && pv.st === k && cur !== k ? ' pend' : '';
-        return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (oae ? oaeStOf(s, k) : STATUS[k]).btn + '</button>';
+        return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (cont ? oaeStOf(s, k) : STATUS[k]).btn + '</button>';
       }).join('');
-      if (oae) {
+      if (cont) {
         var on = comQtd(cur), mx = mais ? mais(s, cur) : '';
         h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q + ' (estimativa)') + '</small>' : '') +
           (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + (extra ? extra(s) : '') + '</div>' +
@@ -2265,18 +2318,18 @@
   }
 
   function ponteHead(p, c) {
-    var dots = OAE_SERVICES.map(function (s) {
+    var dots = servicesOf(c).map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
       return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
     }).join('');
-    var n = oaeNec(p), nc = n.dn ? 'dn' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok';
-    var nt = n.dn ? n.dn + (n.dn === 1 ? ' dano' : ' danos') : n.exec ? 'em exec.' : nc === 'nv' ? '–' : 's/ dano';
+    var n = oaeNec(p, c), nc = n.dn ? 'dn' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok', w = palavrasDe(c);
+    var nt = n.dn ? n.dn + ' ' + (n.dn === 1 ? w.dano : w.danos) : n.exec ? 'em exec.' : nc === 'nv' ? '–' : w.semDanoCurto;
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
     var badge = (n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '') +
       (function () { var k = alertasEm(a, etapaDe(an)).length; return k ? '<b class="pt-al" title="' + k + (k === 1 ? ' alerta' : ' alertas') + ' na análise das medições">' + k + '</b>' : ''; })();
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n)) + '">' + nt + '</span>' + ICON_CHEV;
+      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null ? (p.codigo ? ' · ' : '') + 'km ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n, c)) + '">' + nt + '</span>' + ICON_CHEV;
   }
 
   function ponteCard(p, c) {
@@ -2298,7 +2351,7 @@
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       // com a análise: a última restauração do grupo (verde) e o alerta; o estado continua sendo o da vistoria
-      h += servHtml(p, OAE_SERVICES, function (s) {
+      h += servHtml(p, servicesOf(c), function (s) {
         var gi = a && a.grupos ? a.grupos[s.key] : null;
         if (!gi) return '';
         var mm = gi.ult ? mesMed(an, gi.ult) : '';
@@ -2548,11 +2601,12 @@
   var NO_STATUS = { name: 'Sem atividade', fill: '#7A8580' };
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
-    if (isOae(ownerOf(p))) {
-      var n = oaeNec(p), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null, nt = oaeNecTxt(n);
+    var dono = ownerOf(p);
+    if (isOae(dono)) {
+      var n = oaeNec(p, dono), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null, nt = oaeNecTxt(n, dono);
       return {
-        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: nt === 'sem vistoria' || nt === 'sem dano aparente' ? '' : nt,
-        servs: OAE_SERVICES.filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
+        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: nt === 'sem vistoria' || nt === palavrasDe(dono).semDano ? '' : nt,
+        servs: servicesOf(dono).filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
           var sv = p.serv[s.key], x = oaeSt(sv), qt = comQtd(x) ? fmtQtd(s, sv.q) : '';
           return { label: s.label, color: OAE_STATUS[x].fill, text: oaeStOf(s, x).name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.pri ? ' · prioridade' : '') +
             (comQtd(x) && sv.ci ? ' · conclusão informada' : '') + (comQtd(x) && sv.n ? ' · ' + sv.n : '') };
@@ -2869,10 +2923,10 @@
       if (!p2) return;
       var sv2 = p2.serv[t.dataset.svcpct];
       if (!sv2) return;
-      if (isOae(c)) {
+      if (isContinuo(c)) {
         if (t.dataset.nota) { if (t.value.trim()) sv2.n = t.value; else delete sv2.n; }
         else {
-          var so = OAE_SERVICES.find(function (x) { return x.key === t.dataset.svcpct; }), q = parseNum(t.value);
+          var so = servicesOf(c).find(function (x) { return x.key === t.dataset.svcpct; }), q = parseNum(t.value);
           if (q == null) delete sv2.q; else sv2.q = so && so.un === '%' ? clamp(q, 0, 100) : Math.max(0, q);
         }
       } else sv2.pct = clamp(Number(t.value) || 0, 0, 100);
@@ -3001,9 +3055,9 @@
         if (!p) return;
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
         if (!sv) return;
-        if (isOae(c)) {
+        if (isContinuo(c)) {
           if (oaeSt(sv) === st) st = 'NV';   // tocar de novo no status marcado desmarca (volta para sem vistoria)
-          // ponte: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
+          // serviço contínuo: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
           delete sv.pct;
           if (!comQtd(st)) { delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; }
         } else if (st === 'OK') sv.pct = 100;
@@ -3025,7 +3079,7 @@
         var base = last && last.kmFim != null ? Math.round((last.kmFim + 1) * 100) / 100 : null;
         var serv = {};
         if (isOae(c)) {
-          OAE_SERVICES.forEach(function (s) { serv[s.key] = { st: 'NV' }; });
+          servicesOf(c).forEach(function (s) { serv[s.key] = { st: 'NV' }; });
           p = { id: uid('pt'), nome: 'Nova ponte', codigo: 'OAE ' + String(c.pontos.length + 1).padStart(2, '0'), kmIni: null, kmFim: null, extensao: null, largura: null, municipio: '', serv: serv, disp: [], obs: '' };
         } else {
           SERVICES.forEach(function (s) { serv[s.key] = { st: 'P', pct: 0 }; });
@@ -3612,7 +3666,7 @@
     obsFolha: 'observações da folha'
   };
   function fieldName(k) {
-    if (k.indexOf('serv.') === 0) { var s = SERVICES.concat(OAE_SERVICES).find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
+    if (k.indexOf('serv.') === 0) { var s = GRUPOS_TODOS.find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
     return FIELD_NAMES[k] || k;
   }
   // nome de tela do contrato pelo id, buscado neste aparelho (histórico, conflitos, propostas, lixeira); sem ele, o texto que veio
@@ -3706,7 +3760,7 @@
   function vistoriaPonte(c, p) {
     var x = banco.on && banco.meta[metaKey(c.id, p.id)], best = null;
     if (!x) return null;
-    OAE_SERVICES.forEach(function (s) {
+    servicesOf(c).forEach(function (s) {
       var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em);
       if (isFinite(t) && oaeSt(p.serv[s.key]) !== 'NV' && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
     });
@@ -3751,7 +3805,8 @@
   function fmtValue(campo, v) {
     if (v == null || v === '') return '(vazio)';
     if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
-      var so = OAE_SERVICES.find(function (x) { return x.key === campo.slice(5); });
+      // grupo do serviço contínuo (pontes ou conservação), pela chave, que não se repete entre os tipos
+      var so = OAE_SERVICES.concat(CONS_SERVICES).find(function (x) { return x.key === campo.slice(5); });
       if (so) {
         var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
         return oaeStOf(so, k).name + (qt ? ' ' + qt : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', conclusão informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
@@ -4639,11 +4694,11 @@
     }
     relFoto.abrir(a);
   }
-  // texto inicial da descrição: situação de cada serviço (lotes) ou estado de cada grupo na vistoria (pontes) e a observação
+  // texto inicial da descrição: situação de cada serviço (lotes) ou estado de cada grupo na vistoria (pontes, conservação) e a observação
   function descRelatorio(c, p) {
     var partes;
-    if (isOae(c)) {
-      partes = OAE_SERVICES.map(function (s) {
+    if (isContinuo(c)) {
+      partes = servicesOf(c).map(function (s) {
         var sv = p.serv[s.key], k = oaeSt(sv);
         if (k === 'NV' || k === 'NA') return '';
         var qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
