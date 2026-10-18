@@ -7,6 +7,8 @@
 # Também monta o pacote de atualização do app (iOS/Android) de cada ambiente, que o app baixa sozinho (atualizar.js):
 #   <site>/app/versao.json + app-<commit>.zip (oficial)   e   <site>/previa/app/... (prévia)
 # O ambiente cujo ramo ainda não tem ferramentas/montar-app.sh fica sem pacote (o app dele ainda não sabe se atualizar).
+# O mesmo site também vai para o Cloudflare Pages (projeto via-230): https://via-230.pages.dev/ e https://via-230.pages.dev/previa/
+# Só quando o segredo CLOUDFLARE_API_TOKEN existe no repositório; se o Cloudflare falhar, o GitHub Pages publica do mesmo jeito.
 name: Site (oficial e prévia)
 
 on:
@@ -89,6 +91,17 @@ jobs:
           }
           pacote oficial oficial _site
           pacote previa previa _site/previa
+
+      - name: Publicar no Cloudflare Pages
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: b6dac35ea493329331f3298eeea3e1e1
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Sem o segredo CLOUDFLARE_API_TOKEN: não publiquei no Cloudflare"; exit 0; fi
+          W="npx --yes wrangler@4.20.0"
+          $W pages project create via-230 --production-branch producao || echo "projeto via-230 já existe"
+          $W pages deploy _site --project-name via-230 --branch producao --commit-dirty=true
 
       - uses: actions/configure-pages@v5
 
