@@ -82,6 +82,52 @@
     { key: 'pavurb', label: 'Pavimento urbano', short: 'Pavimento urbano', un: 'm²', q: 'm² de pavimento com defeito', nomes: CONS_NOMES },
     { key: 'sinal', label: 'Sinalização', short: 'Sinalização', un: 'un', q: 'nº de placas ou elementos com defeito', nomes: CONS_NOMES }
   ];
+  // conservação com a pista pavimentada (c.superficie === 'pavimentada': 558, 310, 419, 264, 665, 731), plano 5.2 e decisão D-3.
+  // Os grupos seguem os das MPs e do Resumo do contrato do SIAC. A mesma chave da lista de cima só onde o significado é o mesmo
+  // (drenagem, erosões, faixa de domínio, sinalização, pontes de madeira, pista não pavimentada). extra: só no contrato que o
+  // lista em c.gruposExtras (pontes de madeira no 665; a pista não pavimentada no 310)
+  var CONS_PAV_SERVICES = [
+    { key: 'panelas', label: 'Pista: panelas e buracos', short: 'Panelas e buracos', tot: 'Panelas', un: 'm²', q: 'm² de panelas', nomes: CONS_NOMES },
+    { key: 'remendos', label: 'Pista: afundamentos, trincas em bloco e couro de jacaré', short: 'Afundam. e couro de jacaré', tot: 'Remendos', un: 'm²', q: 'm² a remendar', nomes: CONS_NOMES },
+    { key: 'trincas', label: 'Pista: trincas isoladas', short: 'Trincas isoladas', tot: 'Trincas', un: 'm', q: 'm de trincas', nomes: CONS_NOMES },
+    { key: 'desgaste', label: 'Pista: desgaste e desagregação', short: 'Desgaste e desagregação', tot: 'Desgaste', un: 'm²', q: 'm² com desgaste', nomes: CONS_NOMES },
+    { key: 'acost', label: 'Acostamento e bordos', short: 'Acostamento e bordos', tot: 'Acostamento', un: 'km', q: 'km com defeito', nomes: CONS_NOMES },
+    { key: 'drenoac', label: 'Drenagem e OAC', short: 'Drenagem e OAC', un: 'un', q: 'nº de dispositivos com defeito', nomes: CONS_NOMES },
+    { key: 'erosao', label: 'Aterros, erosões e barreiras', short: 'Aterros, erosões, barreiras', tot: 'Aterros e erosões', un: 'm³', q: 'm³ a recompor', nomes: CONS_NOMES },
+    { key: 'faixadom', label: 'Faixa de domínio (roçada e capina)', short: 'Faixa de domínio', un: 'km', q: 'km a roçar ou capinar', nomes: CONS_NOMES },
+    { key: 'sinal', label: 'Sinalização', short: 'Sinalização', un: 'un', q: 'nº de placas ou elementos com defeito', nomes: CONS_NOMES },
+    { key: 'pontelimp', label: 'Pontes: limpeza, guarda-corpo e laje de transição', short: 'Pontes (limpeza e laje)', tot: 'Pontes', un: 'un', q: 'nº de pontes com defeito', nomes: CONS_NOMES },
+    { key: 'pontesmad', label: 'Pontes de madeira', short: 'Pontes de madeira', un: 'un', q: 'nº de pontes com defeito', nomes: CONS_NOMES, extra: true },
+    { key: 'revprim', label: 'Pista não pavimentada (revestimento primário)', short: 'Pista não pavimentada', tot: 'Pista não pavimentada', un: 'km', q: 'km de pista com defeito', nomes: CONS_NOMES, extra: true }
+  ];
+  // superfície da pista da conservação: os textos e a cor da pista nas folhas (sem superficie, revestimento primário: 437 e 438)
+  var PISTA = {
+    primario: { nome: 'revestimento primário', cor: '#E8DCBF', leg: 'Revestimento primário (predominante)',
+      nota: 'Pista: revestimento primário (predominante). Os trechos pavimentados, quando houver, não são desenhados: os perímetros e as extensões estão nas Observações gerais.' },
+    pavimentada: { nome: 'pavimentada', cor: '#D2D6D9', leg: 'Pista pavimentada (predominante)',
+      nota: 'Pista: pavimentada (predominante). Os trechos não pavimentados, quando houver, não são desenhados: os perímetros e as extensões estão nas Observações gerais.' }
+  };
+  function isPavimentada(c) { return !!(c && c.tipo === 'conserva' && c.superficie === 'pavimentada'); }
+  function pistaDe(c) { return isPavimentada(c) ? PISTA.pavimentada : PISTA.primario; }
+  // desempenho (conservação rotineira) na vistoria, só na pista pavimentada (plano 5.4, decisão D-4): os 5 indicadores das MPs,
+  // com o peso de cada um no fator de desempenho. Cada indicador é um campo do segmento, p.serv['desemp_veg'] = 'A' | 'N' (sem a
+  // chave, não vistoriado): assim o banco mescla, propõe, aprova e avisa de conflito por indicador, como nos grupos.
+  // Fica fora da folha A3 nesta versão
+  var DESEMP_IND = [
+    { k: 'veg', n: 'Vegetação', peso: 40 },
+    { k: 'limpd', n: 'Limpeza dentro da plataforma', peso: 10 },
+    { k: 'limpf', n: 'Limpeza fora da plataforma', peso: 5 },
+    { k: 'dren', n: 'Drenagem: existência e funcionamento', peso: 20 },
+    { k: 'caia', n: 'Caiação', peso: 25 }
+  ];
+  var DESEMP_ST = { A: 'Atende', N: 'Não atende' };
+  DESEMP_IND.forEach(function (d) { d.key = 'desemp_' + d.k; d.short = 'Desempenho: ' + d.n; d.label = d.short; });
+  // os indicadores marcados do segmento: { veg: 'A', caia: 'N' }
+  function desempDe(p) {
+    var o = {}, sv = (p && p.serv) || {};
+    DESEMP_IND.forEach(function (d) { if (DESEMP_ST[sv[d.key]]) o[d.k] = sv[d.key]; });
+    return o;
+  }
   // trafegabilidade do segmento: linha própria, com estados próprios (interrompido é vermelho e nunca conta como em execução)
   var TRAFEG = { key: 'trafeg', label: 'Trafegabilidade', short: 'Trafegabilidade' };
   var TRAF_STATUS = {
@@ -93,10 +139,23 @@
   var TRAF_ORDER = ['T', 'R', 'I'];
   function trafSt(sv) { var st = sv && sv.st; return TRAF_STATUS[st] ? st : 'NV'; }
   // todos os grupos de todos os tipos, para achar o nome pela chave (histórico, propostas, conflitos)
-  var GRUPOS_TODOS = SERVICES.concat(OAE_SERVICES, CONS_SERVICES, [TRAFEG]);
+  var GRUPOS_TODOS = SERVICES.concat(OAE_SERVICES, CONS_SERVICES, CONS_PAV_SERVICES.filter(function (s) { return !CONS_SERVICES.some(function (x) { return x.key === s.key; }); }), [TRAFEG], DESEMP_IND);
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
-  // grupos de serviço do tipo do contrato (TIPOS[...].servicos): pontos críticos, conservação ou pontes
-  function servicesOf(c) { return tipoInfo(c).servicos; }
+  // grupos de serviço do tipo do contrato (TIPOS[...].servicos): pontos críticos, conservação ou pontes. Na conservação com a
+  // pista pavimentada, os de CONS_PAV_SERVICES, com os extras só do contrato que os lista (c.gruposExtras)
+  function servicesOf(c) {
+    if (isPavimentada(c)) {
+      var ex = Array.isArray(c.gruposExtras) ? c.gruposExtras : [];
+      return CONS_PAV_SERVICES.filter(function (s) { return !s.extra || ex.indexOf(s.key) >= 0; });
+    }
+    return tipoInfo(c).servicos;
+  }
+  // grupo que falta nos segmentos (a superfície ou os extras mudaram) nasce sem vistoria; os que saíram ficam guardados
+  function gruposFaltam(c) {
+    if (!isContinuo(c)) return;
+    var list = servicesOf(c);
+    c.pontos.forEach(function (p) { p.serv = p.serv || {}; list.forEach(function (s) { if (!p.serv[s.key]) p.serv[s.key] = { st: 'NV' }; }); });
+  }
 
   // ---------------- nomes do contrato. O campo Lote é o lote da licitação ("Lote 01"): fica na folha A3, no carimbo da foto
   // e no título do relatório. O nome de tela sai do tipo e do número do contrato ("Pontos Críticos 314", "Conservação 437",
@@ -139,10 +198,18 @@
   // pasta usada até a versão 51 do app (o Lote ou "CT nº"), igual letra por letra (ou a da lista acima): o script do Drive
   // renomeia a pasta antiga da pessoa no primeiro envio, sem mover as fotos
   function ctPastaAntiga(c) { return c ? ctPastaAntes(c) || String(c.lote || (c.numero ? 'CT ' + c.numero : '') || 'Contrato') : 'Sem lote'; }
-  // ordem fixa: pontos críticos, conservação e pontes; dentro do tipo, pelo número (sem número no fim, na ordem da lista)
+  // ordem fixa: pontos críticos, conservação e pontes; dentro do tipo, pelo número (sem número no fim, na ordem da lista). A
+  // conservação vai pela posição no eixo (decisão D-16: 558, 310, 419, 264, 731, 665, 437, 438): o km inicial ou, no contrato
+  // fora do eixo (o ramal do 731), c.posEixo
+  function posEixo(c) { return typeof c.posEixo === 'number' ? c.posEixo : typeof c.kmIni === 'number' ? c.kmIni : null; }
   function ctOrdem(lista) {
-    return (lista || []).map(function (c, i) { return { c: c, i: i, t: TIPO_ORDEM.indexOf(ctTipo(c)), n: Number(ctNumeroCurto(c)) || Infinity }; })
-      .sort(function (a, b) { return a.t - b.t || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i; })
+    return (lista || []).map(function (c, i) {
+      var t = ctTipo(c);
+      return { c: c, i: i, t: TIPO_ORDEM.indexOf(t), k: t === 'conserva' ? posEixo(c) : null, n: Number(ctNumeroCurto(c)) || Infinity };
+    })
+      .sort(function (a, b) {
+        return a.t - b.t || (a.k == null) - (b.k == null) || (a.k != null && a.k !== b.k ? a.k - b.k : 0) || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i;
+      })
       .map(function (x) { return x.c; });
   }
   var NOMES = {
@@ -180,8 +247,17 @@
   // régua discorda em mais de 0,01 km (o início do 437: 750,90 no cadastro, 751,94 pela geometria); no meio, a régua.
   // Devolve { km, ast, geom } (geom: o km pela régua, para a nota) ou null: sem a régua (aparelho com o cache antigo),
   // régua de outra versão do eixo (snv-br230.js trocou e a régua não foi gerada de novo) ou km fora dela
+  // versões do SNV que a régua conhece (snv-conversao.js), para o campo do cadastro. Sem snvVersao, 202104A (437/438)
+  var SNV_VERSOES = [['202104A', 'SNV 2020–2022 (202104A)'], ['202304A', 'SNV 2023–2025 (202304A)']];
+  // régua do contrato pela versão do SNV dele; o snv-conversao.js antigo (sem versao) só tem a 202104A
+  function reguaDe(c) {
+    var R = window.SNV_CONVERSAO, v = (c && c.snvVersao) || '202104A';
+    if (!R) return null;
+    if (typeof R.versao === 'function') return R.versao(v);
+    return v === '202104A' ? R : null;
+  }
   function kmDoContrato(c, s) {
-    var R = window.SNV_CONVERSAO, eixo = window.SNV_BR230;
+    var R = reguaDe(c), eixo = window.SNV_BR230;
     if (!c || !R || typeof R.paraContrato !== 'function' || !eixo || R.para !== eixo.versao) return null;
     var ki = c.kmIniContrato, kf = c.kmFimContrato;
     if (typeof ki !== 'number' || typeof kf !== 'number' || !isFinite(ki) || !isFinite(kf)) return null;
@@ -282,7 +358,7 @@
   }
   // total por grupo ("Juntas: ~12 m em 3 pontes"), com os grupos e o item do tipo; sem c (folha das pontes, que não muda), os das pontes
   function oaeFaltaTxt(r, c) {
-    var ti = c ? tipoInfo(c) : TIPOS.oae, asterisco = false, t = ti.servicos.filter(function (s) { return r.grupos[s.key].pontes; }).map(function (s) {
+    var ti = c ? tipoInfo(c) : TIPOS.oae, asterisco = false, t = (c ? servicesOf(c) : ti.servicos).filter(function (s) { return r.grupos[s.key].pontes; }).map(function (s) {
       var gr = r.grupos[s.key], q = s.un && s.un !== '%' && gr.q ? '~' + fmtN(gr.q) + ' ' + s.un + (gr.semQ ? '*' : '') + ' em ' : '';
       if (q && gr.semQ) asterisco = true;
       return (s.tot || s.short) + ': ' + q + gr.pontes + ' ' + (gr.pontes === 1 ? ti.item : ti.itens);
@@ -928,14 +1004,22 @@
   // 'semCadastro' (sem os dois km do contrato no cadastro), 'semRegua' (snv-conversao.js não carregou: o index.html antigo
   // guardado no aparelho), 'semEixo' (snv-br230.js não carregou, ou veio sem a versão), 'outraVersao' (o eixo mudou de versão e a
   // régua não foi gerada de novo), 'foraDominio' (ponta do contrato fora do domínio da régua) ou 'ok'
+  // os intervalos de km do site cobertos pela régua: um por trecho (a 202104A tem dois, 301,30–642,40 e 741,70–999,80)
+  function dominiosDe(conv) {
+    if (conv && Array.isArray(conv.trechos) && conv.trechos.length) return conv.trechos.map(function (q) { return [q[0][1], q[q.length - 1][1]]; });
+    var q = (conv && conv.quebras) || [], d = conv && conv.dominio && conv.dominio.site;
+    return d ? [d] : q.length ? [[q[0][1], q[q.length - 1][1]]] : [];
+  }
   function reguaStatus(c) {
-    var conv = window.SNV_CONVERSAO, eixo = window.SNV_BR230;
+    var conv = reguaDe(c), eixo = window.SNV_BR230;
     if (!faixasDe(c)) return 'semFaixa';
     if (typeof c.kmIniContrato !== 'number' || typeof c.kmFimContrato !== 'number' || !isFinite(c.kmIniContrato) || !isFinite(c.kmFimContrato)) return 'semCadastro';
     if (!conv || typeof conv.paraContrato !== 'function') return 'semRegua';
     if (!eixo || !eixo.versao) return 'semEixo';
     if (conv.para !== eixo.versao) return 'outraVersao';
     if (!kmDoContrato(c, c.kmIni) || !kmDoContrato(c, c.kmFim)) return 'foraDominio';
+    // as duas pontas num trecho só: com o buraco no meio, a régua não cobre o contrato todo
+    if (!dominiosDe(conv).some(function (d) { return c.kmIni >= d[0] - 1e-6 && c.kmFim <= d[1] + 1e-6; })) return 'foraDominio';
     return 'ok';
   }
   // texto no lugar da régua do km do contrato, na faixa em que ela não sai
@@ -1004,8 +1088,8 @@
   // sai em alguma faixa), asterisco das pontas (quando o cadastro discorda da régua), régua indisponível ou fora do domínio
   // (reguaStatus) e a da pista (sempre). Sem as faixas, só a da pista. Os números e as versões vêm da régua e do eixo
   function notasConserva(c) {
-    var st = reguaStatus(c), conv = window.SNV_CONVERSAO, eixo = window.SNV_BR230, out = [];
-    var pista = 'Pista: revestimento primário (predominante). Os trechos pavimentados, quando houver, não são desenhados: os perímetros e as extensões estão nas Observações gerais.';
+    var st = reguaStatus(c), conv = reguaDe(c), eixo = window.SNV_BR230, out = [];
+    var pista = pistaDe(c).nota;
     if (st === 'semFaixa') return [pista];
     if (faixasDe(c).some(function (f) { return kmDoContrato(c, f[0]) && kmDoContrato(c, f[1]); })) {
       var sc = txtPdf(txtLimpo(c.snvContrato)), dp = [conv.de ? 'de ' + conv.de : '', conv.para ? 'para ' + conv.para : ''].filter(Boolean).join(' ');
@@ -1021,12 +1105,15 @@
     else if (st === 'semRegua') out.push('A régua do km do contrato não foi carregada neste aparelho (versão antiga do app guardada sem internet): a folha saiu sem o km do contrato. Abra o app com internet e gere a folha de novo.');
     else if (st === 'semEixo') out.push('O eixo do SNV (km Atualizado) não foi carregado inteiro neste aparelho: a folha saiu sem o km do contrato. Abra o app com internet e gere a folha de novo.');
     else if (st === 'outraVersao') out.push('A régua do km do contrato é ' + (conv.para ? 'do SNV ' + conv.para : 'de outra versão do SNV') + ', e o km Atualizado é do SNV ' + eixo.versao + ': a folha saiu sem o km do contrato.');
-    else if (st === 'foraDominio') {
-      var q = conv.quebras || [], dom = conv.dominio && conv.dominio.site || (q.length ? [q[0][1], q[q.length - 1][1]] : null);
-      out.push(dom ? 'O km do contrato só é calculado do km Atualizado ' + fmtKm(dom[0]) + ' ao ' + fmtKm(dom[1]) + ' (domínio da régua).' : 'O km do contrato só é calculado dentro do domínio da régua.');
-    }
+    else if (st === 'foraDominio') out.push(notaDominio(conv));
     out.push(pista);
     return out;
+  }
+  // nota do domínio da régua: "do km Atualizado 301,30 ao 642,40 e do 741,70 ao 999,80"
+  function notaDominio(conv) {
+    var ds = dominiosDe(conv);
+    if (!ds.length) return 'O km do contrato só é calculado dentro do domínio da régua.';
+    return 'O km do contrato só é calculado do km Atualizado ' + ds.map(function (d, i) { return (i ? 'do ' : '') + fmtKm(d[0]) + ' ao ' + fmtKm(d[1]); }).join(' e ') + ' (domínio da régua).';
   }
   // a relação entre o km Atualizado e o km do contrato, pelos pontos de quebra da régua: a diferença (contrato − Atualizado) na
   // ponta inicial, em cada quebra dentro do contrato e na ponta final; igual (a 0,005 km) em todos: "em todo o contrato, km
@@ -1151,7 +1238,7 @@
     o.push(T(x, y0 + 84, escalaFaixa(ppk), { size: 6, fill: gray }));
     if (pedacos.length) o.push(T(x, y0 + 115, 'SEGMENTO SNV', { size: 7, bold: true }));
     o.push(T(x, y0 + 140, 'PISTA', { size: 7, bold: true }));
-    o.push(T(x, y0 + 150, 'revestimento primário', { size: 6.2, fill: gray }));
+    o.push(T(x, y0 + 150, pistaDe(c).nome, { size: 6.2, fill: gray }));
     o.push(T(x, y0 + 158, '(predominante)', { size: 6.2, fill: gray }));
     o.push(T(x, y0 + 178, 'KM ATUALIZADO', { size: 7, bold: true }));
     if (versao) o.push(T(x, y0 + 186, 'SNV ' + versao, { size: 5.8, fill: gray }));
@@ -1169,7 +1256,7 @@
     });
     // pista, com o eixo tracejado; os limites dos segmentos tracejados até a régua do contrato; o traço vermelho nas pontas do
     // contrato (o início na 1ª faixa, o fim na última)
-    o.push(R(G.x0, yB, G.x1 - G.x0, GF.bandH, { fill: '#E8DCBF' }));
+    o.push(R(G.x0, yB, G.x1 - G.x0, GF.bandH, { fill: pistaDe(c).cor }));
     o.push(L(G.x0, yB + GF.bandH / 2, G.x1, yB + GF.bandH / 2, { stroke: '#30353A', sw: 0.8, dash: '7 4' }));
     o.push(R(G.x0, yB, G.x1 - G.x0, GF.bandH, { stroke: '#7D8581', sw: 0.8 }));
     lim.forEach(function (k) { o.push(L(X(k), y0 + GF.ySeg, X(k), y0 + 218, { stroke: '#7D8581', sw: 0.7, dash: '3 2' })); });
@@ -1182,7 +1269,7 @@
     // régua do km Atualizado e régua do km do contrato, com os traços pela régua de conversão (nunca por um deslocamento fixo:
     // no antigo 1530 os do contrato ficam mais espaçados) e, nas pontas, o km do contrato como nas bandeiras ("750,90*"). Sem o
     // km do contrato nas duas pontas da faixa, a régua não sai e o motivo fica no lugar dela, na mesma altura (nada sobe)
-    var par = passoRegua(ppk), conv = window.SNV_CONVERSAO, ra = kmDoContrato(c, kA), rb = kmDoContrato(c, kB);
+    var par = passoRegua(ppk), conv = reguaDe(c) || {}, ra = kmDoContrato(c, kA), rb = kmDoContrato(c, kB);
     reguaFaixa(o, 'site', y0 + GF.yRule, '#17201C', tracosRegua(kA, kB, par).map(function (t) { return { x: X(t.k), k: t.k, maior: t.maior }; }), fmtKm(kA), fmtKm(kB));
     if (ra && rb) {
       var tc = typeof conv.paraSite !== 'function' ? [] : tracosRegua(ra.geom, rb.geom, par).map(function (t) {
@@ -1366,7 +1453,7 @@
     o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
     o.push(T(G.labelX, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
     [[{ fill: '#5E8C2E', rx: 1.5 }, 'Localidade'], [{ fill: '#17201C', rx: 1.5 }, 'Início / fim do contrato'],
-      [{ fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }, 'Segmento do SNV'], [{ fill: '#E8DCBF', stroke: '#7D8581', sw: 0.6 }, 'Revestimento primário (predominante)'],
+      [{ fill: '#EEF0EF', stroke: '#7D8581', sw: 0.6 }, 'Segmento do SNV'], [{ fill: pistaDe(c).cor, stroke: '#7D8581', sw: 0.6 }, pistaDe(c).leg],
       [{ fill: '#FFFFFF', stroke: '#8E9792', sw: 0.9, dash: '3 2' }, 'Previsto, a confirmar']].forEach(function (l) {
       o.push(R(lx, y + 2, 15, 10, l[0]));
       o.push(T(lx + 19, y + 10, l[1], { size: 6.6 }));
@@ -1796,7 +1883,7 @@
   // uma página de colunas: a j-ésima de paginate (pg); num = { pag, total, ultima } ("Página pag de total"; ultima: a última
   // página de colunas, com o total); r = resumoSegs(c); faixa: com as Observações gerais do contrato embaixo das colunas
   function renderColunas(c, pg, j, num, r, faixa) {
-    var o = [], ch = pg.chunks[j], g = colunasGeom(faixa), gm = geom(pg.slots);
+    var o = [], ch = pg.chunks[j], g = colunasGeom(faixa, servicesOf(c).length), gm = geom(pg.slots);
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
@@ -1815,11 +1902,13 @@
     o.push('</svg>');
     return o.join('');
   }
-  // alturas da folha de colunas (pt; da maquete): as das pontes até o estado, a trafegabilidade em 275 e os 7 grupos a partir de
-  // 305; as observações até 748, ou até 700 com a faixa das Observações gerais do contrato (faixa)
-  function colunasGeom(faixa) {
-    var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yTraf: 275, servH: 19, yServ: 305, servStep: 23 };
-    g.yObs = g.yServ + CONS_SERVICES.length * g.servStep + 6;
+  // alturas da folha de colunas (pt; da maquete): as das pontes até o estado, a trafegabilidade em 275 e os grupos a partir de
+  // 305 (nGrupos: 7 no revestimento primário, de 23 em 23 pt; mais de 8, na pista pavimentada, de 21 em 21); as observações
+  // até 748, ou até 700 com a faixa das Observações gerais do contrato (faixa)
+  function colunasGeom(faixa, nGrupos) {
+    var n = nGrupos || CONS_SERVICES.length;
+    var g = { yKm: 151, yBand: 157, bandH: 56, yExt: 219, extH: 18, yNec: 243, necH: 26, yTraf: 275, servH: 19, yServ: 305, servStep: n > 8 ? 21 : 23 };
+    g.yObs = g.yServ + n * g.servStep + 6;
     g.obsEnd = G.yFoot - (faixa ? 60 : 12);
     return g;
   }
@@ -1860,7 +1949,9 @@
     o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
     servicesOf(c).forEach(function (s, i) {
       var y = g.yServ + i * g.servStep + g.servH / 2 + 3.3, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
-      o.push(T(x, y, fitText(s.short, w - uw, 7.2, true), { size: 7.2, bold: true }));
+      // para baixo, em décimos: arredondar para cima devolveria o "..." (7,2 quando cabe: a folha do 437/438 não muda)
+      var fz = Math.floor(fitSize(s.short, w - uw, 7.2, true, 6.2) * 10) / 10;
+      o.push(T(x, y, fitText(s.short, w - uw, fz, true), { size: fz, bold: true }));
       if (s.un) o.push(T(x + w, y, s.un, { size: 6.4, fill: gray, anchor: 'end' }));
     });
     o.push(T(x, g.yObs + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
@@ -1880,7 +1971,7 @@
     }
 
     // bloco do segmento (a cor da pista da folha em escala): o código do SNV em cima, o nome grande e a descrição embaixo
-    o.push(R(bx, g.yBand, bw, g.bandH, { fill: '#E8DCBF', stroke: '#7D8581', sw: 0.7, cls: 'blk' }));
+    o.push(R(bx, g.yBand, bw, g.bandH, { fill: pistaDe(c).cor, stroke: '#7D8581', sw: 0.7, cls: 'blk' }));
     var snv = txtPdf(snvDoSegmento(p));
     if (snv) o.push(T(cx, g.yBand + 13, fitText(snv, bw - 6, 6.4, true), { size: 6.4, bold: true, fill: '#5C6661', anchor: 'middle' }));
     var nome = txtPdf(txtLimpo(p.nome)) || '?', ns = fitSize(nome, bw - 6, 19, true, 9), ds = txtPdf(txtLimpo(p.descricao));
@@ -1993,7 +2084,9 @@
       }).filter(Boolean);
       out.push('KM Atualizado: SNV ' + window.SNV_BR230.versao + ' (DNIT); contr. = km do contrato' + (sc ? ', ' + sc + ',' : '') + ' pela tabela de conversão do SNV.' + (ast.length ? ' ' + ast.join(' ') : ''));
     } else if (c.pontos.length) {
-      out.push(reguaStatus(c) === 'semCadastro' ? 'Sem o km do contrato no cadastro: a folha mostra só o km Atualizado.' : 'Sem a tabela de conversão do SNV neste aparelho: o km do contrato não aparece.');
+      var stc = reguaStatus(c);
+      out.push(stc === 'semCadastro' ? 'Sem o km do contrato no cadastro: a folha mostra só o km Atualizado.' : stc === 'foraDominio' ? notaDominio(reguaDe(c)) :
+        'Sem a tabela de conversão do SNV neste aparelho: o km do contrato não aparece.');
     }
     return out;
   }
@@ -2052,7 +2145,7 @@
   // ------------------------------------------------------------------ estado
   // aba/dadosAb/grpAb: aba aberta na ponte (vist | med), "Dados da ponte" aberto e grupos abertos na aba Medições ("pid|grupo");
   // medModo: grupo | abc (aba Medições); servModo: o mesmo nos serviços do contrato (resumo da análise)
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, grpAb: {}, medModo: 'grupo', servModo: 'grupo' };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, medModo: 'grupo', servModo: 'grupo' };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -2147,7 +2240,8 @@
   function renderTabs() {
     var nav = $('tabs'), at = !visaoOn ? active() : null;
     var lista = GRUPOS_MENU.map(function (g) {
-      var cs = state.contracts.filter(function (c) { return ctTipo(c) === g[0]; });
+      // na ordem fixa (ctOrdem): a conservação pela posição no eixo, e não pela ordem de cadastro no banco
+      var cs = ctOrdem(state.contracts).filter(function (c) { return ctTipo(c) === g[0]; });
       if (!cs.length) return '';
       return '<div class="ctm-g">' + g[1] + '</div>' + cs.map(function (c) {
         return '<button type="button" class="ctm-i" data-tab="' + esc(c.id) + '" aria-current="' + (!!at && c.id === at.id) + '">' +
@@ -2330,15 +2424,26 @@
   function avisoKm(c) {
     function igual(a, b) { return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 0.5; }
     if (!isConserva(c) || (!igual(c.kmIni, c.kmIniContrato) && !igual(c.kmFim, c.kmFimContrato))) return '';
+    // quanto a régua desloca o km nas pontas (437: cerca de -7,1; SNV 2023–2025: +0,20): só avisa quando passa de 0,5 km
+    var R = reguaDe(c), d = null;
+    [c.kmFimContrato, c.kmIniContrato].forEach(function (k) { var s = R && typeof k === 'number' ? R.paraSite(k) : null; if (s != null && d == null) d = s - k; });
+    if (d == null) d = { '202104A': -7.1, '202304A': 0.2 }[c.snvVersao || '202104A'];
+    if (d == null || Math.abs(d) < 0.5) return '';
     var v = window.SNV_BR230 && window.SNV_BR230.versao;
-    return 'O km Atualizado está igual ao do contrato. O km Atualizado' + (v ? ' (SNV ' + v + ')' : '') + ' é cerca de 7,1 km menor: confira.';
+    return 'O km Atualizado está igual ao do contrato. O km Atualizado' + (v ? ' (SNV ' + v + ')' : '') + ' é cerca de ' + fmt(Math.abs(d), 1) + ' km ' + (d > 0 ? 'maior' : 'menor') + ': confira.';
   }
   // limites dos trechos e dos segmentos da conservação (c.trechos: os km Atualizado, do km inicial ao final do contrato).
   // Hoje só o "Gerar segmentos" usa; o relatório por trechos vai ler o mesmo campo. Listas validadas (decisão 0.12), pelo nº
   // do contrato sem espaços, para o botão "Preencher com a lista validada"
   var TRECHOS_PADRAO = {
     '0200437/2021': [743.8, 754.8, 765.8, 776.8, 786.8, 796.8, 806.8, 816.8, 826.8, 836.8, 848.8, 857.3, 865.8],
-    '0200438/2021': [865.8, 876.8, 887.8, 898.8, 909.8, 919.8, 929.8, 939.8, 949.8, 959.8, 969.8, 979.8, 989.8, 999.8]
+    '0200438/2021': [865.8, 876.8, 887.8, 898.8, 909.8, 919.8, 929.8, 939.8, 949.8, 959.8, 969.8, 979.8, 989.8, 999.8],
+    // plano dos contratos novos, seção 5.5 (decisão D-5)
+    '0200558/2025': [301.3, 311.3, 321.3, 331.3, 341.3, 351.3, 361.3, 371.3, 383.6],
+    '0200310/2023': [383.6, 388.6, 398.6, 406.9, 416.9, 426.9, 436.9, 446.9, 456.9, 466.9, 476.9, 488.5],
+    '0200419/2023': [488.5, 498.5, 508.5, 518.5, 528.5, 538.5, 548.5, 555.3, 563.7],
+    '0200264/2023': [564.1, 574, 584, 594, 604, 614, 624.7, 642.4],
+    '0200665/2024': [642.4, 652.4, 662.4, 672.4, 682.4, 692.4, 702.4, 712.4, 722.4, 732.4, 743.8]
   };
   function trechosPadrao(c) {
     var k = txtLimpo(c && c.numero).replace(/\s+/g, '');
@@ -2388,11 +2493,11 @@
   }
   // ---------------- segmentos da conservação (os pontos do contrato, como as pontes do 424): funções puras, para o teste em node
   // um segmento por par de limites, contíguos, S01, S02…; todos sem vistoria (os 7 grupos e a trafegabilidade)
-  function segmentosDosTrechos(lista, uidFn) {
+  function segmentosDosTrechos(lista, uidFn, grupos) {
     var out = [];
     for (var i = 0; i + 1 < lista.length; i++) {
       var serv = {};
-      CONS_SERVICES.forEach(function (s) { serv[s.key] = { st: 'NV' }; });
+      (grupos || CONS_SERVICES).forEach(function (s) { serv[s.key] = { st: 'NV' }; });
       serv[TRAFEG.key] = { st: 'NV' };
       out.push({ id: uidFn('pt'), classe: 'segmento', nome: 'S' + String(i + 1).padStart(2, '0'), descricao: '', kmIni: lista[i], kmFim: lista[i + 1], serv: serv, disp: [], obs: '' });
     }
@@ -2533,7 +2638,22 @@
         h.push(field('KM final do contrato', 'data-c="kmFimContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFimContrato)));
         h.push('<div class="hint ct-aviso full" data-aviso="km">' + esc(avisoKm(c)) + '</div>');
         h.push(field('SNV do contrato', 'data-c="snvContrato" type="text"', c.snvContrato));
+        // versão do SNV dos km do contrato: escolhe a régua (snv-conversao.js)
+        var vId = 'f-' + Math.random().toString(36).slice(2, 9), vAt = c.snvVersao || '202104A';
+        h.push('<div class="field"><label for="' + vId + '">Versão do SNV do km do contrato</label><select id="' + vId + '" data-c="snvVersao">' + SNV_VERSOES.map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === vAt ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+        }).join('') + '</select></div>');
         h.push(field('Data da última vistoria', 'data-c="dataVistoria" type="date"', c.dataVistoria));
+        // superfície da pista: escolhe os grupos da vistoria e os textos da folha; os extras só valem na pavimentada
+        var sId = 'f-' + Math.random().toString(36).slice(2, 9), pav = isPavimentada(c);
+        h.push('<div class="field"><label for="' + sId + '">Superfície da pista</label><select id="' + sId + '" data-c="superficie">' +
+          '<option value="primario"' + (pav ? '' : ' selected') + '>Revestimento primário</option><option value="pavimentada"' + (pav ? ' selected' : '') + '>Pavimentada</option></select></div>');
+        if (pav) {
+          var ex = Array.isArray(c.gruposExtras) ? c.gruposExtras : [];
+          h.push('<div class="field full"><span class="lbl">Grupos só deste contrato</span><div class="gx-lista">' + CONS_PAV_SERVICES.filter(function (s) { return s.extra; }).map(function (s) {
+            return '<label class="gx"><input type="checkbox" data-gx="' + s.key + '"' + (ex.indexOf(s.key) >= 0 ? ' checked' : '') + '> ' + esc(s.label) + '</label>';
+          }).join('') + '</div></div>');
+        }
       } else {
         h.push(field('KM inicial do trecho', 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
         h.push(field('KM final do trecho', 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
@@ -2572,6 +2692,7 @@
 
     var pts = sortedPoints(c), oae = isOae(c);
     if (oae) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
+    if (isPavimentada(c)) h.push(desempResumoHtml(c));
     // conservação: a lista "Segmentos". Sem nenhum, só "Gerar segmentos" (pelos limites dos trechos); com pelo menos um, só
     // "+ Segmento" (os dois nunca juntos: um segmento solto num contrato vazio esconderia o "Gerar")
     if (cons) {
@@ -2745,6 +2866,7 @@
   document.addEventListener('toggle', function (e) {
     var d = e.target;
     if (d && d.classList && d.classList.contains('pt-dados') && d.dataset.id) ui.dadosAb[d.dataset.id] = d.open;
+    if (d && d.classList && d.classList.contains('pt-des') && d.dataset.id) ui.desAb[d.dataset.id] = d.open;
   }, true);
 
   // ------------------------------------------------------------------ análise das medições (contratos de pontes)
@@ -3181,12 +3303,55 @@
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Estado do segmento' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       h += servHtml(p, servicesOf(c), null, null, trafHtml(p));
+      if (isPavimentada(c)) h += desempHtml(p, c);
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
       h += '<div class="pt-foot"><span class="pt-foot-l"></span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir segmento</button></div>';
       h += '</div>';
     }
     return h + '</article>';
+  }
+  // bloco recolhido "Desempenho" do segmento (pista pavimentada): os 5 indicadores com Atende / Não atende; tocar de novo no
+  // marcado volta a não vistoriado. O fiscal marca como nos grupos (cada indicador vira proposta do seu campo, serv.desemp_<indicador>)
+  function desempHtml(p, c) {
+    var id = esc(p.id), x = desempDe(p), pv = propServ(c.id, p.id), nv = 0, nn = 0;
+    var linhas = DESEMP_IND.map(function (d) {
+      var cur = x[d.k] === 'A' || x[d.k] === 'N' ? x[d.k] : '';
+      if (!cur) nv++; else if (cur === 'N') nn++;
+      var bts = ['A', 'N'].map(function (v) {
+        var pend = pv[d.key] === v && cur !== v ? ' pend' : '';
+        return '<button type="button" class="' + (v === 'A' ? 'OK' : 'DN') + pend + '" data-act="set-desemp" data-id="' + id + '" data-ind="' + d.k + '" data-v="' + v + '" aria-pressed="' + (cur === v) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + DESEMP_ST[v] + '</button>';
+      }).join('');
+      return '<div class="svc oae des"><div class="svc-name">' + esc(d.n) + ' <small class="svc-un">peso ' + d.peso + '</small>' + (cur ? '' : ' <small class="svc-nv">não vistoriado</small>') + '</div>' +
+        '<div class="seg" role="group" aria-label="' + esc(d.n) + '">' + bts + '</div></div>';
+    }).join('');
+    var sub = nv === DESEMP_IND.length ? 'não vistoriado' : (nn ? nn + (nn === 1 ? ' não atende' : ' não atendem') : 'todos atendem') + (nv ? ' · ' + nv + ' sem vistoria' : '');
+    return '<details class="pt-dados pt-des" data-id="' + id + '"' + (ui.desAb[p.id] ? ' open' : '') + '><summary>Desempenho <span>· ' + esc(sub) + '</span></summary><div class="des-lista">' + linhas + '</div></details>';
+  }
+  // extensão atendida pela vistoria (resumo do contrato, só para quem vê as medições): por indicador, os km dos segmentos que
+  // atendem sobre os km vistoriados; o fator é a média pelos pesos dos indicadores vistoriados (como o fator das MPs)
+  function desempResumo(c) {
+    var ind = DESEMP_IND.map(function (d) { return { d: d, at: 0, vis: 0 }; }), nseg = 0, nvis = 0, ext = 0, pesos = 0, soma = 0;
+    c.pontos.forEach(function (p) {
+      var len = pointLen(p), x = desempDe(p), algum = false;
+      if (len == null) return;
+      nseg++; ext += len;
+      ind.forEach(function (o) { var v = x[o.d.k]; if (v === 'A' || v === 'N') { o.vis += len; algum = true; if (v === 'A') o.at += len; } });
+      if (algum) nvis++;
+    });
+    ind.forEach(function (o) { if (o.vis > 0) { pesos += o.d.peso; soma += o.d.peso * o.at / o.vis; } });
+    return { ind: ind, nseg: nseg, nvis: nvis, ext: ext, pesos: pesos, fator: pesos ? soma / pesos : null };
+  }
+  function desempResumoHtml(c) {
+    if (!banco.on || !isEng() || !c.pontos.length) return '';
+    var r = desempResumo(c);
+    var h = '<section class="card an-card des-card"><div class="an-head"><b>Desempenho pela vistoria</b><span class="sub">' +
+      (r.nvis ? r.nvis + ' de ' + r.nseg + ' segmentos vistoriados' : 'nenhum segmento vistoriado') + ' · só para quem vê as medições</span></div>';
+    if (r.fator != null) h += '<div class="des-fator"><b>' + fmt(r.fator, 2) + '</b><span>fator pela vistoria' + (r.pesos < 100 ? ' (só ' + r.pesos + ' dos 100 pontos de peso foram vistoriados)' : '') + '</span></div>';
+    h += '<ul class="des-ind">' + r.ind.map(function (o) {
+      return '<li><span>' + esc(o.d.n) + ' <small>peso ' + o.d.peso + '</small></span><span>' + (o.vis ? fmt(o.at, 1) + ' de ' + fmt(o.vis, 1) + ' km atendem' : 'sem vistoria') + '</span></li>';
+    }).join('') + '</ul></section>';
+    return h;
   }
   // trafegabilidade do segmento: Trafegável, Com restrição, Interrompido (tocar de novo desmarca) e a nota, sempre à vista e com
   // data-svcpct (o fiscal escreve); sem estimativa nem marcas. "pend" = proposta de um fiscal com outro estado
@@ -3971,6 +4136,17 @@
       schedulePreview();
       return;
     }
+    // grupos só deste contrato (pista pavimentada): mudam a lista de grupos; não é vistoria
+    if (t.dataset.gx) {
+      if (e.type !== 'change') return;
+      var gx = Array.isArray(c.gruposExtras) ? c.gruposExtras.slice() : [], gi = gx.indexOf(t.dataset.gx);
+      if (t.checked && gi < 0) gx.push(t.dataset.gx); else if (!t.checked && gi >= 0) gx.splice(gi, 1);
+      if (gx.length) c.gruposExtras = gx; else delete c.gruposExtras;
+      gruposFaltam(c);
+      save();
+      renderAll();
+      return;
+    }
     if (t.dataset.c) {
       var k = t.dataset.c;
       // nº de outro contrato (como no "+ Contrato"): não grava; ao sair do campo, avisa e volta ao número de antes da edição
@@ -3986,7 +4162,19 @@
       else if (t.dataset.int) c[k] = clamp(parseInt(t.value, 10) || 9, 1, 14);
       else c[k] = t.value;
       if (k === 'numero' || k === 'lote') { renderTabs(); syncNomes(c); }
-      if (/^(objeto|kmIni|kmFim|kmIniContrato|kmFimContrato)$/.test(k)) syncAvisos(c);
+      // superfície da pista: outros grupos e outra folha (sem o campo, revestimento primário)
+      if (k === 'superficie') {
+        if (e.type !== 'change') return;
+        if (c.superficie !== 'pavimentada') delete c.superficie;
+        gruposFaltam(c);
+        save();
+        renderAll();
+        return;
+      }
+      if (/^(objeto|kmIni|kmFim|kmIniContrato|kmFimContrato|snvVersao)$/.test(k)) syncAvisos(c);
+      if (isConserva(c) && e.type === 'change' && /^(kmIniContrato|kmFimContrato|snvVersao)$/.test(k)) c.pontos.forEach(refreshPointHead);
+      // a aba da conservação vai pela posição no eixo
+      if (isConserva(c) && e.type === 'change' && /^(kmIni|posEixo)$/.test(k)) renderTabs();
     } else if (t.dataset.marco != null && t.dataset.mf) {
       var m = c.marcos[Number(t.dataset.marco)];
       if (m) m[t.dataset.mf] = t.dataset.mf === 'km' ? parseNum(t.value) : t.value;
@@ -4069,7 +4257,7 @@
     }
     if (act === 'login') { openLogin(); return; }
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
-    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
+    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item' && act !== 'set-desemp') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
     // barra do gráfico: escolhe a medição (o topo e a curva ABC passam a ser só dela); tocar de novo, ou "Todas as medições", volta a todas
@@ -4235,6 +4423,19 @@
         sv.st = st;
         rerenderPoint(p);
         break;
+      case 'set-desemp':
+        p = findPoint(b.dataset.id);
+        var dInd = DESEMP_IND.find(function (d) { return d.k === b.dataset.ind; }), dv = b.dataset.v;
+        if (!p || !isPavimentada(c) || !dInd || !DESEMP_ST[dv]) return;
+        if (p.serv[dInd.key] === dv) delete p.serv[dInd.key]; else p.serv[dInd.key] = dv;
+        ui.desAb[p.id] = true;
+        rerenderPoint(p);
+        // o resumo do contrato (fora do cartão do segmento) acompanha
+        var dc = document.querySelector('.des-card');
+        if (dc) { var dh = desempResumoHtml(c); if (dh) dc.outerHTML = dh; else dc.remove(); }
+        var fd = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="set-desemp"][data-ind="' + dInd.k + '"][data-v="' + dv + '"]');
+        if (fd) try { fd.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+        break;
       case 'set-marca':
         p = findPoint(b.dataset.id);
         if (!p) return;
@@ -4263,7 +4464,7 @@
           // "+ Segmento" (o botão só existe com pelo menos um): no fim, contíguo ao que termina mais longe (kmNovoSegmento)
           if (!c.pontos.length) { toast('Para começar, grave os limites dos trechos e toque em Gerar segmentos.', 5000); return; }
           var kmN = kmNovoSegmento(c);
-          p = segmentosDosTrechos([0, 0], uid)[0];
+          p = segmentosDosTrechos([0, 0], uid, servicesOf(c))[0];
           p.nome = nomeNovoSegmento(c); p.kmIni = kmN.kmIni; p.kmFim = kmN.kmFim;
         } else if (isOae(c)) {
           servicesOf(c).forEach(function (s) { serv[s.key] = { st: 'NV' }; });
@@ -4387,7 +4588,7 @@
   }
   // na conservação, só marcar o estado conta como vistoria: gerar, acrescentar, excluir e desfazer a exclusão não contam
   function afterEdit(act, c) {
-    if (isConserva(c) ? act === 'set-st' || act === 'set-marca' : POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
+    if (isConserva(c) ? act === 'set-st' || act === 'set-marca' || act === 'set-desemp' : POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
     save();
     schedulePreview();
   }
@@ -4419,7 +4620,7 @@
         if (c && isConserva(c) && c.pontos.length) { toast('Os segmentos deste contrato já foram gerados em outro aparelho.', 6000); return; }
         var e = recusa(c);
         if (e) { toast(e, 6000); return; }
-        c.pontos = c.pontos.concat(segmentosDosTrechos(c.trechos, uid));
+        c.pontos = c.pontos.concat(segmentosDosTrechos(c.trechos, uid, servicesOf(c)));
         ui.open = {};
         if (c === active() && !visaoOn) renderEditor();
         afterEdit('gerar-segmentos', c);
@@ -4913,11 +5114,17 @@
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
     kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)',
-    kmIniContrato: 'KM inicial do contrato', kmFimContrato: 'KM final do contrato', snvContrato: 'SNV do contrato', prazos: 'prazos', valores: 'valores (PI)',
+    kmIniContrato: 'KM inicial do contrato', kmFimContrato: 'KM final do contrato', snvContrato: 'SNV do contrato', snvVersao: 'versão do SNV do contrato', superficie: 'superfície da pista', gruposExtras: 'grupos só deste contrato', kmFimMapa: 'fim do desenho no mapa', posEixo: 'posição no eixo', prazos: 'prazos', valores: 'valores (PI)',
     obsFolha: 'observações da folha', trechos: 'limites dos trechos', descricao: 'descrição', classe: 'classe do item'
   };
-  function fieldName(k) {
-    if (k.indexOf('serv.') === 0) { var s = GRUPOS_TODOS.find(function (x) { return x.key === k.slice(5); }); return s ? s.short : k.slice(5); }
+  // cid: o contrato do campo, quando se sabe. Na conservação, a mesma chave pode ter nome diferente na pista de revestimento
+  // primário e na pavimentada (erosao: "Aterros e erosões" x "Aterros, erosões, barreiras"): vale o grupo do contrato
+  function fieldName(k, cid) {
+    if (k.indexOf('serv.') === 0) {
+      var ck = k.slice(5), c = cid ? contractById(cid) : null;
+      var s = (c ? servicesOf(c) : []).find(function (x) { return x.key === ck; }) || GRUPOS_TODOS.find(function (x) { return x.key === ck; });
+      return s ? s.short : ck;
+    }
     return FIELD_NAMES[k] || k;
   }
   // nome de tela do contrato pelo id, buscado neste aparelho (histórico, conflitos, propostas, lixeira); sem ele, o texto que veio
@@ -4978,7 +5185,7 @@
       if (op.t === 'ponto' && isConserva(contractById(op.cid))) (segNovos[op.cid] = segNovos[op.cid] || []).push(op.dados.nome || '?');
     });
     ops.forEach(function (op) {
-      var t, f = op.campos ? Object.keys(op.campos).map(fieldName).join(', ') : '', sg = segNovos[op.cid];
+      var t, f = op.campos ? Object.keys(op.campos).map(function (k) { return fieldName(k, op.t === 'ponto_campos' ? op.cid : op.id); }).join(', ') : '', sg = segNovos[op.cid];
       if (op.t === 'ponto_campos') t = loteOf(op.cid) + ' ' + (op.nome || 'ponto') + (f ? ': ' + f : '');
       else if (op.t === 'ponto' && sg) t = loteOf(op.cid) + ': ' + (sg.length === 1 ? 'segmento ' + sg[0] + ' (novo)' : sg.length + ' segmentos novos (' + sg[0] + ' a ' + sg[sg.length - 1] + ')');
       else if (op.t === 'ponto') t = loteOf(op.cid) + ' ' + (op.dados.nome || 'ponto') + ' (novo ponto)';
@@ -5019,8 +5226,9 @@
   function vistoriaPonte(c, p) {
     var x = banco.on && banco.meta[metaKey(c.id, p.id)], best = null;
     if (!x) return null;
-    servicesOf(c).concat(isConserva(c) ? [TRAFEG] : []).forEach(function (s) {
-      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em), marcado = s === TRAFEG ? trafSt(p.serv[s.key]) !== 'NV' : oaeSt(p.serv[s.key]) !== 'NV';
+    servicesOf(c).concat(isConserva(c) ? [TRAFEG] : [], isPavimentada(c) ? DESEMP_IND : []).forEach(function (s) {
+      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em);
+      var marcado = s === TRAFEG ? trafSt(p.serv[s.key]) !== 'NV' : s.peso ? !!DESEMP_ST[p.serv[s.key]] : oaeSt(p.serv[s.key]) !== 'NV';
       if (isFinite(t) && marcado && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
     });
     return best;
@@ -5033,7 +5241,7 @@
   function lastHtml(key) {
     var l = banco.on && lastChange(key);
     if (!l) return '';
-    var f = l.campos.length && l.campos.length <= 4 ? ' · ' + esc(l.campos.map(fieldName).join(', ')) : '';
+    var kc = String(key).split(':')[1], f = l.campos.length && l.campos.length <= 4 ? ' · ' + esc(l.campos.map(function (k) { return fieldName(k, kc); }).join(', ')) : '';
     return 'Última alteração: <b>' + esc(l.por || 'sem nome') + '</b> · ' + esc(fmtWhen(l.em)) + f;
   }
   function lastLine(key) {
@@ -5065,9 +5273,11 @@
     if (v == null || v === '') return '(vazio)';
     // trafegabilidade do segmento: o estado e a nota ("Com restrição (atoleiro no km 790)")
     if (campo === 'serv.' + TRAFEG.key && typeof v === 'object') return TRAF_STATUS[trafSt(v)].name + (v.n ? ' (' + v.n + ')' : '');
+    // indicador do desempenho do segmento: "atende" / "não atende"
+    if (campo && campo.indexOf('serv.desemp_') === 0) return DESEMP_ST[v] ? minus1(DESEMP_ST[v]) : 'não vistoriado';
     if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
       // grupo do serviço contínuo (pontes ou conservação), pela chave, que não se repete entre os tipos
-      var so = OAE_SERVICES.concat(CONS_SERVICES).find(function (x) { return x.key === campo.slice(5); });
+      var so = OAE_SERVICES.concat(CONS_SERVICES, CONS_PAV_SERVICES).find(function (x) { return x.key === campo.slice(5); });
       if (so) {
         var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
         var its = comQtd(k) ? itensDe(so.key, v).map(function (x) { return minus1(x.n); }) : [];
@@ -5094,7 +5304,7 @@
     // o banco manda o Lote como nome do contrato: a tela usa o nome do contrato deste aparelho, quando ele ainda existe
     var alvo = x.alvo === 'ponto' ? loteOf(x.cid) + ' ' + (x.nome || 'ponto') : loteOf(x.id, x.nome);
     var secs = !!(x.em && x.seu_em && fmtWhen(x.em) === fmtWhen(x.seu_em));   // no mesmo minuto: mostra os segundos
-    var campo = x.campo ? ' · ' + fieldName(x.campo) : '', quem = x.por || 'outra pessoa', quando = x.em ? ' (' + fmtWhen(x.em, secs) + ')' : '';
+    var campo = x.campo ? ' · ' + fieldName(x.campo, x.alvo === 'ponto' ? x.cid : x.id) : '', quem = x.por || 'outra pessoa', quando = x.em ? ' (' + fmtWhen(x.em, secs) + ')' : '';
     var sua = autor ? 'a alteração de ' + autor : 'a sua alteração', seu = x.seu_em ? ' (' + fmtWhen(x.seu_em, secs) + ')' : '';
     // prazos e valores (PI), com a lista que este aparelho enviou (flush): o que ficou comparado item a item com o que saiu
     var dif = Array.isArray(x.enviado) ? listaDif(x.campo, x.tipo === 'perdeu' ? x.enviado : x.valor, x.tipo === 'perdeu' ? x.valor : x.enviado).join('; ') : '';
@@ -5796,7 +6006,7 @@
   function propCampos(x) {
     return Object.keys(x.campos || {}).map(function (k) {
       var a = x.campos[k].a;
-      return '<li><b>' + esc(fieldName(k)) + ':</b> ' + (a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, x.campos[k].v)) + '</b></li>';
+      return '<li><b>' + esc(fieldName(k, x.contrato_id)) + ':</b> ' + (a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, x.campos[k].v)) + '</b></li>';
     }).join('');
   }
   function propHtml(cid, p) {
@@ -6038,7 +6248,7 @@
     if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
-  var EDIT_ACTS = ['set-st', 'set-marca', 'set-item', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
+  var EDIT_ACTS = ['set-st', 'set-marca', 'set-item', 'set-desemp', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
     'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit', 'preencher-trechos', 'gerar-segmentos'];
   var POINT_ACTS = ['set-st', 'set-marca', 'set-item', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {

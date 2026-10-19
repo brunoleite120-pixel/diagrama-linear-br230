@@ -1,11 +1,18 @@
-# Gera site/snv-conversao.js: a régua que converte o km dos contratos de conservação 437 e 438 (km do contrato, SNV
-# 2020-2022, citado como 202101A; os km e a geometria são os mesmos de 202004A a 202206A) no km do site (SNV 202607A, o
-# eixo de snv-br230.js), e de volta. Baixa do WFS do DNIT a geometria das duas versões, confere que o traçado é o mesmo,
+# Gera site/snv-conversao.js: as réguas que convertem o km dos contratos de conservação (km do contrato) no km do site
+# (SNV 202607A, o eixo de snv-br230.js), e de volta, uma por versão do SNV do contrato:
+#   202104A (SNV 2020-2022; os km e a geometria são os mesmos de 202004A a 202206A): 437 e 438 (750,90 a 1.006,90) e
+#     310, 419 e 264 (308,40 a 649,50, onde o km do site é o do contrato - 7,10);
+#   202304A (SNV 2023-2025): 558 e 665 (301,10 a 999,60, onde o km do site é o do contrato + 0,20).
+# No trecho do 437/438 Baixa do WFS do DNIT a geometria das duas versões, confere que o traçado é o mesmo,
 # calcula os pontos de quebra (dentro de um segmento do SNV o km é proporcional ao comprimento, como em snv_build.py) e
 # imprime a tabela de conferência. Não grava nada se uma conferência falhar.
+# Nos trechos de deslocamento fixo, a conferência é a dos limites de cada segmento do SNV nas duas versões (mesma extensão,
+# mesmo deslocamento em todos, sem buraco entre eles) e a do comprimento do traçado (a 3%: o DNIT redesenha um pouco a linha
+# entre versões, mas o km nominal, que é o que a régua usa, é o mesmo).
 # Rodar de novo sempre que o eixo do site (snv-br230.js) mudar de versão: a régua vale só para o eixo da versão PARA.
 #   python -I ferramentas/snv_conversao_build.py                         (baixa do WFS e grava ../snv-conversao.js)
-#   python -I ferramentas/snv_conversao_build.py --local de.json para.json   (usa o GeoJSON já baixado)
+#   python -I ferramentas/snv_conversao_build.py --local de.json para.json   (usa o GeoJSON já baixado do trecho do 437/438;
+#                                                                            os trechos de deslocamento fixo ainda vêm do WFS)
 #   ... --saida <arquivo.js> --site <pasta do site>                      (grava em outro lugar ou lê outro eixo, para testar)
 # Só a biblioteca padrão do Python. Fica fora do Pages (pages.yml exclui a pasta ferramentas).
 import sys, os, json, math, urllib.request, urllib.parse
@@ -33,8 +40,11 @@ def baixar(ver, codes):
     q = {'service': 'WFS', 'version': '2.0.0', 'request': 'GetFeature', 'typeNames': 'vgeo:vw_snv_rod',
          'outputFormat': 'application/json', 'srsName': 'EPSG:4326',
          'CQL_FILTER': "Versao_SNV='%s' AND Codigo_SNV IN (%s)" % (ver, ','.join("'%s'" % c for c in codes))}
-    with urllib.request.urlopen(WFS + '?' + urllib.parse.urlencode(q), timeout=120) as r:
-        return json.loads(r.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(WFS + '?' + urllib.parse.urlencode(q), timeout=120) as r:
+            return json.loads(r.read().decode('utf-8'))
+    except (OSError, ValueError) as e:   # sem rede, WFS fora do ar, tempo esgotado ou resposta que não é JSON
+        falha('sem acesso ao WFS do DNIT (%s, versão %s): %s' % (WFS, ver, e))
 
 
 def hav(a, b):
@@ -131,28 +141,95 @@ print('  fora da faixa: km 1.010,00 do contrato = %s' % ('fora da faixa' if conv
 if conv(1010.0, 0, 1) is not None or conv(741.6, 1, 0) is not None:
     falha('km fora do domínio não voltou vazio')
 
-# 4) grava o arquivo (LF, UTF-8)
-D = {'fonte': 'DNIT · SNV, camada vgeo:vw_snv_rod (WFS)', 'de': DE, 'equivalentes': '202004A a 202206A', 'para': PARA,
-     'baixadoEm': baixado, 'quebras': Q, 'dominio': {'contrato': [Q[0][0], Q[-1][0]], 'site': [Q[0][1], Q[-1][1]]}}
-JS = '''/* Régua do km dos contratos de conservação 437 e 438: km do contrato (SNV %(de)s; os km são os mesmos de
-   %(eq)s) para o km do site (SNV %(para)s, o eixo de snv-br230.js), e de volta. Gerado por
-   ferramentas/snv_conversao_build.py do WFS do DNIT (baixado em %(bx)s). Não editar à mão: rodar o script de novo quando
-   o eixo do site mudar de versão.
-   Entre dois pontos de quebra o km é linear; fora do domínio as funções devolvem null (não extrapolam). */
+# 4) trechos de deslocamento fixo: [versão, códigos em ordem, deslocamento esperado (km do site - km do contrato)]
+FIXOS = [
+    ('202104A', ['230BPA1400', '230BPA1405', '230BPA1410', '230BPA1420', '230BPA1440', '230BPA1460', '230BPA1470', '230BPA1480',
+                 '230BPA1482', '230BPA1485', '230BPA1495', '230BPA1497'], -7.10),
+    ('202304A', ['230BPA1400', '230BPA1405', '230BPA1410', '230BPA1420', '230BPA1440', '230BPA1460', '230BPA1470', '230BPA1480',
+                 '230BPA1482', '230BPA1485', '230BPA1495', '230BPA1497', '230BPA1500', '230BPA1520', '230BPA1525', '230BPA1530',
+                 '230BPA1540', '230BPA1550', '230BPA1580'], 0.20),
+]
+EIXO_KM = {x['codigo']: (x['kmIni'], x['kmFim']) for x in eixo['segmentos']}
+
+
+def comprimento(f):
+    line = [x for part in f['geometry']['coordinates'] for x in part]
+    return sum(hav(line[i - 1], line[i]) for i in range(1, len(line)))
+
+
+def fixo(ver, codes, dd):
+    gv, gp = baixar(ver, codes), baixar(PARA, codes)
+    fv = {f['properties']['Codigo_SNV']: f for f in gv.get('features', []) if f['properties'].get('Versao_SNV') == ver}
+    fp = {f['properties']['Codigo_SNV']: f for f in gp.get('features', []) if f['properties'].get('Versao_SNV') == PARA}
+    ant = None
+    for c in codes:
+        if c not in fv or c not in fp:
+            falha('o segmento %s não veio na versão %s ou na %s' % (c, ver, PARA))
+        a, b = fv[c]['properties'], fp[c]['properties']
+        ki, kf, si, sf = a['Quilometragem_Inicio'], a['Quilometragem_Fim'], b['Quilometragem_Inicio'], b['Quilometragem_Fim']
+        if (si, sf) != EIXO_KM.get(c):
+            falha('no snv-br230.js, %s vai de %s; o WFS %s diz %s' % (c, EIXO_KM.get(c), PARA, (si, sf)))
+        if abs((si - ki) - dd) > 0.0005 or abs((sf - kf) - dd) > 0.0005:
+            falha('%s: %s a %s (%s) e %s a %s (%s) não têm o deslocamento %+.2f' % (c, ki, kf, ver, si, sf, PARA, dd))
+        if ant is not None and abs(ki - ant) > 0.0005:
+            falha('%s (%s) não começa onde o anterior termina (%s; %s)' % (c, ver, ant, ki))
+        ant = kf
+        lv, lp = comprimento(fv[c]), comprimento(fp[c])
+        print('  %s  %s: %7.2f a %7.2f  ->  %7.2f a %7.2f   traçado %8.3f / %8.3f km' % (c, ver, ki, kf, si, sf, lv / 1000, lp / 1000))
+        if abs(lv - lp) > 0.03 * max(lv, lp):
+            falha('o traçado do %s tem %.3f km em %s e %.3f km em %s' % (c, lv / 1000, ver, lp / 1000, PARA))
+    k0 = fv[codes[0]]['properties']['Quilometragem_Inicio']
+    return [[k0, round(k0 + dd, 3)], [ant, round(ant + dd, 3)]]
+
+
+print('\nTrechos de deslocamento fixo:')
+T104 = fixo(*FIXOS[0])
+T304 = fixo(*FIXOS[1])
+
+
+# 5) grava o arquivo (LF, UTF-8). Cada versão: trechos (cada um, uma lista de quebras, linear entre elas; fora de todos, null)
+def versao(de, eq, trechos):
+    todas = [q for tr in trechos for q in tr]
+    return {'de': de, 'equivalentes': eq, 'para': PARA, 'trechos': trechos,
+            'dominio': {'contrato': [min(q[0] for q in todas), max(q[0] for q in todas)], 'site': [min(q[1] for q in todas), max(q[1] for q in todas)]}}
+
+
+V = {'202104A': versao(DE, '202004A a 202206A', [T104, Q]), '202304A': versao('202304A', '', [T304])}
+D = {'fonte': 'DNIT · SNV, camada vgeo:vw_snv_rod (WFS)', 'baixadoEm': baixado, 'para': PARA, 'versoes': V}
+JS = '''/* Réguas do km dos contratos de conservação: km do contrato para o km do site (SNV %(para)s, o eixo de snv-br230.js), e
+   de volta, uma por versão do SNV do contrato (campo snvVersao; sem ele, 202104A): 202104A (437, 438, 310, 419, 264) e
+   202304A (558, 665). Gerado por ferramentas/snv_conversao_build.py do WFS do DNIT (baixado em %(bx)s). Não editar à mão:
+   rodar o script de novo quando o eixo do site mudar de versão.
+   Dentro de um trecho, o km é linear entre dois pontos de quebra; fora dos trechos as funções devolvem null (não extrapolam).
+   O topo do objeto repete a versão 202104A só do trecho do 437/438 (quebras, paraSite, paraContrato), como antes. */
 window.SNV_CONVERSAO = (function () {
   var D = %(json)s;
   // i: coluna de entrada (0 = contrato, 1 = site), j: a de saída
-  function conv(i, j, k) {
-    var q = D.quebras, n = q.length;
-    if (k == null || k === '' || !isFinite(k = Number(k)) || k < q[0][i] - 1e-9 || k > q[n - 1][i] + 1e-9) return null;
-    for (var t = 1; t < n; t++) if (k <= q[t][i] + 1e-9) return q[t - 1][j] + (k - q[t - 1][i]) * (q[t][j] - q[t - 1][j]) / (q[t][i] - q[t - 1][i]);
+  function conv(trechos, i, j, k) {
+    if (k == null || k === '' || !isFinite(k = Number(k))) return null;
+    for (var r = 0; r < trechos.length; r++) {
+      var q = trechos[r], n = q.length;
+      if (k < q[0][i] - 1e-9 || k > q[n - 1][i] + 1e-9) continue;
+      for (var t = 1; t < n; t++) if (k <= q[t][i] + 1e-9) return q[t - 1][j] + (k - q[t - 1][i]) * (q[t][j] - q[t - 1][j]) / (q[t][i] - q[t - 1][i]);
+    }
     return null;
   }
-  D.paraSite = function (k) { return conv(0, 1, k); };       // km do contrato -> km do site
-  D.paraContrato = function (s) { return conv(1, 0, s); };   // km do site -> km do contrato
+  Object.keys(D.versoes).forEach(function (v) {
+    var o = D.versoes[v];
+    o.quebras = [].concat.apply([], o.trechos);
+    o.paraSite = function (k) { return conv(o.trechos, 0, 1, k); };       // km do contrato -> km do site
+    o.paraContrato = function (s) { return conv(o.trechos, 1, 0, s); };   // km do site -> km do contrato
+  });
+  // a régua de um contrato pela versão do SNV dele (sem versão: 202104A; versão sem régua: null)
+  D.versao = function (v) { return D.versoes[v || '202104A'] || null; };
+  var a = D.versoes['202104A'], t437 = a.trechos[a.trechos.length - 1];
+  D.de = a.de; D.equivalentes = a.equivalentes; D.quebras = t437;
+  D.dominio = { contrato: [t437[0][0], t437[t437.length - 1][0]], site: [t437[0][1], t437[t437.length - 1][1]] };
+  D.paraSite = function (k) { return conv([t437], 0, 1, k); };
+  D.paraContrato = function (s) { return conv([t437], 1, 0, s); };
   return D;
 })();
-''' % {'de': DE, 'eq': D['equivalentes'], 'para': PARA, 'bx': baixado, 'json': json.dumps(D, ensure_ascii=False, separators=(',', ':'))}
+''' % {'para': PARA, 'bx': baixado, 'json': json.dumps(D, ensure_ascii=False, separators=(',', ':'))}
 with open(saida, 'w', encoding='utf-8', newline='\n') as fo:
     fo.write(JS)
 print('\nGravado: %s (%d bytes)' % (saida, len(JS.encode('utf-8'))))

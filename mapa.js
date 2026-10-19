@@ -540,6 +540,9 @@
         a = Math.min.apply(null, ks) - 2; b = Math.max.apply(null, ks) + 2;
       }
       a = Math.max(ref.kmMin, Math.min(a, b)); b = Math.min(ref.kmMax, Math.max(a, b));
+      // kmFimMapa: o mapa para antes do fim do contrato (264: o contorno planejado de Altamira, 624,70 a 642,40, não existe;
+      // decisão D-6). As folhas e os dados do contrato continuam com o km do contrato
+      if (typeof c.kmFimMapa === 'number' && c.kmFimMapa > a && c.kmFimMapa < b) b = c.kmFimMapa;
       return b > a ? [a, b] : null;
     }
 

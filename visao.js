@@ -51,9 +51,15 @@
     function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
     function formal(c) { return c ? [loteReal(c), numeroCT(c)].filter(Boolean).join(' · ') || nome(c) : ''; }
     function completo(c) { var out = []; [nome(c), loteReal(c), numeroCT(c)].forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out.join(' · '); }
+    // a conservação vai pela posição no eixo (km inicial, ou posEixo no contrato fora do eixo), como ctOrdem no app.js
     function ordem(lista) {
-      return (lista || []).map(function (c, i) { return { c: c, i: i, t: ORD.indexOf(tipo(c)), n: Number(numeroCurto(c)) || Infinity }; })
-        .sort(function (a, b) { return a.t - b.t || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i; })
+      return (lista || []).map(function (c, i) {
+        var t = tipo(c), k = t !== 'conserva' ? null : typeof c.posEixo === 'number' ? c.posEixo : typeof c.kmIni === 'number' ? c.kmIni : null;
+        return { c: c, i: i, t: ORD.indexOf(t), k: k, n: Number(numeroCurto(c)) || Infinity };
+      })
+        .sort(function (a, b) {
+          return a.t - b.t || (a.k == null) - (b.k == null) || (a.k != null && a.k !== b.k ? a.k - b.k : 0) || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i;
+        })
         .map(function (x) { return x.c; });
     }
     return { tipo: tipo, numeroCurto: numeroCurto, nome: nome, loteReal: loteReal, numeroCT: numeroCT, formal: formal, completo: completo, ordem: ordem,
