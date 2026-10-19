@@ -6,7 +6,8 @@
  * Só age no app nativo com o plugin @capgo/capacitor-updater (modo manual, sem a nuvem deles, sem estatísticas: veja
  * capacitor.config.json). No navegador não faz nada: o site já se atualiza sozinho.
  *
- *   <site>/app/versao.json (oficial) e <site>/previa/app/versao.json (prévia), montados pelo pages.yml:
+ *   <site>/app/versao.json (oficial) e <site>/previa/app/versao.json (prévia), montados pelo pages.yml. O <site> é o
+ *   Cloudflare Pages (via-230.pages.dev); se ele não responder, o GitHub Pages (os dois recebem o mesmo pacote):
  *     { ambiente, versao (commit curto), ordem (data do commit, em segundos), arquivo, sha256, tamanho, texto }
  *   Só troca por uma versão do MESMO ambiente e MAIS NOVA (ordem maior) que a que está rodando (AMBIENTE.pacote e
  *   AMBIENTE.ordem, gravados por ferramentas/montar-app.sh). O plugin confere o SHA-256 do arquivo baixado.
@@ -19,7 +20,9 @@
   var U = C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.CapacitorUpdater;
   if (!U || !A.ordem) return;
 
-  var BASE = 'https://brunoleite120-pixel.github.io/diagrama-linear-br230/' + (A.previa ? 'previa/' : '') + 'app/';
+  var SUB = (A.previa ? 'previa/' : '') + 'app/';
+  var BASES = ['https://via-230.pages.dev/' + SUB, 'https://brunoleite120-pixel.github.io/diagrama-linear-br230/' + SUB];
+  var BASE = BASES[0];
   var K_PRONTA = 'diagrama-linear.app-pronta';   // { id, versao, ordem, texto }: baixada, esperando o app abrir de novo
   var K_TENTOU = 'diagrama-linear.app-tentou';   // versão que acabou de ser posta: se não for a que está rodando, falhou
   var K_FALHOU = 'diagrama-linear.app-falhou';   // versão que não abriu: não baixa de novo
@@ -98,16 +101,28 @@
   function avisarPronta(p) {
     aviso('Versão nova do app baixada' + (p.texto ? ' (' + p.texto + ')' : '') + '. Entra quando o app abrir de novo.', 'Atualizar agora', function () { trocar(p); });
   }
+  // versao.json do primeiro endereço que responder (Cloudflare; senão GitHub)
+  function versaoEm(i) {
+    if (i >= BASES.length) return Promise.resolve(null);
+    return fetch(BASES[i] + 'versao.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; })
+      .then(function (v) { return v && v.arquivo ? { v: v, base: BASES[i] } : versaoEm(i + 1); }, function () { return versaoEm(i + 1); });
+  }
   function conferir(forcar) {
     if (baixando || navigator.onLine === false) return;
     if (!forcar && Date.now() - ultima < INTERVALO) return;
     ultima = Date.now();
-    fetch(BASE + 'versao.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
+    var base = BASES[0];
+    versaoEm(0).then(function (achou) {
+      var v = achou && achou.v;
+      if (achou) base = achou.base;
       if (!v || v.ambiente !== A.nome || !(v.ordem > A.ordem) || !v.arquivo || !v.sha256 || v.versao === ler(K_FALHOU)) return;
       var p = ler(K_PRONTA);
       if (p && p.versao === v.versao) { avisarPronta(p); return; }
       baixando = true;
-      return U.download({ url: BASE + v.arquivo, version: v.versao, checksum: String(v.sha256).toLowerCase() }).then(function (b) {
+      var baixa = function (b0) { return U.download({ url: b0 + v.arquivo, version: v.versao, checksum: String(v.sha256).toLowerCase() }); };
+      // o pacote não veio do primeiro endereço: tenta o outro (mesmo commit, mesmo arquivo)
+      return baixa(base).catch(function (e) { var outro = BASES.filter(function (x) { return x !== base; })[0]; if (!outro) throw e; return baixa(outro); }).then(function (b) {
         if (p && p.id && p.id !== b.id) U.delete({ id: p.id }).catch(function () { /* já foi */ });
         var nova = { id: b.id, versao: v.versao, ordem: v.ordem, texto: v.texto || v.versao };
         gravar(K_PRONTA, nova);
@@ -128,5 +143,5 @@
     });
   });
 
-  window.AtualizarApp = { conferir: function () { conferir(true); }, base: BASE };
+  window.AtualizarApp = { conferir: function () { conferir(true); }, base: BASE, bases: BASES };
 })();
