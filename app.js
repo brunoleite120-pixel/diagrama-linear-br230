@@ -2145,7 +2145,7 @@
   // ------------------------------------------------------------------ estado
   // aba/dadosAb/grpAb: aba aberta na ponte (vist | med), "Dados da ponte" aberto e grupos abertos na aba Medições ("pid|grupo");
   // medModo: grupo | abc (aba Medições); servModo: o mesmo nos serviços do contrato (resumo da análise)
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, medModo: 'grupo', servModo: 'grupo' };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, ocAb: {}, medModo: 'grupo', servModo: 'grupo' };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -2695,7 +2695,7 @@
     h.push('</section>');
 
     var pts = sortedPoints(c), oae = isOae(c);
-    if (oae) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
+    if (oae || cons) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
     if (isPavimentada(c)) h.push(desempResumoHtml(c));
     // conservação: a lista "Segmentos". Sem nenhum, só "Gerar segmentos" (pelos limites dos trechos); com pelo menos um, só
     // "+ Segmento" (os dois nunca juntos: um segmento solto num contrato vazio esconderia o "Gerar")
@@ -2870,6 +2870,11 @@
     var d = e.target;
     if (d && d.classList && d.classList.contains('pt-dados') && d.dataset.id) ui.dadosAb[d.dataset.id] = d.open;
     if (d && d.classList && d.classList.contains('pt-des') && d.dataset.id) ui.desAb[d.dataset.id] = d.open;
+    // "Onde foi medido" (segmento da conservação): a lista só é montada aberta; ao abrir, lê as ocorrências e refaz o cartão
+    if (d && d.classList && d.classList.contains('an-oc') && d.dataset.id) {
+      ui.ocAb[d.dataset.id] = d.open;
+      if (d.open && !d.dataset.cheio) { carregarOcorr(active()); refazPonte(d.dataset.id, '.an-oc summary'); }
+    }
   }, true);
 
   // ------------------------------------------------------------------ análise das medições (contratos de pontes)
@@ -2904,7 +2909,7 @@
   lsPut('diagrama-linear.janela', null);                             // seletor antigo (3/6/12 meses)
   var anCache = { raw: null, view: null }, mnePend = {}, anLido = {};   // anLido[cid]: quando a análise (e as marcas) foi lida do banco
   function anOf(c) {
-    var raw = c && isOae(c) && parte(c, 'med') ? analise.dados[c.id] || null : null;
+    var raw = c && (isOae(c) || isConserva(c)) && parte(c, 'med') ? analise.dados[c.id] || null : null;
     if (!raw) return null;
     if (anCache.raw !== raw) anCache = { raw: raw, view: anCalc(raw) };
     return anCache.view;
@@ -2947,7 +2952,7 @@
       });
       return Object.assign({}, a, { servicos: sv, grupos: grupos });
     }
-    var pontes = {}, total = 0, comAlerta = 0;
+    var pontes = {}, total = 0, comAlerta = 0, cons = raw.tipo === 'conserva';
     Object.keys(raw.pontes || {}).forEach(function (pid) {
       var a = regrupa(raw.pontes[pid]), mx = {}, grupos = {}, als = [], et = {};
       Object.keys(a.grupos || {}).forEach(function (k) { grupos[k] = Object.assign({}, a.grupos[k], { altos: 0 }); });
@@ -2962,7 +2967,7 @@
           if (isFinite(d) && (gap == null || d < gap)) gap = d;
         }
         et[e.etapa] = { ns: ns, v: v, passagens: at, trechos: at.map(trecho), gap: gap, rep: rep };
-        if (at.length < 2) return;
+        if (at.length < 2 || cons) return;   // conservação: o segmento é atendido o ano todo, voltar não é alerta
         var et_ = e.etapa;
         als.push({ tipo: 'atendimentos', sev: 'Alta', etapa: et_, etapas: [et_], vezes: at.length, valor: v, rep: rep, gap: gap, meds: ns.map(function (n) { return n + 'ª'; }).join(', '),
           servico: 'Atendida ' + at.length + ' vezes na ' + et_ + 'ª etapa', tipoNome: 'mais de uma passagem na mesma etapa', trechos: at.map(trecho).join(' · '),
@@ -2992,7 +2997,7 @@
           if (gj == null || dj < gj) gj = dj;
         }
       }
-      if (volta.length) {
+      if (volta.length && !cons) {
         var vj = sj.reduce(function (t, s) { return t + s.v; }, 0);
         var etJ = [];
         volta.forEach(function (r) { r.forEach(function (n) { var e = info[n] && info[n].etapa; if (e != null && etJ.indexOf(e) < 0) etJ.push(e); }); });
@@ -3034,7 +3039,7 @@
     return r;
   }
   function carregarAnalise(c) {
-    if (!c || !isOae(c) || !banco.on || !parte(c, 'med') || !window.Banco || !window.Banco.analise) return;
+    if (!c || !(isOae(c) || isConserva(c)) || !banco.on || !parte(c, 'med') || !window.Banco || !window.Banco.analise) return;
     var e = analise.estado[c.id];
     if (e === 'carregando' || e === 'ok' || e === 'vazia' || e === 'erro') return;   // erro: só de novo ao trocar de aba ou voltar ao app
     analise.estado[c.id] = 'carregando';
@@ -3072,8 +3077,26 @@
   // contrato (pelo valor). A quantidade só se soma por serviço; por grupo, o valor e o % do total. Os itens do Anexo VI sem
   // descrição (cod_*) nunca foram medidos: ficam fora das listas, citados no rodapé
   function servContratoHtml(c, an, E) {
-    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {};
-    sortedPoints(c).forEach(function (p) {
+    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {}, cons = an.tipo === 'conserva';
+    // conservação: o contrato inteiro, da medição consolidada (inclui o que não tem local); "segmentos" conta onde há local
+    if (cons) {
+      var svI = {}, ns = E ? ei.ns : (an.medicoes || []).map(function (m) { return m.n; });
+      (an.servicos || []).forEach(function (s) { svI[s.cod || s.id] = s; });
+      ns.forEach(function (n) {
+        var pm = (an.porMedicao || {})[String(n)] || {};
+        Object.keys(pm).forEach(function (k) {
+          var s = svI[k] || { nome: k, un: '' }, t = ag[k];
+          if (!t) { t = ag[k] = { nome: s.nome, un: s.un, g: s.g || 'semlocal', q: 0, v: 0, pontes: 0 }; ord.push(t); }
+          t.q += Number(pm[k][0]) || 0; t.v += Number(pm[k][1]) || 0;
+        });
+      });
+      sortedPoints(c).forEach(function (p) {
+        var a = an.pontes && an.pontes[p.id];
+        ((a && a.servicos) || []).forEach(function (s) { if (ag[s.cod] && noEscopo([s], ns, true).length) ag[s.cod].pontes++; });
+      });
+      ord = ord.filter(function (t) { return t.v > 0; });
+    }
+    if (!cons) sortedPoints(c).forEach(function (p) {
       var a = an.pontes && an.pontes[p.id];
       if (!a) return;
       var base = a.servicos || [], temPor = base.some(function (s) { return s.por; });
@@ -3095,11 +3118,11 @@
     var modo = ui.servModo === 'abc' ? 'abc' : 'grupo', cid = 'ct:' + c.id;
     function linha(t) {
       return '<div class="mg-svc"><div class="mg-l"><span class="mg-nm"><span class="sc-k ' + t.k.toLowerCase() + '" aria-label="classe ' + t.k + '">' + t.k + '</span>' + esc(t.nome) +
-        '<small class="sc-p">' + t.pontes + (t.pontes === 1 ? ' ponte' : ' pontes') + (t.g === 'acesso' ? ' · meio de execução' : '') + '</small></span>' +
+        '<small class="sc-p">' + (cons ? (t.pontes ? t.pontes + (t.pontes === 1 ? ' segmento' : ' segmentos') : 'sem local') : t.pontes + (t.pontes === 1 ? ' ponte' : ' pontes')) + (t.g === 'acesso' ? ' · meio de execução' : '') + '</small></span>' +
         '<span class="mg-q"><b>' + fmtN(Math.round(t.q * 100) / 100) + ' <small>' + esc(unTxt(t.un)) + '</small></b><small>' + fmtBRL(t.v) + ' · ' + pct(t.v / tot * 100) + '</small></span></div></div>';
     }
     var h = '<div class="an-sec an-serv"><h4>Serviços medidos (' + ord.length + ')' + (E ? ' · ' + E + 'ª etapa' : '') + '</h4>';
-    h += '<div class="an-line">' + fmtBRL(tot) + ' nas pontes · quantidade somada por serviço; por grupo, só o valor</div>';
+    h += '<div class="an-line">' + fmtBRL(tot) + (cons ? ' no contrato' : ' nas pontes') + ' · quantidade somada por serviço; por grupo, só o valor</div>';
     h += '<div class="sc-abc" aria-hidden="true">' + ['A', 'B', 'C'].filter(function (k) { return nk[k]; }).map(function (k) {
       return '<i class="' + k.toLowerCase() + '" style="flex:' + pc[k].toFixed(2) + ' 0 0"></i>';
     }).join('') + '</div>';
@@ -3114,16 +3137,17 @@
       h += '<div class="mg-lista sc-lista">' + ord.filter(function (t) { return t.k !== 'C'; }).map(linha).join('') +
         (lc.length ? '<details class="sc-c"><summary>Classe C: ' + lc.length + (lc.length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(pc.C) + ' do valor</summary>' + lc.map(linha).join('') + '</details>' : '') + '</div>';
     } else {
-      h += '<div class="mg-lista">' + servicesOf(c).concat([MED_ACESSO]).map(function (g) {
+      h += '<div class="mg-lista">' + servicesOf(c).concat([cons ? MED_SEMLOCAL : MED_ACESSO]).map(function (g) {
         var it = ord.filter(function (t) { return t.g === g.key; });
         if (!it.length) return '';
-        var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO;
+        var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO || g === MED_SEMLOCAL;
         return '<div class="mg' + (ac ? ' acesso' : '') + '"><button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(cid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
-          '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? 'meio de execução · fora da vistoria' : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
+          '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? (cons ? 'sem local nos segmentos · ' + it.length + (it.length === 1 ? ' serviço' : ' serviços') : 'meio de execução · fora da vistoria') : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
           '<span class="mg-t"><b>' + fmtBRL(v) + '</b><small>' + pct(v / tot * 100) + '</small></span>' + ICON_CHEV + '</button>' +
           '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + it.map(linha).join('') + '</div></div>';
       }).join('') + '</div>';
     }
+    if (cons) return h + '<div class="an-rod">Todos os serviços da medição consolidada, inclusive os sem local (transportes, administração, canteiro). "Segmentos": em quantos a memória de cálculo localizou o serviço.</div></div>';
     var ks = Object.keys(cods).sort();
     h += '<div class="an-rod">Remoção de asfalto conta em Juntas (é medida junto com os berços); pintura epóxi, em Pintura.' +
       (ks.length ? ' Fora das listas: ' + (ks.length === 1 ? 'o item ' : 'os itens ') + esc(ks.join(' e ')) + ' do Anexo VI, estimados em ' + ks.map(function (k) { return cods[k]; }).join(' e ') + ' pontes, sem descrição e nunca medidos.' : '') + '</div>';
@@ -3170,6 +3194,7 @@
       var t = e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba ou voltar ao app.' : 'Nenhuma análise das medições cadastrada para este contrato.';
       return '<div class="an-note">' + esc(t) + '</div>';
     }
+    if (an.tipo === 'conserva') return analiseConsHtml(c, an);
     var r = an.resumo || {}, sobre = an.sobre || {}, E = etapaDe(an), ei = etapaInfo(an, E), cob = coberturaEtapas(c, an), nAl = 0, pAl = 0;
     c.pontos.forEach(function (p) { var k = alertasEm(an.pontes ? an.pontes[p.id] : null, E).length; nAl += k; if (k) pAl++; });
     var kp = [
@@ -3202,6 +3227,58 @@
         return '<li><b>' + esc(n.assunto) + '.</b> ' + esc(n.texto) + '</li>';
       }).join('') + '</ol></details>';
     }
+    return h + '</section>';
+  }
+  // resumo da conservação: o medido (todas ou uma etapa), quanto a memória de cálculo pôs nos segmentos, os segmentos por
+  // medição, o valor de cada segmento, os serviços do contrato e os avisos da leitura (memória × medição, MP × despacho)
+  function analiseConsHtml(c, an) {
+    var r = an.resumo || {}, sobre = an.sobre || {}, E = etapaDe(an), ei = etapaInfo(an, E), ets = an.etapas || [], cob = an.cobertura || {};
+    var ns = E ? ei.ns : (an.medicoes || []).map(function (m) { return m.n; }), et = {};
+    (an.medicoes || []).forEach(function (m) { et[m.n] = m.etapa; });
+    function locDe(l) { return l.reduce(function (t, n) { var x = cob[String(n)]; return t + (x ? Number(x[0]) || 0 : 0); }, 0); }
+    var tot = E ? ei.total : r.total, loc = locDe(ns);
+    var avs = (an.alertas || []).filter(function (x) { return !E || et[x.n] === E; }).sort(function (x, y) { return x.n - y.n; });
+    var kp = [
+      E ? ['Medido na ' + E + 'ª etapa', fmtBRL(tot), ei.ns.length + ' medições · ' + ei.de + ' a ' + ei.ate] : ['Medido a preços iniciais', fmtBRL(r.total), r.n + ' medições · ' + r.de + ' a ' + r.ate],
+      ['Com local nos segmentos', tot ? pctTxt(loc / tot * 100) : '–', fmtBRL(loc) + ' pela memória de cálculo; o resto é transporte, administração e serviço sem km'],
+      ['Avisos da leitura', String(avs.length), 'memória de cálculo que não fecha com a medição, ou MP diferente do despacho']
+    ];
+    var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' + (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + '</span></div>';
+    h += '<div class="an-jan"><span id="anEtTit">Mostrar</span><div class="seg an-etapas" role="group" aria-labelledby="anEtTit" style="grid-template-columns:repeat(' + (ets.length + 1) + ',minmax(0,1fr))">' +
+      '<button type="button" data-act="an-etapa" data-v="0" aria-pressed="' + !E + '">Todas<small>' + esc((r.de || '') + ' a ' + (r.ate || '')) + '</small></button>' +
+      ets.map(function (e) { return '<button type="button" data-act="an-etapa" data-v="' + e.etapa + '" aria-pressed="' + (E === e.etapa) + '">' + e.etapa + 'ª etapa<small>' + esc(e.de + ' a ' + e.ate) + '</small></button>'; }).join('') + '</div></div>';
+    h += '<div class="an-kpis">' + kp.map(function (k) { return '<div class="an-kpi"><span>' + esc(k[0]) + '</span><b>' + esc(k[1]) + '</b><small>' + esc(k[2]) + '</small></div>'; }).join('') + '</div>';
+    h += medListaHtml(c, an, E);
+    if (!E) {
+      h += '<div class="an-sec"><h4>Por etapa</h4>' + ets.map(function (e) {
+        var l = locDe(e.ns);
+        return '<button type="button" class="an-etrow" data-act="an-etapa" data-v="' + e.etapa + '"><span><b>' + e.etapa + 'ª etapa</b> · ' + esc(e.de + ' a ' + e.ate) + ' · ' + e.ns.length + ' medições · ' + fmtBRL(e.total) + '</span>' +
+          '<small>' + fmtBRL(l) + ' nos segmentos (' + (e.total ? pctTxt(l / e.total * 100) : '–') + ')</small></button>';
+      }).join('') + '</div>';
+    }
+    // valor de cada segmento no recorte, por km, com a barra proporcional ao maior
+    var segs = sortedPoints(c).map(function (p) {
+      var a = an.pontes && an.pontes[p.id], v = !a ? 0 : E ? (a.et && a.et[E] ? a.et[E].v : 0) : a.tot || 0;
+      return { p: p, v: v };
+    }), mx = segs.reduce(function (t, x) { return Math.max(t, x.v); }, 0);
+    if (mx > 0) {
+      h += '<div class="an-sec"><h4>Por segmento' + (E ? ' · ' + E + 'ª etapa' : '') + '</h4>' + segs.map(function (x) {
+        var p = x.p, km = 'km ' + (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
+        return '<button type="button" class="an-prow an-segv" data-act="an-ir" data-id="' + esc(p.id) + '"><span><b>' + esc(p.nome || '?') + '</b><small>' + esc(km) + (p.descricao ? ' · ' + esc(p.descricao) : '') + '</small>' +
+          '<span class="abc-bar"><i style="width:' + (x.v ? Math.max(1.5, x.v / mx * 100) : 0).toFixed(1) + '%"></i></span></span>' +
+          '<span class="an-v"><b>' + fmtBRL(x.v) + '</b><small>' + (loc ? pctTxt(x.v / loc * 100) + ' do localizado' : '') + '</small></span></button>';
+      }).join('') + '</div>';
+    }
+    h += servContratoHtml(c, an, E);
+    if (avs.length) {
+      h += '<details class="an-mais an-avs"><summary>Avisos da leitura das medições · ' + avs.length + '</summary>' + avs.map(function (x) {
+        return '<div class="an-line"><b>' + esc(medTxt(an, x.n)) + '</b> · ' + esc(x.tipo === 'despacho' ? 'valor da MP × despacho: ' : 'memória de cálculo: ') + esc(x.motivo) + '</div>';
+      }).join('') + '</details>';
+    }
+    if (parte(c, 'acomp')) h += cmpResumoHtml(c, an);
+    if (sobre.fonte) h += '<div class="an-src">Fonte: ' + esc(sobre.fonte) + '.</div>';
+    var notas = an.notas || [];
+    if (notas.length) h += '<details class="an-notas"><summary>Como foi feita a análise</summary><ol>' + notas.map(function (n) { return '<li><b>' + esc(n.assunto) + '.</b> ' + esc(n.texto) + '</li>'; }).join('') + '</ol></details>';
     return h + '</section>';
   }
 
@@ -3282,7 +3359,8 @@
   function segHead(p, c) {
     if (!parte(c, 'acomp')) {   // analista da conservação: só o segmento, sem as bolinhas e a trafegabilidade da vistoria
       var kmA = 'km ' + (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?'), nomeA = (p.nome || '?') + (p.descricao ? ' · ' + p.descricao : '');
-      return '<span class="pt-name" title="' + esc(nomeA) + '">' + esc(nomeA) + '</span><span class="pt-km">' + esc(kmA) + '</span><span class="pt-dots"></span><span class="pt-pct"></span>' + ICON_CHEV;
+      var anA = anOf(c), aA = anA && anA.pontes ? anA.pontes[p.id] : null;
+      return '<span class="pt-name" title="' + esc(nomeA) + '">' + esc(nomeA) + '</span><span class="pt-km">' + esc(kmA) + (aA ? ultTagHtml(c, anA, aA) : '') + '</span><span class="pt-dots"></span><span class="pt-pct"></span>' + ICON_CHEV;
     }
     var dots = servicesOf(c).map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
@@ -3292,9 +3370,10 @@
     var km = 'km ' + (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?') + (contr ? ' (' + contr + ')' : '') +
       (len != null ? ' · ' + fmt(len, 2) + ' km' : '') + (snv ? ' · ' + snv : '');
     var np = banco.on ? propsDo(c.id, p.id).length : 0, nome = (p.nome || '?') + (p.descricao ? ' · ' + p.descricao : '');
+    var anS = anOf(c), aS = anS && anS.pontes ? anS.pontes[p.id] : null;
     var badge = n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '';
     return '<span class="pt-name" title="' + esc(nome) + '">' + esc(nome) + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(km) + '</span><span class="pt-dots">' + dots + '</span>' +
+      '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(km) + (aS ? ultTagHtml(c, anS, aS) : '') + '</span><span class="pt-dots">' + dots + '</span>' +
       '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c)) + '">' + (kt === 'NV' ? '–' : TRAF_STATUS[kt].tag) + '</span>' + ICON_CHEV;
   }
   // cartão aberto (classe oae só pelo leiaute dos cartões das pontes; cons para as regras próprias): nome, descrição, extensão
@@ -3306,7 +3385,21 @@
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + segHead(p, c) + '</button>';
     if (open) {
       var id = esc(p.id), len = pointLen(p), snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '', kmR = ' · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '');
-      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '') + '<div class="grid">';
+      // com as medições: abas Vistoria e Medições, como na ponte; o analista (sem o acompanhamento) vê só as medições
+      var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null, soMed = !parte(c, 'acomp');
+      var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
+      h += '<div class="pt-body">' + (banco.on && !soMed ? lastLine(metaKey(c.id, p.id)) : '');
+      if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes do segmento">' + [['vist', 'Vistoria'], ['med', 'Medições']].map(function (x) {
+        return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+      if (a && !soMed) h += conferirHtml(c, p, an, a, aba);
+      if (aba === 'med') return h + medicoesHtml(c, p, an, a) + '</div></article>';
+      if (soMed) {
+        var eA = analise.estado[c.id];
+        return h + '<div class="section-title">Medições deste segmento</div><div class="an-note">' + esc(!banco.on ? 'As medições aparecem com o banco da equipe ligado.' : eA === 'carregando' || !eA ? 'Carregando as medições…' :
+          eA === 'erro' ? 'Não foi possível carregar as medições agora.' : an ? 'Nenhuma medição com serviço neste segmento.' : 'Nenhuma medição cadastrada para este contrato.') + '</div></div></article>';
+      }
+      h += '<div class="grid">';
       h += field('Nome', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
       h += field('Descrição (opcional)', 'data-p="descricao" data-id="' + id + '" type="text"', p.descricao);
       h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
@@ -3315,11 +3408,14 @@
       h += field('KM do contrato', 'data-segc="1" type="text" readonly tabindex="-1"', segContrTxt(c, p).replace(/^contr\. /, ''));
       h += field('Segmento do SNV', 'data-segsnv="1" type="text" readonly tabindex="-1"', snvDoSegmento(p));
       h += '</div>';
-      // analista: as medições do segmento, sem os campos da vistoria
-      if (!parte(c, 'acomp')) return h + '<div class="section-title">Medições deste segmento</div><div class="an-note">As medições da conservação ainda não estão no sistema.</div></div></article>';
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Estado do segmento' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
-      h += servHtml(p, servicesOf(c), null, null, trafHtml(p));
+      // com a análise: a última medição de cada grupo neste segmento (verde) ou "nunca medido"
+      h += servHtml(p, servicesOf(c), a ? function (s) {
+        var gi = a.grupos ? a.grupos[s.key] : null, u = gi && gi.ult, mm = u ? mesMed(an, u) : '';
+        return u ? ' <span class="svc-ult" title="Última medição com este serviço neste segmento">medido ' + esc(u + 'ª' + (mm ? ' · ' + mm : '')) + '</span>'
+          : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço neste segmento">nunca medido</span>';
+      } : null, null, trafHtml(p));
       if (isPavimentada(c)) h += desempHtml(p, c);
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
@@ -3402,14 +3498,14 @@
     var h = '';
     if (med) {
       h += '<div class="section-title">Serviços · Curva ABC · ' + med + 'ª medição' + (mesDe[med] ? ' (' + esc(mesDe[med]) + ')' : '') + '</div>';
-      h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido nesta ponte na ' + medTxt(an, med) + '.' : 'Serviços medidos na ' + medTxt(an, med) + ', com o total de cada um nesta ponte.') +
+      h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido ' + nPt(an) + ' na ' + medTxt(an, med) + '.' : 'Serviços medidos na ' + medTxt(an, med) + ', com o total de cada um ' + nPt(an) + '.') +
         '</span><button type="button" class="btn small" data-act="abc-todas">' + (Ev ? 'A ' + Ev + 'ª etapa inteira' : 'Todas as medições · ' + fmtBRL(a.tot)) + '</button></div>';
-      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + esc(medTxt(an, med)) + '.</div>';
+      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido ' + nPt(an) + ' na ' + esc(medTxt(an, med)) + '.</div>';
     } else if (E) {
       h += '<div class="section-title">Serviços · Curva ABC · ' + E + 'ª etapa (' + esc(ei.de + ' a ' + ei.ate) + ')</div>';
-      h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido nesta ponte na ' + E + 'ª etapa' + (comEst ? ', com o estimado do Anexo VI.' : '.') : 'Serviços medidos na ' + E + 'ª etapa, com o total de cada um nesta ponte.') +
+      h += '<div class="abc-filtro"><span>' + esc(temPor ? 'Só o que foi medido ' + nPt(an) + ' na ' + E + 'ª etapa' + (comEst ? ', com o estimado do Anexo VI.' : '.') : 'Serviços medidos na ' + E + 'ª etapa, com o total de cada um ' + nPt(an) + '.') +
         '</span><button type="button" class="btn small" data-act="an-etapa" data-v="0">Todas as medições · ' + fmtBRL(a.tot) + '</button></div>';
-      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido nesta ponte na ' + E + 'ª etapa.</div>';
+      if (!sv.length) return h + '<div class="an-note">Nenhum serviço medido ' + nPt(an) + ' na ' + E + 'ª etapa.</div>';
     } else {
       if (!sv.length) return '';
       h += '<div class="section-title">Serviços · Curva ABC</div>';
@@ -3476,6 +3572,9 @@
   function medsNums(t) { var ns = []; String(t || '').replace(/(\d+)ª/g, function (_, d) { ns.push(Number(d)); }); return ns; }
   // medição citada sempre com o mês e o ano: "25ª (mar/26)" (os meses vêm da análise)
   function mesMed(an, n) { var m = null; ((an && an.medicoes) || []).forEach(function (x) { if (x.n === Number(n)) m = x; }); return m && m.mes ? m.mes : ''; }
+  // a análise da conservação é por segmento; a das pontes, por ponte
+  function nPt(an) { return an && an.tipo === 'conserva' ? 'neste segmento' : 'nesta ponte'; }
+  function dPt(an) { return an && an.tipo === 'conserva' ? 'deste segmento' : 'desta ponte'; }
   function medTxt(an, n) { var mm = mesMed(an, n); return n + 'ª' + (mm ? ' (' + mm + ')' : ''); }
 
   // ---------------- última medição da ponte, pontes por medição e medido × vistoriado
@@ -3500,13 +3599,13 @@
     var g = medGlobalDe(c, an);
     if (g) {
       var v = Number(a.meses && a.meses[String(g)]) || 0;
-      return v ? ' <span class="pt-ult u-sel" title="' + esc('Medido nesta ponte na ' + medTxt(an, g)) + '">' + esc(g + 'ª · ' + fmtBRLc(v)) + '</span>' : '';
+      return v ? ' <span class="pt-ult u-sel" title="' + esc('Medido ' + nPt(an) + ' na ' + medTxt(an, g)) + '">' + esc(g + 'ª · ' + fmtBRLc(v)) + '</span>' : '';
     }
     var u = ultMedDe(an, a);
     if (!u) return '';
-    var tip = !u.m ? 'Nenhuma medição com serviço nesta ponte' : 'Última medição com serviço nesta ponte: ' + medTxt(an, u.m.n) +
+    var tip = !u.m ? 'Nenhuma medição com serviço ' + nPt(an) + '' : 'Última medição com serviço ' + nPt(an) + ': ' + medTxt(an, u.m.n) +
       (u.idade ? ', ' + u.idade + (u.idade === 1 ? ' mês' : ' meses') + ' antes da ' + medTxt(an, u.fim.n) + ', a última do contrato' : ', a última do contrato');
-    return ' <span class="pt-ult u-' + u.cls + '" title="' + esc(tip) + '">' + esc(u.m ? 'Última ' + u.m.n + 'ª · ' + u.m.mes : 'Nunca medida') + '</span>';
+    return ' <span class="pt-ult u-' + u.cls + '" title="' + esc(tip) + '">' + esc(u.m ? 'Última ' + u.m.n + 'ª · ' + u.m.mes : an.tipo === 'conserva' ? 'Nunca medido' : 'Nunca medida') + '</span>';
   }
   // medição escolhida na lista (por contrato), se existir nesta análise
   function medGlobalDe(c, an) {
@@ -3524,31 +3623,31 @@
     var ps = sortedPoints(c), g = medGlobalDe(c, an), sid = 'anMed-' + c.id, todas = an.medicoes || [];
     var ms = todas.filter(function (m) { return !E || m.etapa === E || m.n === g; }).slice().reverse();
     function medidas(n) { return ps.filter(function (p) { var a = an.pontes && an.pontes[p.id]; return a && Number(a.meses[String(n)]) > 0; }); }
-    var fim = todas[todas.length - 1];
-    var h = '<div class="an-sec an-medsel"><h4><label for="' + sid + '">Pontes por medição</label></h4>' +
-      '<select id="' + sid + '" data-anmed="1"><option value="">Todas as pontes, por km</option>' + ms.map(function (m) {
+    var fim = todas[todas.length - 1], cons = an.tipo === 'conserva', w1 = cons ? ' segmento' : ' ponte', wN = cons ? ' segmentos' : ' pontes';
+    var h = '<div class="an-sec an-medsel"><h4><label for="' + sid + '">' + (cons ? 'Segmentos' : 'Pontes') + ' por medição</label></h4>' +
+      '<select id="' + sid + '" data-anmed="1"><option value="">' + (cons ? 'Todos os segmentos' : 'Todas as pontes') + ', por km</option>' + ms.map(function (m) {
         var k = medidas(m.n).length;
-        return '<option value="' + m.n + '"' + (g === m.n ? ' selected' : '') + '>' + esc(m.n + 'ª · ' + m.mes + ' · ' + k + (k === 1 ? ' ponte' : ' pontes')) + '</option>';
+        return '<option value="' + m.n + '"' + (g === m.n ? ' selected' : '') + '>' + esc(m.n + 'ª · ' + m.mes + ' · ' + k + (k === 1 ? w1 : wN)) + '</option>';
       }).join('') + '</select>';
     if (g) {
       var cur = medidas(g), ant = null;
       todas.forEach(function (m) { if (m.n < g && (!ant || m.n > ant.n)) ant = m; });
       var v = cur.reduce(function (t, p) { return t + (Number(an.pontes[p.id].meses[String(g)]) || 0); }, 0);
       var nal = cur.filter(function (p) { return (an.pontes[p.id].mx || []).indexOf(g) >= 0; }).length;
-      h += '<div class="an-line"><b>' + cur.length + (cur.length === 1 ? ' ponte' : ' pontes') + '</b> com serviço na ' + esc(medTxt(an, g)) + ' · ' + fmtBRL(v) + ' nas pontes' +
+      h += '<div class="an-line"><b>' + cur.length + (cur.length === 1 ? w1 : wN) + '</b> com serviço na ' + esc(medTxt(an, g)) + ' · ' + fmtBRL(v) + ' n' + (cons ? 'os' : 'as') + wN +
         (nal ? ' · <span class="an-over">' + nal + ' com alerta</span>' : '') + '</div>';
       if (ant) {
         var pa = medidas(ant.n), idsC = cur.map(function (p) { return p.id; }), idsA = pa.map(function (p) { return p.id; });
         var entr = cur.filter(function (p) { return idsA.indexOf(p.id) < 0; }), sai = pa.filter(function (p) { return idsC.indexOf(p.id) < 0; });
-        h += '<div class="an-line">Em relação à ' + esc(medTxt(an, ant.n)) + ': ' + (entr.length ? entr.length + (entr.length === 1 ? ' entrou' : ' entraram') : 'nenhuma entrou') +
-          ' · ' + (sai.length ? sai.length + (sai.length === 1 ? ' saiu' : ' saíram') : 'nenhuma saiu') + '</div>';
+        h += '<div class="an-line">Em relação à ' + esc(medTxt(an, ant.n)) + ': ' + (entr.length ? entr.length + (entr.length === 1 ? ' entrou' : ' entraram') : (cons ? 'nenhum entrou' : 'nenhuma entrou')) +
+          ' · ' + (sai.length ? sai.length + (sai.length === 1 ? ' saiu' : ' saíram') : (cons ? 'nenhum saiu' : 'nenhuma saiu')) + '</div>';
         if (entr.length) h += '<div class="an-pchips"><span class="an-pch-l">Entraram</span>' + entr.map(anPChip).join('') + '</div>';
         if (sai.length) h += '<div class="an-pchips"><span class="an-pch-l">Saíram</span>' + sai.map(anPChip).join('') + '</div>';
       }
     } else if (fim) {
-      h += '<div class="an-line an-ult-leg">Etiqueta de cada ponte: a última medição com serviço, contando até a ' + esc(medTxt(an, fim.n)) + ', a última do contrato. ' +
+      h += '<div class="an-line an-ult-leg">Etiqueta de cada' + w1 + ': a última medição com serviço, contando até a ' + esc(medTxt(an, fim.n)) + ', a última do contrato. ' +
         '<span class="pt-ult u-rec">até ' + ULT_REC + ' meses</span> <span class="pt-ult u-med">' + (ULT_REC + 1) + ' a ' + ULT_MED + ' meses</span> ' +
-        '<span class="pt-ult u-ant">mais de ' + ULT_MED + ' meses</span> <span class="pt-ult u-nunca">nunca medida</span></div>';
+        '<span class="pt-ult u-ant">mais de ' + ULT_MED + ' meses</span> <span class="pt-ult u-nunca">' + (cons ? 'nunca medido' : 'nunca medida') + '</span></div>';
     }
     return h + '</div>';
   }
@@ -3573,11 +3672,11 @@
         var miI = medIdx(an, u), dI = viI != null && miI != null ? viI - miI : null;
         if (dI != null && dI >= 0 && dI <= CMP_MESES && (!logo || dI < logo.d)) logo = { d: dI, u: u, n: minus1(x.n) };
       });
-      if (nunca.length) return { k: 'nunca', t: 'dano observado em ' + juntaE(nunca) + ' e nenhuma medição ' + (nunca.length === 1 ? 'deste item' : 'destes itens') + ' nesta ponte' };
+      if (nunca.length) return { k: 'nunca', t: 'dano observado em ' + juntaE(nunca) + ' e nenhuma medição ' + (nunca.length === 1 ? 'deste item' : 'destes itens') + ' ' + nPt(an) + '' };
       if (logo) return { k: 'logo', t: 'dano observado em ' + logo.n + ' ' + (logo.d === 0 ? 'no mesmo mês da ' : logo.d + (logo.d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, logo.u) + ', que mediu ' + logo.n };
       return null;
     }
-    if (!gi || !gi.ult) return { k: 'nunca', t: 'dano observado e nenhuma medição deste serviço nesta ponte' };
+    if (!gi || !gi.ult) return { k: 'nunca', t: 'dano observado e nenhuma medição deste serviço ' + nPt(an) + '' };
     var vi = vistIdx(c, p, key), mi = medIdx(an, gi.ult), d = vi != null && mi != null ? vi - mi : null;
     if (d == null || d < 0 || d > CMP_MESES) return null;
     return { k: 'logo', t: 'dano observado ' + (d === 0 ? 'no mesmo mês da ' : d + (d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, gi.ult) + ', que mediu este serviço' };
@@ -3595,7 +3694,7 @@
     if (!its.length) return '';
     return '<div class="svc-it-med">' + its.map(function (x) {
       var u = ultItem(a, s.key, x);
-      return '<span' + (u ? '' : ' class="nunca"') + '><b>' + esc(x.n) + '</b> ' + esc(u ? 'medido na ' + medTxt(an, u) : 'nunca medido nesta ponte') + '</span>';
+      return '<span' + (u ? '' : ' class="nunca"') + '><b>' + esc(x.n) + '</b> ' + esc(u ? 'medido na ' + medTxt(an, u) : 'nunca medido ' + nPt(an) + '') + '</span>';
     }).join('') + '</div>';
   }
   // resumo: os grupos com dano observado que pedem conferência com as medições
@@ -3633,7 +3732,7 @@
       var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = sv.some(function (s) { return s.por; });
       var nsv = sv.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(m.n) >= 0; }).length;
       h += '<div class="an-line">' + (m.etapa ? esc(m.etapa) + 'ª etapa · ' : '') +
-        (v ? nsv + (nsv === 1 ? ' serviço medido' : ' serviços medidos') + ' nesta ponte' : 'sem serviço nesta ponte') +
+        (v ? nsv + (nsv === 1 ? ' serviço medido' : ' serviços medidos') + ' ' + nPt(an) + '' : 'sem serviço ' + nPt(an) + '') +
         ((a.mx || []).indexOf(m.n) >= 0 ? ' · <span class="an-over">medição com alerta</span>' : '') + '</div>';
       return h;
     }
@@ -3646,7 +3745,8 @@
     }
     if (E) {
       var i = a.et && a.et[E], ei = etapaInfo(an, E);
-      if (!i || !i.ns.length) h += '<div class="an-line"><span class="an-over">Sem serviço nesta ponte na ' + E + 'ª etapa</span> (' + esc(ei.de + ' a ' + ei.ate) + ').</div>';
+      if (!i || !i.ns.length) h += '<div class="an-line"><span class="an-over">Sem serviço ' + nPt(an) + ' na ' + E + 'ª etapa</span> (' + esc(ei.de + ' a ' + ei.ate) + ').</div>';
+      else if (an.tipo === 'conserva') h += '<div class="an-line">' + i.ns.length + ' de ' + ei.ns.length + ' medições da ' + E + 'ª etapa com serviço ' + nPt(an) + ' (' + esc(ei.de + ' a ' + ei.ate) + ')</div>';
       else h += '<div class="an-line">' + (i.passagens.length > 1 ? '<span class="an-over">' + i.passagens.length + ' passagens</span>' : '1 passagem') + ': ' + esc(i.trechos.join(' · ')) +
         (i.passagens.length > 1 ? (i.gap != null ? ' · voltou em ' + i.gap + (i.gap === 1 ? ' mês' : ' meses') : '') + ' · <b>' + fmtBRL(i.rep) + '</b> depois da 1ª passagem' : '') + '</div>';
       return h + estL;
@@ -3682,14 +3782,14 @@
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
     if (sel && !ms.some(function (m) { return m.n === sel; })) sel = null;
-    h += '<div class="section-title">Medições nesta ponte</div>';
+    h += '<div class="section-title">Medições ' + nPt(an) + '</div>';
     h += '<div class="an-topo">' + topoHtml(an, a, sel) + '</div>';
     var corte = -1;
     ms.forEach(function (m, i) { if (corte < 0 && i > 0 && m.etapa !== ms[i - 1].etapa) corte = i; });
     // cada barra é um botão: no celular não há "passar o mouse"; tocar escolhe a medição, tocar de novo volta ao total
-    h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
+    h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido ' + nPt(an) + ' em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
-      var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição com alerta' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
+      var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição com alerta' : '') + (it ? ' · ' + it : '') : ' · sem serviço ' + nPt(an) + '');
       return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + (E && m.etapa !== E ? ' fora' : '') + '" data-act="med-bar" data-n="' + m.n + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
@@ -3714,6 +3814,11 @@
       return '<button type="button" data-act="med-modo" data-v="' + x[0] + '" aria-pressed="' + (modo === x[0]) + '">' + x[1] + '</button>';
     }).join('') + '</div>';
     h += '<div class="abc-box">' + (modo === 'abc' ? abcHtml(an, a, sel) : gruposMedHtml(c, p, an, a, sel)) + '</div>';
+    if (an.tipo === 'conserva') {
+      h += ocorrHtml(c, p, an, a, sel, E) + avisosSegHtml(an, a, sel, E);
+      return h + '<div class="an-rod">' + esc((modo === 'grupo' ? 'Valores ' + (sel ? 'da ' + medTxt(an, sel) : E ? 'da ' + E + 'ª etapa' : 'de todas as medições') + ' em cada grupo' + (parte(c, 'acomp') ? '; o estado vem da aba Vistoria. ' : '. ') : 'Classe A/B/C pelo valor; a quantidade em destaque. ') +
+        'O local vem da memória de cálculo de cada medição. Medição registra quantidade e valor; não comprova execução.') + '</div>';
+    }
 
     var al = alertasEm(a, E).slice().sort(function (x, y) { return (y.rep != null ? y.rep : y.valor) - (x.rep != null ? x.rep : x.valor); });
     h += '<div class="section-title">Alertas da análise' + (E ? ' · ' + E + 'ª etapa' : '') + '</div>';
@@ -3731,6 +3836,7 @@
   // serviços medidos, nos grupos da vistoria (na ordem da aba Vistoria) e, por último, "Acesso e limpeza" (plataforma e jato,
   // que não são grupo da vistoria). Por grupo só se soma o valor; a quantidade fica em cada serviço
   var MED_ACESSO = { key: 'acesso', short: 'Acesso e limpeza' };
+  var MED_SEMLOCAL = { key: 'semlocal', short: 'Transporte, administração e canteiro' };   // conservação: sem local na memória
   function gruposMedHtml(c, p, an, a, med) {
     var pid = p.id, k = String(med || ''), E = med ? 0 : etapaDe(an), ei = E ? etapaInfo(an, E) : null, ms = an.medicoes || [], mMed = null;
     var base = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = base.some(function (s) { return s.por; });
@@ -3752,7 +3858,7 @@
       }).filter(Boolean);
       return { g: g, it: it, v: it.reduce(function (t, x) { return t + x.v; }, 0) };
     });
-    if ((med || E) && !grupos.some(function (x) { return x.it.length; })) return '<div class="an-note">Nenhum serviço medido nesta ponte na ' + esc(med ? medTxt(an, med) : E + 'ª etapa (' + ei.de + ' a ' + ei.ate + ')') + '.</div>';
+    if ((med || E) && !grupos.some(function (x) { return x.it.length; })) return '<div class="an-note">Nenhum serviço medido ' + nPt(an) + ' na ' + esc(med ? medTxt(an, med) : E + 'ª etapa (' + ei.de + ' a ' + ei.ate + ')') + '.</div>';
     // abre sozinho o grupo de maior valor no recorte; o que a pessoa abriu ou fechou fica como ela deixou
     var maior = null;
     grupos.forEach(function (x) { if (x.v > 0 && (!maior || x.v > maior.v)) maior = x; });
@@ -3763,13 +3869,14 @@
       if (ac && !n && !(gi && gi.ult)) return;   // acesso e limpeza só aparece se a ponte já teve
       var est;
       if (ac) est = '<span class="mg-e nv">fora dos grupos da vistoria</span>';
+      else if (!parte(c, 'acomp')) est = '';   // analista só das medições: sem o estado da vistoria
       else {
         var sv = p.serv[g.key], st = oaeSt(sv), qt = comQtd(st) ? fmtQtd(g, sv.q) : '';
         est = st === 'NV' ? '<span class="mg-e nv">sem vistoria</span>' : '<span class="mg-e ' + st.toLowerCase() + '">' + esc(oaeStOf(g, st).name + (qt ? ' ' + qt : '')) + '</span>';
       }
       var ult = gi && gi.ult ? '<span class="mg-u">última ' + gi.ult + 'ª</span>' : '<span class="mg-u nunca">nunca medido</span>';
       var vazio = gi && gi.ult && (med || E) ? 'Sem serviço deste grupo ' + (med ? 'na ' + medTxt(an, med) : 'na ' + E + 'ª etapa') + '; a última medição com ele foi a ' + medTxt(an, gi.ult) + '.'
-        : 'Nenhuma das ' + ms.length + ' medições pagou serviço deste grupo nesta ponte.';
+        : 'Nenhuma das ' + ms.length + ' medições pagou serviço deste grupo ' + nPt(an) + '.';
       h += '<div class="mg' + (ac ? ' acesso' : '') + (n ? '' : ' vazio') + '">' +
         '<button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(pid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
         '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s">' + est + ult + '</span></span>' +
@@ -3783,7 +3890,7 @@
   function svcMedHtml(an, y, med, faixa, etF, temPor) {
     var s = y.s, un = esc(unTxt(s.un)), h = '<div class="mg-svc"><div class="mg-l"><span class="mg-nm">' + esc(s.nome) + '</span>' +
       '<span class="mg-q"><b>' + fmtN(y.q) + ' <small>' + un + '</small></b><small>' + fmtBRL(y.v) + '</small></span></div>';
-    if (!temPor) return h + (y.tot ? '<small class="mg-obs">total desta ponte; esta análise não separa por medição</small>' : '') + '</div>';
+    if (!temPor) return h + (y.tot ? '<small class="mg-obs">total ' + dPt(an) + '; esta análise não separa por medição</small>' : '') + '</div>';
     var rows = faixa.filter(function (m) { return s.por && s.por[String(m.n)]; });
     var tq = 0, tv = 0;
     rows.forEach(function (m) { var x = s.por[String(m.n)]; tq += Number(x[0]) || 0; tv += Number(x[1]) || 0; });
@@ -3796,6 +3903,72 @@
         (est ? '<span class="es">Estimado no Anexo VI (' + EST_ETAPA + 'ª etapa)</span><span class="n es' + (tq > s.est ? ' an-over' : '') + '">' + fmtN(s.est) + ' ' + un + '</span>' : '') + '</div>';
     }
     return h + '</div>';
+  }
+
+  // ---------------- conservação: as ocorrências da memória de cálculo (onde cada serviço foi medido, km a km)
+  // Ficam numa segunda linha da análise ('ct-437#ocorr'), lida só quando alguém abre a lista; não fica guardada no aparelho.
+  // Cada ocorrência: [medição, código do serviço, km inicial, km final (km Atualizado), lado, quantidade, local, página]
+  var anOcorr = {}, OC_MAX = 300;   // anOcorr[cid] = { estado: carregando | ok | vazia | erro, dados }
+  function carregarOcorr(c) {
+    if (!c || !banco.on || !banco.login || !window.Banco || !window.Banco.analise) return;
+    var x = anOcorr[c.id];
+    if (x && x.estado !== 'erro') return;
+    anOcorr[c.id] = { estado: 'carregando' };
+    var cred = banco.login.codigo, cid = c.id;
+    function refaz() {
+      if (visaoOn || !active() || active().id !== cid || typing()) return;
+      Object.keys(ui.ocAb).forEach(function (pid) { if (ui.ocAb[pid] && ui.open[pid]) refazPonte(pid); });
+    }
+    window.Banco.analise(cred, cid + '#ocorr').then(function (r) {
+      if (!banco.login || banco.login.codigo !== cred) return;
+      anOcorr[cid] = r && r.dados && Array.isArray(r.dados.ocorr) ? { estado: 'ok', dados: r.dados } : { estado: 'vazia' };
+      refaz();
+    }, function () { anOcorr[cid] = { estado: 'erro' }; refaz(); });
+  }
+  // ocorrências do segmento: as que tocam o trecho (a pontual fica no segmento onde começa); recorte da medição ou da etapa
+  function ocorrSeg(c, p, an, sel, E) {
+    var x = anOcorr[c.id], ini = p.kmIni, fim = p.kmFim, et = {};
+    if (!x || x.estado !== 'ok' || ini == null || fim == null) return null;
+    (an.medicoes || []).forEach(function (m) { et[m.n] = m.etapa; });
+    return x.dados.ocorr.filter(function (o) {
+      if (sel ? o[0] !== sel : E && et[o[0]] !== E) return false;
+      var a = o[2], b = o[3] == null ? o[2] : o[3], lo = Math.min(a, b), hi = Math.max(a, b);
+      return hi > lo ? hi > ini && lo < fim : lo >= ini && lo < fim;
+    }).sort(function (u, w) { return Math.min(u[2], u[3] == null ? u[2] : u[3]) - Math.min(w[2], w[3] == null ? w[2] : w[3]) || u[0] - w[0]; });
+  }
+  function ocorrHtml(c, p, an, a, sel, E) {
+    var ab = !!ui.ocAb[p.id], x = anOcorr[c.id], h = '<details class="an-oc" data-id="' + esc(p.id) + '"' + (ab ? ' open data-cheio="1"' : '') + '><summary>Onde foi medido · km a km' +
+      '<span>' + esc(sel ? medTxt(an, sel) : E ? E + 'ª etapa' : 'todas as medições') + '</span></summary>';
+    if (!ab) return h + '</details>';
+    if (!x || x.estado === 'carregando') return h + '<div class="an-note">Carregando as ocorrências da memória de cálculo…</div></details>';
+    if (x.estado === 'erro') return h + '<div class="an-note">Não foi possível carregar agora. Feche e abra de novo para tentar outra vez.</div></details>';
+    var l = ocorrSeg(c, p, an, sel, E);
+    if (!l) return h + '<div class="an-note">Sem as ocorrências deste contrato.</div></details>';
+    var sv = {}, arq = x.dados.arquivos || {};
+    (an.servicos || []).forEach(function (s) { sv[s.cod || s.id] = s; });
+    if (!l.length) return h + '<div class="an-note">Nenhuma ocorrência ' + esc(nPt(an)) + ' ' + esc(sel ? 'na ' + medTxt(an, sel) : E ? 'na ' + E + 'ª etapa' : 'nas medições') + '.</div></details>';
+    h += '<div class="an-line">' + l.length + (l.length === 1 ? ' ocorrência' : ' ocorrências') + (l.length > OC_MAX ? ' · as ' + OC_MAX + ' primeiras por km; escolha uma medição no gráfico para ver só ela' : '') + '</div>';
+    h += '<div class="an-oc-t">' + l.slice(0, OC_MAX).map(function (o) {
+      var s = sv[o[1]] || {}, km = o[3] != null && o[3] !== o[2] ? fmtKm(o[2]) + ' – ' + fmtKm(o[3]) : fmtKm(o[2]);
+      var tip = 'Memória de cálculo da ' + medTxt(an, o[0]) + (arq[o[0]] ? ': ' + arq[o[0]] : '') + (o[7] ? ', pág. ' + o[7] : '') + (o[3] != null && o[3] !== o[2] ? ' · a quantidade é a da linha inteira da memória' : '');
+      return '<div class="an-oc-r" title="' + esc(tip) + '"><span class="km">km ' + esc(km) + (o[4] ? ' <small>' + esc(o[4]) + '</small>' : '') + '</span>' +
+        '<span class="sv">' + esc(s.nome || o[1]) + (o[6] ? ' <small>' + esc(o[6]) + '</small>' : '') + '</span>' +
+        '<span class="q"><b>' + fmtN(o[5]) + ' <small>' + esc(unTxt(s.un)) + '</small></b><small>' + esc(o[0] + 'ª · ' + mesMed(an, o[0])) + '</small></span></div>';
+    }).join('') + '</div>';
+    return h + '<div class="an-rod">km Atualizado, passado do km da memória pela régua do contrato. Trecho que passa do segmento aparece com a quantidade da linha inteira.</div></details>';
+  }
+  // avisos da leitura das medições que tocam o segmento: a memória de cálculo não fecha com o que a medição pagou
+  function avisosSegHtml(an, a, sel, E) {
+    var et = {};
+    (an.medicoes || []).forEach(function (m) { et[m.n] = m.etapa; });
+    var l = (an.alertas || []).filter(function (x) {
+      if (x.tipo !== 'memoria' || (sel ? x.n !== sel : E && et[x.n] !== E)) return false;
+      return (a.servicos || []).some(function (s) { return s.cod === x.cod && s.por && s.por[String(x.n)]; });
+    });
+    if (!l.length) return '';
+    return '<details class="an-mais an-avs"><summary>Avisos da leitura · ' + l.length + '</summary>' + l.map(function (x) {
+      return '<div class="an-line"><b>' + esc(medTxt(an, x.n)) + '</b> · ' + esc(x.motivo) + '</div>';
+    }).join('') + '<div class="an-rod">Quando a memória soma mais que o medido, as quantidades dos segmentos foram reduzidas na mesma proporção.</div></details>';
   }
 
   // ------------------------------------------------------------------ interface: pré-visualização
@@ -4869,7 +5042,7 @@
   // quem vê a análise das medições escolhe: só a vistoria (padrão, para enviar) ou com a análise (uso interno)
   function escolherFolha(oque) {
     var c = active();
-    if (!anOf(c)) return Promise.resolve(true);
+    if (!anOf(c) || !isOae(c)) return Promise.resolve(true);   // a folha da conservação ainda não traz a análise
     if (!parte(c, 'acomp')) return Promise.resolve(false);   // analista só das medições: a folha com a análise, sem escolher
     return new Promise(function (resolve) {
       modal('<h2 id="modalTitle">' + esc(oque) + '</h2>' +
@@ -6443,7 +6616,7 @@
         if (ca && analise.estado[ca.id] === 'erro') { delete analise.estado[ca.id]; renderEditor(); }
         // as marcas "medido sem execução" de outras pessoas chegam com a análise: lê de novo ao voltar ao app,
         // no máximo a cada 10 min e sem marca sendo gravada
-        else if (ca && isOae(ca) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length) {
+        else if (ca && (isOae(ca) || isConserva(ca)) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length) {
           delete analise.estado[ca.id]; carregarAnalise(ca);
         }
       }
@@ -6453,7 +6626,7 @@
       conferirAcesso();
       // marcas gravadas em outro aparelho: relê a análise da ponte aberta a cada 10 min (não no meio de uma gravação ou digitação)
       var ca = active();
-      if (ca && !visaoOn && isOae(ca) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length && !typing()) { delete analise.estado[ca.id]; carregarAnalise(ca); }
+      if (ca && !visaoOn && (isOae(ca) || isConserva(ca)) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length && !typing()) { delete analise.estado[ca.id]; carregarAnalise(ca); }
     }, 300000);
     window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openConfigurar(); });
     setInterval(poll, 20000);
