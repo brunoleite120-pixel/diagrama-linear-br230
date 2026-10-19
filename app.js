@@ -2006,8 +2006,8 @@
 
   // ------------------------------------------------------------------ estado
   // aba/dadosAb/grpAb: aba aberta na ponte (vist | med), "Dados da ponte" aberto e grupos abertos na aba Medições ("pid|grupo");
-  // medModo: grupo | abc (aba Medições)
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, grpAb: {}, medModo: 'grupo' };
+  // medModo: grupo | abc (aba Medições); servModo: o mesmo nos serviços do contrato (resumo da análise)
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, grpAb: {}, medModo: 'grupo', servModo: 'grupo' };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -2715,6 +2715,9 @@
     if (anCache.raw !== raw) anCache = { raw: raw, view: anCalc(raw) };
     return anCache.view;
   }
+  var REGRUPA = [[/^remo[çc][ãa]o manual de revestimento asf/i, 'juntas'], [/anticorrosiva/i, 'pintura']];
+  // unidade como se escreve: m2 → m², m3 → m³, und → un
+  function unTxt(u) { return { m2: 'm²', m3: 'm³', und: 'un' }[u] || u || ''; }
   function anCalc(raw) {
     var meds = (raw.medicoes || []).slice().sort(function (x, y) { return x.n - y.n; }), mes = {}, info = {}, etapas = [], porEtapa = {};
     meds.forEach(function (m) {
@@ -2728,9 +2731,31 @@
       var a0 = info[r[0]], a1 = info[r[r.length - 1]];
       return r.length === 1 ? r[0] + 'ª (' + (a0 && a0.mes || '') + ')' : r[0] + 'ª a ' + r[r.length - 1] + 'ª (' + (a0 && a0.mes || '') + ' a ' + (a1 && a1.mes || '') + ')';
     }
+    // serviços que mudaram de grupo (19/10/2026, pedido do usuário): a remoção de asfalto é medida junto com os berços (o corte
+    // do asfalto para refazer a junta) e vai para Juntas; a pintura epóxi vai para Pintura. Vale também para a análise gravada
+    // antes; os grupos tocados são refeitos como em gen_424.py (valor = soma, ult = última medição, n = nº de medições)
+    function regrupa(a) {
+      var toca = {}, sv = (a.servicos || []).map(function (s) {
+        var r = null;
+        REGRUPA.forEach(function (x) { if (x[0].test(s.nome || '')) r = x[1]; });
+        if (!r || r === s.g) return s;
+        if (s.g) toca[s.g] = 1;
+        toca[r] = 1;
+        return Object.assign({}, s, { g: r, gAntes: s.g });
+      });
+      if (!Object.keys(toca).length) return a;
+      var grupos = Object.assign({}, a.grupos);
+      Object.keys(toca).forEach(function (k) {
+        var ns = [], v = 0;
+        sv.forEach(function (s) { if (s.g !== k) return; v += Number(s.v) || 0; medsDe(s.meds).forEach(function (n) { if (ns.indexOf(n) < 0) ns.push(n); }); });
+        if (!ns.length) { delete grupos[k]; return; }
+        grupos[k] = Object.assign({}, grupos[k], { valor: Math.round(v * 100) / 100, ult: Math.max.apply(null, ns), n: ns.length });
+      });
+      return Object.assign({}, a, { servicos: sv, grupos: grupos });
+    }
     var pontes = {}, total = 0, comAlerta = 0;
     Object.keys(raw.pontes || {}).forEach(function (pid) {
-      var a = raw.pontes[pid], mx = {}, grupos = {}, als = [], et = {};
+      var a = regrupa(raw.pontes[pid]), mx = {}, grupos = {}, als = [], et = {};
       Object.keys(a.grupos || {}).forEach(function (k) { grupos[k] = Object.assign({}, a.grupos[k], { altos: 0 }); });
       etapas.forEach(function (e) {
         var ns = e.ns.filter(function (n) { return Number(a.meses && a.meses[String(n)]) > 0; }), at = [], gap = null, v = 0, rep = 0;
@@ -2849,6 +2874,67 @@
   // no resumo: com "Todas", uma linha por etapa; com uma etapa, as pontes sem serviço, as atendidas mais de uma vez e
   // (na 1ª etapa) o executado × estimado do Anexo VI. Tocar numa ponte abre o cartão dela.
   function anPChip(p) { return '<button type="button" class="an-pchip" data-act="an-ir" data-id="' + esc(p.id) + '">' + esc(p.nome || p.codigo || '?') + (p.kmIni != null ? ' <small>km ' + esc(fmtKm(p.kmIni)) + '</small>' : '') + '</button>'; }
+  // resumo: serviços medidos no contrato (na etapa mostrada), nos grupos da vistoria e "Acesso e limpeza", com a curva ABC do
+  // contrato (pelo valor). A quantidade só se soma por serviço; por grupo, o valor e o % do total. Os itens do Anexo VI sem
+  // descrição (cod_*) nunca foram medidos: ficam fora das listas, citados no rodapé
+  function servContratoHtml(c, an, E) {
+    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {};
+    sortedPoints(c).forEach(function (p) {
+      var a = an.pontes && an.pontes[p.id];
+      if (!a) return;
+      var base = a.servicos || [], temPor = base.some(function (s) { return s.por; });
+      base.forEach(function (s) {
+        if (/^cod_/.test(s.nome || '')) { if (s.est > 0 && (!E || E === EST_ETAPA)) cods[s.nome.slice(4)] = (cods[s.nome.slice(4)] || 0) + 1; return; }
+        if (!(s.v > 0)) return;
+        var x = E ? noEscopo([s], ei.ns, temPor)[0] : s;
+        if (!x || !(x.v > 0)) return;
+        var t = ag[s.nome];
+        if (!t) { t = ag[s.nome] = { nome: s.nome, un: s.un, g: s.g, q: 0, v: 0, pontes: 0 }; ord.push(t); }
+        t.q += Number(x.q) || 0; t.v += Number(x.v) || 0; t.pontes++;
+      });
+    });
+    if (!ord.length) return '';
+    ord.sort(function (x, y) { return y.v - x.v; });
+    var tot = ord.reduce(function (t, x) { return t + x.v; }, 0), acum = 0, pc = { A: 0, B: 0, C: 0 }, nk = { A: 0, B: 0, C: 0 };
+    ord.forEach(function (t) { t.k = acum / tot < 0.8 ? 'A' : acum / tot < 0.95 ? 'B' : 'C'; acum += t.v; pc[t.k] += t.v / tot * 100; nk[t.k]++; });
+    function pct(v) { return (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('pt-BR') + '%'; }
+    var modo = ui.servModo === 'abc' ? 'abc' : 'grupo', cid = 'ct:' + c.id;
+    function linha(t) {
+      return '<div class="mg-svc"><div class="mg-l"><span class="mg-nm"><span class="sc-k ' + t.k.toLowerCase() + '" aria-label="classe ' + t.k + '">' + t.k + '</span>' + esc(t.nome) +
+        '<small class="sc-p">' + t.pontes + (t.pontes === 1 ? ' ponte' : ' pontes') + (t.g === 'acesso' ? ' · meio de execução' : '') + '</small></span>' +
+        '<span class="mg-q"><b>' + fmtN(Math.round(t.q * 100) / 100) + ' <small>' + esc(unTxt(t.un)) + '</small></b><small>' + fmtBRL(t.v) + ' · ' + pct(t.v / tot * 100) + '</small></span></div></div>';
+    }
+    var h = '<div class="an-sec an-serv"><h4>Serviços medidos (' + ord.length + ')' + (E ? ' · ' + E + 'ª etapa' : '') + '</h4>';
+    h += '<div class="an-line">' + fmtBRL(tot) + ' nas pontes · quantidade somada por serviço; por grupo, só o valor</div>';
+    h += '<div class="sc-abc" aria-hidden="true">' + ['A', 'B', 'C'].filter(function (k) { return nk[k]; }).map(function (k) {
+      return '<i class="' + k.toLowerCase() + '" style="flex:' + pc[k].toFixed(2) + ' 0 0"></i>';
+    }).join('') + '</div>';
+    h += '<div class="abc-res">' + ['A', 'B', 'C'].filter(function (k) { return nk[k]; }).map(function (k) {
+      return '<span class="abc-tag ' + k.toLowerCase() + '"><b>' + k + '</b> ' + nk[k] + (nk[k] === 1 ? ' serviço' : ' serviços') + ' · ' + pct(pc[k]) + '</span>';
+    }).join('') + '</div>';
+    h += '<div class="seg an-modo" role="group" aria-label="Ordem dos serviços do contrato">' + [['grupo', 'Por grupo'], ['abc', 'Por valor (ABC)']].map(function (x) {
+      return '<button type="button" data-act="serv-modo" data-v="' + x[0] + '" aria-pressed="' + (modo === x[0]) + '">' + x[1] + '</button>';
+    }).join('') + '</div>';
+    if (modo === 'abc') {
+      var lc = ord.filter(function (t) { return t.k === 'C'; });
+      h += '<div class="mg-lista sc-lista">' + ord.filter(function (t) { return t.k !== 'C'; }).map(linha).join('') +
+        (lc.length ? '<details class="sc-c"><summary>Classe C: ' + lc.length + (lc.length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(pc.C) + ' do valor</summary>' + lc.map(linha).join('') + '</details>' : '') + '</div>';
+    } else {
+      h += '<div class="mg-lista">' + servicesOf(c).concat([MED_ACESSO]).map(function (g) {
+        var it = ord.filter(function (t) { return t.g === g.key; });
+        if (!it.length) return '';
+        var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO;
+        return '<div class="mg' + (ac ? ' acesso' : '') + '"><button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(cid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
+          '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? 'meio de execução · fora da vistoria' : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
+          '<span class="mg-t"><b>' + fmtBRL(v) + '</b><small>' + pct(v / tot * 100) + '</small></span>' + ICON_CHEV + '</button>' +
+          '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + it.map(linha).join('') + '</div></div>';
+      }).join('') + '</div>';
+    }
+    var ks = Object.keys(cods).sort();
+    h += '<div class="an-rod">Remoção de asfalto conta em Juntas (é medida junto com os berços); pintura epóxi, em Pintura.' +
+      (ks.length ? ' Fora das listas: ' + (ks.length === 1 ? 'o item ' : 'os itens ') + esc(ks.join(' e ')) + ' do Anexo VI, estimados em ' + ks.map(function (k) { return cods[k]; }).join(' e ') + ' pontes, sem descrição e nunca medidos.' : '') + '</div>';
+    return h + '</div>';
+  }
   function etapasHtml(an, cob, E) {
     var h = '';
     var pChip = anPChip;
@@ -2912,6 +2998,7 @@
     }).join('') + '</div>';
     h += medListaHtml(c, an, E);
     h += etapasHtml(an, cob, E);
+    h += servContratoHtml(c, an, E);
     h += cmpResumoHtml(c, an);
     if (sobre.fonte) h += '<div class="an-src">Fonte: ' + esc(sobre.fonte) + '.</div>';
     // as notas de critérios que não valem mais na tela (garantia, carta das juntas, comprimento das juntas, vegetação) saem
@@ -3104,9 +3191,9 @@
       return '<div class="abc-r ' + x.k.toLowerCase() + '"><span class="abc-c" aria-label="classe ' + x.k + '">' + x.k + '</span>' +
         '<div class="abc-n"><span class="abc-t">' + esc(x.s.nome) + '</span>' + meds(x.s.meds) +
         '<span class="abc-bar"><i style="width:' + Math.max(1.5, x.pct).toFixed(1) + '%"></i></span></div>' +
-        '<div class="abc-v" title="' + pct(x.pct) + ' do valor · acumulado ' + pct(x.ac) + '"><b>' + fmtN(x.s.q) + ' <span class="abc-un">' + esc(x.s.un) + '</span></b>' +
+        '<div class="abc-v" title="' + pct(x.pct) + ' do valor · acumulado ' + pct(x.ac) + '"><b>' + fmtN(x.s.q) + ' <span class="abc-un">' + esc(unTxt(x.s.un)) + '</span></b>' +
         '<small>' + fmtBRL(x.s.v) + ' · ' + pct(x.pct) + '</small>' +
-        (comEst && x.s.est > 0 ? '<small' + (x.s.q > x.s.est ? ' class="an-over"' : '') + '>estimado ' + fmtN(x.s.est) + ' ' + esc(x.s.un) + '</small>' : '') + '</div></div>';
+        (comEst && x.s.est > 0 ? '<small' + (x.s.q > x.s.est ? ' class="an-over"' : '') + '>estimado ' + fmtN(x.s.est) + ' ' + esc(unTxt(x.s.un)) + '</small>' : '') + '</div></div>';
     }
     h += '<div class="abc-res">' + ['A', 'B', 'C'].filter(function (k) { return cls[k].length; }).map(function (k) {
       return '<span class="abc-tag ' + k.toLowerCase() + '"><b>' + k + '</b> ' + cls[k].length + (cls[k].length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(soma(cls[k])) + '</span>';
@@ -3422,7 +3509,7 @@
   // um serviço na aba Medições: quantidade em destaque, valor pequeno; embaixo, cada medição da faixa com este serviço (a
   // escolhida em negrito), o total da etapa e, só na 1ª etapa, o estimado do Anexo VI (o edital só traz a 1ª)
   function svcMedHtml(an, y, med, faixa, etF, temPor) {
-    var s = y.s, un = esc(s.un || ''), h = '<div class="mg-svc"><div class="mg-l"><span class="mg-nm">' + esc(s.nome) + '</span>' +
+    var s = y.s, un = esc(unTxt(s.un)), h = '<div class="mg-svc"><div class="mg-l"><span class="mg-nm">' + esc(s.nome) + '</span>' +
       '<span class="mg-q"><b>' + fmtN(y.q) + ' <small>' + un + '</small></b><small>' + fmtBRL(y.v) + '</small></span></div>';
     if (!temPor) return h + (y.tot ? '<small class="mg-obs">total desta ponte; esta análise não separa por medição</small>' : '') + '</div>';
     var rows = faixa.filter(function (m) { return s.por && s.por[String(m.n)]; });
@@ -3931,6 +4018,16 @@
       var pidMo = (b.closest('article.pt') || {}).dataset.id;
       ui.medModo = b.dataset.v === 'abc' ? 'abc' : 'grupo';
       if (pidMo) refazPonte(pidMo, '.an-modo [data-v="' + ui.medModo + '"]');
+      return;
+    }
+    if (act === 'serv-modo') {
+      var secS = b.closest('.an-serv'), anS = anOf(c);
+      ui.servModo = b.dataset.v === 'abc' ? 'abc' : 'grupo';
+      if (secS && anS) {
+        secS.outerHTML = servContratoHtml(c, anS, etapaDe(anS));
+        var fS = document.querySelector('.an-serv [data-act="serv-modo"][data-v="' + ui.servModo + '"]');
+        if (fS) try { fS.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+      }
       return;
     }
     if (act === 'med-grp') {
