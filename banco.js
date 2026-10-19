@@ -27,6 +27,7 @@
  *
  * Análise das medições (migração 05; engenheiro, auxiliar, Administrador e, desde a 11, o analista com as medições do contrato):
  *   Banco.analise(cred, contratoId) -> {dados, fonte, em, por} | null
+ *   Banco.analiseOcorr(cred, contratoId, kmIni, kmFim) -> ocorrências medidas da conservação no trecho (migração 14)
  */
 (function () {
   'use strict';
@@ -136,6 +137,8 @@
     fotosMover: function (cred, ids, cid, pid) { return rpc('fotos_mover', { p_cred: cred, p_ids: ids, p_contrato: cid, p_ponto: pid || null }); },
 
     analise: function (cred, cid) { return rpc('analise_ler', { p_cred: cred, p_contrato: cid }); },
+    // ocorrências medidas da conservação no trecho de km (migração 14): [[medição, serviço, km ini, km fim, lado, q, local, pág.]]
+    analiseOcorr: function (cred, cid, ki, kf) { return rpc('analise_ocorr_ler', { p_cred: cred, p_contrato: cid, p_km_ini: ki, p_km_fim: kf }); },
     // marca "medido sem execução" (uso interno): med = nº da medição, ou null para tirar
     analiseMarcar: function (cred, cid, pid, grupo, med) {
       return rpc('analise_marcar', { p_cred: cred, p_contrato: cid, p_ponte: pid, p_grupo: grupo, p_medicao: med == null ? null : Number(med) });

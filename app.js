@@ -2873,7 +2873,7 @@
     // "Onde foi medido" (segmento da conservação): a lista só é montada aberta; ao abrir, lê as ocorrências e refaz o cartão
     if (d && d.classList && d.classList.contains('an-oc') && d.dataset.id) {
       ui.ocAb[d.dataset.id] = d.open;
-      if (d.open && !d.dataset.cheio) { carregarOcorr(active()); refazPonte(d.dataset.id, '.an-oc summary'); }
+      if (d.open && !d.dataset.cheio) { carregarOcorr(active(), findPoint(d.dataset.id)); refazPonte(d.dataset.id, '.an-oc summary'); }
     }
   }, true);
 
@@ -3906,45 +3906,44 @@
   }
 
   // ---------------- conservação: as ocorrências da memória de cálculo (onde cada serviço foi medido, km a km)
-  // Ficam numa segunda linha da análise ('ct-437#ocorr'), lida só quando alguém abre a lista; não fica guardada no aparelho.
-  // Cada ocorrência: [medição, código do serviço, km inicial, km final (km Atualizado), lado, quantidade, local, página]
-  var anOcorr = {}, OC_MAX = 300;   // anOcorr[cid] = { estado: carregando | ok | vazia | erro, dados }
-  function carregarOcorr(c) {
-    if (!c || !banco.on || !banco.login || !window.Banco || !window.Banco.analise) return;
-    var x = anOcorr[c.id];
-    if (x && x.estado !== 'erro') return;
-    anOcorr[c.id] = { estado: 'carregando' };
-    var cred = banco.login.codigo, cid = c.id;
-    function refaz() {
-      if (visaoOn || !active() || active().id !== cid || typing()) return;
-      Object.keys(ui.ocAb).forEach(function (pid) { if (ui.ocAb[pid] && ui.open[pid]) refazPonte(pid); });
-    }
-    window.Banco.analise(cred, cid + '#ocorr').then(function (r) {
-      if (!banco.login || banco.login.codigo !== cred) return;
-      anOcorr[cid] = r && r.dados && Array.isArray(r.dados.ocorr) ? { estado: 'ok', dados: r.dados } : { estado: 'vazia' };
-      refaz();
-    }, function () { anOcorr[cid] = { estado: 'erro' }; refaz(); });
+  // Ficam na tabela analise_ocorr (migração 14, decisão D-9), lidas por segmento (o trecho de km dele) só quando alguém
+  // abre a lista; não ficam guardadas no aparelho. Cada ocorrência: [medição, código do serviço, km inicial, km final
+  // (km Atualizado), lado, quantidade, local, página da memória]
+  var anOcorr = {}, OC_MAX = 300;   // anOcorr["cid|pid"] = { estado: carregando | ok | erro, cred, ki, kf, l }
+  function ocKey(c, p) { return c.id + '|' + p.id; }
+  // a lista guardada só vale para a mesma sessão e o mesmo trecho de km
+  function ocorrDe(c, p) {
+    var x = anOcorr[ocKey(c, p)];
+    return x && banco.login && x.cred === banco.login.codigo && x.ki === p.kmIni && x.kf === p.kmFim ? x : null;
   }
-  // ocorrências do segmento: as que tocam o trecho (a pontual fica no segmento onde começa); recorte da medição ou da etapa
-  function ocorrSeg(c, p, an, sel, E) {
-    var x = anOcorr[c.id], ini = p.kmIni, fim = p.kmFim, et = {};
-    if (!x || x.estado !== 'ok' || ini == null || fim == null) return null;
+  function carregarOcorr(c, p) {
+    if (!c || !p || p.kmIni == null || p.kmFim == null || !banco.on || !banco.login || !window.Banco || !window.Banco.analiseOcorr) return;
+    var x = ocorrDe(c, p);
+    if (x && x.estado !== 'erro') return;
+    var k = ocKey(c, p), cred = banco.login.codigo, cid = c.id, pid = p.id;
+    anOcorr[k] = { estado: 'carregando', cred: cred, ki: p.kmIni, kf: p.kmFim };
+    function refaz() { if (!visaoOn && active() && active().id === cid && ui.open[pid] && ui.ocAb[pid] && !typing()) refazPonte(pid); }
+    window.Banco.analiseOcorr(cred, cid, p.kmIni, p.kmFim).then(function (r) {
+      if (!anOcorr[k] || anOcorr[k].cred !== cred) return;
+      anOcorr[k] = { estado: 'ok', cred: cred, ki: p.kmIni, kf: p.kmFim, l: Array.isArray(r) ? r : [] };
+      refaz();
+    }, function () { if (anOcorr[k] && anOcorr[k].cred === cred) anOcorr[k].estado = 'erro'; refaz(); });
+  }
+  // ocorrências do segmento (o banco já devolve só as que tocam o trecho, por km), no recorte da medição ou da etapa
+  function ocorrSeg(x, an, sel, E) {
+    var et = {};
     (an.medicoes || []).forEach(function (m) { et[m.n] = m.etapa; });
-    return x.dados.ocorr.filter(function (o) {
-      if (sel ? o[0] !== sel : E && et[o[0]] !== E) return false;
-      var a = o[2], b = o[3] == null ? o[2] : o[3], lo = Math.min(a, b), hi = Math.max(a, b);
-      return hi > lo ? hi > ini && lo < fim : lo >= ini && lo < fim;
-    }).sort(function (u, w) { return Math.min(u[2], u[3] == null ? u[2] : u[3]) - Math.min(w[2], w[3] == null ? w[2] : w[3]) || u[0] - w[0]; });
+    return x.l.filter(function (o) { return sel ? o[0] === sel : !E || et[o[0]] === E; });
   }
   function ocorrHtml(c, p, an, a, sel, E) {
-    var ab = !!ui.ocAb[p.id], x = anOcorr[c.id], h = '<details class="an-oc" data-id="' + esc(p.id) + '"' + (ab ? ' open data-cheio="1"' : '') + '><summary>Onde foi medido · km a km' +
+    var ab = !!ui.ocAb[p.id], x = ocorrDe(c, p), h = '<details class="an-oc" data-id="' + esc(p.id) + '"' + (ab ? ' open data-cheio="1"' : '') + '><summary>Onde foi medido · km a km' +
       '<span>' + esc(sel ? medTxt(an, sel) : E ? E + 'ª etapa' : 'todas as medições') + '</span></summary>';
     if (!ab) return h + '</details>';
+    if (!x) { carregarOcorr(c, p); x = ocorrDe(c, p); }   // aberta antes (ui.ocAb) e ainda sem a lista desta sessão e deste trecho
+    if (!x && (p.kmIni == null || p.kmFim == null)) return h + '<div class="an-note">Informe o km inicial e o final do segmento para ver as ocorrências.</div></details>';
     if (!x || x.estado === 'carregando') return h + '<div class="an-note">Carregando as ocorrências da memória de cálculo…</div></details>';
     if (x.estado === 'erro') return h + '<div class="an-note">Não foi possível carregar agora. Feche e abra de novo para tentar outra vez.</div></details>';
-    var l = ocorrSeg(c, p, an, sel, E);
-    if (!l) return h + '<div class="an-note">Sem as ocorrências deste contrato.</div></details>';
-    var sv = {}, arq = x.dados.arquivos || {};
+    var l = ocorrSeg(x, an, sel, E), sv = {}, arq = an.memorias || {};
     (an.servicos || []).forEach(function (s) { sv[s.cod || s.id] = s; });
     if (!l.length) return h + '<div class="an-note">Nenhuma ocorrência ' + esc(nPt(an)) + ' ' + esc(sel ? 'na ' + medTxt(an, sel) : E ? 'na ' + E + 'ª etapa' : 'nas medições') + '.</div></details>';
     h += '<div class="an-line">' + l.length + (l.length === 1 ? ' ocorrência' : ' ocorrências') + (l.length > OC_MAX ? ' · as ' + OC_MAX + ' primeiras por km; escolha uma medição no gráfico para ver só ela' : '') + '</div>';
