@@ -139,9 +139,17 @@
       return semRede(r.erro) && (r.falhou || 0) < voltou;
     }
     function change() { if (opts.onChange) opts.onChange(); }
+    // a foto é de quem entrou agora? Cada pessoa vê e envia só as suas (outra pessoa no mesmo aparelho não manda as fotos
+    // de quem saiu com o código dela); a foto antiga, sem dono gravado, fica com quem estiver
+    function daPessoa(r) {
+      var l = opts.getLogin ? opts.getLogin() : null, a = r && r.autor;
+      if (!a || (!a.uid && !a.nome)) return true;
+      if (!l) return false;
+      return a.uid ? a.uid === l.uid : !l.uid && a.nome === l.nome;
+    }
     function recount() {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
-        all = all || [];
+        all = (all || []).filter(daPessoa);
         total = all.length;
         n = all.filter(function (r) { return r.situacao === 'fila'; }).length;
         soAparelho = all.filter(function (r) { return r.situacao === 'aparelho'; }).length;
@@ -185,7 +193,7 @@
 
     function list() {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
-        return (all || []).map(function (r) {
+        return (all || []).filter(daPessoa).map(function (r) {
           return { id: r.id, nome: r.nome, meta: r.meta || {}, descricao: r.descricao, situacao: r.situacao, etapa: r.etapa, erro: r.erro || null,
             enviada: r.enviada || null, criada: r.criada, tamanho: r.tamanho, temArquivo: !!r.temArquivo, drive: r.drive || null, autor: r.autor || null,
             mini: r.mini ? new Blob([r.mini], { type: 'image/jpeg' }) : null };
@@ -250,7 +258,7 @@
     // mais antiga (a foto grande que estoura o tempo no sinal fraco não segura as outras); `forcar`: sem esperar a pausa de cada foto
     function next(forcar) {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
-        var now = Date.now(), pend = (all || []).filter(function (r) { return r.situacao === 'fila'; });
+        var now = Date.now(), pend = (all || []).filter(function (r) { return r.situacao === 'fila' && daPessoa(r); });
         var ok = pend.filter(function (r) { return forcar || devida(r, now); })
           .sort(function (a, b) { return Math.min(a.prox || 0, now) - Math.min(b.prox || 0, now) || (a.criada || 0) - (b.criada || 0); });
         proxFila = !ok.length && pend.length ? Math.min.apply(null, pend.map(function (r) { return r.prox || 0; })) : 0;
@@ -448,6 +456,7 @@
       if (acesso(erro)) { erro = null; espera = 0; }
       recusas = 0;
       guardar();
+      recount();   // outra pessoa: a contagem passa a ser só das fotos dela
     }
 
     // pede ao navegador para não apagar as fotos guardadas quando faltar espaço

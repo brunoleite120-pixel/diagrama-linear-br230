@@ -64,6 +64,25 @@ button{cursor:pointer}
 .ctm-i.add{color:var(--accent);font-weight:550}
 .ctm-add hr{border:0;border-top:1px solid var(--line-2);margin:4px 0}
 body.ro .ctm-add,body.fiscal .ctm-add{display:none}
+/* cadastro: contratos do fiscal e do analista */
+.us-cts{border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;margin:0;display:grid;gap:8px;min-width:0}
+.us-cts legend{font-weight:650;padding:0 4px}
+.us-cts .hint{margin:0}
+.us-ct-todos{display:flex;gap:8px;flex-wrap:wrap}
+.us-ct{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;padding:8px 0;border-top:1px solid var(--line-2)}
+.us-ct-n{min-width:0;font-weight:600}
+.us-ct-n small{display:block;font-weight:400;color:var(--ink-3)}
+.us-ct-ops{display:flex;flex-wrap:wrap;gap:6px 14px}
+.us-ct-ops label{display:flex;align-items:center;gap:6px;min-height:36px}
+/* papéis (app.js, aplicaPapel): sem diagrama (fiscal; analista sem o acompanhamento do contrato), sem mapa (analista só com as
+   medições: fica só a lista) e sem fotos (analista e quem não entrou). O banco confere de novo: aqui é só a tela */
+body.sem-diagrama #viewDiagrama,body.sem-diagrama #btnPdf,body.sem-diagrama #menuPdf,body.sem-diagrama #pgNav [data-pg="diagrama"],
+body.sem-diagrama [data-act="print"],body.sem-diagrama #selPages,body.sem-diagrama #folhaSw{display:none !important}
+body.sem-diagrama.sem-mapa .preview,body.sem-mapa #pgNav [data-pg="mapa"],body.sem-mapa #viewMapa{display:none !important}
+body.sem-diagrama.sem-mapa .layout{grid-template-columns:minmax(0,1fr)}
+body.sem-diagrama.sem-mapa .editor{position:static;height:auto;border-right:0}
+body.sem-fotos #btnFoto,body.sem-fotos #btnGaleria,body.sem-fotos #pgNav [data-pg="foto"],body.sem-fotos #pgNav [data-pg="galeria"],
+body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{display:none !important}
 .actions{display:flex;align-items:center;gap:8px;margin-left:auto}
 .save-state{font-size:12px;color:var(--ink-3);min-width:110px;text-align:right}
 .save-state.warn{color:var(--danger)}

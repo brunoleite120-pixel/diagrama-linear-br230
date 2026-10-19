@@ -232,6 +232,8 @@
       };
     });
   }
+  // ao sair (ou entrar outra pessoa) no aparelho: as fotos inteiras guardadas eram do acesso anterior (app.js, limparDadosAparelho)
+  window.GaleriaLimparCache = function () { try { if (window.indexedDB) indexedDB.deleteDatabase(CDB); } catch (e) { /* sem IndexedDB */ } };
   function cacheLer(id) {
     return cacheTx('readonly', function (i, a) { return a.get(id); }).then(function (r) {
       if (!r || !r.buf) return null;
@@ -1069,7 +1071,7 @@
       // fiscal: as da fila esperam o envio; as que ele escolheu deixar só no aparelho, ele mesmo pode apagar
       if (nv() < 2 && nao.some(function (x) { return x.situacao === 'fila'; })) {
         loc = loc.filter(function (x) { return x.situacao !== 'fila'; });
-        if (!loc.length) { o.toast('Estas fotos ainda não foram enviadas. Espere o envio (ou peça a um engenheiro) para apagar do celular.', 7000); return; }
+        if (!loc.length) { o.toast('Estas fotos ainda não foram enviadas. Espere o envio para apagar do celular.', 7000); return; }
         nao = loc.filter(function (x) { return x.situacao !== 'enviada'; });
       }
       if (!loc.length) return;

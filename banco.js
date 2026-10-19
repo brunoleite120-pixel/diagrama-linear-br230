@@ -3,7 +3,9 @@
  * Leitura pública com a chave publicável (feita para ficar no site). Gravar só pelas funções do banco
  * (salvar, definir_codigos), que conferem o código da equipe; as tabelas não aceitam gravação direta.
  *
- *   Banco.carregar()                      -> {contratos, pontos, config, versao}
+ *   Banco.carregar(cred)                  -> {contratos, pontos, config, versao, propostas, novo, publico, acesso, sessaoInvalida}
+ *     (migração 11: dados_ler, já filtrado pelo papel e pelos contratos da pessoa; sem código, só a visão geral.
+ *      Sem a função no banco, lê as tabelas como antes)
  *   Banco.versao()                        -> número que muda a cada gravação
  *   Banco.entrar(codigo)                  -> 'equipe' | 'responsavel' | null
  *   Banco.salvarCampos(codigo, autor, resumo, ops) -> {versao, conflitos} (só os campos alterados; fica o de quem alterou por último)
@@ -23,7 +25,7 @@
  *   Banco.fotosMover(cred, ids, contratoId, pontoId|null) -> {movidas, lote, ponto_nome}   (migração 06: corrigir contrato e ponto)
  *   Banco.fotoImportar(cred, foto, miniB64) -> {nova}   foto que já estava no Drive e não no banco (migração 06, Administrador)
  *
- * Análise das medições (migração 05; só engenheiro e criador, a tabela não tem leitura pública):
+ * Análise das medições (migração 05; engenheiro, auxiliar, Administrador e, desde a 11, o analista com as medições do contrato):
  *   Banco.analise(cred, contratoId) -> {dados, fonte, em, por} | null
  */
 (function () {
@@ -68,7 +70,18 @@
   function rpc(fn, args) { return req('rpc/' + fn, args || {}); }
 
   window.Banco = {
-    carregar: function () {
+    carregar: function (cred) {
+      var antigo = this.carregarAntigo;
+      return rpc('dados_ler', { p_cred: cred || null }).then(function (r) {
+        return { contratos: r.contratos || [], pontos: r.pontos || [], config: r.config || [], versao: Number(r.versao) || 0, propostas: r.propostas || [],
+          novo: true, publico: !!r.publico, acesso: r.acesso || null, sessaoInvalida: !!r.sessao_invalida };
+      }, function (e) {
+        // banco ainda sem a migração 11 (função não encontrada): lê as tabelas
+        if (e && (e.pg === 'PGRST202' || e.status === 404)) return antigo();
+        throw e;
+      });
+    },
+    carregarAntigo: function () {
       return Promise.all([
         req('contratos?select=id,dados,ordem,meta,atualizado_em,atualizado_por&order=ordem.asc,id.asc'),
         req('pontos?select=contrato_id,id,dados,meta,atualizado_em,atualizado_por&order=contrato_id.asc,id.asc'),
@@ -90,7 +103,12 @@
     salvar: function (codigo, autor, resumo, ops) {
       return rpc('salvar', { p_codigo: codigo, p_autor: autor || null, p_resumo: resumo || null, p_ops: ops }).then(Number);
     },
-    historico: function (n) { return req('historico?select=em,autor,papel,resumo,conflitos&order=id.desc&limit=' + (n || 40)); },
+    historico: function (n, cred) {
+      return rpc('historico_ler', { p_cred: cred || null, p_n: n || 40 }).catch(function (e) {
+        if (e && (e.pg === 'PGRST202' || e.status === 404)) return req('historico?select=em,autor,papel,resumo,conflitos&order=id.desc&limit=' + (n || 40));
+        throw e;
+      });
+    },
 
     entrarV2: function (codigo, nome, aparelho) { return rpc('entrar_v2', { p_codigo: codigo, p_nome: nome || null, p_aparelho: aparelho || null }); },
     criarCriador: function (nome, codigo, aparelho) { return rpc('criar_criador', { p_nome: nome, p_codigo: codigo, p_aparelho: aparelho || null }); },
@@ -98,7 +116,8 @@
     sair: function (token) { return rpc('sair', { p_token: token }); },
     usuarios: function (cred) { return rpc('usuarios_listar', { p_cred: cred }); },
     usuarioSalvar: function (cred, u) {
-      return rpc('usuario_salvar', { p_cred: cred, p_id: u.id || null, p_nome: u.nome, p_papel: u.papel, p_codigo: u.codigo || null, p_ativo: u.ativo !== false });
+      return rpc('usuario_salvar', { p_cred: cred, p_id: u.id || null, p_nome: u.nome, p_papel: u.papel, p_codigo: u.codigo || null, p_ativo: u.ativo !== false,
+        p_acesso: u.acesso || null });   // contratos do fiscal e do analista (migração 11)
     },
     codigoGeralDesativar: function (cred, papel) { return rpc('codigo_geral_desativar', { p_cred: cred, p_papel: papel }); },
     decidir: function (cred, ids, aprovar, motivo) { return rpc('decidir_propostas', { p_cred: cred, p_ids: ids, p_aprovar: !!aprovar, p_motivo: motivo || null }); },

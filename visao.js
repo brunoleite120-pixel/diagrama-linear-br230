@@ -15,10 +15,13 @@
     ['Parado', '#D93025', 'parado', 'parados'], ['Sem atividade', '#7A8580', 'sem atividade', 'sem atividade']];
   var SIT_O = [['Sem dano aparente', '#1E9E55', 'sem dano aparente', 'sem dano aparente'], ['Dano observado', '#F2A93B', 'com dano', 'com dano'],
     ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem vistoria', '#7A8580', 'sem vistoria', 'sem vistoria']];
+  // segmentos da conservação (passo 2.4): a situação da vistoria, como nas pontes, com "defeito"
+  var SIT_S = [['Sem defeito', '#1E9E55', 'sem defeito', 'sem defeito'], ['Defeito observado', '#F2A93B', 'com defeito', 'com defeito'],
+    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem vistoria', '#7A8580', 'sem vistoria', 'sem vistoria']];
   // a pior situação de um grupo pinta a borda do círculo
-  var PESO = { 'Parado': 4, 'Dano observado': 4, 'Ativo': 2, 'Em execução': 2, 'Sem atividade': 1, 'Sem vistoria': 1 };
+  var PESO = { 'Parado': 4, 'Dano observado': 4, 'Defeito observado': 4, 'Ativo': 2, 'Em execução': 2, 'Sem atividade': 1, 'Sem vistoria': 1 };
   var COR = {};
-  SIT_C.concat(SIT_O).forEach(function (s) { COR[s[0]] = s[1]; });
+  SIT_C.concat(SIT_O, SIT_S).forEach(function (s) { COR[s[0]] = s[1]; });
   var MIN_KM = 1.5;   // menor trecho na tela, em km
   // km plausível na rodovia: fora disso é erro de digitação (ex.: 84880 em vez de 848,80) e não entra no desenho
   // (a faixa do eixo SNV com 50 km de folga; sem o eixo, 0 a 5.000)
@@ -67,7 +70,7 @@
   }
   // filtro de situação por tipo de contrato: cada tipo conta à parte (antes o 'c:' juntava tudo que não era ponte)
   var PRE = { pc: 'c:', conserva: 's:', oae: 'o:' };
-  var SIT_GR = [['pc', 'Pontos críticos · situação', SIT_C], ['conserva', 'Conservação · segmentos', SIT_C], ['oae', 'Proarte · pontes', SIT_O]];
+  var SIT_GR = [['pc', 'Pontos críticos · situação', SIT_C], ['conserva', 'Conservação · segmentos', SIT_S], ['oae', 'Proarte · pontes', SIT_O]];
   // a busca não liga para acento nem maiúscula ("conservacao", "criticos")
   function semAc(s) { s = String(s == null ? '' : s).toLowerCase(); return s.normalize ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : s; }
   // "A", "A e B", "A, B e C"
@@ -131,8 +134,8 @@
         if (ativo && vistosM && !vistosM[c.id] && !ok) novos[c.id] = true;
         // km do contrato fora da rodovia: não entra na faixa (faixaDe), mas entra no aviso
         if (ok && [c.kmIni, c.kmFim].some(function (v) { var n = num(v); return n != null && !noKm(n); })) foraC++;
-        // conservação: os segmentos ficam fora da Visão geral até o passo 2.4 (a raia só com a faixa, como antes deles)
-        (N.tipo(c) === 'conserva' ? [] : c.pontos).forEach(function (p) {
+        // conservação (passo 2.4): os segmentos entram como trechos, na cor da pior situação do segmento
+        c.pontos.forEach(function (p) {
           var km = num(p.kmIni), kf = num(p.kmFim);
           if (km == null) { if (ok) semKm++; return; }
           if (!noKm(km)) { if (ok) fora++; return; }
@@ -300,7 +303,7 @@
         gs.forEach(function (g) {
           var x = g.xs[0];
           if (g.t === 'grupo') {
-            var km = k0 + g.soma / g.xs.length / W * R, pior = null, n = g.xs.length, nome = oae ? ' pontes' : ' pontos';
+            var km = k0 + g.soma / g.xs.length / W * R, pior = null, n = g.xs.length, nome = oae ? ' pontes' : N.tipo(x.c) === 'conserva' ? ' segmentos' : ' pontos';
             g.xs.forEach(function (y) { if (!pior || (PESO[y.st] || 0) > (PESO[pior.st] || 0)) pior = y; });
             var estilo = ' style="left:' + pc(X(km)) + ';border-color:' + ((PESO[pior.st] || 0) >= 2 ? pior.cor : '#3B4540') + '"';
             var fidG = (preso(g) ? 'gp:' : 'ga:') + x.key;
@@ -348,7 +351,9 @@
 
       // cartão do ponto escolhido (no celular, sobe da parte de baixo)
       if (sel) {
-        var x = sel, inf = x.inf, nomeS = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
+        // sem código (o.publico): o banco manda só a posição; o cartão diz só o km e pede o código para abrir
+        var pub = !!(o.publico && o.publico());
+        var x = sel, inf = x.inf, nomeS = pub ? (x.oae ? 'Ponte' : 'Ponto') : x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
         var kmS = x.oae ? 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + (Number(x.p.extensao) ? ' · ' + nf(x.p.extensao, 1) + ' m de ponte' : '')
           : 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + ' a ' + nf(x.kf, 2) + ' · ' + nf(x.kf - x.km, 2) + ' km';
         var servs = (inf.servs || []).map(function (s) {
@@ -356,18 +361,18 @@
         }).join('');
         h += '<aside class="vg-box vg-card" aria-label="Ponto escolhido" data-key="' + esc(x.key) + '"><div class="vg-card-top"><div><small>' + esc(N.completo(x.c)) + '</small>' +
           '<h3>' + esc(nomeS) + '</h3><span>' + kmS + '</span></div><button type="button" class="vg-x" data-vg="fechar" aria-label="Fechar">×</button></div>' +
-          '<div class="vg-st"><i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (inf.pctText ? ' · ' + esc(inf.pctText) : '') + '</div>' +
-          (servs || x.p.obs ? '<details class="vg-mais"' + ((st.mais != null ? st.mais : !mob) ? ' open' : '') + '><summary>' + (servs ? 'Serviços' + (x.p.obs ? ' e observações' : '') : 'Observações') + '</summary>' + servs +
+          (pub ? '<p class="vg-obs">A situação e os detalhes aparecem para quem entra com o código.</p>' : '<div class="vg-st"><i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (inf.pctText ? ' · ' + esc(inf.pctText) : '') + '</div>') +
+          (!pub && (servs || x.p.obs) ? '<details class="vg-mais"' + ((st.mais != null ? st.mais : !mob) ? ' open' : '') + '><summary>' + (servs ? 'Serviços' + (x.p.obs ? ' e observações' : '') : 'Observações') + '</summary>' + servs +
             (x.p.obs ? '<p class="vg-obs">' + esc(x.p.obs) + '</p>' : '') + '</details>' : '') +
-          '<div class="vg-acoes"><button type="button" class="btn primary" data-vg="abrir">Abrir no contrato</button>' +
-          (o.temMapa ? '<button type="button" class="btn" data-vg="mapa">Ver no mapa</button>' : '') +
+          '<div class="vg-acoes"><button type="button" class="btn primary" data-vg="abrir">' + (pub ? 'Entrar para ver' : 'Abrir no contrato') + '</button>' +
+          ((typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn" data-vg="mapa">Ver no mapa</button>' : '') +
           (o.temFotos && o.temFotos() ? '<button type="button" class="btn" data-vg="fotos">Fotos</button>' : '') + '</div></aside>';
       }
       h += '</div>';
 
       // resumo por contrato (só os mostrados); embaixo, quantos ficaram fora do filtro
       h += '<section class="vg-cards" aria-label="Resumo dos contratos mostrados">' + cs.map(function (c) {
-        var tp = N.tipo(c), oae = tp === 'oae', xs = d.por[c.id] || [], sits = oae ? SIT_O : SIT_C, n = {}, f = d.fx[c.id];
+        var tp = N.tipo(c), oae = tp === 'oae', xs = d.por[c.id] || [], sits = oae ? SIT_O : tp === 'conserva' ? SIT_S : SIT_C, n = {}, f = d.fx[c.id];
         xs.forEach(function (x) { n[x.st] = (n[x.st] || 0) + 1; });
         var tot = tp === 'conserva' ? xs.length : c.pontos.length, ext = oae ? c.pontos.reduce(function (t, p) { return t + (Number(p.extensao) || 0); }, 0) / 1000 : uniao(xs);
         var segs = sits.filter(function (s) { return n[s[0]]; }).map(function (s) { return '<i style="flex:' + n[s[0]] + ' 1 0;background:' + s[1] + '"></i>'; }).join('');
@@ -375,7 +380,7 @@
         var pad = f ? Math.max((f[1] - f[0]) * 0.03, 0.5) : 0, nome = N.nome(c) || 'Contrato', formal = N.formal(c);
         return '<article class="vg-box vg-ct ' + tp + '"><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
           (f ? '<div class="vg-ct-t">km ' + nf(f[0], 1) + ' – ' + nf(f[1], 1) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
-          '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' ponte' : ' pontes') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de pontes' : ' km de atuação') + '</span></div>' +
+          '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' ponte' : ' pontes') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de pontes' : ' km de atuação') + '</span></div>' +
           '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' +
           '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';

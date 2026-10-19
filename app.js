@@ -2251,11 +2251,11 @@
     // no celular a Visão geral fica só com o ícone (aria-label mantém o nome). O botão dos contratos abre uma lista de botões
     // comuns (aria-expanded/aria-controls), sem a semântica de menu (aria-haspopup), que pediria setas e outro anúncio
     nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-label="Visão geral" aria-current="' + visaoOn + '">' + ICON_VISAO + '<span class="tv-txt">Visão geral</span></button>' : '') +
-      '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
+      (isPublico() ? '' : '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
       '<span class="ctm-nome"><span class="ctm-n">' + (at ? esc(ctNome(at)) + '</span><small>' + esc(abaSub(at)) + '</small>' : 'Contratos</span>') +
       (window.AMBIENTE && window.AMBIENTE.previa ? '<span class="ctm-prev">Prévia</span>' : '') + '</span>' + ICON_DESCE + '</button>' +
       '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
-      '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>';
+      '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>');
     var cc = $('ctCurto');
     if (cc) cc.innerHTML = esc(at ? ctCurto(at) : 'Contratos') + ICON_DESCE;
     var atl = $('atalhos');
@@ -2353,7 +2353,9 @@
     if (!nav) return;
     nav.hidden = !on;
     if (!on) { document.body.removeAttribute('data-pg'); fechaGaleriaPg(); return; }
-    if ((pg === 'galeria' && !galeriaOn()) || (pg === 'mapa' && !temMapa())) pg = 'diagrama';
+    var cA = active();
+    if ((pg === 'galeria' && !galeriaOn()) || (pg === 'mapa' && (!temMapa() || !podeMapa(cA)))) pg = 'diagrama';
+    if (pg === 'diagrama' && !podeDiagrama(cA)) pg = 'pontos';   // fiscal e analista sem o acompanhamento: sem diagrama
     document.body.setAttribute('data-pg', pg);
     nav.querySelectorAll('[data-pg]').forEach(function (b) { if (b.dataset.pg === pg) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
     topoMini(false);
@@ -2363,7 +2365,8 @@
   }
   // semHist: veio do Voltar (popstate), não entra de novo no histórico
   function irPg(novo, semHist) {
-    if (novo === 'foto') { openFoto(''); return; }
+    if (novo === 'foto') { if (podeFotos()) openFoto(''); return; }
+    if ((novo === 'diagrama' && !podeDiagrama(active())) || (novo === 'mapa' && !podeMapa(active())) || (novo === 'galeria' && !galeriaOn())) return;
     if (!pgAtivo()) return;
     if (novo === pg && document.body.getAttribute('data-pg') === pg) {   // tocar na página aberta: volta ao começo dela
       if (novo !== 'mapa' && novo !== 'galeria') window.scrollTo(0, 0);
@@ -2718,13 +2721,12 @@
     h.push('<div class="pt-list" id="ptList">');
     pts.forEach(function (p) { h.push(pointCard(p)); });
     h.push('</div>');
-    if (readOnly()) {
+    // analista e fiscal: sem aviso de papel em cima (pedido de 19/10/2026); só o contrato de conservação vazio avisa o fiscal
+    if (readOnly() && !isAnalista()) {
       h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
         '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
-    } else if (isFiscal()) {
-      h.unshift('<div class="ro-note fiscal-note"><span>' + (cons ? (pts.length ? 'Você entrou como <b>fiscal de campo</b>: em cada segmento, marque a trafegabilidade e o estado de cada grupo, com a estimativa (quanto e onde). A mudança fica aguardando a aprovação de um engenheiro.' :
-        'Você entrou como <b>fiscal de campo</b>. Este contrato de conservação ainda não tem segmentos: um engenheiro precisa gerá-los.') :
-        'Você entrou como <b>fiscal de campo</b>: ' + (oae ? 'marque o estado de cada ponte e estime o dano (quanto e onde)' : 'mude o status e o % dos serviços') + '. A mudança fica aguardando a aprovação de um engenheiro.') + '</span></div>');
+    } else if (isFiscal() && cons && !pts.length) {
+      h.unshift('<div class="ro-note fiscal-note"><span>Este contrato de conservação ainda não tem segmentos.</span></div>');
     }
     h.push(dicaInstalarHtml());
     $('editor').innerHTML = h.join('');
@@ -2876,9 +2878,19 @@
   var AN_KEY = 'diagrama-linear.analise';
   var analise = { dados: {}, estado: {} };   // estado[cid]: carregando | ok | vazia | erro
   function analiseInit() {
-    var x = isEng() ? lsGet(AN_KEY) : null;
+    var x = isEng() || isAnalista() ? lsGet(AN_KEY) : null;
     analise = { dados: x && x.dados && typeof x.dados === 'object' ? x.dados : {}, estado: {} };
-    if (!isEng()) lsPut(AN_KEY, null);
+    if (!isEng() && !isAnalista()) lsPut(AN_KEY, null);
+  }
+  // o acesso do analista diminuiu (tiraram as medições de um contrato): as medições guardadas daquele contrato saem do aparelho
+  function podarAnalise() {
+    if (!isAnalista() || !analise) return;
+    var tirou = false;
+    Object.keys(analise.dados).forEach(function (cid) {
+      var a = banco.acesso && banco.acesso[cid];
+      if (!(a && a.med)) { delete analise.dados[cid]; tirou = true; }
+    });
+    if (tirou) lsPut(AN_KEY, { dados: analise.dados });
   }
   // Alerta da análise (por ponte): a ponte atendida mais de uma vez na mesma etapa. Passagem = medições seguidas com
   // serviço na ponte (uma passagem pode atravessar o mês). O PTO prevê uma passagem por estrutura em cada etapa, então
@@ -2892,7 +2904,7 @@
   lsPut('diagrama-linear.janela', null);                             // seletor antigo (3/6/12 meses)
   var anCache = { raw: null, view: null }, mnePend = {}, anLido = {};   // anLido[cid]: quando a análise (e as marcas) foi lida do banco
   function anOf(c) {
-    var raw = c && isOae(c) && isEng() ? analise.dados[c.id] || null : null;
+    var raw = c && isOae(c) && parte(c, 'med') ? analise.dados[c.id] || null : null;
     if (!raw) return null;
     if (anCache.raw !== raw) anCache = { raw: raw, view: anCalc(raw) };
     return anCache.view;
@@ -3022,7 +3034,7 @@
     return r;
   }
   function carregarAnalise(c) {
-    if (!c || !isOae(c) || !banco.on || !isEng() || !window.Banco || !window.Banco.analise) return;
+    if (!c || !isOae(c) || !banco.on || !parte(c, 'med') || !window.Banco || !window.Banco.analise) return;
     var e = analise.estado[c.id];
     if (e === 'carregando' || e === 'ok' || e === 'vazia' || e === 'erro') return;   // erro: só de novo ao trocar de aba ou voltar ao app
     analise.estado[c.id] = 'carregando';
@@ -3152,10 +3164,7 @@
   }
   function analiseResumoHtml(c) {
     if (!banco.on) return '';
-    if (!isEng()) {
-      return '<div class="an-note">Os valores medidos e os alertas da análise das medições aparecem para engenheiros, auxiliares de engenharia e o Administrador.' +
-        (banco.login ? '' : ' Entre para ver.') + '</div>';
-    }
+    if (!parte(c, 'med')) return '';   // sem as medições: nada aparece (ninguém fica sabendo o que outros acessos veem)
     var an = anOf(c), e = analise.estado[c.id];
     if (!an) {
       var t = e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba ou voltar ao app.' : 'Nenhuma análise das medições cadastrada para este contrato.';
@@ -3170,7 +3179,7 @@
     ];
     if (E) kp.push(['Pontes atendidas', cob[E].atend + ' de ' + cob[E].total, cob[E].falta.length ? cob[E].falta.length + ' sem serviço nesta etapa' : 'todas tiveram serviço nesta etapa']);
     var h = '<section class="card an-card"><div class="an-head"><b>Análise das medições</b><span class="sub">' +
-      (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + ' · visível só para engenheiros, auxiliares de engenharia e o Administrador</span></div>';
+      (sobre.em ? 'atualizada em ' + esc(fmtIsoDate(sobre.em)) : '') + (isEng() ? ' · visível só para engenheiros, auxiliares de engenharia e o Administrador' : '') + '</span></div>';
     var ets = an.etapas || [];
     h += '<div class="an-jan"><span id="anEtTit">Mostrar</span><div class="seg an-etapas" role="group" aria-labelledby="anEtTit" style="grid-template-columns:repeat(' + (ets.length + 1) + ',minmax(0,1fr))">' +
       '<button type="button" data-act="an-etapa" data-v="0" aria-pressed="' + !E + '">Todas<small>' + esc((r.de || '') + ' a ' + (r.ate || '')) + '</small></button>' +
@@ -3219,9 +3228,11 @@
     if (open) {
       var id = esc(p.id), an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
       // com a análise (engenheiro, auxiliar, Administrador): duas abas, Vistoria e Medições. Sem ela (fiscal), só a vistoria
-      var aba = a && ui.aba[p.id] === 'med' ? 'med' : 'vist';
+      var soMed = !parte(c, 'acomp');   // analista só com as medições: sem a vistoria
+      var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
+      if (soMed && !a) return h + '<div class="pt-body"><div class="an-note">' + (analise.estado[c.id] === 'carregando' ? 'Carregando as medições…' : 'Sem medições desta ponte.') + '</div></div></article>';
       h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '');
-      if (a) h += '<div class="pt-abas" role="tablist" aria-label="Partes da ponte">' + [['vist', 'Vistoria'], ['med', 'Medições']].map(function (x) {
+      if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes da ponte">' + [['vist', 'Vistoria'], ['med', 'Medições']].map(function (x) {
         return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
       }).join('') + '</div>';
       if (a) h += conferirHtml(c, p, an, a, aba);
@@ -3255,7 +3266,6 @@
           '<i aria-hidden="true">✕</i>Medido sem execução · ' + esc(med) + 'ª</button>';
       }, '', a ? function (s, sv) { return itensMedHtml(an, a, s, sv); } : null);
 
-      if (!a && banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros, auxiliares de engenharia e o Administrador.</div>';
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
@@ -3270,6 +3280,10 @@
   // linha fechada, como no esboço do plano: nome e descrição; km Atualizado, km do contrato, extensão e código do SNV (com a
   // marca de prioridade na frente); as 7 bolinhas dos grupos; à direita, a trafegabilidade por extenso (o resumo dos grupos no title)
   function segHead(p, c) {
+    if (!parte(c, 'acomp')) {   // analista da conservação: só o segmento, sem as bolinhas e a trafegabilidade da vistoria
+      var kmA = 'km ' + (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?'), nomeA = (p.nome || '?') + (p.descricao ? ' · ' + p.descricao : '');
+      return '<span class="pt-name" title="' + esc(nomeA) + '">' + esc(nomeA) + '</span><span class="pt-km">' + esc(kmA) + '</span><span class="pt-dots"></span><span class="pt-pct"></span>' + ICON_CHEV;
+    }
     var dots = servicesOf(c).map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
       return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
@@ -3301,6 +3315,8 @@
       h += field('KM do contrato', 'data-segc="1" type="text" readonly tabindex="-1"', segContrTxt(c, p).replace(/^contr\. /, ''));
       h += field('Segmento do SNV', 'data-segsnv="1" type="text" readonly tabindex="-1"', snvDoSegmento(p));
       h += '</div>';
+      // analista: as medições do segmento, sem os campos da vistoria
+      if (!parte(c, 'acomp')) return h + '<div class="section-title">Medições deste segmento</div><div class="an-note">As medições da conservação ainda não estão no sistema.</div></div></article>';
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Estado do segmento' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       h += servHtml(p, servicesOf(c), null, null, trafHtml(p));
@@ -3344,7 +3360,7 @@
     return { ind: ind, nseg: nseg, nvis: nvis, ext: ext, pesos: pesos, fator: pesos ? soma / pesos : null };
   }
   function desempResumoHtml(c) {
-    if (!banco.on || !isEng() || !c.pontos.length) return '';
+    if (!banco.on || !parte(c, 'med') || !c.pontos.length) return '';
     var r = desempResumo(c);
     var h = '<section class="card an-card des-card"><div class="an-head"><b>Desempenho pela vistoria</b><span class="sub">' +
       (r.nvis ? r.nvis + ' de ' + r.nseg + ' segmentos vistoriados' : 'nenhum segmento vistoriado') + ' · só para quem vê as medições</span></div>';
@@ -3822,10 +3838,12 @@
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
     var dono = ownerOf(p);
-    if (isOae(dono)) {
+    // pontes e segmentos da conservação: a situação pela vistoria (na conservação, "defeito" no lugar de "dano")
+    if (isOae(dono) || isConserva(dono)) {
       var n = oaeNec(p, dono), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null, nt = oaeNecTxt(n, dono);
+      var nomeK = !k ? 'Sem vistoria' : isConserva(dono) && k === 'OK' ? 'Sem defeito' : isConserva(dono) && k === 'DN' ? 'Defeito observado' : OAE_STATUS[k].name;
       return {
-        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k ? OAE_STATUS[k].name : 'Sem vistoria', pctText: nt === 'sem vistoria' || nt === palavrasDe(dono).semDano ? '' : nt,
+        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: nomeK, pctText: nt === 'sem vistoria' || nt === palavrasDe(dono).semDano ? '' : nt,
         servs: servicesOf(dono).filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
           var sv = p.serv[s.key], x = oaeSt(sv), qt = comQtd(x) ? fmtQtd(s, sv.q) : '';
           return { label: s.label, color: OAE_STATUS[x].fill, text: oaeStOf(s, x).name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.pri ? ' · prioridade' : '') +
@@ -3926,10 +3944,12 @@
   function saveText(name, text, mime) { return saveBlob(name, new Blob([text], { type: mime || 'text/plain' })); }
   var foto = null;
   function openFoto(pid) {
+    if (!podeFotos()) { toast(banco.login ? 'Seu acesso não inclui fotos.' : 'Entre com o seu código para tirar fotos.'); return; }
     if (!foto && window.FotoCarimbo) {
       foto = window.FotoCarimbo({
-        snv: window.SNV_BR230, getContract: active, logoSrc: window.UNIFILAR_LOGO && window.UNIFILAR_LOGO.src, nomes: NOMES,
-        getContracts: function () { return state.contracts; },
+        snv: window.SNV_BR230, logoSrc: window.UNIFILAR_LOGO && window.UNIFILAR_LOGO.src, nomes: NOMES,
+        getContract: function () { var c = active(), l = ctsFoto(); return l.indexOf(c) >= 0 ? c : l[0] || null; },
+        getContracts: ctsFoto,
         setActiveContract: function (id) {
           if (state.activeId === id || !state.contracts.some(function (c) { return c.id === id; })) return;
           state.activeId = id; ui.open = {}; save(); renderAll();
@@ -3957,7 +3977,10 @@
     return mapa;
   }
   function setView(v) {
-    view = v === 'mapa' && window.MapaSNV && window.L && window.SNV_BR230 ? 'mapa' : 'diagrama';
+    var temM = !!(window.MapaSNV && window.L && window.SNV_BR230), cV = state && state.contracts.length ? active() : null;
+    // fiscal: só o mapa (sem o diagrama)
+    if (cV && !podeDiagrama(cV) && temM && podeMapa(cV)) v = 'mapa';
+    view = v === 'mapa' && temM ? 'mapa' : 'diagrama';
     try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* sem armazenamento */ }
     var isMap = view === 'mapa';
     $('viewDiagrama').setAttribute('aria-pressed', String(!isMap));
@@ -3995,10 +4018,10 @@
     }
     var temAn = isOae(c) && !!anOf(c), sw = $('folhaSw');
     if (sw) {
-      sw.hidden = !temAn;
+      sw.hidden = !temAn || !parte(c, 'acomp');
       sw.querySelectorAll('[data-folha]').forEach(function (x) { x.setAttribute('aria-pressed', String((x.dataset.folha === 'vistoria') === folhaVistoria)); });
     }
-    var sheets = renderSheets(c, temAn && folhaVistoria);
+    var sheets = renderSheets(c, temAn && folhaSoVist(c));
     renderPagesCtl(c);
     $('pages').innerHTML = sheets.map(function (svg, i) {
       return '<div class="sheet" aria-label="Página ' + (i + 1) + '">' + svg + (viewer ? '<button type="button" class="ler-btn" data-ler="' + i + '">' + ICON_LER + 'Abrir para ler</button>' : '') + '</div>';
@@ -4007,9 +4030,16 @@
     if (viewer && viewer.isOpen()) viewer.update(sheets);
   }
 
+  // sem código (ou sem nenhum contrato liberado): só a visão geral
+  function soVisao() { return isPublico() || !state.contracts.length; }
   function renderAll() {
+    if (soVisao() && window.VisaoGeral && $('visaoHost')) visaoOn = true;
+    aplicaPapel();
     renderTabs();
     if (mostraVisao() && desenhaVisao()) return;
+    // fiscal (sem o diagrama): a folha ao lado fica no mapa
+    var cR = active();
+    if (view !== 'mapa' && !podeDiagrama(cR) && podeMapa(cR) && temMapa()) setView('mapa');
     renderEditor();
     // o mapa criado (ou girado) com o layout escondido ficou com tamanho zero: mede de novo antes de desenhar
     if (view === 'mapa') { if (mapa) mapa.invalidate(); else ensureMap(); }
@@ -4030,10 +4060,12 @@
   function ensureVisao() {
     if (visao || !window.VisaoGeral || !$('visaoHost')) return visao;
     visao = window.VisaoGeral({
-      host: $('visaoHost'), contratos: function () { return state.contracts; }, info: pointInfo, isOae: isOae, nomes: NOMES,
-      temMapa: !!(window.MapaSNV && window.L && window.SNV_BR230), temFotos: galeriaOn,
+      host: $('visaoHost'), contratos: function () { return state.contracts; }, nomes: NOMES, publico: isPublico,
+      // sem código, o ponto vem só com o km: sem situação (cinza)
+      info: function (p) { return isPublico() ? { status: '', color: '#5C6661', servs: [], pctText: '' } : pointInfo(p); }, isOae: isOae,
+      temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,
       onAbrir: function (c, p) { abrirDaVisao(c, p, false); },
-      onMapa: function (c, p) { abrirDaVisao(c, p, true); },
+      onMapa: function (c, p) { abrirDaVisao(c, p, podeMapa(c)); },
       onFotos: function (c, p) { abrirGaleria({ cid: c.id, pid: p.id }); },
       // erro num evento da visão (clique, busca, arrasto): mostra o contrato
       onErro: function (e) { console.error(e); visaoOn = false; renderAll(); }
@@ -4053,16 +4085,18 @@
     if (on) topoMini(false);
     $('layout').hidden = on;
     if (vh) vh.hidden = !on;
-    $('btnPdf').hidden = on;
-    // na visão não há contrato na tela: imprimir pegaria o contrato escondido
+    // na visão não há contrato na tela: imprimir pegaria o contrato escondido. Fiscal e analista sem o acompanhamento: sem diagrama
+    var semPdf = on || !state.contracts.length || !podeDiagrama(active());
+    $('btnPdf').hidden = semPdf;
     var pr = document.querySelector('#menuPop [data-act="print"]');
-    if (pr) pr.hidden = on;
-    if ($('menuPdf')) $('menuPdf').hidden = on;
+    if (pr) pr.hidden = semPdf;
+    if ($('menuPdf')) $('menuPdf').hidden = semPdf;
     aplicaPg();
     return on;
   }
   // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
   function abrirDaVisao(c, p, noMapa) {
+    if (isPublico()) { toast('Entre com o seu código para abrir o contrato.', 5000); openLogin(); return; }
     setVisao(false);
     if (analise.estado[c.id] === 'erro') delete analise.estado[c.id];
     state.activeId = c.id;
@@ -4257,7 +4291,7 @@
       return;
     }
     if (act === 'login') { openLogin(); return; }
-    if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
+    if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { if (isAnalista()) { toast('Analista só consulta.'); return; } toast('Para editar, entre com o seu código.'); openLogin(); return; }
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item' && act !== 'set-desemp') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
@@ -4836,11 +4870,13 @@
   function escolherFolha(oque) {
     var c = active();
     if (!anOf(c)) return Promise.resolve(true);
+    if (!parte(c, 'acomp')) return Promise.resolve(false);   // analista só das medições: a folha com a análise, sem escolher
     return new Promise(function (resolve) {
       modal('<h2 id="modalTitle">' + esc(oque) + '</h2>' +
         '<fieldset class="folha-op"><legend>O que vai na folha</legend>' +
-        '<label><input type="radio" name="folha" value="vistoria"' + (folhaVistoria ? ' checked' : '') + '> <span><b>Só a vistoria</b><small>Estado das pontes e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
-        '<label><input type="radio" name="folha" value="analise"' + (folhaVistoria ? '' : ' checked') + '> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
+        // começa sempre em "Só a vistoria": a folha com a análise é de uso interno e não vai à contratada por engano
+        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Só a vistoria</b><small>Estado das pontes e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
+        '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
         '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary">Continuar</button></div>',
       function (f) {
         var com = f.querySelector('input[name=folha]:checked').value === 'analise';
@@ -4850,6 +4886,7 @@
     });
   }
   function exportPdf() {
+    if (!state.contracts.length || !podeDiagrama(active())) { toast('Seu acesso não inclui o diagrama deste contrato.'); return; }
     escolherFolha('Gerar PDF').then(function (semAnalise) {
       var btn = $('btnPdf'), c = active(), old = btn.innerHTML, nome = pdfName(c, !semAnalise && !!anOf(c));
       btn.disabled = true;
@@ -4866,7 +4903,7 @@
       });
     });
   }
-  function imprimir() { escolherFolha('Imprimir').then(printSheets); }
+  function imprimir() { if (!state.contracts.length || !podeDiagrama(active())) { toast('Seu acesso não inclui o diagrama deste contrato.'); return; } escolherFolha('Imprimir').then(printSheets); }
   function printSheets(semAnalise) {
     var sheets = renderSheets(active(), semAnalise === true);
     $('printArea').innerHTML = sheets.map(function (s) { return '<div class="print-sheet">' + s + '</div>'; }).join('');
@@ -4951,23 +4988,56 @@
   var NAME_KEY = 'diagrama-linear.nome';
   var OLD_KEY = 'diagrama-linear.antes-do-banco';   // o que estava só neste aparelho antes do banco da equipe
   var RECUSA_KEY = 'diagrama-linear.recusadas';     // alterações que o banco recusou de vez (guardadas, nunca apagadas sozinhas)
-  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false,
+  var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], acesso: null, base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false,
     falhas: 0, espera: 0, lote: 0 };   // falhas seguidas do servidor, quando tentar de novo e tamanho do lote ao separar uma recusa
   var flushTimer = null;
 
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
-  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas }); }
-  function readOnly() { return banco.on && !banco.login; }
-  // papéis: criador (tudo), engenheiro e auxiliar de engenharia (edita, aprova, lixeira, medições) e fiscal de campo
-  // (só status dos serviços, com aprovação). Os códigos gerais antigos valem como criador ("responsavel") e engenheiro ("equipe").
-  var NIVEL = { criador: 3, responsavel: 3, engenheiro: 2, auxiliar: 2, equipe: 2, fiscal: 1 };
-  var PAPEL_NOME = { criador: 'Administrador', responsavel: 'Administrador', engenheiro: 'engenheiro', auxiliar: 'auxiliar de engenharia', equipe: 'engenheiro', fiscal: 'fiscal de campo' };
+  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas, acesso: banco.acesso }); }
+  // sem código ou analista: só consulta
+  function readOnly() { return banco.on && (!banco.login || isAnalista()); }
+  // papéis (revisoes/2026-10-19-decisoes-acessos.md): Administrador (criador) e engenheiro (tudo; só o Administrador mexe na
+  // conta de outro Administrador), auxiliar de engenharia (edita, aprova, lixeira, medições), analista (só vê, nos contratos e
+  // partes liberados) e fiscal de campo (vistoria e fotos, nos contratos liberados, com aprovação). O banco confere tudo de
+  // novo; aqui é só a tela. Os códigos gerais antigos valem como Administrador ("responsavel") e auxiliar ("equipe").
+  var NIVEL = { criador: 3, responsavel: 3, engenheiro: 3, auxiliar: 2, equipe: 2, fiscal: 1, analista: 0 };
+  var PAPEL_NOME = { criador: 'Administrador', responsavel: 'Administrador', engenheiro: 'engenheiro', auxiliar: 'auxiliar de engenharia', equipe: 'auxiliar de engenharia',
+    fiscal: 'fiscal de campo', analista: 'analista' };
   function nivel() { return banco.on && banco.login ? (NIVEL[banco.login.papel] || 0) : 0; }
   function isResp() { return nivel() >= 3; }
+  function isAdmin() { var p = banco.on && banco.login && banco.login.papel; return p === 'criador' || p === 'responsavel'; }
   function isEng() { return nivel() >= 2; }
   function isFiscal() { return nivel() === 1; }
+  function isAnalista() { return !!(banco.on && banco.login && banco.login.papel === 'analista'); }
+  // sem código: só a visão geral (o banco manda só o trecho dos contratos e a posição dos pontos)
+  function isPublico() { return banco.on && !banco.login; }
   function papelNome(p) { return PAPEL_NOME[p] || 'equipe'; }
+  // parte do contrato: med = medições; acomp = pontos e status, diagrama e PDF, mapa. O analista só tem as partes liberadas
+  // para ele em cada contrato (banco.acesso, do banco); os outros papéis, conforme o papel
+  function parte(c, k) {
+    if (!banco.on) return true;
+    if (!banco.login || !c) return false;
+    if (isAnalista()) {
+      var a = banco.acesso && banco.acesso[c.id];
+      if (k === 'acomp' && isConserva(c)) return false;   // na conservação o analista só tem as medições
+      return !!(a && a[k]);
+    }
+    return k === 'med' ? isEng() : true;
+  }
+  // analista com as medições: vê também os pontos (segmentos), o diagrama (com a análise) e o mapa, sem a vistoria
+  function anMed(c) { return isAnalista() && parte(c, 'med'); }
+  function podeDiagrama(c) { return !isFiscal() && (parte(c, 'acomp') || anMed(c)); }
+  function podeMapa(c) { return parte(c, 'acomp') || anMed(c); }
+  // Foto e Galeria: do fiscal ao Administrador, e o analista nos contratos em que tem as medições (só as fotos dele)
+  function podeFotos(c) {
+    if (!banco.on || nivel() >= 1) return true;
+    if (!isAnalista()) return false;
+    return c ? parte(c, 'med') : state.contracts.some(function (x) { return parte(x, 'med'); });
+  }
+  function ctsFoto() { return state.contracts.filter(function (x) { return !isAnalista() || parte(x, 'med'); }); }
+  // a folha só da vistoria: só para quem tem o acompanhamento (o analista só das medições vê sempre a folha com a análise)
+  function folhaSoVist(c) { return folhaVistoria && parte(c, 'acomp'); }
 
   function contractFields(c) { var o = {}; Object.keys(c).forEach(function (k) { if (k !== 'id' && k !== 'pontos') o[k] = c[k]; }); return o; }
   function pointFields(p) { var o = {}; Object.keys(p).forEach(function (k) { if (k !== 'id') o[k] = p[k]; }); return o; }
@@ -5496,8 +5566,14 @@
     if (!banco.on) return Promise.resolve();
     if (!force && typing()) { banco.want = true; return Promise.resolve(); }
     banco.want = false;
-    return window.Banco.carregar().then(function (r) {
+    var credR = banco.login && banco.login.codigo;
+    return window.Banco.carregar(credR).then(function (r) {
       if (!force && typing()) { banco.want = true; return; }
+      // a resposta é de outra sessão (saiu ou entrou outra pessoa no meio): descarta
+      if ((banco.login && banco.login.codigo) !== credR) return;
+      // sessão vencida ou desativada em outro aparelho: o banco mandou só a visão pública; confere o acesso (sai)
+      if (r.sessaoInvalida && banco.login) { conferirAcesso(); return; }
+      if (r.novo) { banco.acesso = r.acesso || null; podarAnalise(); }
       banco.online = true;
       banco.at = new Date();
       banco.versao = r.versao;
@@ -5506,7 +5582,8 @@
       var logoMudou = !same(cfg.fotoLogo || null, banco.cfg.fotoLogo || null);
       banco.cfg = cfg;
       banco.propostas = Array.isArray(r.propostas) ? r.propostas : [];
-      if (r.contratos.length) {
+      // r.novo: o banco já filtrou pelo acesso (dados_ler): vale mesmo vazio (nenhum contrato liberado)
+      if (r.contratos.length || r.novo) {
         if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
         trackChanges();   // o que acabou de ser mudado aqui entra na fila antes de trocar o estado
         state = normalize(applyOps(fromServer(r), banco.pend));
@@ -5556,12 +5633,16 @@
   // ---------------- acesso: cada pessoa entra com o próprio código (criador, engenheiro ou fiscal de campo).
   // A entrada vira uma sessão (token "tk_..." guardado em banco.login.codigo), que vale até a pessoa sair ou o criador
   // trocar/desativar o acesso dela. Os códigos gerais antigos (equipe/responsável) ainda entram, pedindo o nome.
-  function setLogin(l) {
+  // inicio: a sessão guardada ao abrir o app (os dados do aparelho são dela). Ao sair ou ao entrar outra pessoa, o que este
+  // aparelho guardou do banco era do acesso anterior: sai antes de mostrar (o próximo refresh traz só o que o novo acesso vê)
+  // a mesma pessoa com o mesmo papel: trocar de pessoa, ou a mesma pessoa com outro papel, limpa o aparelho
+  function mesmaPessoa(a, b) { return !a && !b || !!(a && b && (a.codigo === b.codigo || (a.uid && a.uid === b.uid)) && a.papel === b.papel); }
+  function setLogin(l, inicio) {
+    if (banco.on && !inicio && !mesmaPessoa(banco.login, l)) limparDadosAparelho();
     banco.login = l;
     lsPut(LOGIN_KEY, l);
     analiseInit();
-    document.body.classList.toggle('ro', readOnly());
-    document.body.classList.toggle('fiscal', isFiscal());
+    aplicaPapel();
     renderLoginBtn();
     renderAprov();
     if (driveQ && l) { driveQ.resetCode(); driveQ.pump(); }
@@ -5577,17 +5658,42 @@
     if (ml) { ml.hidden = !banco.on; ml.textContent = b ? b.textContent : 'Entrar'; }
     if (mh) mh.hidden = !banco.on;
     // itens do menu Dados conforme o papel
-    var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn() };
+    // fiscal e analista: sem backup e sem voltar aos dados iniciais (o menu fica com a conta, o PDF e a impressão do que veem)
+    var equipe = !banco.on || isEng();
+    var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe, reset: equipe };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
     });
   }
+  function limparDadosAparelho() {
+    state = { version: (state && state.version) || 1, activeId: null, contracts: [] };
+    // as alterações que não subiram eram da pessoa anterior: não vão com o código de quem entra agora
+    if (banco.pend.length) toast(banco.pend.length + (banco.pend.length === 1 ? ' alteração' : ' alterações') + ' que não tinham subido foram descartadas: eram de quem saiu.', 7000);
+    banco.pend = []; banco.sending = 0; banco.cfg = {}; banco.conf = [];
+    banco.base = clone(state); banco.meta = {}; banco.propostas = []; banco.acesso = null;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
+    lsPut(AN_KEY, null);
+    if (window.GaleriaLimparCache) window.GaleriaLimparCache();
+    setVisao(true);
+    keepSync();
+  }
+  // classes do corpo conforme o papel e o contrato aberto (o CSS esconde o que o papel não usa)
+  function aplicaPapel() {
+    var c = state && state.contracts.length ? active() : null, b = document.body.classList;
+    b.toggle('ro', readOnly());
+    b.toggle('fiscal', isFiscal());
+    b.toggle('analista', isAnalista());
+    b.toggle('publico', isPublico());
+    b.toggle('sem-diagrama', !!c && !podeDiagrama(c));
+    b.toggle('sem-mapa', !!c && !podeMapa(c));
+    b.toggle('sem-fotos', !podeFotos(c));
+  }
   function logout(silent) {
     setLogin(null);
     renderAll();
     syncStatus();
-    if (!silent) toast('Você saiu. Este aparelho fica só para consulta.');
+    if (!silent) toast('Você saiu. Sem o código, este aparelho mostra só a visão geral.');
   }
   function aparelho() {
     var ua = navigator.userAgent;
@@ -5650,7 +5756,9 @@
       : c === 'codigo_em_uso' ? 'Esse código já é de outra pessoa (ou é um código geral). Escolha outro.'
       : c === 'nome_em_uso' ? 'Já existe um usuário com esse nome.'
       : c === 'ultimo_criador' ? 'Precisa ficar pelo menos um Administrador ativo.'
-      : c === 'so_criador' ? 'Só o Administrador pode fazer isso.'
+      : c === 'so_criador' ? 'Só o Administrador e os engenheiros podem fazer isso.'
+      : c === 'so_admin' ? 'Só o Administrador mexe na conta de um Administrador.'
+      : c === 'acesso_invalido' ? 'Os contratos escolhidos não vieram certos. Tente de novo.'
       : c === 'sem_permissao' ? 'Seu acesso não permite isso.'
       : c === 'contrato_excluido' ? 'O contrato deste ponto foi excluído: restaure o contrato primeiro.'
       : c === 'ja_existe' ? 'Já existe um item com esse código. Nada foi mudado.'
@@ -5729,7 +5837,8 @@
     closeModal();
     renderAll();
     toast(r.papel === 'fiscal'
-      ? 'Olá, ' + r.nome + '. Como fiscal de campo, você muda o status dos serviços e um engenheiro aprova.'
+      ? 'Olá, ' + r.nome + '. Como fiscal de campo, você faz a vistoria e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.'
+      : r.papel === 'analista' ? 'Olá, ' + r.nome + '. Como analista, você consulta os contratos liberados para você.'
       : 'Olá, ' + r.nome + ' (' + papelNome(r.papel) + ').', 5000);
     if (location.hash === '#configurar') history.replaceState(null, '', location.pathname + location.search);
     refresh(true).then(flush);
@@ -5763,12 +5872,13 @@
   function openAccount() {
     var n = banco.propostas.length;
     var f = modal('<h2 id="modalTitle">' + esc(banco.login.nome || 'Equipe') + '</h2>' +
-      '<p>Este aparelho entrou como <b>' + esc(papelNome(banco.login.papel)) + '</b>.' + (isFiscal() ? ' Você muda o status dos serviços e um engenheiro aprova.' : '') + '</p>' +
+      '<p>Este aparelho entrou como <b>' + esc(papelNome(banco.login.papel)) + '</b>.' + (isFiscal() ? ' Você faz a vistoria e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.' :
+        isAnalista() ? ' Você consulta os contratos liberados para você, sem editar.' : '') + '</p>' +
       '<div class="modal-list">' +
       (isEng() ? '<button type="button" class="btn" data-acc="aprov">Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '') + '</button>' : '') +
       (isResp() ? '<button type="button" class="btn" data-acc="users">Usuários e acessos</button>' : '') +
       (isEng() ? '<button type="button" class="btn" data-acc="lixeira">Lixeira e cópias de segurança</button>' : '') +
-      '<button type="button" class="btn" data-acc="hist">Histórico de alterações</button>' +
+      (isEng() ? '<button type="button" class="btn" data-acc="hist">Histórico de alterações</button>' : '') +
       '<button type="button" class="btn danger" data-acc="sair">Sair deste aparelho</button></div>' +
       '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
     f.addEventListener('click', function (e) {
@@ -5794,7 +5904,7 @@
   }
   function openHist() {
     var f = modal('<h2 id="modalTitle">Histórico de alterações</h2><div class="hist" aria-live="polite">Carregando…</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'wide');
-    window.Banco.historico(60).then(function (rows) {
+    window.Banco.historico(60, banco.login && banco.login.codigo).then(function (rows) {
       var el = f.querySelector('.hist');
       el.innerHTML = rows.length ? rows.map(function (r) {
         var d = new Date(r.em);
@@ -5807,10 +5917,11 @@
 
   // ---------------- usuários e acessos (só o criador)
   var PAPEIS = [
-    { k: 'engenheiro', nome: 'Engenheiro', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira e vê as fotos de todos.' },
-    { k: 'auxiliar', nome: 'Auxiliar de engenharia', desc: 'O mesmo que o engenheiro: edita tudo, aprova as mudanças dos fiscais, restaura da lixeira, vê as medições e as fotos de todos.' },
-    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Só muda o status e o % dos serviços (fica aguardando aprovação) e vê só as fotos que tirou.' },
-    { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas e voltar os dados para uma cópia.' }
+    { k: 'engenheiro', nome: 'Engenheiro', desc: 'O mesmo que o Administrador: edita tudo, aprova, vê as medições e as fotos de todos, cadastra pessoas e volta os dados para uma cópia. Só não mexe na conta de um Administrador.' },
+    { k: 'auxiliar', nome: 'Auxiliar de engenharia', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira, vê as medições e as fotos de todos. Não cadastra pessoas.' },
+    { k: 'analista', nome: 'Analista', desc: 'Só consulta, nos contratos marcados abaixo: as medições, o acompanhamento (pontos e status, diagrama e PDF, mapa) ou os dois. Onde tem as medições, também tira fotos e vê as que tirou.', ct: 'analista' },
+    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Nos contratos marcados abaixo: faz a vistoria e muda o status dos serviços (fica aguardando aprovação), tira e envia fotos e vê só as que tirou. Sem diagrama e sem PDF.', ct: 'fiscal' },
+    { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas, outros Administradores e voltar os dados para uma cópia.' }
   ];
   function gerarCodigo() {
     var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = new Uint32Array(8), s = '';
@@ -5819,7 +5930,7 @@
     return s.slice(0, 4) + '-' + s.slice(4);
   }
   function openUsuarios() {
-    if (!isResp()) { toast('Só o Administrador cadastra pessoas.'); return; }
+    if (!isResp()) { toast('Só o Administrador e os engenheiros cadastram pessoas.'); return; }
     var f = modal('<h2 id="modalTitle">Usuários e acessos</h2>' +
       '<p>Cada pessoa entra com o próprio código. Desativar alguém tira o acesso de todos os aparelhos dela.</p>' +
       '<div class="us" aria-live="polite">Carregando…</div>' +
@@ -5831,17 +5942,20 @@
         dados = r;
         var lista = r.usuarios || [], el = f.querySelector('.us');
         var h = lista.length ? lista.map(function (u) {
-          var pp = PAPEIS.find(function (x) { return x.k === u.papel; }) || PAPEIS[0];
+          var pp = PAPEIS.find(function (x) { return x.k === u.papel; }) || PAPEIS[0], nct = u.acesso ? Object.keys(u.acesso).length : 0;
+          var podeEd = r.pode_admin || u.papel !== 'criador';   // o engenheiro não mexe na conta de um Administrador
           return '<div class="us-row' + (u.ativo ? '' : ' off') + '"><div class="us-txt"><b>' + esc(u.nome) + '</b> <span class="tag t-' + esc(u.papel) + '">' + esc(pp.nome) + '</span>' +
             (u.ativo ? '' : ' <span class="tag t-off">desativado</span>') + (u.id === r.eu ? ' <span class="tag">você</span>' : '') +
-            '<small>' + (u.usado_em ? 'Último uso: ' + esc(fmtWhen(u.usado_em)) + ' · ' + u.aparelhos + (u.aparelhos === 1 ? ' aparelho' : ' aparelhos') : 'Ainda não entrou') + '</small></div>' +
-            '<button type="button" class="btn small" data-us="edit" data-id="' + esc(u.id) + '">Editar</button></div>';
+            '<small>' + (pp.ct ? (nct ? nct + (nct === 1 ? ' contrato' : ' contratos') : 'nenhum contrato liberado') + ' · ' : '') +
+            (u.usado_em ? 'Último uso: ' + esc(fmtWhen(u.usado_em)) + ' · ' + u.aparelhos + (u.aparelhos === 1 ? ' aparelho' : ' aparelhos') : 'Ainda não entrou') + '</small></div>' +
+            (podeEd ? '<button type="button" class="btn small" data-us="edit" data-id="' + esc(u.id) + '">Editar</button>' : '') + '</div>';
         }).join('') : '<p class="empty">Ninguém cadastrado ainda. Use “+ Nova pessoa”.</p>';
         if (r.codigo_equipe || r.codigo_responsavel) {
           h += '<div class="section-title">Códigos gerais (do sistema antigo)</div>' +
             '<p class="hint">Ainda entram, pedindo o nome. Quando todos tiverem código próprio, desative.</p>' +
-            (r.codigo_equipe ? '<div class="us-row"><div class="us-txt"><b>Código geral da equipe</b><small>Entra como engenheiro</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="equipe">Desativar</button></div>' : '') +
-            (r.codigo_responsavel ? '<div class="us-row"><div class="us-txt"><b>Código geral do responsável</b><small>Entra como Administrador</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="responsavel">Desativar</button></div>' : '');
+            (r.codigo_equipe ? '<div class="us-row"><div class="us-txt"><b>Código geral da equipe</b><small>Entra como auxiliar de engenharia</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="equipe">Desativar</button></div>' : '') +
+            (r.codigo_responsavel ? '<div class="us-row"><div class="us-txt"><b>Código geral do responsável</b><small>Entra como Administrador</small></div>' +
+              (r.pode_admin ? '<button type="button" class="btn small danger" data-us="geral" data-papel="responsavel">Desativar</button>' : '') + '</div>' : '');
         }
         el.innerHTML = h;
       }, function (err) { f.querySelector('.us').textContent = errText(err); });
@@ -5849,8 +5963,8 @@
     f.addEventListener('click', function (e) {
       var b = e.target.closest('[data-us]');
       if (!b) return;
-      if (b.dataset.us === 'novo') openUsuario(null);
-      else if (b.dataset.us === 'edit') openUsuario((dados.usuarios || []).find(function (u) { return u.id === b.dataset.id; }) || null);
+      if (b.dataset.us === 'novo') openUsuario(null, dados);
+      else if (b.dataset.us === 'edit') openUsuario((dados.usuarios || []).find(function (u) { return u.id === b.dataset.id; }) || null, dados);
       else if (b.dataset.us === 'geral') {
         var papel = b.dataset.papel;
         confirmar({ titulo: 'Desativar o código geral ' + (papel === 'equipe' ? 'da equipe' : 'do responsável') + '?',
@@ -5864,15 +5978,32 @@
     });
     carregar();
   }
-  function openUsuario(u) {
-    var novo = !u;
-    var radios = PAPEIS.map(function (x) {
+  // contratos do fiscal (um por contrato) e do analista (medições e acompanhamento, cada um à parte)
+  function usContratosHtml(u) {
+    var ac = (u && u.acesso) || {}, ehF = u && u.papel === 'fiscal', ehA = u && u.papel === 'analista';
+    var linhas = ctOrdem(state.contracts).map(function (c) {
+      var a = ac[c.id], id = esc(c.id);
+      return '<div class="us-ct"><span class="us-ct-n">' + esc(ctNome(c)) + '<small>' + esc(abaSub(c)) + '</small></span><span class="us-ct-ops">' +
+        '<label data-ctx="fiscal"><input type="checkbox" data-ct="' + id + '" data-k="f"' + (ehF && a ? ' checked' : '') + '> Liberado</label>' +
+        '<label data-ctx="analista"><input type="checkbox" data-ct="' + id + '" data-k="med"' + (ehA && a && a.med ? ' checked' : '') + '> Medições</label>' +
+        (isConserva(c) ? '' : '<label data-ctx="analista"><input type="checkbox" data-ct="' + id + '" data-k="acomp"' + (ehA && a && a.acomp ? ' checked' : '') + '> Acompanhamento</label>') + '</span></div>';
+    }).join('');
+    return '<fieldset class="us-cts" id="usCts" hidden><legend>Contratos liberados</legend>' +
+      '<p class="hint" data-ctx="fiscal">Marque os contratos em que esta pessoa faz a vistoria e tira as fotos. Ela só vê esses.</p>' +
+      '<p class="hint" data-ctx="analista">Em cada contrato, marque o que o analista vê. <b>Medições</b>: as medições de cada ponto, com os pontos, o diagrama e o mapa, e as fotos dele. ' +
+      '<b>Acompanhamento</b>: pontos e status dos serviços, diagrama e PDF, mapa. Na conservação, só as medições. Sem nenhuma, o contrato não aparece para ele.</p>' +
+      '<div class="us-ct-todos"><button type="button" class="btn small" data-cts="todos">Marcar todos</button><button type="button" class="btn small" data-cts="nenhum">Desmarcar todos</button></div>' +
+      (linhas || '<p class="empty">Nenhum contrato cadastrado.</p>') + '</fieldset>';
+  }
+  function openUsuario(u, dados) {
+    var novo = !u, podeAdm = !!(dados && dados.pode_admin) || isAdmin();
+    var radios = PAPEIS.filter(function (x) { return x.k !== 'criador' || podeAdm; }).map(function (x) {
       var on = u ? u.papel === x.k : x.k === 'fiscal';
       return '<label class="papel-op"><input type="radio" name="usPapel" value="' + x.k + '"' + (on ? ' checked' : '') + '><span><b>' + esc(x.nome) + '</b><small>' + esc(x.desc) + '</small></span></label>';
     }).join('');
     var f = modal('<h2 id="modalTitle">' + (novo ? 'Nova pessoa' : 'Editar ' + esc(u.nome)) + '</h2>' +
       mField('usNome', 'Nome (aparece no histórico e nas fotos)', false, u ? u.nome : '', 'off') +
-      '<fieldset class="papeis"><legend>Acesso</legend>' + radios + '</fieldset>' +
+      '<fieldset class="papeis"><legend>Acesso</legend>' + radios + '</fieldset>' + usContratosHtml(u) +
       '<div class="field"><label for="usCod">' + (novo ? 'Código de acesso (pelo menos 6 caracteres)' : 'Novo código (deixe em branco para manter o atual)') + '</label>' +
       '<div class="cod-row"><input id="usCod" maxlength="200" autocomplete="off" autocorrect="off" spellcheck="false" value="' + (novo ? gerarCodigo() : '') + '"><button type="button" class="btn small" data-gerar>Gerar outro</button></div></div>' +
       (novo ? '' : '<label class="show-pw"><input type="checkbox" id="usAtivo"' + (u.ativo ? ' checked' : '') + '> Acesso ativo</label>') +
@@ -5881,11 +6012,22 @@
       var nome = form.querySelector('#usNome').value.trim(), papel = (form.querySelector('input[name=usPapel]:checked') || {}).value,
         cod = form.querySelector('#usCod').value.trim(), ativo = novo ? true : form.querySelector('#usAtivo').checked;
       if (!nome) { modalErr(form, 'Escreva o nome.'); return; }
+      var acesso = null;
+      if (papel === 'fiscal' || papel === 'analista') {
+        acesso = {};
+        form.querySelectorAll('#usCts input[data-ct]:checked').forEach(function (i) {
+          var cid = i.dataset.ct, k = i.dataset.k;
+          if (papel === 'fiscal' && k === 'f') acesso[cid] = {};
+          if (papel === 'analista' && k !== 'f') { acesso[cid] = acesso[cid] || { med: false, acomp: false }; acesso[cid][k] = true; }
+        });
+      }
       if (novo && cod.length < 6) { modalErr(form, 'O código precisa de pelo menos 6 caracteres.'); return; }
       if (!novo && cod && cod.length < 6) { modalErr(form, 'O código precisa de pelo menos 6 caracteres.'); return; }
       modalErr(form, '');
       busyBtn(form, true, 'Salvando…');
-      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo }).then(function () {
+      var semCt = acesso && !Object.keys(acesso).length;
+      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo, acesso: acesso }).then(function () {
+        if (semCt) toast(nome + ' ficou sem nenhum contrato liberado: só vai ver a visão geral até você marcar algum.', 7000);
         busyBtn(form, false);
         if (u && u.id === (banco.login && banco.login.uid) && papel !== banco.login.papel) conferirAcesso();
         if (cod) mostrarCodigo(nome, cod, novo);
@@ -5893,6 +6035,20 @@
       }, function (err) { busyBtn(form, false); modalErr(form, errText(err)); });
     });
     f.querySelector('[data-gerar]').addEventListener('click', function () { f.querySelector('#usCod').value = gerarCodigo(); });
+    // a lista de contratos aparece para o fiscal e o analista, com as caixas de cada um
+    var mostraCts = function () {
+      var pp = (f.querySelector('input[name=usPapel]:checked') || {}).value, box = f.querySelector('#usCts');
+      box.hidden = pp !== 'fiscal' && pp !== 'analista';
+      box.querySelectorAll('[data-ctx]').forEach(function (el) { el.hidden = el.dataset.ctx !== pp; });
+    };
+    f.addEventListener('change', function (e) { if (e.target.name === 'usPapel') mostraCts(); });
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cts]');
+      if (!b) return;
+      var pp = (f.querySelector('input[name=usPapel]:checked') || {}).value;
+      f.querySelectorAll('#usCts [data-ctx="' + pp + '"] input[data-ct]').forEach(function (i) { i.checked = b.dataset.cts === 'todos'; });
+    });
+    mostraCts();
   }
   // o código só aparece agora: o banco guarda apenas a versão embaralhada
   function mostrarCodigo(nome, cod, novo) {
@@ -6151,7 +6307,7 @@
   }
   // ---------------- galeria (galeria.js): fotos deste aparelho e da equipe, conforme o acesso
   var galeria = null;
-  function galeriaOn() { return !!(banco.on && driveQ && window.Galeria); }
+  function galeriaOn() { return !!(banco.on && driveQ && window.Galeria && banco.login && podeFotos()); }
   function abrirGaleria(f) {
     if (!galeriaOn()) return;
     var c = active();
@@ -6165,11 +6321,12 @@
   function abrirGaleriaJa(f) {
     if (!galeria) {
       galeria = window.Galeria({
-        drive: driveQ, Banco: window.Banco, nivel: nivel, getLogin: function () { return banco.login; }, nomes: NOMES,
+        // o analista que tira fotos fica como o fiscal na galeria: Neste aparelho e Minhas
+        drive: driveQ, Banco: window.Banco, nivel: function () { return isAnalista() && podeFotos() ? 1 : nivel(); }, getLogin: function () { return banco.login; }, nomes: NOMES,
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
-        contratos: function () { return state.contracts; }, ativo: function () { var c = active(); return c && !visaoOn ? c.id : ''; },
+        contratos: ctsFoto, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });
@@ -6259,13 +6416,14 @@
     if (s) {
       banco.versao = Number(s.versao) || 0; banco.pend = Array.isArray(s.pend) ? s.pend : []; banco.cfg = s.cfg || {};
       banco.meta = s.meta && typeof s.meta === 'object' ? s.meta : {}; banco.conf = Array.isArray(s.conf) ? s.conf : [];
+      banco.acesso = s.acesso && typeof s.acesso === 'object' ? s.acesso : null;
     }
     banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
     initDrive();
     renderGaleriaBtn();
     $('btnGaleria').addEventListener('click', function () { abrirGaleria(); });
     banco.propostas = s && Array.isArray(s.propostas) ? s.propostas : [];
-    setLogin(lsGet(LOGIN_KEY));
+    setLogin(lsGet(LOGIN_KEY), true);
     if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
     initAprov();
@@ -6279,8 +6437,8 @@
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'visible') return;
       poll();
-      if (isEng()) {
-        conferirAcesso();   // quem tem a análise no aparelho: confere se ainda é engenheiro ou criador
+      if (isEng() || isAnalista()) {
+        conferirAcesso();   // quem tem a análise no aparelho: confere se ainda tem o acesso
         var ca = active();
         if (ca && analise.estado[ca.id] === 'erro') { delete analise.estado[ca.id]; renderEditor(); }
         // as marcas "medido sem execução" de outras pessoas chegam com a análise: lê de novo ao voltar ao app,
@@ -6291,7 +6449,7 @@
       }
     });
     setInterval(function () {
-      if (document.visibilityState !== 'visible' || !isEng()) return;
+      if (document.visibilityState !== 'visible' || (!isEng() && !isAnalista())) return;
       conferirAcesso();
       // marcas gravadas em outro aparelho: relê a análise da ponte aberta a cada 10 min (não no meio de uma gravação ou digitação)
       var ca = active();
@@ -6365,7 +6523,7 @@
     $('viewMapa').addEventListener('click', function () { setView('mapa'); });
     if (!window.MapaSNV || !window.L || !window.SNV_BR230) $('viewMapa').closest('.view-sw').hidden = true;
     if (window.TelaCheia) {
-      viewer = window.TelaCheia({ pageW: PAGE_W, pageH: PAGE_H, getSheets: function () { var c = active(); return renderSheets(c, isOae(c) && !!anOf(c) && folhaVistoria); } });
+      viewer = window.TelaCheia({ pageW: PAGE_W, pageH: PAGE_H, getSheets: function () { var c = active(); return renderSheets(c, isOae(c) && !!anOf(c) && folhaSoVist(c)); } });
       $('btnFull').addEventListener('click', function () { if (view === 'mapa' && mapa) mapa.openFull(); else viewer.open(); });
     } else {
       $('btnFull').hidden = true;

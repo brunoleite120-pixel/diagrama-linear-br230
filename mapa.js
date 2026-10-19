@@ -674,7 +674,12 @@
       });
       renderChips();
       renderLegend();
-      if (c.id !== lastCid) { lastCid = c.id; fit(); }
+      if (c.id !== lastCid) {
+        // outro contrato: o "Ir para km" e a marca da busca do contrato anterior saem
+        lastCid = c.id; q('#mpFindKm').value = '';
+        if (findMarker) { map.removeLayer(findMarker); findMarker = null; }
+        fit();
+      }
       drawKm();
       toggleLabels();
       if (live.loc) updateLive();
