@@ -29,6 +29,42 @@
       DN: { tag: 'VEGETAÇÃO OU SUJEIRA OBSERVADA', name: 'Vegetação ou sujeira observada', btn: 'Vegetação ou sujeira observada' } } },
     { key: 'pista', label: 'Pista, guarda-corpo e encontros', short: 'Pista / guarda-corpo', un: 'm', q: 'm de guarda-corpo ou pista com dano' }
   ];
+  // itens de cada grupo da ponte, marcados na vistoria com dano observado ou em execução (lista aprovada pelo usuário em 19/10/2026).
+  // Guardados no próprio grupo (sv.itens = chaves); saem nas Observações gerais da folha. med = serviço medido que trata o item
+  // (para o "medido × vistoriado" por item); sem med, o item não tem serviço próprio nas medições
+  var OAE_ITENS = {
+    juntas: [{ t: 'O que foi observado', l: [
+      { k: 'berco', n: 'Berço da junta', med: /ber[çc]os? de apoio de junta/i }, { k: 'vedacao', n: 'Vedação (perfil)' },
+      { k: 'pingadeira', n: 'Pingadeira', med: /pingadeira/i }, { k: 'asfalto', n: 'Asfalto sobre a junta', med: /revestimento asf/i },
+      { k: 'degrau', n: 'Degrau na pista' }] }],
+    apoios: [{ t: 'O que foi observado', l: [
+      { k: 'sujeira', n: 'Sujeira ou detritos', med: /limpeza de aparelhos/i }, { k: 'deslocado', n: 'Aparelho deslocado' },
+      { k: 'rompido', n: 'Aparelho rompido ou deformado' }, { k: 'berco_ap', n: 'Berço do aparelho danificado' }] }],
+    concreto: [{ t: 'O quê', l: [
+      { k: 'armadura', n: 'Armadura exposta', med: /concreto|demoli/i }, { k: 'desplacamento', n: 'Desplacamento', med: /concreto|demoli/i },
+      { k: 'fissuras', n: 'Fissuras', med: /concreto/i }, { k: 'infiltracao', n: 'Infiltração / eflorescência', med: /concreto/i }] },
+      { t: 'Onde', l: [{ k: 'laje', n: 'Laje' }, { k: 'viga', n: 'Viga' }, { k: 'pilar', n: 'Pilar' }, { k: 'travessa', n: 'Travessa' }, { k: 'encontro', n: 'Encontro / cortina' }] }],
+    pintura: [{ t: 'O que foi observado', l: [
+      { k: 'desgastada', n: 'Desgastada', med: /nata de cimento|caia[çc][ãa]o|ep[óo]xi/i }, { k: 'manchas', n: 'Manchas ou sujeira', med: /nata de cimento|caia[çc][ãa]o/i },
+      { k: 'pichacao', n: 'Pichação', med: /nata de cimento|caia[çc][ãa]o/i }] }],
+    drenagem: [{ t: 'O que foi observado', l: [
+      { k: 'entupido', n: 'Dreno entupido', med: /dreno/i }, { k: 'quebrado', n: 'Quebrado ou ausente', med: /dreno/i }, { k: 'curto', n: 'Dreno curto', med: /dreno/i }] }],
+    rotina: [{ t: 'O que foi observado', l: [
+      { k: 'veg_tabuleiro', n: 'Vegetação no tabuleiro', med: /poda|ro[çc]ada|vegeta[çc][ãa]o/i }, { k: 'veg_encontros', n: 'Vegetação nos encontros ou taludes', med: /poda|ro[çc]ada|vegeta[çc][ãa]o/i },
+      { k: 'lixo', n: 'Lixo ou entulho', med: /limpeza de ponte/i }, { k: 'assoreamento', n: 'Assoreamento sob a ponte' }] }],
+    pista: [{ t: 'O que foi observado', l: [
+      { k: 'guarda', n: 'Guarda-corpo ou barreira danificado', med: /guarda-corpo/i }, { k: 'buraco', n: 'Buraco ou trinca no pavimento' },
+      { k: 'erosao', n: 'Erosão no encontro ou aterro', med: /eros[ãa]o/i }, { k: 'degrau_cab', n: 'Degrau na cabeceira' }] }]
+  };
+  function itemDe(g, k) { var r = null; (OAE_ITENS[g] || []).forEach(function (b) { b.l.forEach(function (x) { if (x.k === k) r = x; }); }); return r; }
+  // itens marcados, pelo nome e na ordem da lista (chave desconhecida fica como está)
+  function itensDe(g, sv) {
+    var ks = (sv && Array.isArray(sv.itens)) ? sv.itens : [], out = [];
+    (OAE_ITENS[g] || []).forEach(function (b) { b.l.forEach(function (x) { if (ks.indexOf(x.k) >= 0) out.push(x); }); });
+    ks.forEach(function (k) { if (!itemDe(g, k)) out.push({ k: k, n: String(k) }); });
+    return out;
+  }
+  function minus1(t) { return t ? t.charAt(0).toLowerCase() + t.slice(1) : t; }
   // conservação (437, 438): mesmos estados das pontes, com os nomes da conservação (oaeStOf junta s.nomes por cima de OAE_STATUS).
   // tot = nome do grupo no total da folha; as chaves não repetem as dos pontos críticos nem as das pontes (fieldName e
   // fmtValue acham o grupo só pela chave)
@@ -1540,7 +1576,16 @@
     o.push(R(bx, g.yObs, bw, oh, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
     o.push(T(bx + 5, g.yObs + 12, 'Observações gerais', { size: r2(fitSize('Observações gerais', bw - 10, 7, true, 4.2)), bold: true }));
     var k = clamp((bw - 10) / 89.6, 0.62, 1), fs = r2(7 * k), lh = 8.9 * k, maxLines = Math.floor((oh - 26) / lh);
-    var lines = wrap(p.obs || '', bw - 10, fs).map(function (t) { return { t: t }; });
+    // os itens marcados na vistoria saem no alto, um grupo por linha (com o "outro item ou local" do grupo)
+    var itl = [];
+    servicesOf(c || ownerOf(p)).forEach(function (s) {
+      var sv = p.serv[s.key] || {}, k = oaeSt(sv), its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
+      if (!its.length && !(comQtd(k) && sv.n)) return;
+      var tx = s.short + (k === 'EX' ? ' (em execução)' : '') + ': ' + its.join(', ') + (sv.n ? (its.length ? ' · ' : '') + sv.n : '');
+      wrap('• ' + tx, bw - 10, fs).forEach(function (x, j) { itl.push({ t: j ? '  ' + x : x, cor: '#5C3D00' }); });
+    });
+    var lines = (itl.length ? [{ t: fitText('Itens observados:', bw - 10, fs, true), b: true, cor: '#7A5200' }].concat(itl, p.obs ? [{ t: '' }] : []) : [])
+      .concat(wrap(p.obs || '', bw - 10, fs).map(function (t) { return { t: t }; }));
     var altos = a ? (a.alertas || []).slice().sort(function (x, y) { return y.valor - x.valor; }) : [];
     if (altos.length) {
       if (lines.length) lines.push({ t: '' });
@@ -2582,7 +2627,8 @@
   // observado, em execução, N/A), estimativa do dano, onde, e as marcas de prioridade e de conclusão informada
   // mais(s, estado): botões a mais na linha das marcas (pontes, quem vê a análise: medido sem execução)
   // antes: HTML que entra logo depois das mudanças aguardando aprovação e antes dos grupos (a trafegabilidade do segmento)
-  function servHtml(p, list, extra, mais, antes) {
+  // itensMais(s, sv): HTML embaixo dos itens do grupo (pontes, quem vê a análise: em que medição cada item foi medido)
+  function servHtml(p, list, extra, mais, antes, itensMais) {
     var id = esc(p.id), h = propHtml(active().id, p) + (antes || ''), prop = propServ(active().id, p.id), cont = isContinuo(ownerOf(p));
     list.forEach(function (s) {
       var sv = p.serv[s.key] || (cont ? { st: 'NV' } : { st: 'NA', pct: 0 }), pv = prop[s.key], cur = cont ? oaeSt(sv) : sv.st;
@@ -2591,13 +2637,14 @@
         return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (cont ? oaeStOf(s, k) : STATUS[k]).btn + '</button>';
       }).join('');
       if (cont) {
-        var on = comQtd(cur), mx = mais ? mais(s, cur) : '';
+        var on = comQtd(cur), mx = mais ? mais(s, cur) : '', temItens = isOae(ownerOf(p)) && !!OAE_ITENS[s.key];
         h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q + ' (estimativa)') + '</small>' : '') +
           (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + (extra ? extra(s) : '') + '</div>' +
           '<div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
           (s.un ? '<div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (on && sv.q != null ? esc(sv.q) : '') + '"' +
             (on ? ' placeholder="estimativa"' : ' disabled') + ' aria-label="' + esc(s.short + ': estimativa, ' + s.q) + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
-          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="' + esc('Onde ou o quê: ' + s.short) + '">' : '') +
+          (on && temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
+          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="' + (temItens ? 'Outro item ou local (opcional)' : 'Onde / o quê (opcional)') + '" aria-label="' + esc((temItens ? 'Outro item ou local: ' : 'Onde ou o quê: ') + s.short) + '">' : '') +
           (on || mx ? '<div class="svc-marcas">' + (on ? Object.keys(OAE_MARCAS).map(function (m) {
               var pm = pv && comQtd(pv.st) && !!pv[m] !== !!sv[m] ? ' pend' : '';
               return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
@@ -2611,6 +2658,18 @@
         '<div class="pct-in"><input type="number" min="0" max="100" step="1" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (pctDisabled ? (sv.st === 'OK' ? 100 : '') : (Number(sv.pct) || 0)) + '"' + (pctDisabled ? ' disabled' : '') + ' aria-label="Percentual executado de ' + esc(s.short) + '"><span>%</span></div></div>';
     });
     return h;
+  }
+
+  // itens do grupo (dano observado ou em execução): botões que se marcam e desmarcam; "+ Outro" leva ao campo de texto.
+  // Proposta de fiscal com outro conjunto de itens: o botão fica com a borda de "aguardando aprovação"
+  function itensHtml(id, s, sv, pv) {
+    var ks = Array.isArray(sv.itens) ? sv.itens : [], pk = pv && comQtd(oaeSt(pv)) && Array.isArray(pv.itens) ? pv.itens : (pv && comQtd(oaeSt(pv)) ? [] : null);
+    return '<div class="svc-itens">' + OAE_ITENS[s.key].map(function (b, i) {
+      return '<div class="svc-it-b"><span class="svc-it-t">' + esc(b.t) + '</span><div class="svc-it-l" role="group" aria-label="' + esc(s.short + ': ' + b.t) + '">' + b.l.map(function (x) {
+        var on = ks.indexOf(x.k) >= 0, pend = pk && (pk.indexOf(x.k) >= 0) !== on ? ' pend' : '';
+        return '<button type="button" class="svc-it' + pend + '" data-act="set-item" data-id="' + id + '" data-svc="' + s.key + '" data-it="' + x.k + '" aria-pressed="' + on + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (on ? '✓ ' : '') + esc(x.n) + '</button>';
+      }).join('') + (i === OAE_ITENS[s.key].length - 1 ? '<button type="button" class="svc-it outro" data-act="item-outro" data-id="' + id + '" data-svc="' + s.key + '">+ Outro</button>' : '') + '</div></div>';
+    }).join('') + '</div>';
   }
 
   function pointCard(p) {
@@ -3017,7 +3076,8 @@
   function ponteHead(p, c) {
     var dots = servicesOf(c).map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
-      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
+      var its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
+      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (its.length ? ' · ' + its.join(', ') : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
     }).join('');
     var n = oaeNec(p, c), nc = n.dn ? 'dn' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok', w = palavrasDe(c);
     var nt = n.dn ? n.dn + ' ' + (n.dn === 1 ? w.dano : w.danos) : n.exec ? 'em exec.' : nc === 'nv' ? '–' : w.semDanoCurto;
@@ -3070,7 +3130,7 @@
         return '<button type="button" class="marca mne" data-act="an-mne" data-id="' + id + '" data-svc="' + s.key + '" data-med="' + esc(med) + '" aria-pressed="' + !!mk + '"' +
           ' title="' + esc('Uso interno: a ' + med + 'ª medição pagou este serviço, mas a vistoria não achou o serviço feito. Só aparece na folha com a análise.' + (mk && mk.por ? ' Marcado por ' + mk.por + '.' : '')) + '">' +
           '<i aria-hidden="true">✕</i>Medido sem execução · ' + esc(med) + 'ª</button>';
-      });
+      }, '', a ? function (s, sv) { return itensMedHtml(an, a, s, sv); } : null);
 
       if (!a && banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros, auxiliares de engenharia e o Administrador.</div>';
 
@@ -3319,12 +3379,42 @@
     if (!d || !isFinite(d)) d = c.dataVistoria ? new Date(c.dataVistoria + 'T12:00:00') : null;
     return d && isFinite(d) ? d.getFullYear() * 12 + d.getMonth() + 1 : null;
   }
+  // com itens marcados que têm serviço nas medições, a conferência é por item (o serviço daquele item), não pelo grupo inteiro
   function cmpGrupo(c, p, key, an, gi) {
     if (oaeSt(p.serv[key]) !== 'DN') return null;
+    var aP = an.pontes && an.pontes[p.id], its = aP ? itensDe(key, p.serv[key]).filter(function (x) { return x.med; }) : [];
+    if (its.length) {
+      var viI = vistIdx(c, p, key), nunca = [], logo = null;
+      its.forEach(function (x) {
+        var u = ultItem(aP, key, x);
+        if (!u) { nunca.push(minus1(x.n)); return; }
+        var miI = medIdx(an, u), dI = viI != null && miI != null ? viI - miI : null;
+        if (dI != null && dI >= 0 && dI <= CMP_MESES && (!logo || dI < logo.d)) logo = { d: dI, u: u, n: minus1(x.n) };
+      });
+      if (nunca.length) return { k: 'nunca', t: 'dano observado em ' + juntaE(nunca) + ' e nenhuma medição ' + (nunca.length === 1 ? 'deste item' : 'destes itens') + ' nesta ponte' };
+      if (logo) return { k: 'logo', t: 'dano observado em ' + logo.n + ' ' + (logo.d === 0 ? 'no mesmo mês da ' : logo.d + (logo.d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, logo.u) + ', que mediu ' + logo.n };
+      return null;
+    }
     if (!gi || !gi.ult) return { k: 'nunca', t: 'dano observado e nenhuma medição deste serviço nesta ponte' };
     var vi = vistIdx(c, p, key), mi = medIdx(an, gi.ult), d = vi != null && mi != null ? vi - mi : null;
     if (d == null || d < 0 || d > CMP_MESES) return null;
     return { k: 'logo', t: 'dano observado ' + (d === 0 ? 'no mesmo mês da ' : d + (d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, gi.ult) + ', que mediu este serviço' };
+  }
+  // última medição (nº) do serviço que trata o item nesta ponte, só entre os serviços do mesmo grupo (g); 0 = nunca medido
+  function ultItem(a, g, it) {
+    var u = 0;
+    ((a && a.servicos) || []).forEach(function (x) { if (x.v > 0 && x.g === g && it.med && it.med.test(x.nome || '')) medsNums(x.meds).forEach(function (n) { if (n > u) u = n; }); });
+    return u;
+  }
+  function juntaE(l) { return l.length < 2 ? l.join('') : l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1]; }
+  // aba Vistoria (quem vê a análise): em que medição cada item marcado foi medido nesta ponte
+  function itensMedHtml(an, a, s, sv) {
+    var its = itensDe(s.key, sv).filter(function (x) { return x.med; });
+    if (!its.length) return '';
+    return '<div class="svc-it-med">' + its.map(function (x) {
+      var u = ultItem(a, s.key, x);
+      return '<span' + (u ? '' : ' class="nunca"') + '><b>' + esc(x.n) + '</b> ' + esc(u ? 'medido na ' + medTxt(an, u) : 'nunca medido nesta ponte') + '</span>';
+    }).join('') + '</div>';
   }
   // resumo: os grupos com dano observado que pedem conferência com as medições
   function cmpResumoHtml(c, an) {
@@ -3979,7 +4069,7 @@
     }
     if (act === 'login') { openLogin(); return; }
     if (readOnly() && EDIT_ACTS.indexOf(act) >= 0) { toast('Para editar, entre com o seu código.'); openLogin(); return; }
-    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
+    if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
     // barra do gráfico: escolhe a medição (o topo e a curva ABC passam a ser só dela); tocar de novo, ou "Todas as medições", volta a todas
@@ -4009,6 +4099,11 @@
       return;
     }
     // abas da ponte (Vistoria | Medições), ordem dos serviços na aba Medições e grupos abertos ou fechados
+    if (act === 'item-outro') {
+      var art0 = b.closest('.svc'), inp = art0 && art0.querySelector('input.svc-nota');
+      if (inp) { inp.focus(); try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) { /* sem seleção */ } }
+      return;
+    }
     if (act === 'pt-aba') {
       ui.aba[b.dataset.id] = b.dataset.v === 'med' ? 'med' : 'vist';
       refazPonte(b.dataset.id, '.pt-abas [data-v="' + ui.aba[b.dataset.id] + '"]');
@@ -4133,7 +4228,7 @@
           if (oaeSt(sv) === st) st = 'NV';   // tocar de novo no status marcado desmarca (volta para sem vistoria)
           // serviço contínuo: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
           delete sv.pct;
-          if (!comQtd(st)) { delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; }
+          if (!comQtd(st)) { delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens; }
         } else if (st === 'OK') sv.pct = 100;
         else if (st === 'NA') sv.pct = 0;
         else if (sv.st === 'OK' || sv.st === 'NA') sv.pct = st === 'A' ? 50 : 0;
@@ -4147,6 +4242,18 @@
         if (b.dataset.svc === TRAFEG.key || !svm || !OAE_MARCAS[mk] || !comQtd(oaeSt(svm))) return;   // a trafegabilidade não tem marcas
         if (svm[mk]) delete svm[mk]; else svm[mk] = true;
         rerenderPoint(p);
+        break;
+      case 'set-item':
+        p = findPoint(b.dataset.id);
+        if (!p || !isOae(c)) return;
+        var svi = p.serv[b.dataset.svc], ki = b.dataset.it;
+        if (!svi || !itemDe(b.dataset.svc, ki) || !comQtd(oaeSt(svi))) return;
+        var li = Array.isArray(svi.itens) ? svi.itens.slice() : [], ji = li.indexOf(ki);
+        if (ji >= 0) li.splice(ji, 1); else li.push(ki);
+        if (li.length) svi.itens = li; else delete svi.itens;
+        rerenderPoint(p);
+        var fi = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="set-item"][data-svc="' + b.dataset.svc + '"][data-it="' + ki + '"]');
+        if (fi) try { fi.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
         break;
       case 'add-point':
         var pts = sortedPoints(c), last = pts[pts.length - 1];
@@ -4963,7 +5070,8 @@
       var so = OAE_SERVICES.concat(CONS_SERVICES).find(function (x) { return x.key === campo.slice(5); });
       if (so) {
         var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
-        return oaeStOf(so, k).name + (qt ? ' ' + qt : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', conclusão informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
+        var its = comQtd(k) ? itensDe(so.key, v).map(function (x) { return minus1(x.n); }) : [];
+        return oaeStOf(so, k).name + (qt ? ' ' + qt : '') + (its.length ? ': ' + its.join(', ') : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', conclusão informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
       }
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
       return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
@@ -5930,9 +6038,9 @@
     if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
-  var EDIT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
+  var EDIT_ACTS = ['set-st', 'set-marca', 'set-item', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
     'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit', 'preencher-trechos', 'gerar-segmentos'];
-  var POINT_ACTS = ['set-st', 'set-marca', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
+  var POINT_ACTS = ['set-st', 'set-marca', 'set-item', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev'];   // ações que mexem nos pontos
   function initBanco() {
     if (!banco.on) { var lb = $('btnLogin'); if (lb) lb.hidden = true; return; }
     prepareOld();

@@ -582,6 +582,18 @@ button.vg-tr.sel{background:var(--accent-soft)}
 .pt-dados>summary span{margin-left:4px;color:var(--ink-3)}
 .pt-dados[open]>summary{border-bottom:1px solid var(--line-2)}
 .pt-dados .grid{margin:10px 12px 12px}
+/* itens do grupo marcados na vistoria (dano observado ou em execução) */
+.svc-itens{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px;border:1px solid #F3D9A4;border-radius:var(--radius);background:#FFFBF1}
+.svc-it-b{display:flex;flex-direction:column;gap:5px}
+.svc-it-t{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.svc-it-l{display:flex;flex-wrap:wrap;gap:6px}
+.svc-it{min-height:40px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-align:left}
+.svc-it[aria-pressed="true"]{border-color:#E8C77A;background:#FFF4D6;color:#7A5200;font-weight:700}
+.svc-it.outro{border-style:dashed;border-color:#8A928D;color:var(--ink-2)}
+.svc-it.pend{box-shadow:inset 0 0 0 2px #C98A00}
+body.ro .svc-it{cursor:default}
+.svc-it-med{grid-column:1/-1;display:flex;flex-direction:column;gap:2px;padding:6px 9px;border-radius:6px;background:#EEF8F2;font-size:12.5px;line-height:1.35;color:#0F5A31}
+.svc-it-med .nunca{color:#B42318}
 .svc-ult{display:inline-block;margin-left:4px;padding:1px 6px;border:1px solid #8CCBA6;border-radius:4px;background:#DDF1E5;color:#0F5A31;font-size:11px;font-weight:700;white-space:nowrap;vertical-align:1px}
 .svc-ult.nunca{border:1px dashed #E0A39C;background:none;color:#B42318}
 .an-nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:6px;align-items:center}
