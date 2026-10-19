@@ -233,7 +233,45 @@
     /* celular deitado: pouca altura. Fica a tela cheia e um botão que mostra as outras ferramentas; o nome do contrato já está na barra do topo */
     '.mp-mais{display:none}',
     '@media (max-height:500px) and (orientation:landscape) and (max-width:1100px){.mp-mais{display:inline-flex}.mp-tools:not(.abertas)>*:not([data-mp="full"]):not(.mp-mais){display:none}.mp-title,.mp-legend{display:none}}',
-    '@media (prefers-reduced-motion:reduce){.mp-car svg{transition:none}}'
+    /* navegação parecida com a do Google Maps: o mapa gira na direção do carro (o quadro do mapa fica maior que a tela e gira em
+       volta da seta), a seta fica na parte de baixo da área livre; botões redondos à direita; deitado, os painéis vão para a esquerda */
+    '.mp .leaflet-control-container{font-size:12px;line-height:1.5}',
+    '.mp .leaflet-control-attribution{margin:0}',
+    '.mp-map.mp-gira{inset:auto;transition:transform .9s linear;will-change:transform}',
+    '.mp-girando .leaflet-tooltip{transform-origin:50% 50%}',
+    '.mp-girando .mp-place span{transform:translate(-50%,-50%) rotate(var(--mp-crot,0deg))}',
+    '.mp-navcar{width:44px;height:44px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}',
+    '.mp-navcar svg{width:44px;height:44px;transition:transform .9s linear}',
+    '.mp-navtool{display:none}',
+    '.mp.mp-navon .mp-tools>*:not(.mp-navtool):not([data-mp="full"]){display:none!important}',
+    '.mp.mp-navon .mp-tools>.mp-navtool{display:inline-flex!important}',
+    '.mp-navon .mp-tools>.mp-btn,.mp-navon .mp-tools>.mp-layers>.mp-btn{width:50px;height:50px;min-width:50px;min-height:50px;padding:0;border-radius:50%;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25)}',
+    '.mp-navon .mp-tools>.mp-btn svg,.mp-navon .mp-tools>.mp-layers>.mp-btn svg{width:22px;height:22px}',
+    '.mp-navon .mp-tools>.mp-btn .t,.mp-navon .mp-tools>.mp-layers>.mp-btn .t{display:none}',
+    '.mp-navon .mp-tools>[data-mp="nav-voz"]{background:var(--mp-panel);border-color:var(--mp-line);color:var(--mp-ink)}',
+    '.mp-navon .mp-tools>[data-mp="nav-voz"][aria-pressed="false"]{color:#B42318}',
+    '.mp-navon .mp-tools>[data-mp="nav-norte"] svg{transition:transform .9s linear}',
+    '.mp-navtop{padding:8px 14px 8px 10px}',
+    '.mp-navtop svg{width:38px;height:38px}',
+    '.mp-navbot{max-width:460px;padding:12px 14px}',
+    '.mp-nb{display:flex;align-items:center;gap:12px}',
+    '.mp-nb-t{flex:1 1 auto;min-width:0}',
+    '.mp-navbot .mp-nb-t b{font-size:24px;line-height:1.15;color:#0E7A43}',
+    '.mp-navbot .mp-nb-t small{font-size:14.5px;color:var(--mp-ink-2);margin-top:1px}',
+    '.mp-nb .mp-fim{min-height:48px;padding:0 22px;border-radius:999px;font-size:16px}',
+    '.mp-navbot .mp-nb-x{display:block;margin-top:6px;font-size:12px;color:var(--mp-ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.mp-centro{align-self:flex-start;min-height:46px;padding:0 18px;border-radius:999px;font-size:15px;color:var(--mp-accent);box-shadow:0 2px 8px rgba(0,0,0,.25)}',
+    '.mp-centro svg{width:18px;height:18px}',
+    '.mp.mp-navon:not(.mp-lado) .leaflet-bottom.leaflet-right{margin-bottom:calc(var(--mp-nb-h,120px) + 16px)}',
+    '.mp.mp-lado .mp-navtop{flex:0 1 auto;width:min(340px,42%)}',
+    '.mp.mp-lado .mp-bottom{right:auto;width:min(340px,42%)}',
+    '.mp.mp-lado .mp-navbot{max-width:none;padding:10px 12px}',
+    '.mp.mp-lado .mp-nav-txt b{font-size:21px}',
+    '.mp.mp-lado .mp-nav-txt span{font-size:14.5px}',
+    '.mp.mp-lado .mp-nav-txt small{display:none}',
+    '.mp.mp-lado .mp-navbot .mp-nb-t b{font-size:21px}',
+    '.mp.mp-lado .mp-nb .mp-fim{min-height:44px;padding:0 16px}',
+    '@media (prefers-reduced-motion:reduce){.mp-car svg,.mp-navcar svg,.mp-map.mp-gira,.mp-navon .mp-tools>[data-mp="nav-norte"] svg{transition:none}}'
   ].join('\n');
 
   function injectStyle() {
@@ -257,6 +295,12 @@
     rota: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z"/></svg>',
     busca: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>',
     mais: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+    // seta da navegação: aponta para cima; gira junto com o rumo do carro
+    navcar: '<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="19" fill="#FFFFFF" fill-opacity=".92"/><path d="M22 7 33 34 22 28.5 11 34Z" fill="#1A73E8" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+    bussola: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 16 12H8z" fill="#D93025"/><path d="M12 21.5 8 12h8z" fill="currentColor" opacity=".45"/></svg>',
+    voz: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
+    mudo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="m16 9 6 6M22 9l-6 6"/></svg>',
+    centro: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 20 12 16 5 20z" fill="currentColor"/></svg>',
     pin: '<svg viewBox="0 0 30 38" aria-hidden="true"><path d="M15 37S3 26 3 16a12 12 0 0 1 24 0c0 10-12 21-12 21z" fill="#B42318" stroke="#FFFFFF" stroke-width="2.5"/><circle cx="15" cy="15.5" r="4.5" fill="#FFFFFF"/></svg>'
   };
   // setas das manobras (traço branco, sobre o verde da instrução)
@@ -290,6 +334,15 @@
   function MapaSNV(opts) {
     var Lf = window.L, snv = opts.snv;
     if (!Lf || !snv || !opts.host) return null;
+    if (Lf.Tooltip && !Lf.Tooltip.prototype._mpGira) {
+      var tsp = Lf.Tooltip.prototype._setPosition;
+      Lf.Tooltip.prototype._setPosition = function (pos) {
+        tsp.call(this, pos);
+        var el = this._container, g = el && el.closest && el.closest('.mp-girando');
+        if (g) el.style.transform += ' rotate(' + (g.style.getPropertyValue('--mp-crot') || '0deg') + ')';
+      };
+      Lf.Tooltip.prototype._mpGira = true;
+    }
     injectStyle();
     var ref = Ref(snv), host = opts.host, rodovia = snv.rodovia || 'BR-230/PA';
     var notify = opts.notify || function () {}, nomes = opts.nomes || nomesPadrao();
@@ -307,17 +360,21 @@
           '</div>' +
           '<div class="mp-tools">' +
             '<button class="mp-btn" type="button" data-mp="full" title="Tela cheia">' + ICON.full + '<span class="t">Tela cheia</span></button>' +
+            '<button class="mp-btn mp-navtool" type="button" data-mp="nav-norte" aria-pressed="false" title="Norte para cima" aria-label="Norte para cima">' + ICON.bussola + '</button>' +
+            '<button class="mp-btn mp-navtool" type="button" data-mp="nav-voz" aria-pressed="true" title="Voz" aria-label="Voz">' + ICON.voz + '</button>' +
+            '<button class="mp-btn mp-navtool" type="button" data-mp="nav-ver" title="Visão geral da rota" aria-label="Visão geral da rota">' + ICON.fit + '</button>' +
             '<button class="mp-btn" type="button" data-mp="fit" title="Ver o trecho inteiro">' + ICON.fit + '<span class="t">Trecho</span></button>' +
             '<button class="mp-btn" type="button" data-mp="gps" aria-pressed="false" title="Posição ao vivo">' + ICON.gps + '<span class="t">Ao vivo</span></button>' +
             (opts.onPhoto ? '<button class="mp-btn" type="button" data-mp="foto" title="Foto com carimbo">' + ICON.cam + '<span class="t">Foto</span></button>' : '') +
             '<button class="mp-btn" type="button" data-mp="kml" title="Baixar KML">' + ICON.kml + '<span class="t">KML</span></button>' +
-            (opts.tiles ? '<div class="mp-layers"><button class="mp-btn" type="button" data-mp="bases" aria-expanded="false" aria-haspopup="true" title="Fundo do mapa">' + ICON.layers + '<span class="t mp-base-nome"></span></button>' +
+            (opts.tiles ? '<div class="mp-layers mp-navtool"><button class="mp-btn" type="button" data-mp="bases" aria-expanded="false" aria-haspopup="true" title="Fundo do mapa">' + ICON.layers + '<span class="t mp-base-nome"></span></button>' +
               '<div class="mp-bases" role="group" aria-label="Fundo do mapa" hidden></div></div>' : '') +
             '<button class="mp-btn mp-mais" type="button" data-mp="mais" aria-expanded="false" aria-label="Mais ferramentas do mapa">' + ICON.mais + '</button>' +
           '</div>' +
         '</div>' +
         '<div class="mp-bottom">' +
           '<div class="mp-card mp-live" hidden></div>' +
+          '<button class="mp-btn mp-centro" type="button" data-mp="follow" hidden>' + ICON.centro + 'Centralizar</button>' +
           '<div class="mp-card mp-navbot" hidden></div>' +
           '<div class="mp-legend"></div>' +
           '<div class="mp-chips" role="list" aria-label="Pontos do contrato"></div>' +
@@ -331,6 +388,7 @@
     map.attributionControl.addAttribution('Eixo e km: SNV/DNIT ' + esc(snv.versao));
     Lf.control.zoom({ position: 'bottomright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(map);
     Lf.control.scale({ imperial: false, position: 'bottomright' }).addTo(map);
+    if (map._controlContainer) root.appendChild(map._controlContainer);
     map.createPane('mpRoad').style.zIndex = 410;
     map.createPane('mpRota').style.zIndex = 415;
     map.createPane('mpPts').style.zIndex = 420;
@@ -809,18 +867,23 @@
       live.loc = ref.locate(ll[0], ll[1]);
       live.hist.push(live.loc.km);
       if (live.hist.length > 6) live.hist.shift();
-      var icon = Lf.divIcon({ className: 'mp-car', iconSize: [34, 34], iconAnchor: [17, 17], html: live.heading == null ? ICON.dot : ICON.car.replace('<svg ', '<svg style="transform:rotate(' + Math.round(live.heading) + 'deg)" ') });
+      var icon = nav ? null : iconeLivre();
       if (!live.marker) {
+        if (!icon) icon = iconeLivre();
         live.acc = Lf.circle(ll, { pane: 'mpCar', radius: c.accuracy || 0, weight: 1, color: '#1D63D8', fillColor: '#1D63D8', fillOpacity: 0.12, interactive: false }).addTo(map);
         live.marker = Lf.marker(ll, { pane: 'mpCar', icon: icon, keyboard: false, interactive: false }).addTo(map);
         map.setView(ll, Math.max(map.getZoom(), 15), { animate: !reduced() });
       } else {
-        live.marker.setLatLng(ll).setIcon(icon);
+        live.marker.setLatLng(ll);
+        if (icon) { live.marker.setIcon(icon); live.navIco = false; }
         live.acc.setLatLng(ll).setRadius(c.accuracy || 0);
         if (live.follow && !nav) map.panTo(ll, { animate: !reduced(), duration: 0.6 });
       }
       if (nav) navTick();
       updateLive();
+    }
+    function iconeLivre() {
+      return Lf.divIcon({ className: 'mp-car', iconSize: [34, 34], iconAnchor: [17, 17], html: live.heading == null ? ICON.dot : ICON.car.replace('<svg ', '<svg style="transform:rotate(' + Math.round(live.heading) + 'deg)" ') });
     }
     function direction() {
       var h = live.hist;
@@ -863,7 +926,7 @@
     // Na BR-230 a rota segue o eixo do SNV e funciona sem internet. Fora da rodovia, com internet, o caminho vem do OSRM
     // (servidor público com os dados do OpenStreetMap), com as manobras em português; sem internet, vai em linha reta até
     // o ponto mais próximo da rodovia e segue por ela. Saindo da rota, recalcula.
-    var VOZ_KEY = 'diagrama-linear.nav-voz';
+    var VOZ_KEY = 'diagrama-linear.nav-voz', NORTE_KEY = 'diagrama-linear.nav-norte';
     var OSRM = ['https://router.project-osrm.org/route/v1/driving/', 'https://routing.openstreetmap.de/routed-car/route/v1/driving/'];
     var nav = null;
     // cidades ao longo do eixo (nomes do SNV), para o "em direção a"
@@ -1015,7 +1078,7 @@
       if (!nav || !live.ll) return;
       var n = nav;
       if (!n.rota) { planeja(false); navUi(); return; }
-      if (n.chegou) { if (live.follow) map.setView(live.ll, Math.max(map.getZoom(), 16), { animate: !reduced() }); navUi(); return; }
+      if (n.chegou) { n.carLL = live.ll; desenhaSeta(); navUi(); if (live.follow) segue(16); return; }
       var rt = n.rota, pr = naRota(rt, live.ll), lim = Math.max(60, (live.accuracy || 0) * 1.5);
       n.fora = pr.d > lim ? n.fora + 1 : 0;
       if (n.fora >= 3 && Date.now() - n.ultPlano > 20000) { planeja(true); }
@@ -1031,6 +1094,10 @@
       n.dProx = Math.max(0, n.prox.s - pr.s);
       // falta da rota: do ponto atual até o fim
       var A = rt.pts[pr.i], B = rt.pts[Math.min(pr.i + 1, rt.pts.length - 1)], aqui = [A[0] + pr.t * (B[0] - A[0]), A[1] + pr.t * (B[1] - A[1])];
+      // a seta fica sobre a rota quando o GPS está perto dela; parado, aponta para o sentido da rota
+      n.carLL = pr.d <= lim ? aqui : live.ll;
+      n.rumo = live.heading != null && (live.speed || 0) > 1.5 ? live.heading : dist(A, B) > 1 ? bearing(A, B) : (live.heading || 0);
+      desenhaSeta();
       var resto = [aqui].concat(rt.pts.slice(pr.i + 1));
       n.lay.caso.setLatLngs(resto);
       n.lay.linha.setLatLngs(resto);
@@ -1048,11 +1115,8 @@
           }
         }
       }
-      if (live.follow) {
-        var v = live.speed || 0, z = v > 22 ? 14 : v > 11 ? 15 : 16;
-        map.setView(live.ll, z, { animate: !reduced() });
-      }
       navUi();
+      if (live.follow) segue();
     }
     function chegou() {
       if (!nav || nav.chegou) return;
@@ -1067,19 +1131,24 @@
       var n = nav;
       nav = null;
       if (n.lay) { map.removeLayer(n.lay.caso); map.removeLayer(n.lay.linha); map.removeLayer(n.lay.alvo); }
+      giraDesliga();
+      if (live.marker && live.ll) { live.marker.setLatLng(live.ll).setIcon(iconeLivre()); live.navIco = false; }
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* nada */ }
       navUi();
       if (n.gpsNosso && live.watch) stopGps(); else updateLive();
     }
     function navUi() {
-      var top = q('.mp-navtop'), bot = q('.mp-navbot');
+      var top = q('.mp-navtop'), bot = q('.mp-navbot'), centro = q('.mp-centro');
       root.classList.toggle('mp-navon', !!nav);
+      root.classList.toggle('mp-lado', !!nav && root.clientWidth > root.clientHeight * 1.15);
       top.hidden = bot.hidden = !nav;
+      centro.hidden = !nav || live.follow || !live.ll;
       if (!nav) { top.innerHTML = bot.innerHTML = ''; return; }
-      var n = nav, btns = '<button class="mp-btn" type="button" data-mp="nav-voz" aria-pressed="' + n.voz + '">Voz</button>' +
-        '<button class="mp-btn" type="button" data-mp="follow" aria-pressed="' + live.follow + '">Seguir</button>' +
-        '<button class="mp-btn" type="button" data-mp="nav-ver">Visão geral</button>' +
-        '<button class="mp-btn mp-fim" type="button" data-mp="nav-fim">Encerrar</button>';
+      var n = nav, bv = q('[data-mp="nav-voz"]'), bn = q('[data-mp="nav-norte"]');
+      bv.setAttribute('aria-pressed', String(n.voz)); bv.innerHTML = n.voz ? ICON.voz : ICON.mudo;
+      bv.title = n.voz ? 'Voz ligada (toque para silenciar)' : 'Voz desligada (toque para ligar)'; bv.setAttribute('aria-label', bv.title);
+      bn.setAttribute('aria-pressed', String(norteCima));
+      bn.title = norteCima ? 'Norte para cima (toque para a direção do carro)' : 'Direção do carro para cima (toque para norte)'; bn.setAttribute('aria-label', bn.title);
       if (n.chegou) {
         top.innerHTML = NAV_ICO.chegada + '<div class="mp-nav-txt"><b>Você chegou</b><span>' + esc(n.alvo.nome) + '</span></div>';
         bot.innerHTML = (live.loc && live.loc.dist < 2000 ? '<div class="mp-stamp">' + esc(stamp(rodovia, live.loc)) + '</div>' : '') +
@@ -1097,17 +1166,110 @@
       top.innerHTML = ico + '<div class="mp-nav-txt"><b>' + fmtDist(n.dProx) + '</b><span>' + esc(n.prox.t) + '</span>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>';
       var seg = rt.dur ? rt.dur * n.resta / Math.max(1, rt.total) : n.resta / (55 / 3.6);
       var fonte = rt.fonte === 'osrm' ? 'Caminho pelo OpenStreetMap' : rt.fonte === 'reta' ? 'Sem internet: linha reta até a rodovia' : 'Pela ' + rodovia + ' (eixo do SNV), funciona sem internet';
-      bot.innerHTML = '<b>' + fmtDist(n.resta) + ' · ' + fmtTempo(seg) + '</b>' +
-        '<small>chegada ~' + hora(seg) + ' · ' + esc(n.alvo.nome) + (live.loc && live.loc.dist < 2000 ? ' · você no km ' + km2(live.loc.km) : '') + '</small>' +
-        '<small>' + esc(fonte) + '</small><div class="mp-row">' + btns + '</div>';
+      // como no Google Maps: o tempo em destaque, distância e hora de chegada embaixo, e o Sair ao lado
+      bot.innerHTML = '<div class="mp-nb"><div class="mp-nb-t"><b>' + fmtTempo(seg) + '</b><small>' + fmtDist(n.resta) + ' · chegada ' + hora(seg) + '</small></div>' +
+        '<button class="mp-btn mp-fim" type="button" data-mp="nav-fim">Sair</button></div>' +
+        '<small class="mp-nb-x">' + esc(n.alvo.nome) + (live.loc && live.loc.dist < 2000 ? ' · você no km ' + km2(live.loc.km) : '') + ' · ' + esc(fonte) + '</small>';
+      // créditos e escala do mapa sobem para cima do cartão (em pé)
+      root.style.setProperty('--mp-nb-h', bot.offsetHeight + 'px');
     }
     function visaoGeral() {
       if (!nav) return;
       live.follow = false;
-      var b = nav.rota && nav.rota.pts.length > 1 ? Lf.latLngBounds(nav.rota.pts) : Lf.latLngBounds([nav.alvo.ll].concat(live.ll ? [live.ll] : []));
-      map.fitBounds(b, { animate: !reduced(), paddingTopLeft: [20, 130], paddingBottomRight: [70, 170], maxZoom: 16 });
+      giraDesliga();
       navUi();
+      var b = nav.rota && nav.rota.pts.length > 1 ? Lf.latLngBounds(nav.rota.pts) : Lf.latLngBounds([nav.alvo.ll].concat(live.ll ? [live.ll] : []));
+      var L = livre(), W = root.clientWidth, H = root.clientHeight;
+      map.fitBounds(b, { animate: !reduced(), paddingTopLeft: [L.x0 + 12, L.y0 + 12], paddingBottomRight: [W - L.x1 + 12, H - L.y1 + 12], maxZoom: 16 });
     }
+
+    // ---------------- câmera da navegação
+    // área do mapa que nenhum painel cobre (px dentro do .mp); a seta fica na parte de baixo dela
+    var norteCima = lsGet(NORTE_KEY) === '1';
+    var gira = { on: false, ang: 0, P: null, S: 0 }, mapEl = q('.mp-map');
+    function livre() {
+      var W = root.clientWidth, H = root.clientHeight, rr = root.getBoundingClientRect();
+      var t = q('.mp-navtop').getBoundingClientRect(), b = q('.mp-navbot').getBoundingClientRect(), tl = q('.mp-tools').getBoundingClientRect();
+      if (root.classList.contains('mp-lado')) {
+        var x0 = Math.max(t.width ? t.right : 0, b.width ? b.right : 0) - rr.left;
+        return { x0: x0 + 8, x1: (tl.width ? tl.left - rr.left : W) - 8, y0: 8, y1: H - 8 };
+      }
+      return { x0: 8, x1: W - 8, y0: (t.height ? t.bottom - rr.top : 0) + 8, y1: (b.height ? b.top - rr.top : H) - 8 };
+    }
+    function pontoCarro() {
+      var L = livre();
+      return root.classList.contains('mp-lado') ? [Math.round((L.x0 + L.x1) / 2), Math.round(L.y0 + (L.y1 - L.y0) * 0.68)]
+        : [Math.round(root.clientWidth / 2), Math.round(L.y0 + (L.y1 - L.y0) * 0.72)];
+    }
+    // o quadro do mapa vira um quadrado em volta da seta, grande o bastante para cobrir a tela em qualquer ângulo, e gira
+    function giraLiga(ang) {
+      var P = pontoCarro(), W = root.clientWidth, H = root.clientHeight;
+      var r = Math.ceil(Math.max(Math.hypot(P[0], P[1]), Math.hypot(W - P[0], P[1]), Math.hypot(P[0], H - P[1]), Math.hypot(W - P[0], H - P[1]))) + 8;
+      if (!gira.on || !gira.P || Math.abs(gira.P[0] - P[0]) > 20 || Math.abs(gira.P[1] - P[1]) > 20 || gira.S < 2 * r) {
+        gira.on = true; gira.P = P; gira.S = 2 * r;
+        root.classList.add('mp-girando'); mapEl.classList.add('mp-gira');
+        mapEl.style.width = mapEl.style.height = gira.S + 'px';
+        mapEl.style.left = (P[0] - r) + 'px'; mapEl.style.top = (P[1] - r) + 'px';
+        map.invalidateSize({ pan: false });
+      }
+      // pela menor volta: o ângulo acumula (de 359° para 1° gira 2°, não 358°)
+      var d = ((ang - gira.ang) % 360 + 540) % 360 - 180;
+      if (Math.abs(d) < 1 && mapEl.style.transform) return;
+      gira.ang += d;
+      mapEl.style.transform = 'rotate(' + (-gira.ang).toFixed(1) + 'deg)';
+      root.style.setProperty('--mp-crot', gira.ang.toFixed(1) + 'deg');
+      bussola();
+      if (Math.abs(d) >= 2) giraRotulos();
+    }
+    function giraDesliga() {
+      if (!gira.on) return;
+      var car = nav && nav.carLL || live.ll, P = gira.P, z = map.getZoom();
+      gira.on = false; gira.ang = 0; gira.P = null; gira.S = 0;
+      root.classList.remove('mp-girando'); mapEl.classList.remove('mp-gira');
+      mapEl.style.cssText = '';
+      root.style.removeProperty('--mp-crot');
+      map.invalidateSize({ pan: false });
+      if (car && P) centraEm(car, P, z, false);
+      bussola();
+      giraRotulos();
+    }
+    // põe o ponto ll na posição P da tela (mapa reto)
+    function centraEm(ll, P, z, anim) {
+      var W = root.clientWidth, H = root.clientHeight, pt = map.project(ll, z).subtract(Lf.point(P[0] - W / 2, P[1] - H / 2));
+      map.setView(map.unproject(pt, z), z, { animate: !!anim && !reduced() });
+    }
+    // os nomes (km, pontos, lugares) ficam em pé com o mapa girado
+    function giraRotulos() {
+      map.eachLayer(function (l) { var tt = l.getTooltip && l.getTooltip(); if (tt && tt._map && tt._container && tt._latlng) tt._updatePosition(); });
+    }
+    function bussola() {
+      var sv = q('[data-mp="nav-norte"] svg');
+      if (sv) sv.style.transform = gira.on ? 'rotate(' + (-gira.ang).toFixed(1) + 'deg)' : '';
+    }
+    function desenhaSeta() {
+      if (!nav || !live.marker) return;
+      var ll = nav.carLL || live.ll;
+      if (!live.navIco) { live.marker.setIcon(Lf.divIcon({ className: 'mp-navcar', iconSize: [44, 44], iconAnchor: [22, 22], html: ICON.navcar })); live.navIco = true; live.rumoSeta = 0; }
+      live.marker.setLatLng(ll);
+      var d = (((nav.rumo || 0) - (live.rumoSeta || 0)) % 360 + 540) % 360 - 180;
+      live.rumoSeta = (live.rumoSeta || 0) + d;
+      var sv = live.marker.getElement() && live.marker.getElement().querySelector('svg');
+      if (sv) sv.style.transform = 'rotate(' + live.rumoSeta.toFixed(1) + 'deg)';
+    }
+    // a câmera segue a seta: perto quando devagar, mais longe na estrada
+    function segue(zFixo) {
+      var ll = nav && nav.carLL || live.ll;
+      if (!ll) return;
+      var v = live.speed || 0, z = zFixo || (v > 22 ? 15 : v > 11 ? 16 : 17);
+      if (norteCima || !nav) { giraDesliga(); centraEm(ll, pontoCarro(), z, true); return; }
+      giraLiga(nav.rumo || 0);
+      map.setView(ll, z, { animate: !reduced() });
+    }
+    window.addEventListener('resize', function () { if (nav) { gira.P = null; setTimeout(function () { navUi(); if (live.follow) segue(); }, 150); } });
+    // tocar no mapa girado: para de seguir e o mapa volta reto (o toque do Leaflet já conta com o quadro normal)
+    root.addEventListener('pointerdown', function (e) {
+      if (gira.on && e.target.closest && e.target.closest('.mp-map')) { live.follow = false; giraDesliga(); navUi(); }
+    }, true);
 
     // ---------------- eventos
     root.addEventListener('click', function (e) {
@@ -1123,6 +1285,7 @@
       if (act === 'rota') { startNav({ km: Number(b.dataset.km), nome: b.dataset.nome || 'destino', pid: b.dataset.pid || '' }); return; }
       if (act === 'nav-fim') { navStop(); return; }
       if (act === 'nav-ver') { visaoGeral(); return; }
+      if (act === 'nav-norte') { norteCima = !norteCima; lsSet(NORTE_KEY, norteCima ? '1' : '0'); live.follow = true; navUi(); segue(); return; }
       if (act === 'nav-voz') { if (nav) { nav.voz = !nav.voz; lsSet(VOZ_KEY, nav.voz ? '1' : '0'); if (!nav.voz) try { window.speechSynthesis.cancel(); } catch (e2) { /* nada */ } navUi(); } return; }
       if (act === 'mais') { var tl = q('.mp-tools'), ab = !tl.classList.contains('abertas'); tl.classList.toggle('abertas', ab); b.setAttribute('aria-expanded', String(ab)); pedeArrumar(); return; }
       if (act === 'full') { if (isFull) closeFull(); else openFull(); }
@@ -1135,7 +1298,7 @@
       }
       else if (act === 'gps-stop') stopGps();
       else if (act === 'close-live') { live.err = ''; liveCard(''); setGpsBtn(); }
-      else if (act === 'follow') { live.follow = !live.follow; if (live.follow && live.ll) { if (nav) map.setView(live.ll, Math.max(map.getZoom(), 15)); else map.panTo(live.ll); } updateLive(); }
+      else if (act === 'follow') { live.follow = !live.follow; if (live.follow && live.ll) { if (nav) { navUi(); segue(); } else map.panTo(live.ll); } updateLive(); }
     });
     map.on('click', function () { basesMenu(false); });
     q('.mp-find').addEventListener('submit', function (e) { e.preventDefault(); goKm(q('#mpFindKm').value); });
