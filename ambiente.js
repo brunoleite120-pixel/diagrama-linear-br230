@@ -1,7 +1,7 @@
 /*
  * Ambiente do site: "oficial" (o link da equipe) ou "previa" (o link /previa/ e o app do grupo Prévia do TestFlight).
  * A prévia usa o banco de teste e guarda o que fica no aparelho com o prefixo "previa.", porque o site oficial
- * e a prévia ficam no mesmo endereço (github.io) e dividiriam o mesmo armazenamento.
+ * e a prévia ficam na mesma origem (via-230.pages.dev e via-230.pages.dev/previa/) e dividiriam o mesmo armazenamento.
  * As montagens (.github/workflows/pages.yml e ferramentas/montar-app.sh) trocam NOME e VERSAO abaixo; este arquivo carrega
  * antes dos outros. No app (iOS/Android), PACOTE (commit curto) e ORDEM (data do commit, em segundos) dizem qual pacote
  * está rodando, para atualizar.js saber se o do servidor é mais novo.

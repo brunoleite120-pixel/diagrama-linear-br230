@@ -6,12 +6,16 @@
 // A prévia (/previa/) tem o próprio service worker e o próprio cache; o do site oficial não mexe nela.
 var PREVIA = /\/previa\/$/.test(self.registration.scope);
 var FAMILIA = (PREVIA ? 'previa-' : '') + 'diagrama-linear-';
-var CACHE = FAMILIA + 'v71';
+var CACHE = FAMILIA + 'v72';
 var PASTA_PREVIA = PREVIA ? null : self.registration.scope + 'previa/';
+// endereço antigo (GitHub Pages), que sai do ar quando o repositório ficar privado: com a página fora do ar (404), o app
+// instalado por ele abre a cópia guardada, que mostra o aviso do endereço novo (aviso-endereco.js) e ainda envia o que ficou
+// pendente neste aparelho, em vez da página de erro do GitHub
+var ANTIGO = self.location.hostname === 'brunoleite120-pixel.github.io';
 var SHELL = [
   './', 'index.html', 'app.js', 'banco.js', 'drive.js', 'galeria.js', 'foto.js', 'mapa.js', 'snv-br230.js', 'snv-conversao.js', 'osm-br230.js', 'tela-cheia.js', 'logo.js', 'logo-dnit.js',
   'dados-iniciais.js', 'fundo-br230.js', 'lib/leaflet.js', 'manifest.webmanifest',
-  'ambiente.js', 'atualizar.js', 'relatorio.js', 'visao.js', 'relatorio-logos.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'
+  'ambiente.js', 'atualizar.js', 'relatorio.js', 'visao.js', 'relatorio-logos.js', 'aviso-endereco.js', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'
 ];
 var LIBS = [
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
@@ -48,6 +52,7 @@ function networkFirst(req) {
       function finish(r) { if (!done && r) { done = true; resolve(r); } }
       fetch(req).then(function (res) {
         if (res && res.ok) c.put(req, res.clone());
+        if (ANTIGO && res && res.status === 404) { cached(c, req).then(function (r) { finish(r || res); }); return; }
         finish(res);
       }, function () {
         cached(c, req).then(function (r) { if (!done) { done = true; resolve(r || Response.error()); } });

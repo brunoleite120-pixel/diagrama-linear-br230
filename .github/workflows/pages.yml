@@ -1,14 +1,17 @@
-# Publica o site no GitHub Pages, em dois endereços:
-#   link oficial (equipe)  https://brunoleite120-pixel.github.io/diagrama-linear-br230/         <- ramo "producao"
-#   prévia (testes)        https://brunoleite120-pixel.github.io/diagrama-linear-br230/previa/  <- ramo "main"
+# Publica o site no Cloudflare Pages (projeto via-230), em dois endereços:
+#   link oficial (equipe)  https://via-230.pages.dev/         <- ramo "producao"
+#   prévia (testes)        https://via-230.pages.dev/previa/  <- ramo "main"
 # A prévia usa o banco de teste (ambiente.js). Todo envio ao main atualiza só a prévia.
 # Para publicar no link oficial a versão que está na prévia:
 #   git push origin main:producao  e depois  gh workflow run pages.yml
 # Também monta o pacote de atualização do app (iOS/Android) de cada ambiente, que o app baixa sozinho (atualizar.js):
 #   <site>/app/versao.json + app-<commit>.zip (oficial)   e   <site>/previa/app/... (prévia)
 # O ambiente cujo ramo ainda não tem ferramentas/montar-app.sh fica sem pacote (o app dele ainda não sabe se atualizar).
-# O mesmo site também vai para o Cloudflare Pages (projeto via-230): https://via-230.pages.dev/ e https://via-230.pages.dev/previa/
-# Só quando o segredo CLOUDFLARE_API_TOKEN existe no repositório; se o Cloudflare falhar, o GitHub Pages publica do mesmo jeito.
+# Precisa do segredo CLOUDFLARE_API_TOKEN: sem ele, ou se o Cloudflare recusar o envio, a execução fica vermelha (o site e o
+# pacote dos apps NÃO foram atualizados). No fim, confere que o versao.json no ar é o que acabou de ser montado.
+# Endereço antigo (GitHub Pages, brunoleite120-pixel.github.io/diagrama-linear-br230): continua recebendo o mesmo site só
+# enquanto o repositório for público, como ponte para os apps e atalhos antigos (o aviso-endereco.js manda trocar de endereço).
+# Com o repositório privado (o plano grátis não tem Pages), esses passos são pulados sozinhos.
 name: Site (oficial e prévia)
 
 on:
@@ -28,6 +31,7 @@ concurrency:
 jobs:
   montar:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,28 +97,47 @@ jobs:
           pacote previa previa _site/previa
 
       - name: Publicar no Cloudflare Pages
-        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: b6dac35ea493329331f3298eeea3e1e1
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Sem o segredo CLOUDFLARE_API_TOKEN: não publiquei no Cloudflare"; exit 0; fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::error::Falta o segredo CLOUDFLARE_API_TOKEN: o site NÃO foi publicado"; exit 1; fi
           # confere a chave antes (só o tamanho e a resposta do Cloudflare; a chave em si não aparece no registro)
           echo "chave com ${#CLOUDFLARE_API_TOKEN} caracteres"
-          curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" | head -c 400; echo
-          W="npx --yes wrangler@4.20.0"
-          $W pages project create via-230 --production-branch producao || echo "projeto via-230 já existe"
-          $W pages deploy _site --project-name via-230 --branch producao --commit-dirty=true
+          R=$(curl -s -m 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" || true)
+          echo "$R" | head -c 400; echo
+          echo "$R" | jq -e '.success == true' > /dev/null || { echo "::error::O Cloudflare recusou a chave: o site NÃO foi publicado"; exit 1; }
+          npx --yes wrangler@4.20.0 pages deploy _site --project-name via-230 --branch producao --commit-dirty=true             --commit-message "oficial $(git -C oficial rev-parse --short HEAD) · prévia $(git -C previa rev-parse --short HEAD)"
 
-      - uses: actions/configure-pages@v5
+      - name: Conferir o que está no ar
+        run: |
+          # o versao.json que acabou de ser montado tem de ser o que o Cloudflare entrega (é o que os apps leem)
+          for s in "" "previa/"; do
+            f="_site/${s}app/versao.json"
+            [ -f "$f" ] || { echo "${s:-oficial/}: sem pacote do app"; continue; }
+            v=$(jq -r .versao "$f")
+            for i in 1 2 3 4 5 6; do
+              no_ar=$(curl -s -m 20 "https://via-230.pages.dev/${s}app/versao.json?t=$(date +%s)" | jq -r '.versao // empty' 2>/dev/null || true)
+              if [ "$no_ar" = "$v" ]; then echo "${s:-oficial/}: no ar $v"; break; fi
+              if [ "$i" = 6 ]; then echo "::error::${s:-oficial/}app/versao.json no ar = '$no_ar', esperado '$v'"; exit 1; fi
+              sleep 10
+            done
+          done
 
-      - uses: actions/upload-pages-artifact@v3
+      # endereço antigo (GitHub Pages): só enquanto o repositório for público
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/configure-pages@v5
+
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   publicar:
     needs: montar
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
