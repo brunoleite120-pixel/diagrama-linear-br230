@@ -56,8 +56,38 @@
     '.gl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:6px}',
     '.gl-t{position:relative;display:block;padding:0;border:0;border-radius:6px;overflow:hidden;background:var(--line-2,#E6E9E6);aspect-ratio:1/1;max-width:100%}',
     '.gl-t img{display:block;width:100%;height:100%;object-fit:cover}',
-    '.gl-t .gl-cap{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 4px;background:linear-gradient(transparent,rgba(0,0,0,.62));color:#fff;font-size:11px;line-height:1.25;text-align:left;',
-    '  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.gl-t .gl-cap{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 4px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;font-size:11px;line-height:1.25;text-align:left}',
+    // legenda em duas linhas: ponto e km na frente (em destaque); embaixo o dia (ou a hora) e quem tirou
+    '.gl-cap b,.gl-cap span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.gl-cap b{font-size:12px;font-weight:700}',
+    '.gl-cap span{color:#E3E8E5}',
+    // período: botão ao lado dos filtros, faixa da semana (‹ ›) e a janela que sobe de baixo
+    '.gl-per{display:flex;align-items:center;gap:6px;min-height:32px;max-width:100%;padding:4px 10px;border:1px solid var(--line,#D5DAD6);border-radius:6px;background:var(--panel,#fff);color:var(--ink,#17201C);font-size:13px;font-weight:600}',
+    '.gl-per.on{border:2px solid var(--accent,#1D4F91);background:var(--accent-soft,#E7EEF7);padding:3px 9px}',
+    '.gl-per svg{flex:none}',
+    '.gl-sem{flex:1 1 100%;display:flex;align-items:center;gap:8px;padding:4px;background:var(--panel,#fff);border:1px solid var(--line,#D5DAD6);border-radius:10px}',
+    '.gl-sem button{flex:none;width:44px;height:38px;border:0;border-radius:8px;background:var(--line-2,#EEF2EF);color:var(--ink,#17201C);font-size:20px;line-height:1}',
+    '.gl-sem button:disabled{color:#9AA29E;background:#F4F6F5}',
+    '.gl-sem div{flex:1;min-width:0;text-align:center;line-height:1.25}',
+    '.gl-sem b{display:block;font-size:14px}',
+    '.gl-sem small{display:block;font-size:12px;color:var(--ink-3,#5C6661)}',
+    '.gl-pf{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-end;justify-content:center;background:rgba(14,19,17,.45)}',
+    '.gl-pf-box{width:100%;max-width:520px;max-height:92%;overflow:auto;display:grid;gap:10px;padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));background:var(--panel,#fff);color:var(--ink,#17201C);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25)}',
+    '@media (min-width:640px){.gl-pf{align-items:center}.gl-pf-box{border-radius:16px}}',
+    '.gl-pf-top{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+    '.gl-pf-top h3{margin:0;font-size:17px;font-weight:700}',
+    '.gl-pf-ops{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
+    '.gl-pf-op{min-height:52px;border:1px solid var(--line,#C9D0CB);border-radius:12px;background:var(--panel,#fff);color:var(--ink,#17201C);text-align:left;padding:6px 12px;line-height:1.2}',
+    '.gl-pf-op b{display:block;font-size:14px}',
+    '.gl-pf-op small{display:block;font-size:12px;color:var(--ink-3,#5C6661)}',
+    '.gl-pf-op[aria-pressed="true"]{border:2px solid var(--accent,#1D4F91);background:var(--accent-soft,#E7EEF7);padding:5px 11px}',
+    '.gl-pf-datas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px;border-radius:12px;background:#F4F7F5;border:1px solid var(--line,#D5DAD6)}',
+    '.gl-pf-datas label{display:grid;gap:4px;font-size:12px;font-weight:700;color:var(--ink-2,#3B4540)}',
+    '.gl-pf-datas input{min-height:44px;min-width:0;width:100%;box-sizing:border-box;border:1px solid #9AA29E;border-radius:10px;padding:0 10px;font-size:15px;background:var(--panel,#fff);color:var(--ink,#17201C)}',
+    '.gl-pf-atal{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}',
+    '.gl-pf-atal button{min-height:36px;padding:0 12px;border-radius:18px;border:1px solid var(--line,#C9D0CB);background:var(--panel,#fff);font-size:13px;color:var(--ink,#17201C)}',
+    '.gl-pf-acts{display:flex;gap:8px}',
+    '.gl-pf-acts .btn{flex:1;min-height:46px;justify-content:center}',
     '.gl-b{position:absolute;top:5px;left:5px;padding:2px 6px;border-radius:999px;font-size:10.5px;font-weight:650;background:rgba(255,255,255,.92);color:var(--ink,#17201C)}',
     '.gl-b.fila{background:#FEF0C7;color:#7A2E0E}',
     '.gl-b.erro{background:#FEE4E2;color:#912018}',
@@ -128,9 +158,56 @@
   function hora(iso) { var d = data(iso); return d ? dia(iso) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : ''; }
   function mesKey(iso) { var d = data(iso); return d ? d.getFullYear() + '-' + pad(d.getMonth() + 1) : ''; }
   function mesNome(k) { var p = k.split('-'); return MESES[+p[1] - 1] + '/' + p[0]; }
+  function kmCurto(km) { return km == null || km === '' ? '' : 'km ' + Number(km).toFixed(2).replace('.', ','); }
   function kmTxt(km) { return km == null || km === '' ? '' : 'km ' + Number(km).toFixed(3).replace('.', ','); }
   function tam(b) { return !b ? '' : b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB'; }
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
+  // ---------------------------------------------------------------- período (dia, semana de segunda a domingo, mês, datas)
+  // datas em "aaaa-mm-dd" no fuso do aparelho; a escolha fica neste aparelho (PER_KEY) e vale para todas as abas
+  var MESL = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+  var SEMN = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  var PER_KEY = 'diagrama-linear.galeria-periodo', PER_MODOS = ['tudo', 'hoje', 'semana', 'mes', 'datas'];
+  function isoDia(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function dDia(s) { var p = String(s).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function maisDias(s, n) { var d = dDia(s); d.setDate(d.getDate() + n); return isoDia(d); }
+  function segundaDe(s) { var d = dDia(s); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return isoDia(d); }
+  function hojeIso() { return isoDia(new Date()); }
+  function diaLongo(s) { var d = dDia(s); return d.getDate() + ' de ' + MESL[d.getMonth()]; }
+  function ddmm(s) { var d = dDia(s); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }
+  function faixaTxt(a, b) {
+    if (a === b) return diaLongo(a);
+    var da = dDia(a), db = dDia(b);
+    return da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear() ? da.getDate() + ' a ' + diaLongo(b) : diaLongo(a) + ' a ' + diaLongo(b);
+  }
+  function diaDaFoto(iso) { var d = data(iso); return d ? isoDia(d) : ''; }
+  function validoIso(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')); }
+  // [início, fim] do período, ou null (todas as datas)
+  function intervaloPer(p) {
+    var h = hojeIso();
+    if (!p || p.modo === 'tudo') return null;
+    if (p.modo === 'hoje') return [h, h];
+    if (p.modo === 'semana') { var s = maisDias(segundaDe(h), 7 * (p.off || 0)), e = maisDias(s, 6); return [s, e > h ? h : e]; }
+    if (p.modo === 'mes') return [h.slice(0, 8) + '01', h];
+    if (p.modo === 'datas' && validoIso(p.de) && validoIso(p.ate)) return p.de <= p.ate ? [p.de, p.ate] : [p.ate, p.de];
+    return null;
+  }
+  function rotuloPer(p) {
+    var iv = intervaloPer(p);
+    if (!iv) return 'Todas as datas';
+    if (p.modo === 'hoje') return 'Hoje';
+    if (p.modo === 'mes') return 'Este mês';
+    if (p.modo === 'datas') return ddmm(iv[0]) + ' a ' + ddmm(iv[1]);
+    return !p.off ? 'Esta semana' : p.off === -1 ? 'Semana passada' : 'Semana ' + ddmm(iv[0]) + '–' + ddmm(maisDias(iv[0], 6));
+  }
+  function lerPer() {
+    try {
+      var p = JSON.parse(localStorage.getItem(PER_KEY) || 'null');
+      if (p && PER_MODOS.indexOf(p.modo) >= 0) return { modo: p.modo, off: Math.min(0, Math.round(+p.off || 0)), de: p.de || '', ate: p.ate || '' };
+    } catch (e) { /* sem armazenamento */ }
+    return { modo: 'semana', off: 0, de: '', ate: '' };
+  }
+  function salvarPer(p) { try { localStorage.setItem(PER_KEY, JSON.stringify(p)); } catch (e) { /* sem armazenamento */ } }
+  var CAL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
   function b64Blob(s, type) {
     var bin = atob(s), u8 = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
@@ -227,7 +304,7 @@
     { k: 'deletadas', t: 'Deletados', nivel: 3 }
   ];
   // agrupar: por mês ou por pessoa (escolha só para engenheiro e Administrador; o fiscal só vê as fotos dele, por mês)
-  var AGRUPAR = { mes: 'Por mês', pessoa: 'Por pessoa' };
+  var AGRUPAR = { mes: 'Por data', pessoa: 'Por pessoa' };   // por data: por dia até 16 dias; período maior, por semana
   var MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   function mesLongo(k) { var p = k.split('-'); return MESES_NOME[+p[1] - 1] + ' de ' + p[0]; }
   function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : 'mes'; }
@@ -425,6 +502,7 @@
   window.Galeria = function (o) {
     var nomesCt = o.nomes || nomesPadrao();   // funções de nome do contrato (o.nomes do app.js ou a cópia curta)
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
+    var per = lerPer(), pf = null;   // período escolhido; pf: rascunho da janela do período (null = fechada)
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
     var ver = -1, grande = null, ocupado = null, cancelar = false, cidAuto = false, mv = null, guardadas = {}, carregando = null;
@@ -570,12 +648,22 @@
       var c = contratos().find(function (x) { return x.id === cid; });
       return c ? nomesCt.nome(c) || 'Contrato' : 'Sem contrato';
     }
-    function filtrar() {
-      lista = itens.filter(function (it) {
-        return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
-          (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes);
-      });
+    function semPeriodo(it) {
+      return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
+        (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes);
     }
+    function noPeriodo(it, iv) { if (!iv) return true; var k = diaDaFoto(it.em); return !!k && k >= iv[0] && k <= iv[1]; }
+    function filtrar() {
+      var iv = intervaloPer(per);
+      lista = itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); });
+    }
+    // fotos que os outros filtros mostrariam, mas ficam fora do período (para não sumirem sem aviso)
+    function foraDoPeriodo() {
+      var iv = intervaloPer(per);
+      return iv ? itens.filter(function (it) { return semPeriodo(it) && !noPeriodo(it, iv); }).length : 0;
+    }
+    function contarPeriodo(p) { var iv = intervaloPer(p); return itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); }).length; }
+    function mudarPer(p) { per = p; salvarPer(per); sel = {}; render(); }
     function opcoes(sel0, vazio, pares) {
       return '<option value="">' + esc(vazio) + '</option>' + pares.map(function (p) {
         return '<option value="' + esc(p[0]) + '"' + (p[0] === sel0 ? ' selected' : '') + '>' + esc(p[1]) + '</option>';
@@ -614,20 +702,36 @@
         h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>';
       }
       if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
-      var mm = Object.keys(ms).sort().reverse().map(function (k) { return [k, mesNome(k)]; });
-      if (mm.length > 1 || filtro.mes) h += '<select data-f="mes" aria-label="Mês">' + opcoes(filtro.mes, 'Todos os meses', mm) + '</select>';
+      var iv = intervaloPer(per);
+      h += '<button type="button" class="gl-per' + (iv ? ' on' : '') + '" data-g="per" aria-haspopup="dialog" aria-label="Período: ' + esc(rotuloPer(per)) + '">' + CAL +
+        '<span>' + esc(rotuloPer(per)) + '</span><span aria-hidden="true">▾</span></button>';
       if (itens.length && nv() >= 2) {
         var g = modo();
         h += '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).map(function (k) {
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>';
       }
+      if (per.modo === 'semana' && iv) {
+        var off = per.off || 0;
+        h += '<div class="gl-sem"><button type="button" data-g="per-ant" aria-label="Semana anterior">‹</button><div><b>' +
+          esc(!off ? 'Esta semana' : off === -1 ? 'Semana passada' : 'Semana') + '</b><small>' + esc(faixaTxt(iv[0], maisDias(iv[0], 6))) + ' · segunda a domingo</small></div>' +
+          '<button type="button" data-g="per-prox" aria-label="Próxima semana"' + (off >= 0 ? ' disabled' : '') + '>›</button></div>';
+      }
       return h;
     }
+    // por data: um grupo por dia quando o período tem até 16 dias; maior (ou todas as datas), um por semana (segunda a domingo)
+    function porDia() { var iv = intervaloPer(per); return !!iv && (dDia(iv[1]) - dDia(iv[0])) / 864e5 <= 16; }
+    function grupoData(it, diario) {
+      var k = diaDaFoto(it.em);
+      if (!k) return 'Sem data';
+      if (diario) return SEMN[dDia(k).getDay()] + ', ' + diaLongo(k);
+      var s = segundaDe(k), e = maisDias(s, 6), h = hojeIso();
+      return 'Semana de ' + faixaTxt(s, e > h ? h : e);
+    }
     function grupos() {
-      var g = modo(), mapa = {}, ordem = [];
+      var g = modo(), mapa = {}, ordem = [], diario = porDia();
       lista.forEach(function (it, i) {
-        var k = g === 'pessoa' ? it.autor || 'Sem nome' : (mesKey(it.em) ? mesLongo(mesKey(it.em)) : 'Sem data');
+        var k = g === 'pessoa' ? it.autor || 'Sem nome' : grupoData(it, diario);
         if (!mapa[k]) { mapa[k] = []; ordem.push(k); }
         mapa[k].push(i);
       });
@@ -647,18 +751,21 @@
       if (!it.pid) return '<span class="gl-b sp">Sem ponto</span>';
       return locais[it.id] ? '<span class="gl-b">No aparelho</span>' : '';
     }
+    // legenda em duas linhas: "P14 · km 756,30" em destaque; embaixo o dia (a hora, quando o grupo já é o dia) e quem tirou.
+    // Em "Todos" os contratos, o nº do contrato na frente da 2ª linha ("314 · 16/10 · Bruno")
     function tile(it, i) {
-      var m = miniDe(it), cap = [it.pnome, kmTxt(it.km)].filter(Boolean).join(' · ') || hora(it.em);
-      if ((aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa') cap = (it.autor ? it.autor.split(' ')[0] + ' · ' : '') + cap;
-      // em "Todos" a legenda diz de qual contrato é, com o nome de tela ("Pontos Críticos 314 · P3")
-      if (!filtro.cid) cap = curto(it.cid) + ' · ' + cap;
-      // por mês o grupo não diz o dia: vai na legenda da foto
-      if (modo() === 'mes' && it.em && cap.indexOf(dia(it.em)) < 0) cap = dia(it.em).slice(0, 5) + ' · ' + cap;
+      var m = miniDe(it), l1 = [it.pnome, kmCurto(it.km)].filter(Boolean).join(' · ') || 'Sem ponto';
+      var d = data(it.em), quando = !d ? '' : modo() === 'mes' && porDia() ? pad(d.getHours()) + ':' + pad(d.getMinutes()) : pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
+      var quem = (aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa' && it.autor ? it.autor.split(' ')[0] : '';
+      var nCt = !filtro.cid ? ((/(\d+)\s*$/.exec(curto(it.cid)) || [])[1] || curto(it.cid)) : '';
+      var l2 = [nCt, quando, quem].filter(Boolean).join(' · ');
+      var cap = l1 + (l2 ? ' · ' + l2 : '');
+      var rotulo = [it.pid ? '' : 'Sem ponto', it.pnome, kmTxt(it.km), quem ? it.autor : '', hora(it.em)].filter(Boolean).join(', ');
       return '<button type="button" class="gl-t" data-i="' + i + '" data-id="' + esc(it.id) + '"' + (m ? '' : ' data-falta') +
-        (selecionando ? ' aria-pressed="' + !!sel[it.id] + '"' : '') + ' aria-label="' + esc(cap + ', ' + hora(it.em)) + '">' +
+        (selecionando ? ' aria-pressed="' + !!sel[it.id] + '"' : '') + ' aria-label="' + esc(rotulo) + '">' +
         (m ? '<img alt="" src="' + esc(m) + '">' : '<img alt="">') + badge(it) +
         (it.relatorio && !selecionando ? '<span class="gl-star" title="No relatório">★</span>' : '') +
-        (selecionando ? '<span class="gl-ck"></span>' : '') + '<span class="gl-cap">' + esc(cap) + '</span></button>';
+        (selecionando ? '<span class="gl-ck"></span>' : '') + '<span class="gl-cap" title="' + esc(cap) + '"><b>' + esc(l1) + '</b>' + (l2 ? '<span>' + esc(l2) + '</span>' : '') + '</span></button>';
     }
     function infoHtml() {
       if (aba === 'local') {
@@ -686,7 +793,7 @@
         if (pend && login() && !inf.busy) b += '<button type="button" class="btn small" data-g="enviar">Enviar agora</button>';
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         if (env) b += '<button type="button" class="btn small" data-g="limpar">Liberar espaço (' + env + ')</button>';
-        return '<span class="gl-txt">' + t + '</span>' + b + selBtn();
+        return '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
       }
       var txt = {
         minhas: 'Fotos que você enviou, de qualquer aparelho.',
@@ -698,8 +805,13 @@
       if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
       var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' +
         '<button type="button" class="btn small" data-g="drive-pastas">Pastas do Drive pelo nº do contrato</button>' : '';
-      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (lista.length !== itens.length ? ' de ' + itens.length : '') + ' · ' + txt + '</span>' + trazer +
+      var ivI = intervaloPer(per);
+      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (ivI ? ' · ' + esc(faixaTxt(ivI[0], ivI[1])) : '') + foraHtml() + ' · ' + txt + '</span>' + trazer +
         (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
+    }
+    function foraHtml() {
+      var n = foraDoPeriodo();
+      return n ? ' · <button type="button" class="gl-lk" data-g="per-tudo">' + plural(n, 'foto fora do período', 'fotos fora do período') + ': ver todas as datas</button>' : '';
     }
     function selBtn() {
       if (!lista.length) return '';
@@ -717,12 +829,60 @@
           relatorio: 'Nenhuma foto marcada para o relatório. Marque com ★ em "Todas".', deletadas: 'Nenhuma foto apagada do Drive.'
         }[aba]) + '</div>';
       }
-      if (!lista.length) return '<div class="gl-vazio">Nenhuma foto com esses filtros.</div>';
+      if (!lista.length) {
+        if (foraDoPeriodo()) {
+          return '<div class="gl-vazio">Nenhuma foto neste período (' + esc(rotuloPer(per).toLowerCase()) + ').<br>' +
+            (per.modo === 'semana' ? '<button type="button" class="btn small" data-g="per-ant">Ver a semana anterior</button> ' : '') +
+            '<button type="button" class="btn small" data-g="per-tudo">Todas as datas</button></div>';
+        }
+        return '<div class="gl-vazio">Nenhuma foto com esses filtros.</div>';
+      }
       return grupos().map(function (g) {
         return '<h3 class="gl-g">' + esc(g.nome) + ' <small>' + plural(g.idx.length, 'foto', 'fotos') + '</small>' +
           (selecionando ? '<button type="button" data-g="sel-grupo" data-idx="' + g.idx.join(',') + '">Selecionar o grupo</button>' : '') + '</h3>' +
           '<div class="gl-grid">' + g.idx.map(function (i) { return tile(lista[i], i); }).join('') + '</div>';
       }).join('');
+    }
+    // ---------------------------------------------------------------- janela do período
+    function pfAbrir() {
+      var off = per.off || 0, r = per.modo === 'semana' ? (off === 0 ? 'semana0' : off === -1 ? 'semana1' : 'semanaX') : per.modo;
+      var iv = intervaloPer(per) || [maisDias(hojeIso(), -6), hojeIso()];
+      pf = { r: r, de: iv[0], ate: iv[1] };
+      renderPf();
+      var b = q('.gl-pf-op[aria-pressed="true"]') || q('.gl-pf-op'); if (b) b.focus();
+    }
+    function pfFechar() { var aberta = !!pf; pf = null; var el = q('.gl-pf'); if (el) el.remove(); var b = aberta && q('.gl-per'); if (b) b.focus(); }
+    function pfPer() {
+      if (!pf) return per;
+      if (pf.r === 'semana0') return { modo: 'semana', off: 0, de: '', ate: '' };
+      if (pf.r === 'semana1') return { modo: 'semana', off: -1, de: '', ate: '' };
+      if (pf.r === 'semanaX') return { modo: 'semana', off: per.off || 0, de: '', ate: '' };
+      if (pf.r === 'datas') return { modo: 'datas', off: 0, de: pf.de <= pf.ate ? pf.de : pf.ate, ate: pf.de <= pf.ate ? pf.ate : pf.de };
+      return { modo: pf.r, off: 0, de: '', ate: '' };
+    }
+    function renderPf() {
+      if (!root || !pf) return;
+      var h = hojeIso(), s0 = segundaDe(h);
+      var ops = [
+        ['hoje', 'Hoje', diaLongo(h)], ['semana0', 'Esta semana', faixaTxt(s0, h)],
+        ['semana1', 'Semana passada', faixaTxt(maisDias(s0, -7), maisDias(s0, -1))], ['mes', 'Este mês', MESL[dDia(h).getMonth()].replace('.', '') + ' de ' + h.slice(0, 4)],
+        ['tudo', 'Todas as datas', plural(itens.filter(semPeriodo).length, 'foto', 'fotos')], ['datas', 'Escolher datas', 'início e fim']
+      ];
+      var marc = pf.r === 'semanaX' ? 'semana1' : pf.r, n = contarPeriodo(pfPer());
+      var html = '<div class="gl-pf-box" role="dialog" aria-modal="true" aria-labelledby="glPfT">' +
+        '<div class="gl-pf-top"><h3 id="glPfT">Período das fotos</h3><button type="button" class="btn small" data-g="pf-fechar" aria-label="Fechar">✕</button></div>' +
+        '<div class="gl-pf-ops">' + ops.map(function (o2) {
+          return '<button type="button" class="gl-pf-op" data-g="pf-op" data-k="' + o2[0] + '" aria-pressed="' + (o2[0] === marc) + '"><b>' + esc(o2[1]) + '</b><small>' + esc(o2[2]) + '</small></button>';
+        }).join('') + '</div>' +
+        (pf.r === 'datas' ? '<div class="gl-pf-datas"><label>De (início)<input type="date" id="glPfDe" value="' + esc(pf.de) + '" max="' + esc(h) + '"></label>' +
+          '<label>Até (fim)<input type="date" id="glPfAte" value="' + esc(pf.ate) + '" max="' + esc(h) + '"></label>' +
+          '<div class="gl-pf-atal"><button type="button" data-g="pf-ult" data-n="7">Últimos 7 dias</button><button type="button" data-g="pf-ult" data-n="15">Últimos 15 dias</button>' +
+          '<button type="button" data-g="pf-ult" data-n="30">Últimos 30 dias</button></div></div>' : '') +
+        '<div class="gl-pf-acts"><button type="button" class="btn" data-g="per-tudo">Todas as datas</button>' +
+        '<button type="button" class="btn primary" data-g="pf-aplicar">' + (n ? 'Ver ' + plural(n, 'foto', 'fotos') : 'Nenhuma foto: aplicar') + '</button></div></div>';
+      var el = q('.gl-pf');
+      if (!el) { el = document.createElement('div'); el.className = 'gl-pf'; root.appendChild(el); }
+      el.innerHTML = html;
     }
     function selecionadas() { return lista.filter(function (it) { return sel[it.id]; }); }
     // ações possíveis para um conjunto de fotos, conforme a aba e o acesso
@@ -1348,6 +1508,7 @@
     }
 
     function onClick(e) {
+      if (pf && e.target.classList && e.target.classList.contains('gl-pf')) { pfFechar(); return; }   // toque no fundo escuro
       var t = e.target.closest('[data-g],[data-aba],[data-ct],.gl-t');
       if (!t || !root.contains(t)) return;
       if (t.hasAttribute('data-ct')) {
@@ -1372,6 +1533,15 @@
         return;
       }
       var g = t.getAttribute('data-g');
+      if (g === 'per') { pfAbrir(); return; }
+      if (g === 'per-ant') { mudarPer({ modo: 'semana', off: (per.modo === 'semana' ? per.off || 0 : 0) - 1, de: '', ate: '' }); return; }
+      if (g === 'per-prox') { if (per.modo === 'semana' && (per.off || 0) < 0) mudarPer({ modo: 'semana', off: (per.off || 0) + 1, de: '', ate: '' }); return; }
+      if (g === 'per-tudo') { pfFechar(); mudarPer({ modo: 'tudo', off: 0, de: '', ate: '' }); return; }
+      if (g === 'pf-fechar') { pfFechar(); return; }
+      if (g === 'pf-op' && pf) { pf.r = t.getAttribute('data-k'); renderPf(); var b2 = q('.gl-pf-op[data-k="' + pf.r + '"]'); if (b2) b2.focus(); return; }
+      if (g === 'pf-ult' && pf) { var nd = +t.getAttribute('data-n'); pf.r = 'datas'; pf.ate = hojeIso(); pf.de = maisDias(pf.ate, -(nd - 1)); renderPf(); return; }
+      if (g === 'pf-aplicar') { var np = pfPer(); pfFechar(); mudarPer(np); return; }
+      if (t.closest('.gl-pf')) return;
       if (g === 'fechar') close();
       else if (g === 'entrar') { close(); if (o.entrar) o.entrar(); }
       else if (g === 'selecionar') { selecionando = true; sel = {}; render(); }
@@ -1405,6 +1575,10 @@
       else fazer(g, t.hasAttribute('data-um') ? [lista[ver]] : selecionadas());
     }
     function onChange(e) {
+      if (e.target.id === 'glPfDe' || e.target.id === 'glPfAte') {
+        if (pf && validoIso(e.target.value)) { pf.r = 'datas'; pf[e.target.id === 'glPfDe' ? 'de' : 'ate'] = e.target.value; renderPf(); }
+        return;
+      }
       if (e.target.id === 'glMvC') { pontosMover(); return; }
       if (e.target.id === 'glMvP') { sugestao(); return; }
       var f = e.target.getAttribute('data-f');
@@ -1416,6 +1590,7 @@
     function onKey(e) {
       if (!root || document.querySelector('.modal')) return;
       if (mv && e.key !== 'Escape') return;   // no painel de contrato e ponto as setas são das listas
+      if (pf) { if (e.key === 'Escape') pfFechar(); return; }
       if (e.key === 'Escape') { if (mv) fecharMover(); else if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
       else if (ver >= 0 && e.key === 'ArrowLeft' && ver > 0) abrir(ver - 1);
       else if (ver >= 0 && e.key === 'ArrowRight' && ver < lista.length - 1) abrir(ver + 1);
@@ -1444,6 +1619,9 @@
       if (pagina) root.removeAttribute('aria-modal'); else root.setAttribute('aria-modal', 'true');
       document.body.style.overflow = pagina ? '' : 'hidden';
       filtro = { cid: f.cid || '', pid: f.pid || '', autor: '', mes: '' };
+      // "Fotos deste ponto": todas as datas do ponto (sem trocar a escolha guardada); senão, o período guardado neste aparelho
+      per = f.pid ? { modo: 'tudo', off: 0, de: '', ate: '' } : lerPer();
+      pf = null;
       cidAuto = !f.cid;
       fecharMover();
       var vis = abasVisiveis().map(function (a) { return a.k; });
