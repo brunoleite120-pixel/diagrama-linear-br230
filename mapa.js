@@ -831,7 +831,60 @@
       var k = Math.cos(a[0] * Math.PI / 180), dx = (b[1] - a[1]) * Math.PI / 180 * R * k, dy = (b[0] - a[0]) * Math.PI / 180 * R;
       return Math.sqrt(dx * dx + dy * dy);
     }
+    // ---------------- bússola do aparelho: parado ou devagar, a seta (e o mapa, na navegação) gira com o celular,
+    // como no Google Maps; andando, vale o rumo do GPS
+    var bus = { h: null, t: 0, ligada: false, ult: 0 };
+    function anguloTela() {
+      var a = 0;
+      try { a = screen.orientation && typeof screen.orientation.angle === 'number' ? screen.orientation.angle : (typeof window.orientation === 'number' ? window.orientation : 0); } catch (e) { a = 0; }
+      return a || 0;
+    }
+    function onBussola(e) {
+      var h = null;
+      if (typeof e.webkitCompassHeading === 'number' && isFinite(e.webkitCompassHeading)) h = e.webkitCompassHeading;   // iPhone
+      else if (e.absolute && typeof e.alpha === 'number' && isFinite(e.alpha)) h = 360 - e.alpha;                        // Android
+      if (h == null) return;
+      h = ((h + anguloTela()) % 360 + 360) % 360;
+      // suaviza (a bússola treme) pela menor volta
+      if (bus.h == null || Date.now() - bus.t > 3000) bus.h = h;
+      else { var d = ((h - bus.h) % 360 + 540) % 360 - 180; bus.h = ((bus.h + d * 0.35) % 360 + 360) % 360; }
+      bus.t = Date.now();
+      if (Date.now() - bus.ult < 200) return;
+      bus.ult = Date.now();
+      aplicaBussola();
+    }
+    function ligaBussola() {
+      if (bus.ligada || typeof window.DeviceOrientationEvent === 'undefined') return;
+      function escuta() {
+        bus.ligada = true;
+        if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', onBussola);
+        else window.addEventListener('deviceorientation', onBussola);
+      }
+      try {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+          DeviceOrientationEvent.requestPermission().then(function (r) { if (r === 'granted') escuta(); }, function () {});
+        } else escuta();
+      } catch (e) { /* sem bússola: fica o rumo do GPS */ }
+    }
+    function andando() { return live.heading != null && (live.speed || 0) > 1.5; }
+    function bussolaFresca() { return bus.h != null && Date.now() - bus.t < 3000; }
+    // rumo da seta fora da navegação
+    function rumoLivre() { return andando() ? live.heading : bussolaFresca() ? bus.h : live.heading; }
+    function aplicaBussola() {
+      if (!live.marker || andando() || !bussolaFresca()) return;
+      if (nav) {
+        if (!nav.rota || nav.chegou) return;
+        nav.rumo = bus.h;
+        desenhaSeta();
+        if (live.follow && !norteCima && gira.on) giraLiga(nav.rumo);
+        return;
+      }
+      var el = live.marker.getElement(), sv = el && el.querySelector('svg');
+      if (!sv || !el.querySelector('path')) { live.marker.setIcon(iconeLivre()); return; }
+      sv.style.transform = 'rotate(' + Math.round(bus.h) + 'deg)';
+    }
     function startGps() {
+      ligaBussola();
       if (!navigator.geolocation) { live.err = 'Este navegador não informa a localização.'; updateLive(); return; }
       live.follow = true; live.err = ''; live.hist = [];
       liveCard('<div class="mp-stamp">Procurando o GPS…</div><div class="mp-sub">Permita o acesso à localização quando o navegador perguntar.</div>');
@@ -883,7 +936,8 @@
       updateLive();
     }
     function iconeLivre() {
-      return Lf.divIcon({ className: 'mp-car', iconSize: [34, 34], iconAnchor: [17, 17], html: live.heading == null ? ICON.dot : ICON.car.replace('<svg ', '<svg style="transform:rotate(' + Math.round(live.heading) + 'deg)" ') });
+      var r = rumoLivre();
+      return Lf.divIcon({ className: 'mp-car', iconSize: [34, 34], iconAnchor: [17, 17], html: r == null ? ICON.dot : ICON.car.replace('<svg ', '<svg style="transform:rotate(' + Math.round(r) + 'deg)" ') });
     }
     function direction() {
       var h = live.hist;
@@ -1049,6 +1103,7 @@
         alvo: Lf.marker(alvo.ll, { pane: 'mpCar', keyboard: false, interactive: false, icon: Lf.divIcon({ className: 'mp-alvo', iconSize: [30, 38], iconAnchor: [15, 36], html: ICON.pin }) }).addTo(map)
       };
       if (nav.voz) fala('Calculando a rota');   // dentro do toque: libera a voz no iPhone
+      ligaBussola();
       if (!live.watch) startGps(); else live.follow = true;
       if (!isFull && window.matchMedia && window.matchMedia('(pointer:coarse)').matches) openFull();
       navUi();
@@ -1096,7 +1151,7 @@
       var A = rt.pts[pr.i], B = rt.pts[Math.min(pr.i + 1, rt.pts.length - 1)], aqui = [A[0] + pr.t * (B[0] - A[0]), A[1] + pr.t * (B[1] - A[1])];
       // a seta fica sobre a rota quando o GPS está perto dela; parado, aponta para o sentido da rota
       n.carLL = pr.d <= lim ? aqui : live.ll;
-      n.rumo = live.heading != null && (live.speed || 0) > 1.5 ? live.heading : dist(A, B) > 1 ? bearing(A, B) : (live.heading || 0);
+      n.rumo = andando() ? live.heading : bussolaFresca() ? bus.h : dist(A, B) > 1 ? bearing(A, B) : (live.heading || 0);
       desenhaSeta();
       var resto = [aqui].concat(rt.pts.slice(pr.i + 1));
       n.lay.caso.setLatLngs(resto);
