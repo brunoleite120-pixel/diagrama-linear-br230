@@ -2005,7 +2005,9 @@
   }
 
   // ------------------------------------------------------------------ estado
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '' };
+  // aba/dadosAb/grpAb: aba aberta na ponte (vist | med), "Dados da ponte" aberto e grupos abertos na aba Medições ("pid|grupo");
+  // medModo: grupo | abc (aba Medições)
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, grpAb: {}, medModo: 'grupo' };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -2672,6 +2674,19 @@
     if (art) art.outerHTML = pointCard(p);
     lockEditor();
   }
+  // refaz o cartão da ponte (abas, medição escolhida) e devolve o foco ao botão equivalente, sem rolar a tela
+  function refazPonte(pid, foco) {
+    var p = findPoint(pid);
+    if (!p) return;
+    rerenderPoint(p);
+    var el = foco && document.querySelector('.pt[data-id="' + CSS.escape(pid) + '"] ' + foco);
+    if (el && !el.disabled) try { el.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+  }
+  // "Dados da ponte" (aba Vistoria) continua aberto ou fechado quando o cartão é refeito
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (d && d.classList && d.classList.contains('pt-dados') && d.dataset.id) ui.dadosAb[d.dataset.id] = d.open;
+  }, true);
 
   // ------------------------------------------------------------------ análise das medições (contratos de pontes)
   // Fica numa tabela sem leitura pública; só engenheiro e criador recebem (Banco.analise). Guardada no aparelho
@@ -2933,7 +2948,15 @@
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + ponteHead(p, c) + '</button>';
     if (open) {
       var id = esc(p.id), an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
-      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '') + '<div class="grid">';
+      // com a análise (engenheiro, auxiliar, Administrador): duas abas, Vistoria e Medições. Sem ela (fiscal), só a vistoria
+      var aba = a && ui.aba[p.id] === 'med' ? 'med' : 'vist';
+      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '');
+      if (a) h += '<div class="pt-abas" role="tablist" aria-label="Partes da ponte">' + [['vist', 'Vistoria'], ['med', 'Medições']].map(function (x) {
+        return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
+      }).join('') + '</div>';
+      if (a) h += conferirHtml(c, p, an, a, aba);
+      if (aba === 'med') return h + medicoesHtml(c, p, an, a) + '</div></article>';
+      h += '<details class="pt-dados" data-id="' + id + '"' + (ui.dadosAb[p.id] ? ' open' : '') + '><summary>Dados da ponte <span>· nome, km, município, medidas</span></summary><div class="grid">';
       h += field('Nome da ponte', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
       h += field('Código (OAE)', 'data-p="codigo" data-id="' + id + '" type="text"', p.codigo);
       h += field('KM (SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ')' + (p.kmConferir ? ' · estimado, conferir em campo' : ''), 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
@@ -2941,18 +2964,17 @@
       h += field('Município', 'data-p="municipio" data-id="' + id + '" type="text"', p.municipio);
       h += field('Extensão (m)', 'data-p="extensao" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtN(p.extensao));
       h += field('Largura (m)', 'data-p="largura" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtN(p.largura));
-      h += '</div>';
+      h += '</div></details>';
 
       var vis = vistoriaPonte(c, p);
-      h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
-      // com a análise: a última restauração do grupo (verde) e o alerta; o estado continua sendo o da vistoria
+      h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">última vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
+      // com a análise: a última medição de cada grupo (verde) ou "nunca medido"; o estado continua sendo o da vistoria.
+      // O que pede conferência fica no "Para conferir" do alto; os alertas, na aba Medições
       h += servHtml(p, servicesOf(c), function (s) {
-        var gi = a && a.grupos ? a.grupos[s.key] : null, cm = a ? cmpGrupo(c, p, s.key, an, gi) : null;
-        var cmH = cm ? '<small class="svc-med cmp">' + esc(cm.t) + '</small>' : '';
-        if (!gi) return cmH;
-        var mm = gi.ult ? mesMed(an, gi.ult) : '';
-        return cmH + (gi.ult ? ' <span class="svc-rest" title="Última medição com este serviço nesta ponte">restaurado ' + esc((mm ? mm + ' · ' : '') + gi.ult + 'ª') + '</span>' : '') +
-          (gi.altos ? '<small class="svc-med al">' + esc(comMes(an, gi.alerta || 'alerta')) + '</small>' : '');
+        if (!a) return '';
+        var gi = a.grupos ? a.grupos[s.key] : null, u = gi && gi.ult, mm = u ? mesMed(an, u) : '';
+        return u ? ' <span class="svc-ult" title="Última medição com este serviço nesta ponte">medido ' + esc(u + 'ª' + (mm ? ' · ' + mm : '')) + '</span>'
+          : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço nesta ponte">nunca medido</span>';
       }, function (s, cur) {
         // medido sem execução: marca interna, gravada à parte (Banco.analiseMarcar), só para quem vê a análise.
         // Aparece com dano observado ou em execução (junto das outras marcas) ou se já estiver marcada
@@ -2963,8 +2985,7 @@
           '<i aria-hidden="true">✕</i>Medido sem execução · ' + esc(med) + 'ª</button>';
       });
 
-      if (a) h += ponteAnaliseHtml(an, a, p.id);
-      else if (banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros, auxiliares de engenharia e o Administrador.</div>';
+      if (!a && banco.on && !isEng()) h += '<div class="an-note">As medições e os alertas desta ponte aparecem para engenheiros, auxiliares de engenharia e o Administrador.</div>';
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
@@ -3239,8 +3260,6 @@
   function comMes(an, t) {
     return String(t == null ? '' : t).replace(/(\d+)ª(?!\s*(etapa|\(|saída))/g, function (x, n) { var mm = mesMed(an, n); return mm ? x + ' (' + mm + ')' : x; });
   }
-  var DET0 = 'Toque numa barra para ver só aquela medição.';
-  function detTxt(med) { return med ? 'Toque de novo na barra da ' + medTxt(anOf(active()), med) + ' ou em “Todas as medições” para voltar ao total.' : DET0; }
   // topo de "Medições nesta ponte": "Todas as medições" com a soma, ou só os dados da medição escolhida no gráfico
   function topoHtml(an, a, med) {
     var ms = an.medicoes || [], m = null, h = '', k = String(med || ''), E = etapaDe(an);
@@ -3250,8 +3269,7 @@
       (an.etapas || []).map(function (e) {
         var on = !m && E === e.etapa, i = a.et && a.et[e.etapa];
         return '<button type="button" class="an-chip' + (on ? ' on' : '') + '" data-act="an-etapa" data-v="' + e.etapa + '" aria-pressed="' + on + '">' + e.etapa + 'ª etapa <b>' + fmtBRL(i ? i.v : 0) + '</b></button>';
-      }).join('') +
-      (m ? '<span class="an-chip on">' + esc(medTxt(an, m.n)) + ' <b>' + fmtBRL(v) + '</b></span>' : '') + '</div>';
+      }).join('') + '</div>';   // a medição escolhida aparece entre ‹ ›, logo abaixo do gráfico
     if (m) {
       var sv = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = sv.some(function (s) { return s.por; });
       var nsv = sv.filter(function (s) { return temPor ? !!(s.por && s.por[k]) : medsNums(s.meds).indexOf(m.n) >= 0; }).length;
@@ -3278,40 +3296,65 @@
     if (ult.length) h += '<div class="an-line">Últimas com serviço: ' + ult.map(function (x) { return x.n + 'ª (' + esc(x.mes) + ') ' + fmtBRL(Number(a.meses[String(x.n)])); }).join(' · ') + '</div>';
     return h + estL;
   }
-  // troca o topo e a curva ABC da ponte aberta, pela medição escolhida no gráfico (ou todas)
-  function abcTrocar(art) {
-    var pid = art && art.dataset.id, an = anOf(active()), a = an && an.pontes ? an.pontes[pid] : null;
-    if (!a) return;
-    var box = art.querySelector('.abc-box'), topo = art.querySelector('.an-topo');
-    if (box) box.innerHTML = abcHtml(an, a, medSelDe(pid));
-    if (topo) topo.innerHTML = topoHtml(an, a, medSelDe(pid));
+  // ---------------- ponte em duas abas (Vistoria | Medições), só para quem vê a análise
+  // "Para conferir": grupos com dano observado sem medição, ou observado até 6 meses depois da medição que pagou o serviço
+  // (cmpGrupo). Aparece nas duas abas, com o atalho para a outra
+  function conferirHtml(c, p, an, a, aba) {
+    var rows = [];
+    servicesOf(c).forEach(function (s) {
+      var cm = cmpGrupo(c, p, s.key, an, a.grupos ? a.grupos[s.key] : null);
+      if (!cm) return;
+      var qt = fmtQtd(s, (p.serv[s.key] || {}).q);
+      rows.push(s.short + ': ' + (qt ? cm.t.replace(/^dano observado/, 'dano observado (' + qt + ')') : cm.t) + '.');
+    });
+    if (!rows.length) return '';
+    var outra = aba === 'med' ? 'vist' : 'med';
+    return '<section class="pt-conf" aria-label="Para conferir"><b>Para conferir · ' + rows.length + '</b>' + rows.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') +
+      '<button type="button" class="pt-conf-ir" data-act="pt-aba" data-id="' + esc(p.id) + '" data-v="' + outra + '">' + (outra === 'med' ? 'Ver nas Medições ›' : 'Ver na Vistoria ›') + '</button></section>';
   }
-  // medições da ponte (barras por medição), serviços pela curva ABC e alertas
-  function ponteAnaliseHtml(an, a, pid) {
-    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = medSelDe(pid) || null, E = etapaDe(an);
+  // medições com serviço nesta ponte, na etapa mostrada (as que ‹ › percorrem)
+  function medsComServ(an, a) {
+    var E = etapaDe(an);
+    return (an.medicoes || []).filter(function (m) { return Number(a.meses[String(m.n)]) > 0 && (!E || m.etapa === E); });
+  }
+  // aba Medições: escolha da medição (etapas, gráfico, ‹ ›), os serviços por grupo da vistoria (ou pela curva ABC) e os alertas
+  function medicoesHtml(c, p, an, a) {
+    var ms = an.medicoes || [], mx = {}, max = 0, h = '', sel = medSelDe(p.id) || null, E = etapaDe(an);
     (a.mx || []).forEach(function (n) { mx[n] = 1; });
     ms.forEach(function (m) { max = Math.max(max, Number(a.meses[String(m.n)]) || 0); });
-    // só o histórico: total, por etapa e as últimas medições com serviço (sem comparar com o estimado do Anexo VI)
     if (sel && !ms.some(function (m) { return m.n === sel; })) sel = null;
     h += '<div class="section-title">Medições nesta ponte</div>';
     h += '<div class="an-topo">' + topoHtml(an, a, sel) + '</div>';
     var corte = -1;
     ms.forEach(function (m, i) { if (corte < 0 && i > 0 && m.etapa !== ms[i - 1].etapa) corte = i; });
-    // cada barra é um botão: no celular não há "passar o mouse", então o toque mostra a medição embaixo do gráfico
+    // cada barra é um botão: no celular não há "passar o mouse"; tocar escolhe a medição, tocar de novo volta ao total
     h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido nesta ponte em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
       var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição com alerta' : '') + (it ? ' · ' + it : '') : ' · sem serviço nesta ponte');
-      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + (E && m.etapa !== E ? ' fora' : '') + '" data-act="med-bar" data-n="' + m.n + '" data-tip="' + esc(tip) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
+      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + (E && m.etapa !== E ? ' fora' : '') + '" data-act="med-bar" data-n="' + m.n + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
     if (ms.length) {
       h += '<div class="an-axis"><span>' + esc(ms[0].mes) + '</span>' + (corte > 0 ? '<span>' + (ms[corte].etapa) + 'ª etapa a partir de ' + esc(ms[corte].mes) + '</span>' : '') + '<span>' + esc(ms[ms.length - 1].mes) + '</span></div>';
       h += '<div class="an-leg"><span><i class="on"></i>com serviço</span><span><i class="al"></i>medição com alerta</span></div>';
-      h += '<div class="an-det' + (sel ? ' on' : '') + '" aria-live="polite">' + esc(detTxt(sel)) + '</div>';
     }
     h += '</div>';
-
-    h += '<div class="abc-box">' + abcHtml(an, a, sel) + '</div>';
+    // ‹ › pulam entre as medições com serviço nesta ponte; o meio mostra a escolhida e, tocado, volta ao total
+    var com = medsComServ(an, a);
+    if (com.length) {
+      var vSel = sel ? Number(a.meses[String(sel)]) || 0 : 0, iE = E && a.et ? a.et[E] : null;
+      var meio = sel ? esc(sel + 'ª · ' + mesMed(an, sel)) + ' · <b>' + (vSel ? fmtBRL(vSel) : 'sem serviço') + '</b>'
+        : esc(E ? E + 'ª etapa' : 'Todas as medições') + ' · <b>' + fmtBRL(E ? (iE ? iE.v : 0) : a.tot) + '</b>';
+      h += '<div class="an-nav"><button type="button" class="an-nav-s" data-act="med-nav" data-d="-1" aria-label="Medição com serviço anterior">‹</button>' +
+        '<button type="button" class="an-nav-c' + (sel ? ' on' : '') + '" data-act="abc-todas"' + (sel ? ' title="Voltar ao total"' : ' disabled') + '>' + meio + '</button>' +
+        '<button type="button" class="an-nav-s" data-act="med-nav" data-d="1" aria-label="Próxima medição com serviço">›</button></div>';
+      h += '<div class="an-nav-t">‹ › pulam entre ' + (com.length === 1 ? 'a única medição' : 'as ' + com.length + ' medições') + ' com serviço' + (E ? ' na ' + E + 'ª etapa' : '') + (sel ? ' · o meio volta ao total' : '') + '</div>';
+    }
+    var modo = ui.medModo === 'abc' ? 'abc' : 'grupo';
+    h += '<div class="seg an-modo" role="group" aria-label="Ordem dos serviços">' + [['grupo', 'Por grupo'], ['abc', 'Por valor (ABC)']].map(function (x) {
+      return '<button type="button" data-act="med-modo" data-v="' + x[0] + '" aria-pressed="' + (modo === x[0]) + '">' + x[1] + '</button>';
+    }).join('') + '</div>';
+    h += '<div class="abc-box">' + (modo === 'abc' ? abcHtml(an, a, sel) : gruposMedHtml(c, p, an, a, sel)) + '</div>';
 
     var al = alertasEm(a, E).slice().sort(function (x, y) { return (y.rep != null ? y.rep : y.valor) - (x.rep != null ? x.rep : x.valor); });
     h += '<div class="section-title">Alertas da análise' + (E ? ' · ' + E + 'ª etapa' : '') + '</div>';
@@ -3322,7 +3365,78 @@
         (x.gap != null ? ' · voltou em ' + x.gap + (x.gap === 1 ? ' mês' : ' meses') : '') + '</small></div>' +
         '<span class="an-v">' + (x.tipo === 'atendimentos' ? '<b>' + fmtBRL(x.rep) + '</b><small>depois da 1ª passagem</small>' : '<b>' + fmtBRL(x.valor) + '</b><small>juntas medidas</small>') + '</span></div>';
     });
+    h += '<div class="an-rod">' + esc((modo === 'grupo' ? 'Valores ' + (sel ? 'da ' + medTxt(an, sel) : E ? 'da ' + E + 'ª etapa' : 'de todas as medições') + ' em cada grupo; o estado vem da aba Vistoria. ' : 'Classe A/B/C pelo valor; a quantidade em destaque. ') +
+      'Medição registra quantidade e valor; não comprova execução.') + '</div>';
     return h;
+  }
+  // serviços medidos, nos grupos da vistoria (na ordem da aba Vistoria) e, por último, "Acesso e limpeza" (plataforma e jato,
+  // que não são grupo da vistoria). Por grupo só se soma o valor; a quantidade fica em cada serviço
+  var MED_ACESSO = { key: 'acesso', short: 'Acesso e limpeza' };
+  function gruposMedHtml(c, p, an, a, med) {
+    var pid = p.id, k = String(med || ''), E = med ? 0 : etapaDe(an), ei = E ? etapaInfo(an, E) : null, ms = an.medicoes || [], mMed = null;
+    var base = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = base.some(function (s) { return s.por; });
+    ms.forEach(function (m) { if (m.n === med) mMed = m; });
+    // medições abertas em cada serviço: as da etapa da medição escolhida, as da etapa mostrada ou todas
+    var etF = med ? (mMed && mMed.etapa) || 0 : E;
+    var faixa = ms.filter(function (m) { return !etF || m.etapa === etF; });
+    function noRecorte(s) {
+      if (med) {
+        if (temPor) return s.por && s.por[k] ? { q: Number(s.por[k][0]) || 0, v: Number(s.por[k][1]) || 0 } : null;
+        return medsNums(s.meds).indexOf(med) >= 0 ? { q: s.q, v: s.v, tot: true } : null;
+      }
+      if (E) { var x = noEscopo([s], ei.ns, temPor)[0]; return x ? { q: x.q, v: x.v, tot: !temPor } : null; }
+      return { q: s.q, v: s.v };
+    }
+    var grupos = servicesOf(c).concat([MED_ACESSO]).map(function (g) {
+      var it = base.filter(function (s) { return s.g === g.key; }).sort(function (x, y) { return y.v - x.v; }).map(function (s) {
+        var r = noRecorte(s); return r ? { s: s, q: r.q, v: r.v, tot: r.tot } : null;
+      }).filter(Boolean);
+      return { g: g, it: it, v: it.reduce(function (t, x) { return t + x.v; }, 0) };
+    });
+    if ((med || E) && !grupos.some(function (x) { return x.it.length; })) return '<div class="an-note">Nenhum serviço medido nesta ponte na ' + esc(med ? medTxt(an, med) : E + 'ª etapa (' + ei.de + ' a ' + ei.ate + ')') + '.</div>';
+    // abre sozinho o grupo de maior valor no recorte; o que a pessoa abriu ou fechou fica como ela deixou
+    var maior = null;
+    grupos.forEach(function (x) { if (x.v > 0 && (!maior || x.v > maior.v)) maior = x; });
+    var h = '<div class="mg-lista">';
+    grupos.forEach(function (x) {
+      var g = x.g, ac = g === MED_ACESSO, gi = a.grupos ? a.grupos[g.key] : null, n = x.it.length, ch = pid + '|' + g.key;
+      var ab = Object.prototype.hasOwnProperty.call(ui.grpAb, ch) ? ui.grpAb[ch] : x === maior;
+      if (ac && !n && !(gi && gi.ult)) return;   // acesso e limpeza só aparece se a ponte já teve
+      var est;
+      if (ac) est = '<span class="mg-e nv">fora dos grupos da vistoria</span>';
+      else {
+        var sv = p.serv[g.key], st = oaeSt(sv), qt = comQtd(st) ? fmtQtd(g, sv.q) : '';
+        est = st === 'NV' ? '<span class="mg-e nv">sem vistoria</span>' : '<span class="mg-e ' + st.toLowerCase() + '">' + esc(oaeStOf(g, st).name + (qt ? ' ' + qt : '')) + '</span>';
+      }
+      var ult = gi && gi.ult ? '<span class="mg-u">última ' + gi.ult + 'ª</span>' : '<span class="mg-u nunca">nunca medido</span>';
+      var vazio = gi && gi.ult && (med || E) ? 'Sem serviço deste grupo ' + (med ? 'na ' + medTxt(an, med) : 'na ' + E + 'ª etapa') + '; a última medição com ele foi a ' + medTxt(an, gi.ult) + '.'
+        : 'Nenhuma das ' + ms.length + ' medições pagou serviço deste grupo nesta ponte.';
+      h += '<div class="mg' + (ac ? ' acesso' : '') + (n ? '' : ' vazio') + '">' +
+        '<button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(pid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
+        '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s">' + est + ult + '</span></span>' +
+        '<span class="mg-t"><b>' + (n ? fmtBRL(x.v) : '—') + '</b><small>' + (n ? n + (n === 1 ? ' serviço' : ' serviços') : med ? 'nada nesta medição' : E ? 'nada nesta etapa' : 'sem medição') + '</small></span>' + ICON_CHEV + '</button>' +
+        '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + (n ? x.it.map(function (y) { return svcMedHtml(an, y, med, faixa, etF, temPor); }).join('') : '<div class="mg-vazio">' + esc(vazio) + '</div>') + '</div></div>';
+    });
+    return h + '</div>';
+  }
+  // um serviço na aba Medições: quantidade em destaque, valor pequeno; embaixo, cada medição da faixa com este serviço (a
+  // escolhida em negrito), o total da etapa e, só na 1ª etapa, o estimado do Anexo VI (o edital só traz a 1ª)
+  function svcMedHtml(an, y, med, faixa, etF, temPor) {
+    var s = y.s, un = esc(s.un || ''), h = '<div class="mg-svc"><div class="mg-l"><span class="mg-nm">' + esc(s.nome) + '</span>' +
+      '<span class="mg-q"><b>' + fmtN(y.q) + ' <small>' + un + '</small></b><small>' + fmtBRL(y.v) + '</small></span></div>';
+    if (!temPor) return h + (y.tot ? '<small class="mg-obs">total desta ponte; esta análise não separa por medição</small>' : '') + '</div>';
+    var rows = faixa.filter(function (m) { return s.por && s.por[String(m.n)]; });
+    var tq = 0, tv = 0;
+    rows.forEach(function (m) { var x = s.por[String(m.n)]; tq += Number(x[0]) || 0; tv += Number(x[1]) || 0; });
+    var est = etF === EST_ETAPA && s.est > 0;
+    if (rows.length > 1 || est) {
+      h += '<div class="mg-det">' + (rows.length > 1 ? rows.map(function (m) {
+        var on = m.n === med ? ' on' : '';
+        return '<span class="' + on + '">' + esc(medTxt(an, m.n)) + '</span><span class="n' + on + '">' + fmtN(Number(s.por[String(m.n)][0]) || 0) + ' ' + un + '</span>';
+      }).join('') + '<span class="tt">' + esc(etF ? 'Total na ' + etF + 'ª etapa' : 'Total, todas as medições') + '</span><span class="n tt">' + fmtN(tq) + ' ' + un + ' <small>' + fmtBRL(tv) + '</small></span>' : '') +
+        (est ? '<span class="es">Estimado no Anexo VI (' + EST_ETAPA + 'ª etapa)</span><span class="n es' + (tq > s.est ? ' an-over' : '') + '">' + fmtN(s.est) + ' ' + un + '</span>' : '') + '</div>';
+    }
+    return h + '</div>';
   }
 
   // ------------------------------------------------------------------ interface: pré-visualização
@@ -3783,17 +3897,47 @@
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
     // barra do gráfico: escolhe a medição (o topo e a curva ABC passam a ser só dela); tocar de novo, ou "Todas as medições", volta a todas
     if (act === 'med-bar' || act === 'abc-todas') {
-      var art = b.closest('article.pt'), gr = art && art.querySelector('.an-graf'), det = gr && gr.querySelector('.an-det');
-      if (!art || !gr) return;
+      var art = b.closest('article.pt');
+      if (!art) return;
       var pidSel = art.dataset.id, n = act === 'med-bar' ? Number(b.dataset.n) : null;
       if (n && medSelDe(pidSel) === n) n = null;
       ui.medSel[pidSel] = n;   // null = todas, mesmo com uma medição escolhida na lista
-      gr.querySelectorAll('.an-bar').forEach(function (x) {
-        var on = n != null && Number(x.dataset.n) === n;
-        x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on));
-      });
-      if (det) { det.textContent = detTxt(n); det.classList.toggle('on', !!n); }
-      abcTrocar(art);
+      refazPonte(pidSel, act === 'med-bar' ? '.an-bar[data-n="' + b.dataset.n + '"]' : '.an-nav-s[data-d="1"]');
+      return;
+    }
+    // ‹ › da aba Medições: a medição com serviço anterior ou a seguinte (sem nenhuma escolhida, a última ou a primeira)
+    if (act === 'med-nav') {
+      var pidN = b.dataset.id || (b.closest('article.pt') || {}).dataset.id, anN = anOf(c), aN = anN && anN.pontes ? anN.pontes[pidN] : null;
+      if (!aN) return;
+      var comN = medsComServ(anN, aN).map(function (m) { return m.n; }), dN = Number(b.dataset.d), cur = medSelDe(pidN), j;
+      if (!comN.length) return;
+      if (!cur) j = dN > 0 ? 0 : comN.length - 1;
+      else if (comN.indexOf(cur) >= 0) j = Math.max(0, Math.min(comN.length - 1, comN.indexOf(cur) + dN));
+      else {   // a escolhida não teve serviço aqui: a próxima depois dela, ou a anterior antes dela
+        var dep = comN.filter(function (x) { return dN > 0 ? x > cur : x < cur; });
+        j = comN.indexOf(dep.length ? (dN > 0 ? dep[0] : dep[dep.length - 1]) : (dN > 0 ? comN[comN.length - 1] : comN[0]));
+      }
+      ui.medSel[pidN] = comN[j];
+      refazPonte(pidN, '.an-nav-s[data-d="' + b.dataset.d + '"]');
+      return;
+    }
+    // abas da ponte (Vistoria | Medições), ordem dos serviços na aba Medições e grupos abertos ou fechados
+    if (act === 'pt-aba') {
+      ui.aba[b.dataset.id] = b.dataset.v === 'med' ? 'med' : 'vist';
+      refazPonte(b.dataset.id, '.pt-abas [data-v="' + ui.aba[b.dataset.id] + '"]');
+      return;
+    }
+    if (act === 'med-modo') {
+      var pidMo = (b.closest('article.pt') || {}).dataset.id;
+      ui.medModo = b.dataset.v === 'abc' ? 'abc' : 'grupo';
+      if (pidMo) refazPonte(pidMo, '.an-modo [data-v="' + ui.medModo + '"]');
+      return;
+    }
+    if (act === 'med-grp') {
+      var abG = b.getAttribute('aria-expanded') !== 'true', corpo = b.nextElementSibling;
+      ui.grpAb[b.dataset.id + '|' + b.dataset.g] = abG;
+      b.setAttribute('aria-expanded', String(abG));
+      if (corpo) corpo.hidden = !abG;
       return;
     }
     // etapa mostrada na análise (resumo e cartões das pontes); o PDF não muda
