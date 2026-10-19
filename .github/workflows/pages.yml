@@ -99,6 +99,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: b6dac35ea493329331f3298eeea3e1e1
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "Sem o segredo CLOUDFLARE_API_TOKEN: não publiquei no Cloudflare"; exit 0; fi
+          # confere a chave antes (só o tamanho e a resposta do Cloudflare; a chave em si não aparece no registro)
+          echo "chave com ${#CLOUDFLARE_API_TOKEN} caracteres"
+          curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify" | head -c 400; echo
           W="npx --yes wrangler@4.20.0"
           $W pages project create via-230 --production-branch producao || echo "projeto via-230 já existe"
           $W pages deploy _site --project-name via-230 --branch producao --commit-dirty=true
