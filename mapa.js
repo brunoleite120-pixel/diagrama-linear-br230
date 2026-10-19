@@ -243,8 +243,10 @@
     '.mp-navcar{width:44px;height:44px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}',
     '.mp-navcar svg{width:44px;height:44px;transition:transform .9s linear}',
     '.mp-navtool{display:none}',
-    '.mp.mp-navon .mp-tools>*:not(.mp-navtool):not([data-mp="full"]){display:none!important}',
+    /* o botão do fundo do mapa (camadas) fica sempre, com e sem navegação */
+    '.mp.mp-navon .mp-tools>*:not(.mp-navtool):not([data-mp="full"]):not(.mp-layers){display:none!important}',
     '.mp.mp-navon .mp-tools>.mp-navtool{display:inline-flex!important}',
+    '.mp.mp-navon .mp-tools>.mp-layers{display:block!important}',
     '.mp-navon .mp-tools>.mp-btn,.mp-navon .mp-tools>.mp-layers>.mp-btn{width:50px;height:50px;min-width:50px;min-height:50px;padding:0;border-radius:50%;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25)}',
     '.mp-navon .mp-tools>.mp-btn svg,.mp-navon .mp-tools>.mp-layers>.mp-btn svg{width:22px;height:22px}',
     '.mp-navon .mp-tools>.mp-btn .t,.mp-navon .mp-tools>.mp-layers>.mp-btn .t{display:none}',
@@ -367,7 +369,7 @@
             '<button class="mp-btn" type="button" data-mp="gps" aria-pressed="false" title="Posição ao vivo">' + ICON.gps + '<span class="t">Ao vivo</span></button>' +
             (opts.onPhoto ? '<button class="mp-btn" type="button" data-mp="foto" title="Foto com carimbo">' + ICON.cam + '<span class="t">Foto</span></button>' : '') +
             '<button class="mp-btn" type="button" data-mp="kml" title="Baixar KML">' + ICON.kml + '<span class="t">KML</span></button>' +
-            (opts.tiles ? '<div class="mp-layers mp-navtool"><button class="mp-btn" type="button" data-mp="bases" aria-expanded="false" aria-haspopup="true" title="Fundo do mapa">' + ICON.layers + '<span class="t mp-base-nome"></span></button>' +
+            (opts.tiles ? '<div class="mp-layers"><button class="mp-btn" type="button" data-mp="bases" aria-expanded="false" aria-haspopup="true" title="Fundo do mapa">' + ICON.layers + '<span class="t mp-base-nome"></span></button>' +
               '<div class="mp-bases" role="group" aria-label="Fundo do mapa" hidden></div></div>' : '') +
             '<button class="mp-btn mp-mais" type="button" data-mp="mais" aria-expanded="false" aria-label="Mais ferramentas do mapa">' + ICON.mais + '</button>' +
           '</div>' +
