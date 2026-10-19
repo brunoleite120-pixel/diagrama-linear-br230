@@ -2383,6 +2383,7 @@
   function abreGaleriaPg() {
     var c = active(), f = glPend || {};
     glPend = null;
+    syncTopbar();   // a página fica fixa logo abaixo da barra: mede de novo antes de abrir
     if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba)) return;
     glPgCid = c.id;
     abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg('diagrama'); } });
@@ -6389,8 +6390,13 @@
     if (!window.VisaoGeral || !$('visaoHost')) visaoOn = false;
     syncTopbar();
     var tbar = document.querySelector('.topbar');
-    if (window.ResizeObserver && tbar) new ResizeObserver(syncTopbar).observe(tbar);
-    else window.addEventListener('resize', syncTopbar);
+    // border-box: no iPhone o recuo da área segura (env) pode chegar depois da 1ª medida e só muda o padding da barra, que o
+    // observer padrão (content-box) não vê; a galeria do celular (fixa abaixo da barra) ficava com o topo escondido
+    if (window.ResizeObserver && tbar) { try { new ResizeObserver(syncTopbar).observe(tbar, { box: 'border-box' }); } catch (e) { new ResizeObserver(syncTopbar).observe(tbar); } }
+    window.addEventListener('resize', syncTopbar);
+    window.addEventListener('orientationchange', function () { setTimeout(syncTopbar, 300); });
+    window.addEventListener('pageshow', syncTopbar);
+    setTimeout(syncTopbar, 500); setTimeout(syncTopbar, 2000);
     initBanco();
     renderAll();
     if (view === 'mapa') setView('mapa');
