@@ -3092,16 +3092,21 @@
   // contrato (pelo valor). A quantidade só se soma por serviço; por grupo, o valor e o % do total. Os itens do Anexo VI sem
   // descrição (cod_*) nunca foram medidos: ficam fora das listas, citados no rodapé
   function servContratoHtml(c, an, E) {
-    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {}, cons = an.tipo === 'conserva';
+    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {}, cons = an.tipo === 'conserva', caps = {}, capL = [];
     // conservação: o contrato inteiro, da medição consolidada (inclui o que não tem local); "segmentos" conta onde há local
     if (cons) {
       var svI = {}, ns = E ? ei.ns : (an.medicoes || []).map(function (m) { return m.n; });
-      (an.servicos || []).forEach(function (s) { svI[s.cod || s.id] = s; });
+      // pelo id (o mesmo código em dois grupos vira 93776-1, 93776-2) e, sem id igual, pelo código
+      (an.servicos || []).forEach(function (s) { svI[s.id || s.cod] = s; });
+      (an.servicos || []).forEach(function (s) { if (s.cod && !svI[s.cod]) svI[s.cod] = s; });
       ns.forEach(function (n) {
         var pm = (an.porMedicao || {})[String(n)] || {};
         Object.keys(pm).forEach(function (k) {
           var s = svI[k] || { nome: k, un: '' }, t = ag[k];
-          if (!t) { t = ag[k] = { nome: s.nome, un: s.un, g: s.g || 'semlocal', q: 0, v: 0, pontes: 0 }; ord.push(t); }
+          // sem grupo da vistoria: o capítulo do SIAC, quando a análise veio do Resumo da Medição (sem km)
+          var gk = s.g || (s.grupo ? 'cap:' + s.grupo : 'semlocal');
+          if (gk.indexOf('cap:') === 0 && !caps[gk]) { caps[gk] = 1; capL.push({ key: gk, short: s.grupo.replace(/^[\d,.]+\s*-\s*/, ''), cap: true }); }
+          if (!t) { t = ag[k] = { nome: s.nome, un: s.un, g: gk, q: 0, v: 0, pontes: 0 }; ord.push(t); }
           t.q += Number(pm[k][0]) || 0; t.v += Number(pm[k][1]) || 0;
         });
       });
@@ -3152,7 +3157,12 @@
       h += '<div class="mg-lista sc-lista">' + ord.filter(function (t) { return t.k !== 'C'; }).map(linha).join('') +
         (lc.length ? '<details class="sc-c"><summary>Classe C: ' + lc.length + (lc.length === 1 ? ' serviço' : ' serviços') + ' · ' + pct(pc.C) + ' do valor</summary>' + lc.map(linha).join('') + '</details>' : '') + '</div>';
     } else {
-      h += '<div class="mg-lista">' + servicesOf(c).concat([cons ? MED_SEMLOCAL : MED_ACESSO]).map(function (g) {
+      // capítulos do SIAC na ordem do relatório (1,0; 1,1; 2,0...)
+      capL.sort(function (x, y) {
+        var a = (x.key.match(/^cap:([\d,.]+)/) || [, ''])[1].split(/[,.]/).map(Number), b = (y.key.match(/^cap:([\d,.]+)/) || [, ''])[1].split(/[,.]/).map(Number);
+        return (a[0] || 0) - (b[0] || 0) || (a[1] || 0) - (b[1] || 0);
+      });
+      h += '<div class="mg-lista">' + servicesOf(c).concat(capL, [cons ? MED_SEMLOCAL : MED_ACESSO]).map(function (g) {
         var it = ord.filter(function (t) { return t.g === g.key; });
         if (!it.length) return '';
         var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO || g === MED_SEMLOCAL;
