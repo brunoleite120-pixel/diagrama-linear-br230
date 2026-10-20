@@ -992,6 +992,7 @@ span.an-chip{cursor:default}
   .svc:not(.oae) .seg{grid-column:1/-1;grid-row:2}
 }
 </style>
+<link rel="stylesheet" href="medicoes.css">
 </head>
 <body>
 <header class="topbar">
@@ -1021,6 +1022,7 @@ span.an-chip{cursor:default}
         <svg class="ic-desce" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div class="menu-pop" id="menuPop" hidden>
+        <button type="button" data-act="medicoes" id="menuMedicoes" hidden>Medições</button>
         <div class="menu-estado so-compacto" id="menuEstado" hidden></div>
         <button type="button" class="so-compacto" data-act="login" id="menuLogin" hidden>Entrar</button>
         <hr class="so-compacto" id="menuLoginHr" hidden>
@@ -1082,6 +1084,7 @@ span.an-chip{cursor:default}
 </main>
 
 <main class="visao" id="visaoHost" aria-label="Visão geral de todos os contratos" hidden></main>
+<main class="medicoes" id="medicoesHost" aria-label="Medições dos contratos" hidden></main>
 <div id="vgAviso" class="sr-only" aria-live="polite"></div>
 
 <div id="pdfHost" aria-hidden="true"></div>
@@ -1109,6 +1112,7 @@ span.an-chip{cursor:default}
 <script src="relatorio-logos.js"></script>
 <script src="relatorio.js"></script>
 <script src="visao.js"></script>
+<script src="medicoes.js"></script>
 <script src="app.js"></script>
 <script src="aviso-endereco.js"></script>
 <script>

@@ -2251,7 +2251,7 @@
   var GRUPOS_MENU = [['pc', 'Pontos críticos'], ['oae', 'Pontes (Proarte)'], ['conserva', 'Conservação (P.A.T.O.)']];
   var ICON_DESCE = '<svg class="ctm-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   function renderTabs() {
-    var nav = $('tabs'), at = !visaoOn ? active() : null;
+    var nav = $('tabs'), at = !visaoOn && !medicoesOn ? active() : null;
     var lista = GRUPOS_MENU.map(function (g) {
       // na ordem fixa (ctOrdem): a conservação pela posição no eixo, e não pela ordem de cadastro no banco
       var cs = ctOrdem(state.contracts).filter(function (c) { return ctTipo(c) === g[0]; });
@@ -2264,6 +2264,7 @@
     // no celular a Visão geral fica só com o ícone (aria-label mantém o nome). O botão dos contratos abre uma lista de botões
     // comuns (aria-expanded/aria-controls), sem a semântica de menu (aria-haspopup), que pediria setas e outro anúncio
     nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-label="Visão geral" aria-current="' + visaoOn + '">' + ICON_VISAO + '<span class="tv-txt">Visão geral</span></button>' : '') +
+      (temMedicoes() ? '<button type="button" class="tab tab-medicoes" data-act="medicoes" aria-current="' + medicoesOn + '" aria-pressed="' + medicoesOn + '">Medições</button>' : '') +
       (isPublico() ? '' : '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
       '<span class="ctm-nome"><span class="ctm-n">' + (at ? esc(ctNome(at)) + '</span><small>' + esc(abaSub(at)) + '</small>' : 'Contratos</span>') +
       (window.AMBIENTE && window.AMBIENTE.previa ? '<span class="ctm-prev">Prévia</span>' : '') + '</span>' + ICON_DESCE + '</button>' +
@@ -2273,7 +2274,7 @@
     if (cc) cc.innerHTML = esc(at ? ctCurto(at) : 'Contratos') + ICON_DESCE;
     var atl = $('atalhos');
     if (atl) {
-      atl.hidden = visaoOn;
+      atl.hidden = visaoOn || medicoesOn;
       var bp = atl.querySelector('[data-ir="pontos"]');
       if (bp && at) bp.textContent = isConserva(at) ? 'Segmentos' : isOae(at) ? 'Pontes' : 'Pontos';
     }
@@ -2304,7 +2305,7 @@
   function listaAberta() { return ($('ctmPop') && !$('ctmPop').hidden) || !$('menuPop').hidden; }
   function aoRolar() {
     var y = window.scrollY || 0, d = y - rolY;
-    if (!mmEmPe || !mmEmPe.matches || visaoOn || y < 140 || document.body.hasAttribute('data-pg')) { topoMini(false); rolY = y; }
+    if (!mmEmPe || !mmEmPe.matches || visaoOn || medicoesOn || y < 140 || document.body.hasAttribute('data-pg')) { topoMini(false); rolY = y; }
     else if (Math.abs(d) >= 8) {
       if (d > 0 && !listaAberta()) topoMini(true);
       else if (d < 0) topoMini(false);
@@ -2360,7 +2361,7 @@
   var pg = (function () { try { var v = localStorage.getItem(PG_KEY); return v === 'pontos' || v === 'mapa' || v === 'galeria' ? v : 'diagrama'; } catch (e) { return 'diagrama'; } })();
   var pgRolY = {};   // onde cada página estava rolada, para voltar ao mesmo lugar
   function temMapa() { return !!(window.MapaSNV && window.L && window.SNV_BR230); }
-  function pgAtivo() { return !!(mmCel && mmCel.matches) && !visaoOn && !$('layout').hidden; }
+  function pgAtivo() { return !!(mmCel && mmCel.matches) && !visaoOn && !medicoesOn && !$('layout').hidden; }
   function aplicaPg() {
     var nav = $('pgNav'), on = pgAtivo();
     if (!nav) return;
@@ -2922,9 +2923,10 @@
   var ETAPA_KEY = 'diagrama-linear.etapa-analise', EST_ETAPA = 1;   // o Anexo VI do edital estima só a 1ª etapa
   var etapaSel = Number(lsGet(ETAPA_KEY)) || 0;                      // 0 = todas as etapas
   lsPut('diagrama-linear.janela', null);                             // seletor antigo (3/6/12 meses)
-  var anCache = { raw: null, view: null }, mnePend = {}, anLido = {};   // anLido[cid]: quando a análise (e as marcas) foi lida do banco
-  function anOf(c) {
-    var raw = c && (isOae(c) || isConserva(c)) && parte(c, 'med') ? analise.dados[c.id] || null : null;
+  var anCache = { raw: null, view: null }, mnePend = {}, anLido = {}, anPedidos = {};   // anLido[cid]: quando a análise (e as marcas) foi lida do banco
+  // na área dedicada, também consulta pontos críticos; as folhas e o editor conservam o recorte de tipos de antes
+  function anOf(c, naArea) {
+    var raw = c && (naArea || isOae(c) || isConserva(c)) && parte(c, 'med') ? analise.dados[c.id] || null : null;
     if (!raw) return null;
     if (anCache.raw !== raw) anCache = { raw: raw, view: anCalc(raw) };
     return anCache.view;
@@ -3053,14 +3055,15 @@
     });
     return r;
   }
-  function carregarAnalise(c) {
-    if (!c || !(isOae(c) || isConserva(c)) || !banco.on || !parte(c, 'med') || !window.Banco || !window.Banco.analise) return;
+  function carregarAnalise(c, naArea) {
+    if (!c || (!naArea && !(isOae(c) || isConserva(c))) || !banco.on || !parte(c, 'med') || !window.Banco || !window.Banco.analise) return Promise.resolve();
     var e = analise.estado[c.id];
-    if (e === 'carregando' || e === 'ok' || e === 'vazia' || e === 'erro') return;   // erro: só de novo ao trocar de aba ou voltar ao app
+    if (e === 'carregando') return anPedidos[c.id] || Promise.resolve();
+    if (e === 'ok' || e === 'vazia' || e === 'erro') return Promise.resolve();   // erro: só de novo ao trocar de aba ou voltar ao app
     analise.estado[c.id] = 'carregando';
     var cred = banco.login.codigo, cid = c.id;
-    window.Banco.analise(cred, cid).then(function (r) {
-      if (!banco.login || banco.login.codigo !== cred) return;
+    return (anPedidos[cid] = window.Banco.analise(cred, cid).then(function (r) {
+      if (!banco.login || banco.login.codigo !== cred || !parte(contractById(cid), 'med')) return;
       if (r && r.dados && typeof r.dados === 'object') {
         analise.dados[cid] = r.dados;
         analise.dados[cid].sobre = { fonte: r.fonte || '', em: r.em || null, por: r.por || '' };
@@ -3075,13 +3078,16 @@
       }
       lsPut(AN_KEY, { dados: analise.dados });
       // digitando no cartão: só a folha agora; o cartão é refeito quando a pessoa sair do campo
-      if (!visaoOn && active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; renderPreview(); }
+      if (medicoesOn) desenhaMedicoes();
+      else if (!visaoOn && active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; renderPreview(); }
     }, function (err) {
+      if (!banco.login || banco.login.codigo !== cred || !parte(contractById(cid), 'med')) return;
       analise.estado[cid] = 'erro';
       // sessão encerrada ou papel trocado em outro aparelho: reconfere o acesso (que tira a análise deste aparelho)
       if (err && (err.code === 'codigo_invalido' || err.code === 'sem_permissao')) { conferirAcesso(); return; }
-      if (active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; }
-    });
+      if (medicoesOn) desenhaMedicoes();
+      else if (active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; }
+    }));
   }
   function fmtIsoDate(iso) { return iso ? fmtDate(String(iso).slice(0, 10)) : ''; }
 
@@ -3297,7 +3303,7 @@
     h += servContratoHtml(c, an, E);
     if (avs.length) {
       h += '<details class="an-mais an-avs"><summary>Avisos da leitura das medições · ' + avs.length + '</summary>' + avs.map(function (x) {
-        return '<div class="an-line"><b>' + esc(medTxt(an, x.n)) + '</b> · ' + esc(x.tipo === 'siac' ? 'SIAC × MP (para a fiscalização): ' : x.tipo === 'despacho' ? 'valor da MP × despacho: ' : 'memória de cálculo: ') + esc(x.motivo) + '</div>';
+        return '<div class="an-line"><b>' + esc(medTxt(an, x.n)) + '</b> · ' + esc(x.tipo === 'siac' ? 'SIAC × MP (para a fiscalização): ' : x.tipo === 'fiscal' ? 'para a fiscalização: ' : x.tipo === 'despacho' ? 'valor da MP × despacho: ' : 'memória de cálculo: ') + esc(x.motivo) + '</div>';
       }).join('') + '</details>';
     }
     if (parte(c, 'acomp')) h += cmpResumoHtml(c, an);
@@ -4213,6 +4219,7 @@
     return tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
   }
   function renderPreview() {
+    if (medicoesOn) { desenhaMedicoes(); return; }
     if (visaoOn && visao && !$('visaoHost').hidden) { if (!desenhaVisao()) renderAll(); return; }
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
@@ -4237,10 +4244,15 @@
   // sem código (ou sem nenhum contrato liberado): só a visão geral
   function soVisao() { return isPublico() || !state.contracts.length; }
   function renderAll() {
+    if (medicoesOn && !temMedicoes()) { if (medicoes) medicoes.limpar(); medicoesOn = false; }
+    // o link pode ter sido aberto antes de o banco devolver os contratos e as partes liberadas
+    if (location.hash === '#medicoes' && temMedicoes()) { medicoesOn = true; visaoOn = false; }
+    if (medicoes && !medicoesOn) medicoes.render();   // limpa o HTML escondido e poda contratos cujo acesso saiu
     if (soVisao() && window.VisaoGeral && $('visaoHost')) visaoOn = true;
     aplicaPapel();
     renderTabs();
     if (mostraVisao() && desenhaVisao()) return;
+    if (medicoesOn && desenhaMedicoes()) return;
     // fiscal (sem o diagrama): a folha ao lado fica no mapa
     var cR = active();
     if (view !== 'mapa' && !podeDiagrama(cR) && podeMapa(cR) && temMapa()) setView('mapa');
@@ -4258,6 +4270,7 @@
   var ICON_VISAO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 12h20"/><path d="M6 8v8"/><path d="M13 8v8"/><path d="M18 9.5v5"/></svg>';
   var visaoOn = (function () { try { return sessionStorage.getItem(INICIO_KEY) !== '1'; } catch (e) { return true; } })();
   function setVisao(on) {
+    if (medicoesOn) { medicoesOn = false; hashMedicoes(false); }
     visaoOn = !!on;
     try { if (on) sessionStorage.removeItem(INICIO_KEY); else sessionStorage.setItem(INICIO_KEY, '1'); } catch (e) { /* sem armazenamento */ }
   }
@@ -4286,17 +4299,48 @@
   }
   function mostraVisao() {
     var vh = $('visaoHost'), on = visaoOn && !!vh && !!ensureVisao();
-    if (on) topoMini(false);
-    $('layout').hidden = on;
+    if (on || medicoesOn) topoMini(false);
+    $('layout').hidden = on || medicoesOn;
     if (vh) vh.hidden = !on;
+    if ($('medicoesHost')) $('medicoesHost').hidden = !medicoesOn;
     // na visão não há contrato na tela: imprimir pegaria o contrato escondido. Fiscal e analista sem o acompanhamento: sem diagrama
-    var semPdf = on || !state.contracts.length || !podeDiagrama(active());
+    var semPdf = on || medicoesOn || !state.contracts.length || !podeDiagrama(active());
     $('btnPdf').hidden = semPdf;
     var pr = document.querySelector('#menuPop [data-act="print"]');
     if (pr) pr.hidden = semPdf;
     if ($('menuPdf')) $('menuPdf').hidden = semPdf;
     aplicaPg();
     return on;
+  }
+  // ------------------------------------------------------------------ medições (medicoes.js); só na tela, sem alterar as folhas
+  var medicoes = null, medicoesOn = false;
+  function temMedicoes() { return !!window.Medicoes && state.contracts.some(function (c) { return parte(c, 'med'); }); }
+  function hashMedicoes(on) {
+    try { history.replaceState(history.state, '', location.pathname + location.search + (on ? '#medicoes' : location.hash === '#medicoes' ? '' : location.hash)); } catch (e) { /* segue sem link */ }
+  }
+  function abrirMedicoes() {
+    if (!temMedicoes()) return;
+    state.contracts.forEach(function (c) { if (parte(c, 'med') && analise.estado[c.id] === 'erro') delete analise.estado[c.id]; });
+    setVisao(false); medicoesOn = true; hashMedicoes(true);
+    closeMenu(); renderAll(); syncTopbar(); window.scrollTo(0, 0);
+  }
+  function desenhaMedicoes() {
+    if (!medicoesOn || !temMedicoes() || !$('medicoesHost')) return false;
+    if (!medicoes) medicoes = window.Medicoes({
+      host: $('medicoesHost'), contratos: function () { return state.contracts; }, pode: function (c) { return parte(c, 'med'); },
+      ativa: function () { return medicoesOn && temMedicoes(); },
+      base: function (c) { return parte(c, 'med') ? analise.dados[c.id] : null; }, analise: function (c) { return anOf(c, true); },
+      estado: function (c) { return analise.estado[c.id]; },
+      online: function () { return !!(banco.on && banco.login && window.Banco && window.Banco.analise); },
+      carregar: function (c) { return carregarAnalise(c, true); },
+      repetir: function (c) { if (parte(c, 'med') && analise.estado[c.id] === 'erro') delete analise.estado[c.id]; },
+      nome: function (c) { return ctNumeroCT(c) || ctNome(c); }, pontos: sortedPoints, grupos: function (c) { return servicesOf(c).concat([MED_ACESSO]); },
+      esc: esc, fmtN: fmtN, dinheiro: function (v) { return v == null || !isFinite(v) ? '—' : 'R$ ' + fmt(v, 2); },
+      medTxt: medTxt, etapaInfo: etapaInfo, unTxt: unTxt, semLocal: MED_SEMLOCAL, data: fmtIsoDate,
+      diagrama: function (c) { if (parte(c, 'med')) abrirDaVisao(c, null, false); }
+    });
+    medicoes.render(); medicoes.carregar();
+    return true;
   }
   // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
   function abrirDaVisao(c, p, noMapa) {
@@ -4488,6 +4532,7 @@
     if (act === 'ct-menu') { ctMenu($('ctmPop') && $('ctmPop').hidden); return; }
     if (b.closest && b.closest('#ctmPop')) ctMenu(false);
     if (act === 'visao') { setVisao(true); renderAll(); window.scrollTo(0, 0); return; }
+    if (act === 'medicoes') { abrirMedicoes(); return; }
     if (act === 'dica-fechar') {
       try { localStorage.setItem('diagrama-linear.dica-instalar', '1'); } catch (err) { /* sem armazenamento */ }
       var dica = b.closest('.dica-inst');
@@ -5211,6 +5256,7 @@
     if (!b) return;
     closeMenu();
     var act = b.dataset.act;
+    if (act === 'medicoes') { abrirMedicoes(); return; }
     if (act === 'login') { openLogin(); return; }
     if (act === 'pdf') { exportPdf(); return; }
     if (act === 'backup') downloadBackup();
@@ -5218,7 +5264,7 @@
       if (banco.on && !isResp()) { toast('Só o Administrador pode trocar os dados da equipe por um backup.', 5000); if (!banco.login) openLogin(); return; }
       $('fileInput').click();
     }
-    else if (act === 'print') { if (visaoOn) { toast('Abra um contrato para imprimir o diagrama dele.'); return; } imprimir(); }
+    else if (act === 'print') { if (visaoOn || medicoesOn) { toast('Abra um contrato para imprimir o diagrama dele.'); return; } imprimir(); }
     // na visão o contrato ativo está escondido: o relatório começa em "Todos"
     else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: visaoOn ? '' : active().id });
     else if (act === 'reset') {
@@ -5800,8 +5846,8 @@
     var a = document.activeElement;
     // a caixa de marcar da caixa "Contratos" (Visão geral) fica com o foco depois de cada toque e não é digitação: não
     // adia a atualização do banco
-    if (a && a.type === 'checkbox' && a.closest && a.closest('#visaoHost')) return false;
-    return !!(a && a.closest && a.closest('#editor, #visaoHost') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+    if (a && a.type === 'checkbox' && a.closest && a.closest('#visaoHost, #medicoesHost')) return false;
+    return !!(a && a.closest && a.closest('#editor, #visaoHost, #medicoesHost') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
   }
   function fromServer(r) {
     var s = { activeId: state ? state.activeId : null, contracts: [] }, byId = {};
@@ -5925,6 +5971,7 @@
     });
   }
   function limparDadosAparelho() {
+    if (medicoes) medicoes.limpar();
     state = { version: (state && state.version) || 1, activeId: null, contracts: [] };
     // as alterações que não subiram eram da pessoa anterior: não vão com o código de quem entra agora
     if (banco.pend.length) toast(banco.pend.length + (banco.pend.length === 1 ? ' alteração' : ' alterações') + ' que não tinham subido foram descartadas: eram de quem saiu.', 7000);
@@ -5938,6 +5985,7 @@
   }
   // classes do corpo conforme o papel e o contrato aberto (o CSS esconde o que o papel não usa)
   function aplicaPapel() {
+    if ($('menuMedicoes')) $('menuMedicoes').hidden = !temMedicoes();
     var c = state && state.contracts.length ? active() : null, b = document.body.classList;
     b.toggle('ro', readOnly());
     b.toggle('fiscal', isFiscal());
@@ -6687,7 +6735,7 @@
     $('btnLogin').addEventListener('click', openLogin);
     initAprov();
     document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
-    ['editor', 'visaoHost'].forEach(function (id) {
+    ['editor', 'visaoHost', 'medicoesHost'].forEach(function (id) {
       var el = $(id);
       if (el) el.addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
     });
@@ -6714,7 +6762,11 @@
       var ca = active();
       if (ca && !visaoOn && (isOae(ca) || isConserva(ca)) && analise.estado[ca.id] === 'ok' && Date.now() - (anLido[ca.id] || 0) > 600000 && !Object.keys(mnePend).length && !typing()) { delete analise.estado[ca.id]; carregarAnalise(ca); }
     }, 300000);
-    window.addEventListener('hashchange', function () { if (location.hash === '#configurar') openConfigurar(); });
+    window.addEventListener('hashchange', function () {
+      if (location.hash === '#configurar') openConfigurar();
+      if (location.hash === '#medicoes') abrirMedicoes();
+      else if (medicoesOn) { setVisao(true); renderAll(); }
+    });
     setInterval(poll, 20000);
     syncStatus();
     refresh().then(function () {
