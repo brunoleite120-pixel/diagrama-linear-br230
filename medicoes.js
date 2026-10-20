@@ -360,7 +360,10 @@
     function segmentosHtml(c, d, m) {
       var ns = {}, ps = op.pontos(c);
       ps.forEach(function (p) { ns[p.id] = p.nome || p.codigo || p.id; });
-      var ks = Object.keys(d.an.pontes || {}).filter(function (pid) { return valor(d.an.pontes[pid].meses && d.an.pontes[pid].meses[m.n]) !== 0; });
+      var ordem = {}; ps.forEach(function (p, i) { ordem[p.id] = i; });
+      // na ordem do km (o banco guarda as chaves em outra ordem)
+      var ks = Object.keys(d.an.pontes || {}).filter(function (pid) { return valor(d.an.pontes[pid].meses && d.an.pontes[pid].meses[m.n]) !== 0; })
+        .sort(function (x, y) { return (ordem[x] == null ? 1e9 : ordem[x]) - (ordem[y] == null ? 1e9 : ordem[y]); });
       return ks.length ? '<div class="md-segmentos">' + ks.map(function (pid) { var p = d.an.pontes[pid]; return '<div class="md-segmento"><b>' + esc(ns[pid] || p.nome || pid) + '</b><span>' + dinheiro(p.meses[m.n]) + '</span></div>'; }).join('') + '</div><small>' + (c.tipo === 'oae' || c.tipo === 'conserva' ? 'Valores localizados na memória de cálculo.' : 'Valores pelo ponto de cada capítulo do SIAC.') + ' Serviços sem local entram apenas no total da medição.</small>' : vazio('Esta medição não tem valores localizados ' + (c.tipo === 'oae' ? 'nas pontes' : c.tipo === 'conserva' ? 'nos segmentos' : 'nos pontos') + '.');
     }
     function avisosHtml(als) {
