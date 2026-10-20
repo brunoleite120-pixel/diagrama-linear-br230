@@ -3297,7 +3297,7 @@
     h += servContratoHtml(c, an, E);
     if (avs.length) {
       h += '<details class="an-mais an-avs"><summary>Avisos da leitura das medições · ' + avs.length + '</summary>' + avs.map(function (x) {
-        return '<div class="an-line"><b>' + esc(medTxt(an, x.n)) + '</b> · ' + esc(x.tipo === 'despacho' ? 'valor da MP × despacho: ' : 'memória de cálculo: ') + esc(x.motivo) + '</div>';
+        return '<div class="an-line"><b>' + esc(medTxt(an, x.n)) + '</b> · ' + esc(x.tipo === 'siac' ? 'SIAC × MP (para a fiscalização): ' : x.tipo === 'despacho' ? 'valor da MP × despacho: ' : 'memória de cálculo: ') + esc(x.motivo) + '</div>';
       }).join('') + '</details>';
     }
     if (parte(c, 'acomp')) h += cmpResumoHtml(c, an);
