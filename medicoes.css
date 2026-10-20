@@ -8,7 +8,7 @@
 .medicoes h3{font-size:15px}
 .medicoes p{color:var(--ink-2)}
 .medicoes small{display:block;font-size:12.5px;color:var(--ink-2);font-weight:400;overflow-wrap:anywhere}
-.medicoes .btn,.medicoes .seg button,.tab-medicoes,#menuMedicoes{min-height:44px}
+.medicoes .btn,.medicoes .seg button,#menuMedicoes{min-height:44px}
 .medicoes button{color:var(--ink);font:inherit;cursor:pointer}
 .medicoes button:disabled{cursor:default;opacity:.5}
 .medicoes button:focus-visible,.medicoes input:focus-visible,.medicoes select:focus-visible,.medicoes [tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
