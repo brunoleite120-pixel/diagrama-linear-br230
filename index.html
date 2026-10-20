@@ -1030,6 +1030,7 @@ span.an-chip{cursor:default}
         <button type="button" data-act="recusadas" hidden>Alterações recusadas</button>
         <button type="button" data-act="aprovar" hidden>Aprovar mudanças dos fiscais</button>
         <button type="button" data-act="usuarios" hidden>Usuários e acessos</button>
+        <button type="button" data-act="cargamed" hidden>Carregar medições (arquivo)…</button>
         <hr>
         <button type="button" class="so-compacto" data-act="pdf" id="menuPdf">Exportar PDF (A3)</button>
         <button type="button" data-act="print">Imprimir ou salvar PDF pelo navegador</button>
@@ -1086,6 +1087,7 @@ span.an-chip{cursor:default}
 <div id="pdfHost" aria-hidden="true"></div>
 <div id="printArea" aria-hidden="true"></div>
 <input type="file" id="fileInput" accept=".json,application/json" hidden>
+<input type="file" id="fileMed" accept=".json,application/json" hidden>
 <div class="toast" id="toast" role="status"></div>
 
 <script src="ambiente.js"></script>

@@ -652,7 +652,7 @@
   // ------------------------------------------------------------------ desenho da folha
   // semAnalise: folha só com a vistoria, mesmo para quem vê a análise das medições (PDF e impressão perguntam)
   function renderSheets(c, semAnalise) {
-    if (isConserva(c)) return folhasConserva(c);   // conservação: as folhas dela (folhasConserva), com o código à parte
+    if (isConserva(c)) return folhasConserva(c, semAnalise ? null : anOf(c));   // conservação: as folhas dela (folhasConserva), com o código à parte
     var pg = paginate(c), tot = totals(c), marcos = placeMarcos(c, pg);
     return pg.chunks.map(function (chunk, i) {
       return renderSheet(c, chunk, i, pg.chunks.length, pg.slots, tot, marcos.filter(function (m) { return m.pageIdx === i; }), semAnalise);
@@ -927,19 +927,20 @@
   // desenha a página i de n (o "Página i de n" conta todas as folhas, na ordem de FOLHAS_CONSERVA). As colunas sem segmento só
   // saem quando são a única folha da lista (F-5 a: até gerar os segmentos, fica só a folha em escala, como antes); a lista
   // nunca sai vazia (sem nome conhecido em FOLHAS_CONSERVA, saem as colunas)
-  function folhasConserva(c) {
+  // an: a análise das medições (folha "Com análise", de uso interno) ou null (só a vistoria)
+  function folhasConserva(c, an) {
     var L = FOLHAS_CONSERVA.filter(function (k) { return k === 'colunas' || k === 'escala'; }), folhas = [];
     if (!L.length) L = ['colunas'];
     var soColunas = L.indexOf('escala') < 0;
     L.forEach(function (k) {
       if (k === 'colunas') {
-        if (c.pontos.length || soColunas) folhas = folhas.concat(paginasColunas(c, soColunas));   // página 1 (passo 2.3)
+        if (c.pontos.length || soColunas) folhas = folhas.concat(paginasColunas(c, soColunas, an));   // página 1 (passo 2.3)
         return;
       }
       var q = quadrosFaixa(c);
-      folhas.push(function (i, n) { return renderFaixa(c, i, n, q); });   // folha em escala (passo 1.4)
+      folhas.push(function (i, n) { return renderFaixa(c, i, n, q, an); });   // folha em escala (passo 1.4)
       // continuação da folha em escala, logo depois dela, só quando os prazos e valores não couberam nos quadros (E-3)
-      q.cont.forEach(function (pg) { folhas.push(function (i, n) { return quadrosCont(c, i, n, q, pg); }); });
+      q.cont.forEach(function (pg) { folhas.push(function (i, n) { return quadrosCont(c, i, n, q, pg, an); }); });
     });
     return folhas.map(function (f, i) { return f(i, folhas.length); });
   }
@@ -1186,13 +1187,14 @@
     o.push(P([[x + 76, ya], [x + 68, ya - 4], [x + 68, ya + 4]], '#B42318'));
   }
   // q: os quadros de prazos e valores, já medidos e repartidos (quadrosFaixa)
-  function renderFaixa(c, pageIdx, pageCount, q) {
+  function renderFaixa(c, pageIdx, pageCount, q, an) {
     var o = [], x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661', fx = faixasDe(c);
     var yq = GF.yTop + 2 * GF.H + GF.gap + 4, hq = GF.yF - 10 - yq;   // linha dos quadros, embaixo das faixas: y 562, 172 pt
     q = q || quadrosFaixa(c);
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
+    if (an) drawUsoInterno(o);   // a folha "Com análise" sai inteira como uso interno, inclusive esta
     drawHeader(o, c);
     sentidoFaixa(o, c, x, w, gray);
 
@@ -1475,12 +1477,13 @@
   // continuação da folha em escala (E-3), só quando os prazos e valores não couberam nos quadros dela: o cabeçalho e as duas caixas
   // com a lista completa, sem as faixas, do alto da folha (y 104) até o lugar do rodapé. pg: a parte das listas desta folha
   // (quadrosFaixa)
-  function quadrosCont(c, pageIdx, pageCount, q, pg) {
+  function quadrosCont(c, pageIdx, pageCount, q, pg, an) {
     var o = [], x = G.labelX, gray = '#5C6661', yq = Q_CONT_Y, hq = GF.yF - 10 - yq;
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
     drawHeader(o, c);
+    if (an) drawUsoInterno(o);   // a folha "Com análise" sai inteira como uso interno
     o.push(T(x, yq + 12, 'PRAZOS E VALORES', { size: 7, bold: true }));
     o.push(T(x, yq + 22, 'do contrato', { size: 6.2, fill: gray }));
     o.push(T(x, yq + 34, 'continuação da', { size: 6.2, fill: gray }));
@@ -1736,16 +1739,16 @@
   // grupo na ponte). Se a vistoria marcou dano observado ou em execução, a cor passa a ser a do estado e a
   // quantidade estimada vai embaixo da data. Marcas no canto: prioridade, conclusão informada e medido sem execução
   function celRest(o, an, a, p, s, sv, k, bx, y, bw, h) {
-    var gi = a && a.grupos ? a.grupos[s.key] : null, ult = gi && gi.ult ? Number(gi.ult) : 0, cx = bx + bw / 2;
+    var gi = a && a.grupos ? a.grupos[s.key] : null, ult = gi && gi.ult ? Number(gi.ult) : 0, cx = bx + bw / 2, cons = an.tipo === 'conserva';
     var mm = ult ? mesMed(an, ult) : '', data = ult ? (mm ? mm + ' · ' : '') + ult + 'ª' : '';
     var l1 = '', l2 = '', fill = null, ink = '#FFFFFF';
     if (comQtd(k)) {
       var stk = oaeStOf(s, k), qt = fmtQtd(s, sv.q);
       fill = stk.fill; ink = stk.ink;
-      l1 = data || 'sem restauração';
+      l1 = data || (cons ? 'sem medição' : 'sem restauração');
       // em coluna estreita, só a estimativa (o azul já diz em execução), para o número não sair cortado
       if (k === 'EX') { l2 = 'em execução' + (qt ? ' · ' + qt : ''); if (qt && textW(l2, 4, true) > bw - 6) l2 = qt; }
-      else l2 = qt ? qt + (s.un === '%' ? ' com dano' : ' danificados') : stk.name.toLowerCase();
+      else l2 = qt ? qt + (s.un === '%' ? ' com dano' : cons ? ' com defeito' : ' danificados') : stk.name.toLowerCase();
     } else if (ult) { fill = '#1E9E55'; l1 = data; }
     if (fill) {
       o.push(R(bx, y, bw, h, { fill: fill, rx: 2 }));
@@ -1759,7 +1762,7 @@
         o.push(T(cx, y + h / 2 + s0 * 0.36, fitText(l1, bw - 6, s0, true), { size: r2(s0), bold: true, fill: ink, anchor: 'middle' }));
       }
     } else {
-      var tg = k === 'NA' ? 'NÃO TEM (N/A)' : 'SEM RESTAURAÇÃO', vz = fitSize(tg, bw - 6.3, 6.6, true, 4.2);
+      var tg = k === 'NA' ? 'NÃO TEM (N/A)' : cons ? 'SEM MEDIÇÃO' : 'SEM RESTAURAÇÃO', vz = fitSize(tg, bw - 6.3, 6.6, true, 4.2);
       o.push(R(bx, y, bw, h, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
       o.push(T(cx, y + h / 2 + vz * 0.36, fitText(tg, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
     }
@@ -1874,19 +1877,20 @@
   // as páginas de colunas, cada uma uma função (i, n) para folhasConserva: paginate reparte os segmentos pelo "segmentos por
   // página" do contrato (13 no padrão: o 437 e o 438 cabem numa folha) e o total sai na última página de colunas. soColunas: a
   // folha em escala não sai, e a página leva a faixa das Observações gerais do contrato quando o obsFolha tem texto (4.10, F-9 c)
-  function paginasColunas(c, soColunas) {
+  function paginasColunas(c, soColunas, an) {
     var pg = paginate(c), r = resumoSegs(c), faixa = !!(soColunas && txtLimpo(c.obsFolha)), nPag = pg.chunks.length;
     return pg.chunks.map(function (ch, j) {
-      return function (i, n) { return renderColunas(c, pg, j, { pag: i + 1, total: n, ultima: j === nPag - 1 }, r, faixa); };
+      return function (i, n) { return renderColunas(c, pg, j, { pag: i + 1, total: n, ultima: j === nPag - 1 }, r, faixa, an); };
     });
   }
   // uma página de colunas: a j-ésima de paginate (pg); num = { pag, total, ultima } ("Página pag de total"; ultima: a última
   // página de colunas, com o total); r = resumoSegs(c); faixa: com as Observações gerais do contrato embaixo das colunas
-  function renderColunas(c, pg, j, num, r, faixa) {
+  function renderColunas(c, pg, j, num, r, faixa, an) {
     var o = [], ch = pg.chunks[j], g = colunasGeom(faixa, servicesOf(c).length), gm = geom(pg.slots);
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
+    if (an) drawUsoInterno(o);
     drawHeader(o, c, null, null, colunasKpis(c, r));
     drawLabelsSeg(o, c, g);
     // sem segmento (só quando as colunas são a única folha): o aviso no lugar das colunas, nunca uma página em branco
@@ -1894,11 +1898,11 @@
     else {
       // eixo da rodovia passando pelos segmentos (antes dos blocos, que ficam por cima)
       o.push(L(G.x0, g.yBand + g.bandH / 2, G.x0 + gm.slot * ch.length, g.yBand + g.bandH / 2, { stroke: '#9AA29E', sw: 0.8, dash: '7 4' }));
-      ch.forEach(function (p, i) { drawSegmento(o, c, p, gm.bx(i), gm.bw, g); });
+      ch.forEach(function (p, i) { drawSegmento(o, c, p, gm.bx(i), gm.bw, g, an); });
     }
     bandeirasCol(o, c, pg, j, g);
     if (faixa) drawObsContrato(o, c, g);
-    drawFooterSeg(o, c, r, num);
+    drawFooterSeg(o, c, r, num, an);
     o.push('</svg>');
     return o.join('');
   }
@@ -1958,8 +1962,9 @@
     o.push(L(G.colLine, 106, G.colLine, g.obsEnd, { stroke: '#C9CECB', sw: 0.6 }));
   }
   // uma coluna (o segmento p), no molde de drawPonte
-  function drawSegmento(o, c, p, bx, bw, g) {
-    var cx = bx + bw / 2, sv = p.serv || {};
+  // an (folha "Com análise"): cada grupo mostra a última medição com serviço no segmento (celRest), como as pontes do 424
+  function drawSegmento(o, c, p, bx, bw, g, an) {
+    var cx = bx + bw / 2, sv = p.serv || {}, a = an && an.pontes ? an.pontes[p.id] || null : null;
     function km(v) { return typeof v === 'number' && isFinite(v) ? fmtKm(v) : '-'; }
     o.push('<g data-pid="' + esc(p.id) + '">');
     // km Atualizado e, em cima, pequeno, o do contrato pela régua (sem a régua, a linha não sai: a nota do rodapé explica)
@@ -2003,7 +2008,8 @@
     celEstado(o, TRAFEG, sv.trafeg, kt, TRAF_STATUS[kt], bx, g.yTraf, bw, g.servH);
     servicesOf(c).forEach(function (s, i) {
       var x = sv[s.key], k = oaeSt(x);
-      celEstado(o, s, x, k, oaeStOf(s, k), bx, g.yServ + i * g.servStep, bw, g.servH);
+      if (an) celRest(o, an, a, p, s, x || {}, k, bx, g.yServ + i * g.servStep, bw, g.servH);
+      else celEstado(o, s, x, k, oaeStOf(s, k), bx, g.yServ + i * g.servStep, bw, g.servH);
     });
 
     // observações: as do engenheiro e as notas "onde/o quê" (F-4 b), com a letra que diminui com a coluna, como no 424
@@ -2093,7 +2099,7 @@
   // rodapé, no molde de drawFooterOae (que não muda): a legenda dos estados e das marcas e, na 2ª linha, a da trafegabilidade; as
   // notas (notasColunas) quebradas em 598 pt, a 6,1 pt, no máximo 3 linhas (a letra diminui até 5,4 pt e, depois, a última linha
   // termina em "..."); o TOTAL GERAL na última página de colunas (nas outras, "Continua na página X") e a página (num)
-  function drawFooterSeg(o, c, r, num) {
+  function drawFooterSeg(o, c, r, num, an) {
     var y = G.yFoot, x = G.labelX, gray = '#5C6661', lx = x + 40, fs = 6.8;
     o.push(L(G.frame, y - 4, PAGE_W - G.frame, y - 4, { stroke: '#C9CECB', sw: 0.6 }));
     o.push(T(x, y + 10, 'LEGENDA', { size: 6.4, bold: true, fill: gray }));
@@ -2105,7 +2111,12 @@
     function caixa(st, nv) {
       return function (xx, yy) { o.push(st.fill === 'none' ? R(xx, yy, 15, 10, { fill: nv ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }) : R(xx, yy, 15, 10, { fill: st.fill, rx: 1.5 })); };
     }
-    [['OK', 'Sem defeito'], ['DN', 'Defeito observado'], ['EX', 'Em execução'], ['NA', 'Não se aplica (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
+    // com a análise: verde = a última medição com serviço do grupo; laranja e azul = o que a vistoria marcou
+    if (an) {
+      item(function (xx, yy) { o.push(R(xx, yy, 15, 10, { fill: '#1E9E55', rx: 1.5 })); }, 'Medido (mês · nº da última medição)', y + 2);
+      [['DN', 'Defeito observado'], ['EX', 'Em execução']].forEach(function (it) { item(caixa(OAE_STATUS[it[0]]), it[1], y + 2); });
+      item(function (xx, yy) { o.push(R(xx, yy, 15, 10, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 })); }, 'Sem medição', y + 2);
+    } else [['OK', 'Sem defeito'], ['DN', 'Defeito observado'], ['EX', 'Em execução'], ['NA', 'Não se aplica (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
       item(caixa(OAE_STATUS[it[0]], it[0] === 'NV'), it[1], y + 2);
     });
     item(function (xx, yy) { marcaPri(o, xx + 7.5, yy + 5); }, 'Prioridade', y + 2);
@@ -2115,6 +2126,8 @@
     lx += textW('Trafegabilidade:', fs, true) + 8;
     TRAF_ORDER.forEach(function (k) { item(caixa(TRAF_STATUS[k]), TRAF_STATUS[k].name, y + 16); });
     var ns = notasColunas(c), s = 6.1, ls;
+    if (an) ns = ['Com a análise das medições (uso interno): cada grupo mostra a última medição com serviço no segmento, pelo local da memória de cálculo (' +
+      (an.medicoes && an.medicoes.length ? an.medicoes[0].mes + ' a ' + an.medicoes[an.medicoes.length - 1].mes : '') + '); laranja e azul = o que a vistoria marcou. Medição registra quantidade e valor; não comprova execução.'].concat(ns);
     function linhas(z) { return ns.reduce(function (a, t) { return a.concat(wrap(t, 598, z)); }, []); }
     ls = linhas(s);
     while (ls.length > 3 && s > 5.4) { s = Math.max(5.4, r2(s - 0.1)); ls = linhas(s); }
@@ -2873,7 +2886,9 @@
     // "Onde foi medido" (segmento da conservação): a lista só é montada aberta; ao abrir, lê as ocorrências e refaz o cartão
     if (d && d.classList && d.classList.contains('an-oc') && d.dataset.id) {
       ui.ocAb[d.dataset.id] = d.open;
-      if (d.open && !d.dataset.cheio) { carregarOcorr(active(), findPoint(d.dataset.id)); refazPonte(d.dataset.id, '.an-oc summary'); }
+      // fechada, deixa de estar "cheia": ao abrir de novo a lista é refeita (e lida outra vez se deu erro)
+      if (!d.open) delete d.dataset.cheio;
+      else if (!d.dataset.cheio) { carregarOcorr(active(), findPoint(d.dataset.id)); refazPonte(d.dataset.id, '.an-oc summary'); }
     }
   }, true);
 
@@ -3923,7 +3938,12 @@
     var k = ocKey(c, p), cred = banco.login.codigo, cid = c.id, pid = p.id;
     anOcorr[k] = { estado: 'carregando', cred: cred, ki: p.kmIni, kf: p.kmFim };
     function refaz() { if (!visaoOn && active() && active().id === cid && ui.open[pid] && ui.ocAb[pid] && !typing()) refazPonte(pid); }
-    window.Banco.analiseOcorr(cred, cid, p.kmIni, p.kmFim).then(function (r) {
+    // o primeiro e o último segmento também levam o que a memória mediu antes ou depois deles (fora do contrato pela régua),
+    // como na conta dos valores por segmento da análise
+    var ki = p.kmIni, kf = p.kmFim, segs = sortedPoints(c).filter(function (q) { return q.kmIni != null && q.kmFim != null; });
+    if (segs.length && !segs.some(function (q) { return q.kmIni < p.kmIni; })) ki = -1e5;
+    if (segs.length && !segs.some(function (q) { return q.kmFim > p.kmFim; })) kf = 1e5;
+    window.Banco.analiseOcorr(cred, cid, ki, kf).then(function (r) {
       if (!anOcorr[k] || anOcorr[k].cred !== cred) return;
       anOcorr[k] = { estado: 'ok', cred: cred, ki: p.kmIni, kf: p.kmFim, l: Array.isArray(r) ? r : [] };
       refaz();
@@ -3942,9 +3962,11 @@
     if (!x) { carregarOcorr(c, p); x = ocorrDe(c, p); }   // aberta antes (ui.ocAb) e ainda sem a lista desta sessão e deste trecho
     if (!x && (p.kmIni == null || p.kmFim == null)) return h + '<div class="an-note">Informe o km inicial e o final do segmento para ver as ocorrências.</div></details>';
     if (!x || x.estado === 'carregando') return h + '<div class="an-note">Carregando as ocorrências da memória de cálculo…</div></details>';
-    if (x.estado === 'erro') return h + '<div class="an-note">Não foi possível carregar agora. Feche e abra de novo para tentar outra vez.</div></details>';
+    if (x.estado === 'erro') return h + '<div class="an-note">Não foi possível carregar agora. <button type="button" class="btn small" data-act="oc-retry" data-id="' + esc(p.id) + '">Tentar de novo</button></div></details>';
     var l = ocorrSeg(x, an, sel, E), sv = {}, arq = an.memorias || {};
-    (an.servicos || []).forEach(function (s) { sv[s.cod || s.id] = s; });
+    // pelo id (o mesmo código em dois grupos vira 93776-1, 93776-2) e, sem id igual, pelo código
+    (an.servicos || []).forEach(function (s) { sv[s.id || s.cod] = s; });
+    (an.servicos || []).forEach(function (s) { if (s.cod && !sv[s.cod]) sv[s.cod] = s; });
     if (!l.length) return h + '<div class="an-note">Nenhuma ocorrência ' + esc(nPt(an)) + ' ' + esc(sel ? 'na ' + medTxt(an, sel) : E ? 'na ' + E + 'ª etapa' : 'nas medições') + '.</div></details>';
     h += '<div class="an-line">' + l.length + (l.length === 1 ? ' ocorrência' : ' ocorrências') + (l.length > OC_MAX ? ' · as ' + OC_MAX + ' primeiras por km; escolha uma medição no gráfico para ver só ela' : '') + '</div>';
     h += '<div class="an-oc-t">' + l.slice(0, OC_MAX).map(function (o) {
@@ -4188,7 +4210,7 @@
       $('previewMeta').textContent = 'Mapa pelo SNV/DNIT ' + window.SNV_BR230.versao + ' · ' + metaItens(c, tot);
       return;
     }
-    var temAn = isOae(c) && !!anOf(c), sw = $('folhaSw');
+    var temAn = (isOae(c) || isConserva(c)) && !!anOf(c), sw = $('folhaSw');
     if (sw) {
       sw.hidden = !temAn || !parte(c, 'acomp');
       sw.querySelectorAll('[data-folha]').forEach(function (x) { x.setAttribute('aria-pressed', String((x.dataset.folha === 'vistoria') === folhaVistoria)); });
@@ -4525,6 +4547,12 @@
       ui.grpAb[b.dataset.id + '|' + b.dataset.g] = abG;
       b.setAttribute('aria-expanded', String(abG));
       if (corpo) corpo.hidden = !abG;
+      return;
+    }
+    // "Onde foi medido" que não carregou: lê de novo
+    if (act === 'oc-retry') {
+      var pr = findPoint(b.dataset.id);
+      if (c && pr) { carregarOcorr(c, pr); refazPonte(pr.id, '.an-oc summary'); }
       return;
     }
     // etapa mostrada na análise (resumo e cartões das pontes); o PDF não muda
@@ -5041,13 +5069,13 @@
   // quem vê a análise das medições escolhe: só a vistoria (padrão, para enviar) ou com a análise (uso interno)
   function escolherFolha(oque) {
     var c = active();
-    if (!anOf(c) || !isOae(c)) return Promise.resolve(true);   // a folha da conservação ainda não traz a análise
+    if (!anOf(c)) return Promise.resolve(true);
     if (!parte(c, 'acomp')) return Promise.resolve(false);   // analista só das medições: a folha com a análise, sem escolher
     return new Promise(function (resolve) {
       modal('<h2 id="modalTitle">' + esc(oque) + '</h2>' +
         '<fieldset class="folha-op"><legend>O que vai na folha</legend>' +
         // começa sempre em "Só a vistoria": a folha com a análise é de uso interno e não vai à contratada por engano
-        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Só a vistoria</b><small>Estado das pontes e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
+        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Só a vistoria</b><small>Estado ' + (isConserva(c) ? 'dos segmentos' : 'das pontes') + ' e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
         '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
         '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary">Continuar</button></div>',
       function (f) {
@@ -5119,6 +5147,53 @@
     reader.readAsText(file);
   }
 
+  // ---- carga das medições de um contrato (Administrador): arquivo { tipo: 'carga-medicoes', contrato, fonte, dados, ocorr }
+  // gerado na extração das MPs. Grava com o login de quem está no app: a análise (analise_gravar) e, na conservação, as
+  // ocorrências km a km (analise_ocorr_gravar, em partes de 2000). Substitui o que o banco tinha para o contrato.
+  var CARGA_PARTE = 2000;
+  function abrirCargaMed(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var x, c;
+      try {
+        x = JSON.parse(reader.result);
+        if (!x || x.tipo !== 'carga-medicoes' || typeof x.contrato !== 'string' || !x.dados || typeof x.dados !== 'object' ||
+          !Array.isArray(x.dados.medicoes) || !x.dados.medicoes.length || (x.ocorr != null && !Array.isArray(x.ocorr))) throw new Error('formato');
+        (x.ocorr || []).forEach(function (o) { if (!Array.isArray(o) || o.length !== 8) throw new Error('formato'); });
+      } catch (e) { toast('Esse arquivo não é uma carga de medições deste site.'); return; }
+      c = state.contracts.filter(function (k) { return k.id === x.contrato; })[0];
+      if (!c) { toast('O contrato do arquivo (' + x.contrato + ') não está no site.'); return; }
+      var ms = x.dados.medicoes, r = x.dados.resumo || {}, oc = x.ocorr || [];
+      confirmar({
+        titulo: 'Carregar as medições do ' + (c.numero ? 'CT ' + c.numero : c.id) + '?',
+        html: '<p>Arquivo <b>' + esc(file.name) + '</b>: ' + ms.length + ' medições (' + esc((ms[0].mes || '') + ' a ' + (ms[ms.length - 1].mes || '')) + ')' +
+          (r.total != null ? ', ' + fmtBRL(r.total) + ' a preços iniciais' : '') + (oc.length ? ', ' + oc.length + ' ocorrências km a km' : '') + '.</p>' +
+          (x.fonte ? '<p><small>' + esc(x.fonte) + '</small></p>' : '') +
+          '<p>Substitui a análise que o banco tiver para este contrato. Grava como ' + esc(banco.login.nome || 'Administrador') + '.</p>',
+        botao: 'Carregar medições'
+      }).then(function (ok) {
+        if (!ok) return;
+        var cred = banco.login.codigo, cid = c.id, feito = 0;
+        toast('Gravando as medições…', 60000);
+        var p = window.Banco.analiseGravar(cred, cid, x.dados, x.fonte || '');
+        for (var i = 0; i < oc.length; i += CARGA_PARTE) (function (i) {
+          p = p.then(function () { return window.Banco.analiseOcorrGravar(cred, cid, oc.slice(i, i + CARGA_PARTE), i); }).then(function (n) { feito += n; });
+        })(i);
+        p.then(function () {
+          if (oc.length && feito !== oc.length) throw new Error('ocorrências gravadas: ' + feito + ' de ' + oc.length);
+          delete analise.estado[cid];
+          Object.keys(anOcorr).forEach(function (k) { if (k.indexOf(cid + '|') === 0) delete anOcorr[k]; });
+          carregarAnalise(c);
+          toast('Medições do ' + (c.numero ? 'CT ' + c.numero : cid) + ' carregadas: ' + ms.length + ' medições' + (oc.length ? ' e ' + feito + ' ocorrências' : '') + '.', 6000);
+        }).catch(function (err) {
+          console.error(err);
+          toast('Não foi possível gravar tudo (' + ((err && (err.msg || err.message)) || 'erro') + '). Carregue o mesmo arquivo de novo: a carga recomeça do zero.', 9000);
+        });
+      });
+    };
+    reader.readAsText(file);
+  }
+
   // ------------------------------------------------------------------ menu
   function closeMenu() { $('menuPop').hidden = true; $('btnMenu').setAttribute('aria-expanded', 'false'); }
   function onMenu(e) {
@@ -5149,6 +5224,7 @@
     else if (act === 'lixeira') openLixeira();
     else if (act === 'recusadas') openRecusadas();
     else if (act === 'usuarios') openUsuarios();
+    else if (act === 'cargamed') { if (!banco.login || !isResp()) { toast('Só o Administrador carrega medições.'); return; } $('fileMed').click(); }
     else if (act === 'aprovar') openAprov();
   }
 
@@ -5832,7 +5908,7 @@
     // itens do menu Dados conforme o papel
     // fiscal e analista: sem backup e sem voltar aos dados iniciais (o menu fica com a conta, o PDF e a impressão do que veem)
     var equipe = !banco.on || isEng();
-    var show = { lixeira: isEng(), usuarios: isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe, reset: equipe };
+    var show = { lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe, reset: equipe };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
@@ -6574,8 +6650,9 @@
     });
   }
   // editor só para consulta enquanto ninguém entrou
+  // os seletores que só mudam o que se vê (data-anmed: "Segmentos/Pontes por medição") continuam livres para quem só lê
   function lockEditor() {
-    if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { el.disabled = true; });
+    if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-anmed')) el.disabled = true; });
     else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
   }
   var EDIT_ACTS = ['set-st', 'set-marca', 'set-item', 'set-desemp', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
@@ -6695,7 +6772,7 @@
     $('viewMapa').addEventListener('click', function () { setView('mapa'); });
     if (!window.MapaSNV || !window.L || !window.SNV_BR230) $('viewMapa').closest('.view-sw').hidden = true;
     if (window.TelaCheia) {
-      viewer = window.TelaCheia({ pageW: PAGE_W, pageH: PAGE_H, getSheets: function () { var c = active(); return renderSheets(c, isOae(c) && !!anOf(c) && folhaSoVist(c)); } });
+      viewer = window.TelaCheia({ pageW: PAGE_W, pageH: PAGE_H, getSheets: function () { var c = active(); return renderSheets(c, (isOae(c) || isConserva(c)) && !!anOf(c) && folhaSoVist(c)); } });
       $('btnFull').addEventListener('click', function () { if (view === 'mapa' && mapa) mapa.openFull(); else viewer.open(); });
     } else {
       $('btnFull').hidden = true;
@@ -6710,6 +6787,11 @@
     $('fileInput').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
       if (f) openBackup(f);
+      e.target.value = '';
+    });
+    $('fileMed').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (f) abrirCargaMed(f);
       e.target.value = '';
     });
     document.addEventListener('keydown', function (e) {

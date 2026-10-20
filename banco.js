@@ -139,6 +139,12 @@
     analise: function (cred, cid) { return rpc('analise_ler', { p_cred: cred, p_contrato: cid }); },
     // ocorrências medidas da conservação no trecho de km (migração 14): [[medição, serviço, km ini, km fim, lado, q, local, pág.]]
     analiseOcorr: function (cred, cid, ki, kf) { return rpc('analise_ocorr_ler', { p_cred: cred, p_contrato: cid, p_km_ini: ki, p_km_fim: kf }); },
+    // carga das medições (Administrador, menu Dados › Carregar medições): a análise inteira e, na conservação,
+    // as ocorrências em partes (inicio = posição da 1ª linha da parte; 0 apaga as anteriores do contrato)
+    analiseGravar: function (cred, cid, dados, fonte) { return rpc('analise_gravar', { p_cred: cred, p_contrato: cid, p_dados: dados, p_fonte: fonte || '' }); },
+    analiseOcorrGravar: function (cred, cid, linhas, inicio) {
+      return rpc('analise_ocorr_gravar', { p_cred: cred, p_contrato: cid, p_linhas: linhas, p_inicio: inicio }).then(Number);
+    },
     // marca "medido sem execução" (uso interno): med = nº da medição, ou null para tirar
     analiseMarcar: function (cred, cid, pid, grupo, med) {
       return rpc('analise_marcar', { p_cred: cred, p_contrato: cid, p_ponte: pid, p_grupo: grupo, p_medicao: med == null ? null : Number(med) });
