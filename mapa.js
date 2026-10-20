@@ -202,6 +202,7 @@
     '.mp-pop .rotas{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}',
     '.mp-pop .rotas .mp-btn{flex:1 1 auto;justify-content:center;min-height:40px;box-shadow:none;background:var(--mp-accent);border-color:var(--mp-accent);color:var(--mp-accent-ink)}',
     '.mp-pop .mp-pop-foto{margin-top:10px;width:100%;justify-content:center;box-shadow:none}',
+    '.mp-pop .mp-pop-abrir{margin-top:8px;width:100%;justify-content:center;box-shadow:none;background:var(--mp-accent);border-color:var(--mp-accent);color:var(--mp-accent-ink);font-weight:600}',
     '.mp .leaflet-control-attribution{background:rgba(255,255,255,.8);color:#333;font-size:10px}',
     '.mp .leaflet-control-attribution a{color:#1D4F91}',
     '.mp .leaflet-bar a{background:var(--mp-panel);color:var(--mp-ink);border-color:var(--mp-line)}',
@@ -566,6 +567,7 @@
         h += '<div class="links"><a href="' + routeUrl(a) + '" target="_blank" rel="noopener">Rota até o início</a><a href="' + routeUrl(b) + '" target="_blank" rel="noopener">Rota até o fim</a></div>';
       }
       if (opts.onPhoto) h += '<button class="mp-btn mp-pop-foto" type="button" data-mp="foto" data-pid="' + esc(p.id) + '">' + ICON.cam + 'Foto com carimbo</button>';
+      if (opts.onOpen) h += '<button class="mp-btn mp-pop-abrir" type="button" data-mp="abrir" data-pid="' + esc(p.id) + '">' + esc(opts.openLabel ? opts.openLabel(p) : 'Abrir') + '</button>';
       h += '</div>';
       return h;
     }
@@ -1357,6 +1359,7 @@
       else if (act === 'fit') fit();
       else if (act === 'kml') exportKml();
       else if (act === 'foto') { if (opts.onPhoto) opts.onPhoto(b.dataset.pid || ''); }
+      else if (act === 'abrir') { if (opts.onOpen) { map.closePopup(); opts.onOpen(b.dataset.pid || ''); } }
       else if (act === 'gps') {
         if (!opts.gps) { if (q('.mp-live').hidden) noGpsCard(); else liveCard(''); setGpsBtn(); }
         else if (live.watch) stopGps(); else startGps();

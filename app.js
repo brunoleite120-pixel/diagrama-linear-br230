@@ -2158,7 +2158,7 @@
   // ------------------------------------------------------------------ estado
   // aba/dadosAb/grpAb: aba aberta na ponte (vist | med), "Dados da ponte" aberto e grupos abertos na aba Medições ("pid|grupo");
   // medModo: grupo | abc (aba Medições); servModo: o mesmo nos serviços do contrato (resumo da análise)
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, ocAb: {}, medModo: 'grupo', servModo: 'grupo' };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, ocAb: {}, medModo: 'grupo', servModo: 'grupo', voltar: null };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
@@ -2274,7 +2274,7 @@
     if (cc) cc.innerHTML = esc(at ? ctCurto(at) : 'Contratos') + ICON_DESCE;
     var atl = $('atalhos');
     if (atl) {
-      atl.hidden = visaoOn || medicoesOn;
+      atl.hidden = true;   // as páginas valem em qualquer largura: os atalhos que rolavam até cada parte saíram
       var bp = atl.querySelector('[data-ir="pontos"]');
       if (bp && at) bp.textContent = isConserva(at) ? 'Segmentos' : isOae(at) ? 'Pontes' : 'Pontos';
     }
@@ -2352,16 +2352,22 @@
     if (tb) document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
   }
 
-  // ---------------- celular: páginas separadas (Pontos · Diagrama · Mapa · Galeria) e a barra das páginas, com a Foto no meio.
-  // Em pé a barra fica embaixo; deitado, no topo (index.html). O Diagrama é a primeira; a escolhida fica guardada neste aparelho.
-  // Cada troca entra no histórico: o Voltar do Android (e do navegador) volta para a página anterior. Fora do celular
-  // (tablet e computador), tudo como antes: editor e folha juntos, com os atalhos
+  // ---------------- páginas separadas (Pontos · Diagrama · Mapa · Galeria) e a barra das páginas, com a Foto, em qualquer
+  // largura com um contrato aberto. Celular e tablet em pé: a barra embaixo, com a Foto no meio; celular deitado: no topo;
+  // tablet deitado e computador: uma 2ª linha da barra do topo, em abas (index.html). O Diagrama é a primeira; a escolhida
+  // fica guardada neste aparelho. Cada troca entra no histórico: o Voltar do Android (e do navegador) volta para a anterior.
+  // Fora do celular, a página Pontos mostra a lista e o item aberto lado a lado (renderEditor, mdOn)
   var PG_KEY = 'diagrama-linear.pagina';
   var mmCel = window.matchMedia ? window.matchMedia('(max-width:700px),(max-height:500px) and (orientation:landscape) and (max-width:1100px)') : null;
+  var mmMd = window.matchMedia ? window.matchMedia('(min-width:701px) and (min-height:501px),(min-width:1101px)') : null;
+  var mmPc = window.matchMedia ? window.matchMedia('(min-width:1101px)') : null;
+  // computador largo: as ferramentas da folha sobem para a barra das páginas
+  var mmLargo = window.matchMedia ? window.matchMedia('(min-width:1400px)') : null;
   var pg = (function () { try { var v = localStorage.getItem(PG_KEY); return v === 'pontos' || v === 'mapa' || v === 'galeria' ? v : 'diagrama'; } catch (e) { return 'diagrama'; } })();
   var pgRolY = {};   // onde cada página estava rolada, para voltar ao mesmo lugar
   function temMapa() { return !!(window.MapaSNV && window.L && window.SNV_BR230); }
-  function pgAtivo() { return !!(mmCel && mmCel.matches) && !visaoOn && !medicoesOn && !$('layout').hidden; }
+  function pgAtivo() { return !visaoOn && !medicoesOn && !$('layout').hidden; }
+  function mdOn() { return pgAtivo() && !!(mmMd && mmMd.matches); }
   function aplicaPg() {
     var nav = $('pgNav'), on = pgAtivo();
     if (!nav) return;
@@ -2376,6 +2382,81 @@
     if (ui.wide) toggleWide(false);
     if ((pg === 'diagrama' || pg === 'mapa') && (pg === 'mapa') !== (view === 'mapa')) setView(pg);
     if (pg === 'galeria') abreGaleriaPg(); else fechaGaleriaPg();
+    ferramentasNaBarra();
+    folhasNav();
+    contaPg();
+    syncTopbar();   // a 2ª linha (abas) entrou ou saiu da barra do topo
+  }
+  // computador largo, no Diagrama: Só vistoria/Com análise, Páginas, Tela cheia e PDF ficam na barra das páginas
+  function ferramentasNaBarra() {
+    var t = document.querySelector('.preview-tools'), slot = $('pgTools'), bar = document.querySelector('.preview-bar');
+    if (!t || !slot || !bar) return;
+    var sobe = pgAtivo() && pg === 'diagrama' && !!(mmLargo && mmLargo.matches);
+    if (sobe && t.parentNode !== slot) slot.appendChild(t);
+    else if (!sobe && t.parentNode !== bar) bar.appendChild(t);
+    slot.hidden = !sobe;
+  }
+  // computador, no Diagrama: as folhas em miniatura à esquerda (cópias do desenho, sem os cliques); a da tela fica marcada
+  function folhasNav() {
+    var nav = $('folhasNav');
+    if (!nav) return;
+    var on = pgAtivo() && pg === 'diagrama' && view !== 'mapa' && !!(mmPc && mmPc.matches);
+    nav.hidden = !on;
+    if (!on) return;
+    var sh = $('pages').querySelectorAll('.sheet');
+    nav.innerHTML = '<div class="fn-t">Folhas</div>' + Array.prototype.map.call(sh, function (x, i) {
+      return '<button type="button" class="fn-b" data-fi="' + i + '"><span class="fn-mini"></span><span>Folha ' + (i + 1) + '</span></button>';
+    }).join('');
+    var minis = nav.querySelectorAll('.fn-mini');
+    Array.prototype.forEach.call(sh, function (x, i) {
+      var svg = x.querySelector('svg');
+      if (!svg || !minis[i]) return;
+      var cl = svg.cloneNode(true);
+      cl.setAttribute('aria-hidden', 'true');
+      cl.removeAttribute('id');
+      cl.querySelectorAll('[data-pid]').forEach(function (g) { g.removeAttribute('data-pid'); });
+      minis[i].appendChild(cl);
+    });
+    marcaFolha();
+  }
+  function marcaFolha() {
+    var nav = $('folhasNav'), pgs = $('pages');
+    if (!nav || nav.hidden) return;
+    var lim = pgs.getBoundingClientRect().top + 80, at = 0;
+    Array.prototype.forEach.call(pgs.querySelectorAll('.sheet'), function (x, i) { if (x.getBoundingClientRect().top <= lim) at = i; });
+    nav.querySelectorAll('.fn-b').forEach(function (b) { if (Number(b.dataset.fi) === at) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+  }
+  var fnT = 0;
+  function pedeFolhasNav() { clearTimeout(fnT); fnT = setTimeout(function () { folhasNav(); contaPg(); }, 150); }
+  // os números nas abas do computador: itens do contrato e folhas do diagrama
+  function contaPg() {
+    var c = active(), nav = $('pgNav');
+    if (!c || !nav || !state.contracts.length) return;
+    var a = nav.querySelector(':scope > [data-pg="pontos"] .pg-n'), d = nav.querySelector(':scope > [data-pg="diagrama"] .pg-n');   // :scope: o body também tem data-pg
+    if (a) a.textContent = String(sortedPoints(c).length);
+    if (d) { var n = $('pages').querySelectorAll('.sheet').length; d.textContent = n ? n + ' pág.' : ''; }
+  }
+  // "Voltar ao diagrama · folha N" (ou "ao mapa"): o item foi aberto tocando nele no desenho ou no mapa
+  var ICON_VOLTA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>';
+  function voltarHtml() {
+    var v = ui.voltar;
+    if (!v) return '';
+    var t = v.pg === 'mapa' ? 'Voltar ao mapa' : 'Voltar ao diagrama' + (v.folha >= 0 ? ' · folha ' + (v.folha + 1) : '');
+    return '<button type="button" class="btn small ld-voltar" data-act="ld-voltar">' + ICON_VOLTA + esc(t) + '</button>';
+  }
+  function voltarDe(v) {
+    irPg(v.pg);
+    if (v.pg === 'diagrama' && v.top != null) { var pgs = $('pages'); requestAnimationFrame(function () { pgs.scrollTop = v.top; marcaFolha(); }); }
+    renderEditor();
+  }
+  // tocar em "Abrir em Pontes" no balão do mapa
+  function abrirDoMapa(pid) {
+    if (!findPoint(pid)) return;
+    ui.open = {}; ui.open[pid] = true;
+    ui.voltar = mdOn() ? { pg: 'mapa' } : null;
+    if (pgAtivo()) irPg('pontos');
+    renderEditor();
+    scrollToPoint(pid, true);
   }
   // semHist: veio do Voltar (popstate), não entra de novo no histórico
   function irPg(novo, semHist) {
@@ -2711,6 +2792,7 @@
     var pts = sortedPoints(c), oae = isOae(c);
     if (oae || cons) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
     if (isPavimentada(c)) h.push(desempResumoHtml(c));
+    var iLista = h.length;   // até aqui, o resumo do contrato (dados, análise, desempenho); daqui em diante, a lista
     // conservação: a lista "Segmentos". Sem nenhum, só "Gerar segmentos" (pelos limites dos trechos); com pelo menos um, só
     // "+ Segmento" (os dois nunca juntos: um segmento solto num contrato vazio esconderia o "Gerar")
     if (cons) {
@@ -2732,19 +2814,39 @@
       h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa ponte (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
         'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
     }
+    // lado a lado: um item aberto por vez, à direita; na lista, no lugar dele, só a linha marcada
+    var md = mdOn(), pAb = null;
+    if (md) {
+      pts.forEach(function (p) { if (!pAb && ui.open[p.id]) pAb = p; });
+      ui.open = {};
+      if (pAb) ui.open[pAb.id] = true;
+      if (!pAb) ui.voltar = null;
+    }
     h.push('<div class="pt-list" id="ptList">');
-    pts.forEach(function (p) { h.push(pointCard(p)); });
+    pts.forEach(function (p) { h.push(p === pAb ? ptMarcadoHtml(p) : pointCard(p)); });
     h.push('</div>');
     // analista e fiscal: sem aviso de papel em cima (pedido de 19/10/2026); só o contrato de conservação vazio avisa o fiscal
+    var nota = '';
     if (readOnly() && !isAnalista()) {
-      h.unshift('<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
-        '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>');
+      nota = '<div class="ro-note"><span>Só consulta: os dados são do banco da equipe. Para editar, entre com o seu código.</span>' +
+        '<button type="button" class="btn small primary" data-act="login">Entrar</button></div>';
     } else if (isFiscal() && cons && !pts.length) {
-      h.unshift('<div class="ro-note fiscal-note"><span>Este contrato de conservação ainda não tem segmentos.</span></div>');
+      nota = '<div class="ro-note fiscal-note"><span>Este contrato de conservação ainda não tem segmentos.</span></div>';
     }
-    h.push(dicaInstalarHtml());
-    $('editor').innerHTML = h.join('');
+    var ed = $('editor');
+    ed.classList.toggle('ld', md);
+    if (md) {
+      var resBtn = '<button type="button" class="ld-resumo" data-act="ld-resumo" aria-current="' + !pAb + '"><span class="ld-resumo-t"><b>Resumo do contrato</b>' +
+        '<small>Dados do contrato' + (anOf(c) ? ' · Análise das medições' : '') + '</small></span>' + ICON_CHEV + '</button>';
+      ed.innerHTML = '<div class="ld-l">' + nota + resBtn + h.slice(iLista).join('') + dicaInstalarHtml() + '</div>' +
+        '<div class="ld-r">' + (pAb ? voltarHtml() + pointCard(pAb) : '<h2 class="ld-tit">Resumo do contrato</h2>' + h.slice(0, iLista).join('')) + '</div>';
+    } else ed.innerHTML = nota + h.join('') + dicaInstalarHtml();
     lockEditor();
+  }
+  // na lista lado a lado, a linha do item aberto (sem data-id no .pt: os seletores do cartão acham só o da direita)
+  function ptMarcadoHtml(p) {
+    var c = ownerOf(p);   // as mesmas colunas do cartão (ponte, segmento ou ponto)
+    return '<div class="pt' + (isOae(c) || isConserva(c) ? ' oae' : '') + (isConserva(c) ? ' cons' : '') + ' pt-marcado"><button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="true" aria-current="true">' + pointHead(p) + '</button></div>';
   }
 
   function pointHead(p) {
@@ -2856,6 +2958,8 @@
   function refreshPointHead(p) {
     var art = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] .pt-head');
     if (art) art.innerHTML = pointHead(p);
+    var mk = document.querySelector('.pt-marcado [data-id="' + CSS.escape(p.id) + '"]');
+    if (mk) mk.innerHTML = pointHead(p);
     var art2 = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] input[readonly]');
     if (art2) { var len = pointLen(p); art2.value = len != null ? fmt(len, 2) + ' km' : ''; }
     // segmento: o km do contrato e o código do SNV acompanham o km digitado
@@ -4182,7 +4286,8 @@
     if (mapa || !window.MapaSNV) return mapa;
     mapa = window.MapaSNV({
       host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo, nomes: NOMES,
-      saveText: saveText, tiles: true, gps: true, notify: function (m) { toast(m); }, onPhoto: openFoto
+      saveText: saveText, tiles: true, gps: true, notify: function (m) { toast(m); }, onPhoto: openFoto,
+      onOpen: abrirDoMapa, openLabel: function () { var c = active(); return 'Abrir em ' + (isConserva(c) ? 'Segmentos' : isOae(c) ? 'Pontes' : 'Pontos'); }
     });
     return mapa;
   }
@@ -4239,6 +4344,7 @@
     }).join('');
     $('previewMeta').textContent = sheets.length + (sheets.length === 1 ? ' página' : ' páginas') + ' · A3 paisagem · ' + metaItens(c, tot, true);
     if (viewer && viewer.isOpen()) viewer.update(sheets);
+    pedeFolhasNav();
   }
 
   // sem código (ou sem nenhum contrato liberado): só a visão geral
@@ -4667,10 +4773,13 @@
       renderEditor();
       return;
     }
+    if (act === 'ld-resumo') { ui.open = {}; ui.voltar = null; renderEditor(); return; }
+    if (act === 'ld-voltar') { var vv = ui.voltar; ui.voltar = null; if (vv) voltarDe(vv); return; }
     // ponte citada no resumo da análise: abre o cartão dela
     if (act === 'an-ir') {
       var pidIr = b.dataset.id, anIr = anOf(c), gIr = medGlobalDe(c, anIr), aIr = anIr && anIr.pontes ? anIr.pontes[pidIr] : null;
       if (gIr && !(aIr && Number(aIr.meses[String(gIr)]) > 0)) delete ui.medGlobal[c.id];
+      if (mdOn()) { ui.open = {}; ui.voltar = null; }
       ui.open[pidIr] = true;
       renderEditor();
       var alvo = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(pidIr) : pidIr) + '"]');
@@ -4683,6 +4792,15 @@
         renderEditor();
         return;
       case 'toggle-point':
+        if (mdOn()) {
+          var abre = !ui.open[b.dataset.id];
+          ui.open = {}; ui.voltar = null;
+          if (abre) ui.open[b.dataset.id] = true;
+          renderEditor();
+          var mr = document.querySelector('#editor .ld-r');
+          if (mr) mr.scrollTop = 0;
+          return;
+        }
         ui.open[b.dataset.id] = !ui.open[b.dataset.id];
         p = findPoint(b.dataset.id);
         // ao fechar, a lista volta a ser ordenada por KM
@@ -5042,6 +5160,12 @@
 
   // na troca de página do celular o ponto aparece direto (a página acabou de abrir: não há de onde deslizar)
   function scrollToPoint(id, direto) {
+    if (mdOn()) {
+      var mr = document.querySelector('#editor .ld-r'), mk = document.querySelector('#editor .pt-marcado');
+      if (mr) mr.scrollTop = 0;
+      if (mk) mk.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     var el = document.querySelector('.pt[data-id="' + CSS.escape(id) + '"]');
     if (el) el.scrollIntoView(direto ? { block: 'start' } : { behavior: 'smooth', block: 'start' });
   }
@@ -5055,9 +5179,11 @@
     if (!g) return;
     var id = g.getAttribute('data-pid');
     var trocou = pgAtivo() && pg !== 'pontos';
+    var sh = g.closest('.sheet'), fol = sh ? Array.prototype.indexOf.call($('pages').querySelectorAll('.sheet'), sh) : -1, topo = $('pages').scrollTop;
     if (pgAtivo()) irPg('pontos');
     if (ui.wide) toggleWide(false);
     ui.open = {}; ui.open[id] = true;
+    ui.voltar = trocou && mdOn() ? { pg: 'diagrama', folha: fol, top: topo } : null;
     renderEditor();
     scrollToPoint(id, trocou);
   }
@@ -6823,7 +6949,20 @@
     $('pgNav').querySelector('[data-pg="mapa"]').hidden = !temMapa();
     try { history.replaceState({ pg: pg }, ''); } catch (e) { /* segue sem histórico */ }
     window.addEventListener('popstate', function (e) { var s = e.state && e.state.pg; if (s && s !== pg && pgAtivo()) irPg(s, true); });
-    if (mmCel && mmCel.addEventListener) mmCel.addEventListener('change', function () { aplicaPg(); if (view === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); } });
+    [mmCel, mmMd, mmPc, mmLargo].forEach(function (m) {
+      if (m && m.addEventListener) m.addEventListener('change', function () {
+        aplicaPg();
+        if (pgAtivo() && $('editor').classList.contains('md') !== mdOn()) renderEditor();
+        if (view === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); }
+      });
+    });
+    $('folhasNav').addEventListener('click', function (e) {
+      var x = e.target.closest('.fn-b');
+      if (!x) return;
+      var s2 = $('pages').querySelectorAll('.sheet')[Number(x.dataset.fi)];
+      if (s2) s2.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+    $('pages').addEventListener('scroll', function () { marcaFolha(); }, { passive: true });
     // dedo: com um campo de texto em uso (teclado aberto), a barra das páginas some para não ficar no meio da tela
     var mmDedo = window.matchMedia ? window.matchMedia('(pointer:coarse)') : null;
     function campoTexto(t) { return !!(t && t.matches && t.matches('input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=button]):not([type=submit]),textarea')); }

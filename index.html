@@ -383,8 +383,8 @@ button.vg-tr.sel{background:var(--accent-soft)}
    continua na barra, numa 2ª linha. Com um contrato aberto, cada página mostra só a sua parte (body[data-pg]) ---------- */
 .pgnav{display:none}
 .ctm-nome{display:contents}
-.ctm-prev,.so-pg{display:none}
-@media (max-width:700px),(max-height:500px) and (orientation:landscape) and (max-width:1100px){
+.ctm-prev,.so-pg,.pg-n,.pg-sp{display:none}
+@media (max-width:1100px){
   .topbar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"logo tabs menu" "est est est";gap:8px;align-items:center;
     padding:calc(8px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) 8px calc(12px + env(safe-area-inset-left,0px))}
   .brand,.actions{display:contents}
@@ -421,7 +421,7 @@ button.vg-tr.sel{background:var(--accent-soft)}
   /* Foto e Galeria ficam na barra das páginas; Diagrama e Mapa são páginas */
   #btnWide,#viewSw,#btnFoto,#btnGaleria{display:none}
   .so-pg{display:inline-flex}
-  #btnFull .btn-txt{display:none}
+  #btnFull .btn-txt,#btnPdfPg .btn-txt{display:none}
   /* Páginas, tela cheia e PDF numa fileira só, embaixo do texto da folha */
   .preview-tools{width:100%}
   .pages-ctl{flex:1 1 150px;min-width:0}
@@ -454,7 +454,7 @@ button.vg-tr.sel{background:var(--accent-soft)}
 }
 /* em pé: a barra das páginas fica embaixo, com a Foto no meio, em destaque; some com o teclado aberto
    (um celular pequeno deitado tem menos de 700 px de largura: fica com a regra do deitado) */
-@media (max-width:700px) and (orientation:portrait),(max-width:700px) and (min-height:501px){
+@media (max-width:700px) and (orientation:portrait),(max-width:700px) and (min-height:501px),(min-width:701px) and (max-width:1100px) and (orientation:portrait){
   body[data-pg]{--pgnav-h:calc(64px + env(safe-area-inset-bottom,0px));padding-bottom:var(--pgnav-h)}
   body[data-pg].teclado{--pgnav-h:0px}
   body.teclado .pgnav{display:none}
@@ -478,6 +478,114 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .pgnav button[aria-current="page"]{background:var(--accent-soft)}
   .pgnav .pg-foto{background:var(--accent);color:var(--accent-ink);font-weight:600}
   .map-host{height:calc(100vh - 69px);height:calc(100dvh - 69px);min-height:220px}
+}
+/* ---------- tablet (701 a 1100 px): a barra do topo mostra "Visão geral" por extenso ---------- */
+@media (min-width:701px) and (max-width:1100px){
+  .tab-visao{width:auto;padding:0 14px}
+  .tab-visao .tv-txt{display:inline}
+  .tab-visao svg{display:none}
+  .ctmenu{flex:0 1 340px}
+  .brand img{height:36px}
+}
+/* tablet em pé: a barra das páginas embaixo, um pouco maior */
+@media (min-width:701px) and (max-width:1100px) and (orientation:portrait){
+  body[data-pg]{--pgnav-h:calc(68px + env(safe-area-inset-bottom,0px))}
+  .pgnav button{font-size:12.5px}
+}
+/* tablet deitado: as páginas numa 2ª linha da barra do topo, em abas; as ferramentas da folha numa linha delas */
+@media (min-width:701px) and (max-width:1100px) and (orientation:landscape) and (min-height:501px){
+  .topbar{grid-template-areas:"logo tabs menu" "nav nav nav" "est est est";padding-bottom:0}
+  .pgnav:not([hidden]){grid-area:nav;display:flex;align-items:stretch;gap:4px;height:52px;box-sizing:border-box;
+    margin:0 calc(-12px - env(safe-area-inset-right,0px)) 0 calc(-12px - env(safe-area-inset-left,0px));
+    padding:0 calc(12px + env(safe-area-inset-right,0px)) 0 calc(12px + env(safe-area-inset-left,0px));border-top:1px solid var(--line)}
+  .pgnav button{flex-direction:row;gap:8px;padding:0 16px;font-size:14px;font-weight:600;border-bottom:3px solid transparent;border-radius:0}
+  .pgnav button[aria-current="page"]{color:var(--accent);border-bottom-color:var(--accent);background:none}
+  .pg-ic svg{width:18px;height:18px}
+  .pgnav [data-pg="pontos"]{order:1}.pgnav [data-pg="diagrama"]{order:2}.pgnav [data-pg="mapa"]{order:3}.pgnav [data-pg="galeria"]{order:4}
+  .pgnav .pg-sp{display:block;order:5;flex:1}
+  .pgnav .pg-foto{order:6;align-self:center;min-height:40px;padding:0 16px;border:1px solid var(--accent);border-radius:8px;background:var(--accent);color:var(--accent-ink)}
+  .ler-btn{display:none}
+}
+
+/* ---------- páginas (body[data-pg], app.js aplicaPg): cada uma mostra só a sua parte ---------- */
+body[data-pg="pontos"] .preview,body[data-pg="diagrama"] .editor,body[data-pg="mapa"] .editor,body[data-pg="galeria"] .layout{display:none}
+body[data-pg] .layout{grid-template-columns:minmax(0,1fr);min-height:0}
+body[data-pg] .mp-tools [data-mp="foto"]{display:none}
+body[data-pg="mapa"] .map-host .mp-chip{min-height:44px;padding-left:12px;padding-right:14px;font-size:13px}
+.folhas-nav{display:none}
+/* ---------- computador: as páginas numa 2ª linha da barra do topo, em abas com o número de itens e de folhas; a Foto à direita.
+   Cada página ocupa a tela abaixo da barra e rola por dentro (a página do navegador não rola) ---------- */
+@media (min-width:1101px){
+  .pgnav:not([hidden]){display:flex;order:20;flex:1 1 100%;align-items:stretch;gap:4px;height:52px;box-sizing:border-box;
+    margin:-2px calc(-20px - env(safe-area-inset-right,0px)) -10px calc(-20px - env(safe-area-inset-left,0px));
+    padding:0 calc(20px + env(safe-area-inset-right,0px)) 0 calc(20px + env(safe-area-inset-left,0px));border-top:1px solid var(--line)}
+  .pgnav button{display:inline-flex;align-items:center;gap:8px;padding:0 16px;border:0;border-bottom:3px solid transparent;background:none;
+    font-size:14px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+  .pgnav button:hover{color:var(--ink)}
+  .pgnav button[aria-current="page"]{color:var(--accent);border-bottom-color:var(--accent)}
+  .pg-ic{position:relative;display:flex}
+  .pg-ic svg{width:18px;height:18px}
+  .pg-ic .gl-pend{position:absolute;top:-4px;right:-6px}
+  .pg-n:not(:empty){display:inline-block;padding:1px 8px;border-radius:999px;background:var(--line);color:var(--ink-2);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+  .pgnav button[aria-current="page"] .pg-n{background:var(--accent-soft);color:var(--accent)}
+  .pgnav [data-pg="pontos"]{order:1}.pgnav [data-pg="diagrama"]{order:2}.pgnav [data-pg="mapa"]{order:3}.pgnav [data-pg="galeria"]{order:4}
+  .pgnav .pg-sp{display:block;order:5;flex:1}
+  .pg-tools:not([hidden]){order:6;display:flex;align-items:center;padding-right:12px}
+  .pg-tools .preview-tools{flex-wrap:nowrap}
+  .pgnav .pg-foto{order:7;align-self:center;min-height:38px;padding:0 16px;border:1px solid var(--accent);border-radius:8px;color:var(--accent);background:var(--panel)}
+  .pgnav .pg-foto:hover{background:var(--accent-soft)}
+  /* o PDF fica nas ferramentas do Diagrama; a troca Diagrama/Mapa, a Foto e a Galeria viraram abas */
+  body[data-pg] #btnPdf,body[data-pg] #btnWide,body[data-pg] #viewSw,body[data-pg] #btnFoto,body[data-pg] #btnGaleria{display:none}
+  body[data-pg] .so-pg{display:inline-flex}
+  body[data-pg] #btnPdfPg{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  body[data-pg] .layout{min-height:0}
+  /* Diagrama: as folhas em miniatura à esquerda e a folha no meio, do tamanho que cabe na altura */
+  body[data-pg="diagrama"] .preview{height:calc(100vh - var(--topbar-h,61px));height:calc(100dvh - var(--topbar-h,61px));box-sizing:border-box;padding:0;
+    display:grid;grid-template-columns:150px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"nav bar" "nav pages"}
+  body[data-pg="diagrama"] .folhas-nav:not([hidden]){grid-area:nav;display:flex;flex-direction:column;gap:12px;overflow:auto;padding:14px 12px;border-right:1px solid var(--line);background:var(--panel)}
+  body[data-pg="diagrama"] .preview-bar{grid-area:bar;margin:0;padding:12px 24px 0}
+  body[data-pg="diagrama"] .pages{grid-area:pages;overflow:auto;padding:12px 24px 32px}
+  body[data-pg="diagrama"] .folhas-nav[hidden] ~ .preview-bar,body[data-pg="diagrama"] .folhas-nav[hidden] ~ .pages{grid-column:1/-1}
+  body[data-pg="diagrama"] .sheet{width:100%;max-width:calc((100vh - var(--topbar-h,61px) - 96px) * 1.414);max-width:calc((100dvh - var(--topbar-h,61px) - 96px) * 1.414);margin:0 auto;flex:none}
+  .fn-t{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .fn-b{display:flex;flex-direction:column;gap:4px;padding:0;border:0;background:none;font-size:12px;font-weight:600;color:var(--ink-2);text-align:left}
+  .fn-mini{display:block;background:#fff;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+  .fn-mini svg{display:block;width:100%;height:auto;pointer-events:none}
+  .fn-b:hover .fn-mini{border-color:var(--ink-3)}
+  .fn-b[aria-current="true"]{color:var(--accent)}
+  .fn-b[aria-current="true"] .fn-mini{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+  /* Mapa: de borda a borda abaixo da barra; a fileira de baixo escolhe o item */
+  body[data-pg="mapa"] .preview{padding:0}
+  body[data-pg="mapa"] .preview-bar{display:none}
+  body[data-pg="mapa"] .map-host{height:calc(100vh - var(--topbar-h,61px));height:calc(100dvh - var(--topbar-h,61px));min-height:0}
+  body[data-pg="mapa"] .map-host .mp{min-height:0;border:0;border-radius:0}
+}
+
+/* ---------- lado a lado (tablet e computador), na página Pontos: a lista à esquerda, o item aberto à direita (app.js renderEditor).
+   Sem item aberto, a direita mostra o resumo do contrato (Dados e Análise) ---------- */
+@media (min-width:701px) and (min-height:501px),(min-width:1101px){
+  .editor.ld{display:grid;grid-template-columns:minmax(280px,420px) minmax(0,1fr);gap:20px;align-items:stretch;
+    height:calc(100vh - var(--topbar-h,61px) - var(--pgnav-h,0px));height:calc(100dvh - var(--topbar-h,61px) - var(--pgnav-h,0px));
+    box-sizing:border-box;overflow:hidden;position:static;padding:16px 20px 0;border:0}
+  .ld-l,.ld-r{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0;overflow:auto;padding:0 4px 24px 0}
+  .ld-l > *,.ld-r > *{flex:none}
+  .ld-resumo{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:56px;padding:10px 14px;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--panel);text-align:left;color:var(--ink)}
+  .ld-resumo-t{display:flex;flex-direction:column;min-width:0}
+  .ld-resumo-t b{font-size:14px;font-weight:650}
+  .ld-resumo-t small{font-size:12.5px;color:var(--ink-3)}
+  .ld-resumo svg{flex:none;width:16px;height:16px;transform:rotate(-90deg);color:var(--ink-3)}
+  .ld-resumo[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)}
+  .ld-resumo[aria-current="true"] svg{color:var(--accent)}
+  .pt-marcado{border-color:var(--accent)}
+  .pt-marcado .pt-head{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);border-radius:var(--radius)}
+  .ld-voltar{align-self:flex-start;gap:6px}
+  .ld-voltar svg{width:16px;height:16px}
+  .ld-tit{margin:0;font-size:18px;font-weight:650}
+  .ld-r > .pt.open{box-shadow:none}
+}
+@media (min-width:701px) and (max-width:1100px) and (min-height:501px){
+  .editor.ld{grid-template-columns:minmax(250px,36%) minmax(0,1fr);gap:14px;padding:12px 14px 0}
 }
 /* dedo: botões das ferramentas da folha, do aviso "Só consulta" e da troca Diagrama/Mapa com 44 px */
 @media (pointer:coarse),(max-width:700px){
@@ -1213,17 +1321,20 @@ span.an-chip{cursor:default}
     </div>
   </div>
   <nav class="pgnav" id="pgNav" aria-label="Páginas" hidden>
-    <button type="button" data-pg="pontos"><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></span><span class="pg-t">Pontos</span></button>
-    <button type="button" data-pg="diagrama"><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M3 14.5h18M9 5v14M15 5v14"/></svg></span><span class="pg-t">Diagrama</span></button>
+    <button type="button" data-pg="pontos"><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></span><span class="pg-t">Pontos</span><span class="pg-n"></span></button>
+    <button type="button" data-pg="diagrama"><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M3 14.5h18M9 5v14M15 5v14"/></svg></span><span class="pg-t">Diagrama</span><span class="pg-n"></span></button>
     <button type="button" data-pg="foto" class="pg-foto" title="Foto com logo e legenda (km, coordenadas, ponto)"><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="pg-t">Foto</span></button>
     <button type="button" data-pg="mapa"><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg></span><span class="pg-t">Mapa</span></button>
     <button type="button" data-pg="galeria" hidden><span class="pg-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="gl-pend" hidden></span></span><span class="pg-t">Galeria</span></button>
+    <span class="pg-sp" aria-hidden="true"></span>
+    <div class="pg-tools" id="pgTools" hidden></div>
   </nav>
 </header>
 
 <main class="layout" id="layout">
   <aside class="editor" id="editor" aria-label="Edição do contrato"></aside>
   <section class="preview" aria-label="Pré-visualização do diagrama">
+    <aside class="folhas-nav" id="folhasNav" aria-label="Folhas do diagrama" hidden></aside>
     <div class="preview-bar">
       <div class="meta" id="previewMeta"></div>
       <div class="preview-tools">
@@ -1244,6 +1355,7 @@ span.an-chip{cursor:default}
         </button>
         <button class="btn small so-pg" id="btnPdfPg" type="button" aria-label="Exportar PDF" title="Exportar PDF">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          <span class="btn-txt">Exportar PDF</span>
         </button>
         <button class="btn small" id="btnWide" type="button" aria-pressed="false">Ampliar diagrama</button>
       </div>
