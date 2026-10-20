@@ -50,6 +50,14 @@
   var GRUPOS = { leg: ['campos'], apa: ['leg', 'cor', 'tam', 'fundo'], logo: ['logoOn', 'logo', 'logoFundo'], arq: ['arq'] };
   var GRUPO_NOME = { leg: 'Legenda', apa: 'Aparência', logo: 'Logo', arq: 'Arquivo' };
   var GRUPO_TITULO = { leg: 'O que aparece na legenda', apa: 'Aparência', logo: 'Logo', arq: 'Tamanho do arquivo' };
+  // folga do km no trecho do contrato: 50 m, a mesma da galeria (galeria.js)
+  var FOLGA_KM = 0.05;
+  // todos os contratos cujo trecho tem o km, na ordem da lista; faixa(c): [km inicial, km final] ou null. Nunca só "o primeiro":
+  // os de conservação cobrem o mesmo trecho dos de pontos críticos, e a ordem não diz qual serviço foi fotografado
+  function contratosNoKm(cs, km, faixa) {
+    if (km == null || !isFinite(km)) return [];
+    return (cs || []).filter(function (c) { var r = faixa(c); return !!r && km >= r[0] - FOLGA_KM && km <= r[1] + FOLGA_KM; });
+  }
 
   function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   // no app (Capacitor) a permissão é do app, nos Ajustes do aparelho; no site, do navegador
@@ -533,7 +541,12 @@
       return !c.rodovia || k(c.rodovia) === k(snv.rodovia || 'BR-230');
     }
     function lotsAt(km) {
-      return contracts().filter(function (c) { var r = sameRoad(c) && lotRange(c); return r && km >= r[0] - 0.001 && km <= r[1] + 0.001; });
+      return contratosNoKm(contracts(), km, function (c) { return sameRoad(c) ? lotRange(c) : null; });
+    }
+    // "A, B e C"
+    function lotNames(list) {
+      var n = list.map(function (c) { return lotName(c); });
+      return n.length > 1 ? n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1] : n.join('');
     }
     function has(list, c) { return !!c && list.some(function (x) { return x.id === c.id; }); }
     function rangeTxt(c) { var r = lotRange(c); return r ? 'km ' + nf(r[0], 2) + ' a ' + nf(r[1], 2) : ''; }
@@ -923,7 +936,7 @@
     function gpsLot(km) {
       var here = lotsAt(km), cur = activeContract();
       if (!here.length || !cur || has(here, cur)) return '';
-      return ' · <span class="ft-warn">este km é do contrato ' + esc(lotName(here[0])) + '</span>';
+      return ' · <span class="ft-warn">' + (here.length === 1 ? 'este km é do contrato ' + esc(lotName(here[0])) : 'este km está nos contratos ' + esc(lotNames(here))) + '</span>';
     }
     function renderHead() {
       var c = contract();
@@ -1166,8 +1179,11 @@
       var di = st.bi != null ? ' data-i="' + st.bi + '"' : '';   // foto do lote de fotos
       if (st.km != null && cur && !has(here, cur)) {
         if (here.length) {
-          h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica no contrato <b>' + esc(lotName(here[0])) + '</b> (' + esc(rangeTxt(here[0])) + '), não no ' + esc(lotName(cur)) +
-            (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '') + '. A legenda e o ponto estão usando o contrato errado.</div><div class="ft-opts">' +
+          // um km no trecho de mais de um contrato: todos aparecem, cada um com o seu botão (quem corrige escolhe o serviço)
+          h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica ' + (here.length === 1 ? 'no contrato <b>' + esc(lotName(here[0])) + '</b> (' + esc(rangeTxt(here[0])) + ')'
+              : 'no trecho de ' + here.length + ' contratos (' + here.map(function (c) { return '<b>' + esc(lotName(c)) + '</b>' + (rangeTxt(c) ? ': ' + esc(rangeTxt(c)) : ''); }).join('; ') + ')') +
+            ', não no ' + esc(lotName(cur)) + (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '') + '. A legenda e o ponto estão usando o contrato errado.' +
+            (here.length > 1 ? ' Escolha o do serviço fotografado.' : '') + '</div><div class="ft-opts">' +
             here.map(function (c) {
               var a = pointNear(c, st.km);
               return '<button type="button" class="ft-opt ft-fix" data-ft="fix-lot" data-cid="' + esc(c.id) + '"' + di + '>Corrigir para ' + esc(lotName(c)) + (a ? ' · ' + esc(a.nome) : '') + '</button>';
@@ -1548,13 +1564,13 @@
     }
     function liveItems() { return batch ? batch.items.filter(function (it) { return !it.gone; }) : []; }
     function readyItems() { return liveItems().filter(function (it) { return !it.wait && !it.err; }); }
-    // fotos cujo km fica em outro lote (e que ninguém mandou manter)
+    // fotos cujo km fica em outro lote (e que ninguém mandou manter): a lista de todos os contratos que têm o km (null: está certa)
     function wrongLot(it) {
       if (it.km == null) return null;
       return withItem(it, function () {
         var cur = contract(), here = lotsAt(it.km);
         if (!cur || !here.length || has(here, cur) || it.keepLot === cur.id + '@' + nf(it.km, 2)) return null;
-        return here[0];
+        return here;
       });
     }
     function renderBatchSum() {
@@ -1570,9 +1586,25 @@
       if (sem) parts.push('<span class="ft-warn">' + sem + ' sem localização</span>: digite o km ou escolha o ponto nelas');
       if (bad) parts.push('<span class="ft-warn">' + bad + (bad === 1 ? ' não abriu' : ' não abriram') + '</span>');
       q('.ft-bstat').innerHTML = parts.join(' · ');
-      var wrong = ok.filter(function (it) { return wrongLot(it); }).length, box = q('.ft-blot');
+      // "Corrigir pelo km" muda sozinho só as fotos com um único contrato possível; nas outras (o km está no trecho de mais de um),
+      // a escolha aparece antes de gravar: aqui, para todas elas, ou em cada foto
+      var wrong = 0, um = 0, varios = 0, opc = {}, ordem = [], box = q('.ft-blot');
+      ok.forEach(function (it) {
+        var w = wrongLot(it);
+        if (!w) return;
+        wrong++;
+        if (w.length === 1) { um++; return; }
+        varios++;
+        w.forEach(function (c) { if (!opc[c.id]) { opc[c.id] = { c: c, n: 0 }; ordem.push(c.id); } opc[c.id].n++; });
+      });
       box.innerHTML = wrong ? '<div><b>' + wrong + (wrong === 1 ? ' foto está' : ' fotos estão') + ' com o km em outro contrato.</b> A legenda e o ponto ' + (wrong === 1 ? 'dela' : 'delas') + ' estão usando o contrato errado.</div>' +
-        '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">Corrigir o contrato ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km</button></div>' : '';
+        (um ? '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="b-fixall">' + (!varios ? 'Corrigir o contrato ' + (wrong === 1 ? 'dela' : 'das ' + wrong) + ' pelo km'
+          : 'Corrigir pelo km ' + (um === 1 ? 'a que tem' : 'as ' + um + ' que têm') + ' um só contrato possível') + '</button></div>' : '') +
+        (varios ? '<div>' + (varios === 1 ? 'Em 1 foto' : 'Em ' + varios + ' fotos') + ', o km está no trecho de mais de um contrato: escolha o do serviço fotografado (aqui, para ' +
+          (varios === 1 ? 'ela' : 'todas elas') + ', ou em cada foto, abaixo).</div><div class="ft-opts">' + ordem.map(function (id) {
+            return '<button type="button" class="ft-opt" data-ft="b-fixto" data-cid="' + esc(id) + '">Passar ' + (varios === 1 ? 'para ' : opc[id].n < varios ? 'as ' + opc[id].n + ' possíveis para ' : 'as ' + varios + ' para ') +
+              esc(lotName(opc[id].c)) + '</button>';
+          }).join('') + '</div>' : '') : '';
       box.hidden = !wrong;
       var n = ok.length, off = batch.busy || wait > 0 || !n, nd = ok.filter(function (it) { return it.drive !== false; }).length;
       var bd = q('.ft-bdrv');
@@ -1599,19 +1631,38 @@
       });
       return c;
     }
+    // só as fotos com um único contrato possível pelo km; as com mais de um esperam a escolha (fixTo ou o botão de cada foto)
     function fixAll() {
-      var n = 0;
+      var n = 0, resta = 0;
       batch.items.forEach(function (it, i) {
         if (it.gone || it.wait || it.err) return;
         var to = wrongLot(it);
         if (!to) return;
-        setItemLot(it, to.id);
+        if (to.length !== 1) { resta++; return; }
+        setItemLot(it, to[0].id);
         n++;
         refreshItem(i);
         queueDraw(i);
       });
       renderBatchSum();
-      if (n) notify(n + (n === 1 ? ' foto corrigida' : ' fotos corrigidas') + ' para o contrato do km.');
+      if (n || resta) notify((n ? n + (n === 1 ? ' foto corrigida' : ' fotos corrigidas') + ' para o contrato do km.' : '') +
+        (resta ? (n ? ' ' : '') + resta + (resta === 1 ? ' tem' : ' têm') + ' o km em mais de um contrato: escolha o contrato ' + (resta === 1 ? 'dela' : 'delas') + '.' : ''));
+    }
+    // as fotos com o km em mais de um contrato, entre eles o escolhido (id), passam para ele
+    function fixTo(id) {
+      var n = 0, c = byId(id);
+      if (!c) return;
+      batch.items.forEach(function (it, i) {
+        if (it.gone || it.wait || it.err) return;
+        var to = wrongLot(it);
+        if (!to || to.length < 2 || !has(to, c)) return;
+        setItemLot(it, c.id);
+        n++;
+        refreshItem(i);
+        queueDraw(i);
+      });
+      renderBatchSum();
+      if (n) notify(n + (n === 1 ? ' foto passou' : ' fotos passaram') + ' para o contrato ' + lotName(c) + '.');
     }
     function itemChanged(i, later) {
       batch.ver++;
@@ -1978,6 +2029,7 @@
       if (b.dataset.ft === 'b-drive') { sendAllDrive(); return; }
       if (b.dataset.ft === 'drive') { sendDrive(); return; }
       if (b.dataset.ft === 'b-fixall') { if (batch) fixAll(); return; }
+      if (b.dataset.ft === 'b-fixto') { if (batch) fixTo(b.dataset.cid); return; }
       if ((b.dataset.ft === 'b-drv-all' || b.dataset.ft === 'b-drv-none') && batch) {
         var vai = b.dataset.ft === 'b-drv-all';
         padraoDrive(vai);
@@ -2257,5 +2309,7 @@
   // as regras das opções, sem tela (para os testes em node)
   FotoCarimbo.opcoes = { padrao: defaults, ler: loadSet, resumos: resumos, logoCurto: logoCurto, noPadrao: grupoNoPadrao, padraoTxt: padraoTxt,
     ARQS: ARQS, GRUPOS: GRUPOS, FIELDS: FIELDS };
+  // contrato pelo km, sem tela (para os testes em node): a mesma folga da galeria
+  FotoCarimbo.km = { FOLGA_KM: FOLGA_KM, contratosNoKm: contratosNoKm };
   window.FotoCarimbo = FotoCarimbo;
 })();

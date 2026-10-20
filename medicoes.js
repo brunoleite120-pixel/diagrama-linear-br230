@@ -183,30 +183,39 @@
       return h + '<p class="md-legenda"><i class="md-swatch medido"></i>Medido (acumulado PI ÷ base do contrato) <i class="md-swatch proj"></i>Projeção até o fim da execução. Ritmo: média das últimas 6 competências registradas; zeradas contam, lacunas não contam.</p>';
     }
 
-    // as duas formas existentes: consolidado porMedicao, ou serviços .por de cada ponte (424)
+    // a lista completa de serviços por medição: a própria análise (porMedicao) ou, na análise por ponte (424), a do Resumo da
+    // Medição do SIAC (siac.itens), que traz também a administração local, a mobilização e o canteiro
+    function consol(an) {
+      if (an.porMedicao) return { servicos: an.servicos || [], porMedicao: an.porMedicao, nomeCod: {} };
+      var it = an.siac && an.siac.itens;
+      return it && it.porMedicao ? { servicos: it.servicos || [], porMedicao: it.porMedicao, nomeCod: it.nomeCod || {} } : null;
+    }
+    // as duas formas existentes: consolidado porMedicao (ou siac.itens), ou só os serviços .por de cada ponte
     function linhas(d, n) {
       if (d.detalhes[n]) return d.detalhes[n];
-      var an = d.an, rows = [], ix = {}, locais = {}, pts = op.pontos(contrato(cid) || {}), nomes = {};
+      var an = d.an, cs = consol(an), rows = [], ix = {}, locais = {}, pts = op.pontos(contrato(cid) || {}), nomes = {};
       pts.forEach(function (p) { nomes[p.id] = p.nome || p.codigo || p.id; });
       Object.keys(an.pontes || {}).forEach(function (pid) {
         var p = an.pontes[pid];
         (p.servicos || []).forEach(function (s) {
           var qv = s.por && s.por[n]; if (!qv || (!valor(qv[0]) && !valor(qv[1]))) return;
-          var k = String(s.id || s.cod || s.nome);
-          if (!locais[k]) locais[k] = [];
-          if (locais[k].indexOf(nomes[pid] || p.nome || pid) < 0) locais[k].push(nomes[pid] || p.nome || pid);
+          // o nome curto do serviço da ponte e, com siac.itens, os códigos do SIAC a que ele corresponde
+          [String(s.id || s.cod || s.nome)].concat(cs && cs.nomeCod[s.nome] || []).forEach(function (k) {
+            if (!locais[k]) locais[k] = [];
+            if (locais[k].indexOf(nomes[pid] || p.nome || pid) < 0) locais[k].push(nomes[pid] || p.nome || pid);
+          });
         });
       });
-      var pm = an.porMedicao && an.porMedicao[n];
+      var pm = cs && cs.porMedicao[n];
       if (pm) {
-        (an.servicos || []).forEach(function (s) { ix[s.id || s.cod] = s; });
-        (an.servicos || []).forEach(function (s) { if (s.cod && !ix[s.cod]) ix[s.cod] = s; });
+        cs.servicos.forEach(function (s) { ix[s.id || s.cod] = s; });
+        cs.servicos.forEach(function (s) { if (s.cod && !ix[s.cod]) ix[s.cod] = s; });
         Object.keys(pm).forEach(function (k) {
           var s = ix[k] || { cod: k, nome: k }, qv = pm[k];
           rows.push({ id: k, s: s, q: valor(qv[0]), v: valor(qv[1]), locais: locais[k] || locais[s.cod] || [] });
         });
         // capítulos/grupos do catálogo sem serviço nesta competência ficam recolhidos, com valor zero
-        (an.servicos || []).forEach(function (s) {
+        cs.servicos.forEach(function (s) {
           var k = String(s.id || s.cod);
           if (!Object.prototype.hasOwnProperty.call(pm, k) && !rows.some(function (r) { return r.s === s; })) rows.push({ id: k, s: s, q: 0, v: 0, locais: [] });
         });
@@ -219,13 +228,19 @@
             r.q += valor(qv[0]); r.v += valor(qv[1]);
           });
         });
+        // análise por ponte (424): a administração local, a mobilização e o canteiro não têm ponte e entram só no total da
+        // medição; a diferença vira um grupo próprio, para os grupos fecharem com o total
+        var mt = null, soma = 0;
+        d.ms.forEach(function (m) { if (String(m.n) === String(n)) mt = valor(m.total); });
+        rows.forEach(function (r) { soma += r.v; });
+        if (mt != null && Math.abs(mt - soma) > 1) rows.push({ id: '_semponte', s: { cod: '', nome: 'Administração local, mobilização e canteiro (a análise não detalha por serviço)', un: '', g: 'semponte' }, q: null, v: mt - soma, locais: [], semPonte: true });
       }
       rows.sort(function (a, b) { return b.v - a.v; });
       var gs = [], gi = {}, labels = {};
       op.grupos(contrato(cid) || {}).forEach(function (g) { labels[g.key] = g.label || g.short; });
       rows.forEach(function (r) {
         var s = r.s, k = s.grupo ? 'cap:' + s.grupo : s.g || 'semlocal';
-        if (!gi[k]) { gi[k] = { key: k, nome: s.grupo ? nomeGrupo(s.grupo) : labels[k] || (k === 'semlocal' ? op.semLocal.short : k), rows: [], v: 0 }; gs.push(gi[k]); }
+        if (!gi[k]) { gi[k] = { key: k, nome: s.grupo ? nomeGrupo(s.grupo) : labels[k] || (k === 'semlocal' ? op.semLocal.short : k === 'semponte' ? 'Sem ponte' : k), rows: [], v: 0 }; gs.push(gi[k]); }
         gi[k].rows.push(r); gi[k].v += r.v;
       });
       gs.sort(function (a, b) { return b.v - a.v; });
@@ -239,9 +254,9 @@
       cs.forEach(function (c) {
         var d = dado(c); if (!d) return;
         if (!d.indice) {
-          var ag = {}, si = {};
-          (d.an.servicos || []).forEach(function (s) { si[s.id || s.cod] = s; });
-          (d.an.servicos || []).forEach(function (s) { if (s.cod && !si[s.cod]) si[s.cod] = s; });
+          var ag = {}, si = {}, cb = consol(d.an);
+          (cb ? cb.servicos : []).forEach(function (s) { si[s.id || s.cod] = s; });
+          (cb ? cb.servicos : []).forEach(function (s) { if (s.cod && !si[s.cod]) si[s.cod] = s; });
           function soma(s, k, n, qv) {
             if (!valor(qv[0]) && !valor(qv[1])) return;
             if (!ag[k]) ag[k] = { s: s, q: 0, v: 0, ns: [] };
@@ -249,7 +264,7 @@
             if (ag[k].ns.indexOf(n) < 0) ag[k].ns.push(n);
           }
           d.ms.forEach(function (m) {
-            var pm = d.an.porMedicao && d.an.porMedicao[m.n];
+            var pm = cb && cb.porMedicao[m.n];
             if (pm) Object.keys(pm).forEach(function (k) { soma(si[k] || { cod: k, nome: k }, k, m.n, pm[k]); });
             else Object.keys(d.an.pontes || {}).forEach(function (pid) { (d.an.pontes[pid].servicos || []).forEach(function (s) { if (s.por && s.por[m.n]) soma(s, s.id || s.cod || s.nome, m.n, s.por[m.n]); }); });
           });
@@ -328,7 +343,7 @@
       if (grupo == null && gs.length) grupo = gs[0].key;
       var h = '<div class="md-grupos">' + gs.map(function (g) {
         var aberto = grupo === g.key, pc = valor(m.total) ? g.v / valor(m.total) * 100 : 0;
-        return '<div class="md-grupo">' + botao('grupo', '<span><b>' + esc(g.nome) + '</b><span class="md-bar" aria-hidden="true"><i style="width:' + largura(pc) + '%"></i></span></span><span class="md-direita"><b>' + dinheiro(g.v) + '</b><small>' + pct(pc) + ' da medição</small></span>', ' data-g="' + esc(g.key) + '" aria-expanded="' + aberto + '"', 'md-grupo-btn') + (aberto ? tabelaHtml(g.rows) : '') + '</div>';
+        return '<div class="md-grupo">' + botao('grupo', '<span><b>' + esc(g.nome) + '</b><span class="md-bar" aria-hidden="true"><i style="width:' + largura(pc) + '%"></i></span></span><span class="md-direita"><b>' + dinheiro(g.v) + '</b><small>' + pct(pc) + ' da medição</small></span>', ' data-g="' + esc(g.key) + '" aria-expanded="' + aberto + '"', 'md-grupo-btn') + (aberto ? tabelaHtml(semValor || !g.v ? g.rows : g.rows.filter(function (r) { return r.v || r.q; })) : '') + '</div>';
       }).join('') + '</div>';
       if (!dt.rows.length) h += vazio(valor(m.total) ? 'O detalhamento por serviço desta medição não está disponível na análise.' : 'Medição registrada com valor zero.');
       var zero = dt.grupos.filter(function (g) { return !g.v; }).length;
@@ -339,7 +354,7 @@
     }
     function tabelaHtml(rows) {
       return '<div class="md-scroll" tabindex="0" role="region" aria-label="Serviços do grupo, tabela com rolagem"><table class="md-tabela"><caption class="sr-only">Serviços da medição escolhida</caption><thead><tr><th scope="col">Código</th><th scope="col">Serviço</th><th scope="col">Quantidade</th><th scope="col">Valor (PI)</th><th scope="col">Onde</th></tr></thead><tbody>' + rows.map(function (r) {
-        return '<tr><td>' + esc(r.s.cod || r.id) + '</td><td>' + esc(r.s.nome) + '</td><td class="md-num">' + fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un)) + '</td><td class="md-num">' + dinheiro(r.v) + '</td><td>' + esc(r.locais.length ? r.locais.join(' · ') : 'Sem local informado') + '</td></tr>';
+        return '<tr><td>' + esc(r.s.cod || '—') + '</td><td>' + esc(r.s.nome) + '</td><td class="md-num">' + (r.q == null ? '—' : fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un))) + '</td><td class="md-num">' + dinheiro(r.v) + '</td><td>' + esc(r.locais.length ? r.locais.join(' · ') : r.semPonte ? 'Sem ponte' : 'Sem local informado') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     }
     function segmentosHtml(c, d, m) {
