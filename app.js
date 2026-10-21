@@ -153,8 +153,13 @@
       var ex = Array.isArray(c.gruposExtras) ? c.gruposExtras : [];
       return CONS_PAV_SERVICES.filter(function (s) { return !s.extra || ex.indexOf(s.key) >= 0; });
     }
-    if (ctTipo(c) === 'pc' && c && Array.isArray(c.gruposExtras) && c.gruposExtras.length) {
-      return SERVICES.concat(PC_EXTRAS.filter(function (s) { return c.gruposExtras.indexOf(s.key) >= 0; }));
+    // pontos críticos com linhas a mais (c.gruposExtras) ou com o nome de uma linha trocado só neste contrato (c.rotulos:
+    // no CT 267 a linha do solo-brita é a pavimentação, com BGS e CBUQ)
+    if (ctTipo(c) === 'pc' && c && ((Array.isArray(c.gruposExtras) && c.gruposExtras.length) || c.rotulos)) {
+      var exP = Array.isArray(c.gruposExtras) ? c.gruposExtras : [], rot = c.rotulos || {};
+      return SERVICES.concat(PC_EXTRAS.filter(function (s) { return exP.indexOf(s.key) >= 0; })).map(function (s) {
+        return rot[s.key] ? { key: s.key, label: rot[s.key], short: rot[s.key], extra: s.extra } : s;
+      });
     }
     return tipoInfo(c).servicos;
   }
@@ -478,14 +483,15 @@
     });
   }
   function totals(c) {
-    var pts = c.pontos, len = 0, enr = null, sb = null, pct = 0;
+    var pts = c.pontos, len = 0, enr = null, sb = null, bgs = null, pct = 0;
     pts.forEach(function (p) {
       len += pointLen(p) || 0;
       if (p.enr != null) enr = (enr || 0) + p.enr;
       if (p.sb != null) sb = (sb || 0) + p.sb;
+      if (p.bgs != null) bgs = (bgs || 0) + p.bgs;
       pct += pointPct(p, c);
     });
-    return { n: pts.length, len: len, enr: enr, sb: sb, avg: pts.length ? pct / pts.length : null };
+    return { n: pts.length, len: len, enr: enr, sb: sb, bgs: bgs, avg: pts.length ? pct / pts.length : null };
   }
   // conservação (por enquanto só a faixa): a extensão do contrato ou, sem ela, km final − inicial; os segmentos do SNV
   // (snv-br230.js) que entram na faixa do km inicial ao final (sem os km ou sem o eixo, nenhum)
@@ -791,7 +797,8 @@
     drawDevices(o, p, bx, bw);
 
     // volumes e nome do ponto, com fundo para interromper as linhas dos dispositivos
-    var vols = [p.enr != null ? 'Enr: ' + fmt(p.enr, 2) + ' m³' : null, p.sb != null ? 'Sb: ' + fmt(p.sb, 2) + ' m³' : null].filter(Boolean);
+    var vols = [p.enr != null ? 'Enr: ' + fmt(p.enr, 2) + ' m³' : null, p.sb != null ? 'Sb: ' + fmt(p.sb, 2) + ' m³' : null,
+      p.bgs != null ? 'BGS: ' + fmt(p.bgs, 2) + ' m³' : null].filter(Boolean);
     var vs = Math.min.apply(null, [6.1].concat(vols.map(function (t) { return fitSize(t, bw - 8, 6.1, false, 3.6); }))), vy = G.yBand + 10;
     vols.forEach(function (txt) {
       txt = fitText(txt, bw - 8, vs);
@@ -915,6 +922,7 @@
       var parts = [];
       if (tot.enr != null) parts.push(['Enrocamento', fmt(tot.enr, 2) + ' m³']);
       if (tot.sb != null) parts.push(['Solo-brita', fmt(tot.sb, 2) + ' m³']);
+      if (tot.bgs != null) parts.push(['BGS prevista', fmt(tot.bgs, 2) + ' m³']);
       parts.push(['Extensão dos pontos', fmt(tot.len, 2) + ' km']);
       parts.push(['Pontos', String(tot.n)]);
       var px = bx + 10;
@@ -2950,6 +2958,7 @@
       h += field('KM final', 'data-p="kmFim" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmFim));
       h += field('Enrocamento (m³)', 'data-p="enr" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.enr, 2));
       h += field('Solo-brita (m³)', 'data-p="sb" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.sb, 2));
+      if (p.bgs != null || (ownerOf(p) || {}).temBgs) h += field('BGS prevista (m³)', 'data-p="bgs" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.bgs, 2));
       h += '</div>';
 
       h += '<div class="section-title">Serviços</div>';
@@ -5683,7 +5692,7 @@
     keepSync();
   }
   var FIELD_NAMES = {
-    nome: 'nome', kmIni: 'KM inicial', kmFim: 'KM final', enr: 'enrocamento (m³)', sb: 'solo-brita (m³)', obs: 'observações', disp: 'dispositivos',
+    nome: 'nome', kmIni: 'KM inicial', kmFim: 'KM final', enr: 'enrocamento (m³)', sb: 'solo-brita (m³)', bgs: 'BGS prevista (m³)', temBgs: 'campo de BGS nos pontos', rotulos: 'nomes das linhas só deste contrato', obs: 'observações', disp: 'dispositivos',
     numero: 'nº do contrato', lote: 'lote da licitação', executora: 'executora', supervisora: 'supervisora', ctSupervisao: 'contrato da supervisora',
     orgao: 'órgão', rodovia: 'rodovia', objeto: 'objeto', extensaoContrato: 'extensão do contrato', origem: 'sentido (de)', destino: 'sentido (para)',
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
