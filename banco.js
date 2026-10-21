@@ -32,12 +32,18 @@
 (function () {
   'use strict';
 
-  // oficial ou banco de teste da prévia (ambiente.js)
+  // oficial ou banco de teste da prévia (ambiente.js). Sem ambiente.js não há banco: a prévia não pode cair no oficial
   var AMB = window.AMBIENTE || {};
-  var BASE = (AMB.supabaseUrl || 'https://gwuoxrljxuwtiavjrcup.supabase.co') + '/rest/v1/';
-  var KEY = AMB.supabaseKey || 'sb_publishable_B5a0XlObjcN96TklpN1CdA_2kkaUhOg';
+  var BASE = AMB.supabaseUrl ? AMB.supabaseUrl + '/rest/v1/' : null;
+  var KEY = AMB.supabaseKey || '';
 
   function req(path, body) {
+    if (!BASE || !KEY) {
+      var e0 = new Error('A configuração do site não carregou');
+      e0.code = 'sem_ambiente';
+      e0.status = 0;          // como sem rede: nada é recusado nem descartado, só não sai daqui
+      return Promise.reject(e0);
+    }
     var o = { method: body ? 'POST' : 'GET', headers: { apikey: KEY, 'Content-Type': 'application/json' }, cache: 'no-store' };
     if (body) o.body = JSON.stringify(body);
     var timer = null;

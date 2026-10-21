@@ -33,18 +33,29 @@
     try { d = U && U.drive ? U.drive() : null; } catch (e) { d = null; }
     var i = null;
     try { i = d && d.info ? d.info() : null; } catch (e) { i = null; }
-    return { pronto: !!(U && U.pronto), alt: b && b.pend ? b.pend.length : 0, fotos: i ? i.n || 0 : 0, enviando: !!(b && b.sending) || !!(i && i.busy) };
+    var rec = 0;
+    try { rec = U && U.recusadas ? U.recusadas() : 0; } catch (e) { rec = 0; }
+    return { pronto: !!(U && U.pronto), login: !!(b && b.login), alt: b && b.pend ? b.pend.length : 0, fotos: i ? i.n || 0 : 0,
+      aparelho: i ? i.aparelho || 0 : 0, outras: i ? i.outras || 0 : 0, recusadas: rec, enviando: !!(b && b.sending) || !!(i && i.busy) };
   }
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
   function status() {
     var p = pendentes();
     if (!p.pronto) return { ok: false, t: 'Conferindo o que falta enviar deste aparelho…' };
-    var falta = [];
-    if (p.alt) falta.push(plural(p.alt, 'alteração', 'alterações'));
-    if (p.fotos) falta.push(plural(p.fotos, 'foto', 'fotos'));
-    if (!falta.length) return { ok: true, t: 'Tudo enviado: pode trocar de endereço.' };
-    return { ok: false, t: 'Espere: ' + falta.join(' e ') + ' deste aparelho ainda não ' + (p.alt + p.fotos === 1 ? 'foi enviada' : 'foram enviadas') +
-      '. Deixe o app aberto com internet' + (p.enviando ? ' (enviando agora)' : '') + '. No endereço novo isso não aparece.' };
+    // só libera com tudo zerado: o que fica só neste endereço some quando o atalho antigo for apagado
+    var linhas = [];
+    if (p.alt || p.fotos) {
+      var falta = [];
+      if (p.alt) falta.push(plural(p.alt, 'alteração', 'alterações'));
+      if (p.fotos) falta.push(plural(p.fotos, 'foto', 'fotos'));
+      linhas.push('Espere: ' + falta.join(' e ') + ' deste aparelho ainda não ' + (p.alt + p.fotos === 1 ? 'foi enviada' : 'foram enviadas') +
+        '. Deixe o app aberto com internet' + (p.enviando ? ' (enviando agora)' : '') + '.');
+    }
+    if (p.aparelho) linhas.push(plural(p.aparelho, 'foto está', 'fotos estão') + ' só neste aparelho (marcadas para não enviar): envie ao Drive ou salve na galeria do celular e apague daqui antes.');
+    if (p.outras) linhas.push(plural(p.outras, 'foto', 'fotos') + ' de outra pessoa' + (p.login ? '' : ' (ou de quem saiu)') + ' ainda não ' + (p.outras === 1 ? 'foi enviada' : 'foram enviadas') + ': quem tirou precisa entrar aqui com o código dele e enviar.');
+    if (p.recusadas) linhas.push(plural(p.recusadas, 'alteração recusada', 'alterações recusadas') + ' pelo banco ' + (p.recusadas === 1 ? 'está guardada' : 'estão guardadas') + ' só aqui: abra Dados › Alterações recusadas e mande de novo, ou baixe o arquivo e apague a lista.');
+    if (!linhas.length) return { ok: true, t: 'Tudo enviado: pode trocar de endereço.' };
+    return { ok: false, t: linhas.join(' ') + ' Não apague o atalho antigo antes disso.' };
   }
 
   function montar() {

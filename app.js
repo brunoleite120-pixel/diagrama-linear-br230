@@ -455,8 +455,19 @@
   // valor em R$ (PI): aceita o "R$" colado de um documento e, sem vírgula, o ponto de milhar ("1.500.000"), que o parseNum
   // leria como decimal ("1.500" = 1,5) ou como texto (sem valor)
   function parseValor(v) {
-    var t = String(v == null ? '' : v).replace(/R\$/gi, '').replace(/\s/g, '');
+    return parseQtd(String(v == null ? '' : v).replace(/R\$/gi, ''));
+  }
+  // quantidade (m³, m): sem vírgula, o ponto é de milhar como no R$ ("1.300" = mil e trezentos, não 1,3); "1.5" e
+  // "1.300,50" seguem o parseNum. O km não passa por aqui: lá o ponto é decimal ("849.53")
+  var QTD_CAMPO = /^(enr|sb|bgs|extensao|largura|extensaoContrato)$/;
+  function parseQtd(v) {
+    var t = String(v == null ? '' : v).replace(/\s/g, '');
     return parseNum(/^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t);
+  }
+  // ao sair do campo de quantidade: reescreve como ficou gravado (1.300 -> 1.300,00) e avisa se não entendeu
+  function qtdSaida(t, v, dec) {
+    if (v == null && t.value.trim()) toast('Número não entendido: digite só o número, como 1.300,50.', 5000);
+    t.value = dec ? fmt(v, 2) : fmtN(v);
   }
   // um Intl.NumberFormat por número de casas (toLocaleString cria um a cada chamada)
   var FMT = {};
@@ -3363,7 +3374,7 @@
         var it = ord.filter(function (t) { return t.g === g.key; });
         if (!it.length) return '';
         var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO || g === MED_SEMLOCAL || g === MED_OUTROS;
-        return '<div class="mg' + (ac ? ' acesso' : '') + '"><button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(cid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
+        return '<div class="mg' + (ac ? ' acesso' : '') + '"><button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(cid) + '" data-g="' + esc(g.key) + '" aria-expanded="' + ab + '">' +
           '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? (cons ? 'sem local nos segmentos · ' + it.length + (it.length === 1 ? ' serviço' : ' serviços') : 'meio de execução · fora da vistoria') : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
           '<span class="mg-t"><b>' + fmtBRL(v) + '</b><small>' + pct(v / tot * 100) + '</small></span>' + ICON_CHEV + '</button>' +
           '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + it.map(linha).join('') + '</div></div>';
@@ -4019,7 +4030,7 @@
     h += '<div class="an-graf"><div class="an-bars" role="group" aria-label="Valor medido ' + nPt(an) + ' em cada medição">' + ms.map(function (m, i) {
       var v = Number(a.meses[String(m.n)]) || 0, alt = v ? Math.max(4, Math.round(v / max * 100)) : 0, it = a.itens && a.itens[String(m.n)];
       var tip = m.n + 'ª medição (' + m.mes + ')' + (m.etapa ? ' · ' + m.etapa + 'ª etapa' : '') + (v ? ' · ' + fmtBRL(v) + (mx[m.n] ? ' · medição com alerta' : '') + (it ? ' · ' + it : '') : ' · sem serviço ' + nPt(an) + '');
-      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + (E && m.etapa !== E ? ' fora' : '') + '" data-act="med-bar" data-n="' + m.n + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
+      return '<button type="button" class="an-bar' + (i === corte ? ' corte' : '') + (v ? '' : ' zero') + (m.n === sel ? ' sel' : '') + (E && m.etapa !== E ? ' fora' : '') + '" data-act="med-bar" data-n="' + esc(m.n) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-pressed="' + (m.n === sel) + '">' +
         '<i class="' + (v ? (mx[m.n] ? 'al' : 'on') : '') + '" style="height:' + alt + '%"></i></button>';
     }).join('') + '</div>';
     if (ms.length) {
@@ -4108,7 +4119,7 @@
       var vazio = gi && gi.ult && (med || E) ? 'Sem serviço deste grupo ' + (med ? 'na ' + medTxt(an, med) : 'na ' + E + 'ª etapa') + '; a última medição com ele foi a ' + medTxt(an, gi.ult) + '.'
         : 'Nenhuma das ' + ms.length + ' medições pagou serviço deste grupo ' + nPt(an) + '.';
       h += '<div class="mg' + (ac ? ' acesso' : '') + (n ? '' : ' vazio') + '">' +
-        '<button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(pid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
+        '<button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(pid) + '" data-g="' + esc(g.key) + '" aria-expanded="' + ab + '">' +
         '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s">' + est + ult + '</span></span>' +
         '<span class="mg-t"><b>' + (n ? fmtBRL(x.v) : '—') + '</b><small>' + (n ? n + (n === 1 ? ' serviço' : ' serviços') : med ? 'nada nesta medição' : E ? 'nada nesta etapa' : 'sem medição') + '</small></span>' + ICON_CHEV + '</button>' +
         '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + (n ? x.it.map(function (y) { return svcMedHtml(an, y, med, faixa, etF, temPor); }).join('') : '<div class="mg-vazio">' + esc(vazio) + '</div>') + '</div></div>';
@@ -4703,7 +4714,8 @@
           delete t.dataset.antes;
         } else if (dupN) return;
       }
-      if (t.dataset.num) c[k] = parseNum(t.value);
+      if (t.dataset.num && QTD_CAMPO.test(k)) { c[k] = parseQtd(t.value); if (e.type === 'change') qtdSaida(t, c[k], true); }
+      else if (t.dataset.num) c[k] = parseNum(t.value);
       else if (t.dataset.int) c[k] = clamp(parseInt(t.value, 10) || 9, 1, 14);
       else c[k] = t.value;
       if (k === 'numero' || k === 'lote') { renderTabs(); syncNomes(c); }
@@ -4737,7 +4749,10 @@
     } else if (t.dataset.p) {
       var p = findPoint(t.dataset.id);
       if (!p) return;
-      p[t.dataset.p] = t.dataset.num ? parseNum(t.value) : t.value;
+      if (t.dataset.num && QTD_CAMPO.test(t.dataset.p)) {
+        p[t.dataset.p] = parseQtd(t.value);
+        if (e.type === 'change') qtdSaida(t, p[t.dataset.p], !/^(extensao|largura)$/.test(t.dataset.p));
+      } else p[t.dataset.p] = t.dataset.num ? parseNum(t.value) : t.value;
       if (isOae(c) && t.dataset.p === 'kmIni' && p.kmConferir) p.kmConferir = false;   // km corrigido à mão: já foi conferido
       if (isOae(c) && (t.dataset.p === 'kmIni' || t.dataset.p === 'extensao')) {
         p.kmFim = p.kmIni != null ? Math.round((p.kmIni + (Number(p.extensao) || 0) / 1000) * 1000) / 1000 : null;
@@ -5463,7 +5478,9 @@
         toast('Esse arquivo não é um backup válido deste site.');
         return;
       }
-      var np = s.contracts.reduce(function (n, c) { return n + c.pontos.length; }, 0);
+      // um backup sem contratos apagaria tudo de todos: recusa
+      if (!s.contracts.length) { toast('Esse backup não tem nenhum contrato. Nada foi trocado.'); return; }
+      var np =s.contracts.reduce(function (n, c) { return n + c.pontos.length; }, 0);
       confirmar({
         titulo: 'Trocar os dados pelos do backup?',
         html: '<p>Arquivo <b>' + esc(file.name) + '</b>: ' + s.contracts.length + ' contrato(s) e ' + np + ' pontos.</p><p>' + (banco.on
@@ -5549,16 +5566,6 @@
     else if (act === 'print') { if (visaoOn || medicoesOn) { toast('Abra um contrato para imprimir o diagrama dele.'); return; } imprimir(); }
     // na visão o contrato ativo está escondido: o relatório começa em "Todos"
     else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: visaoOn ? '' : active().id });
-    else if (act === 'reset') {
-      confirmar({ titulo: 'Voltar aos dados iniciais?', texto: 'Apaga as alterações deste navegador e volta aos dados da planilha. Faça um backup antes, se precisar.', digitar: 'APAGAR', botao: 'Voltar aos dados iniciais', perigo: true }).then(function (r) {
-        if (!r) return;
-        state = normalize(clone(window.UNIFILAR_SEED));
-        ui.open = {};
-        save();
-        renderAll();
-        toast('Dados iniciais restaurados.');
-      });
-    }
     else if (act === 'lixeira') openLixeira();
     else if (act === 'recusadas') openRecusadas();
     else if (act === 'usuarios') openUsuarios();
@@ -6245,9 +6252,9 @@
     if (ml) { ml.hidden = !banco.on; ml.textContent = b ? b.textContent : 'Entrar'; }
     if (mh) mh.hidden = !banco.on;
     // itens do menu Dados conforme o papel
-    // fiscal e analista: sem backup e sem voltar aos dados iniciais (o menu fica com a conta, o PDF e a impressão do que veem)
+    // fiscal e analista: sem backup (o menu fica com a conta, o PDF e a impressão do que veem)
     var equipe = !banco.on || isEng();
-    var show = { lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe, reset: equipe };
+    var show = { lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
@@ -6887,7 +6894,7 @@
     driveQ = window.DriveFotos({
       getUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
       getLogin: function () { return banco.login; },
-      ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
+      ambiente: window.AMBIENTE.nome,
       registrar: function (cred, f, mini) { return window.Banco.fotoRegistrar(cred, f, mini); },
       // o envio foi recusado pelo acesso: a mesma conferência da sessão (null = não vale mais; falha = banco ou rede fora)
       conferir: function (cred) { return window.Banco.sessao(cred).then(function (x) { return !!x; }); },
@@ -7033,7 +7040,6 @@
     if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
     initAprov();
-    document.querySelectorAll('[data-act="reset"]').forEach(function (b) { b.hidden = true; var hr = b.previousElementSibling; if (hr && hr.tagName === 'HR') hr.hidden = true; });
     ['editor', 'visaoHost', 'medicoesHost'].forEach(function (id) {
       var el = $(id);
       if (el) el.addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
@@ -7075,7 +7081,21 @@
   }
 
   // ------------------------------------------------------------------ início
+  // sem ambiente.js não se sabe qual banco nem qual armazenamento usar (a prévia leria e gravaria o do site oficial,
+  // que fica na mesma origem): o app não abre e pede para recarregar
+  function semAmbiente() {
+    var d = document.createElement('div');
+    d.setAttribute('role', 'alert');
+    d.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(23,32,28,.6)';
+    d.innerHTML = '<div style="max-width:420px;background:#fff;color:#17201C;border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;font:15px/1.45 system-ui,sans-serif">' +
+      '<b style="font-size:17px">A configuração do site não carregou</b>' +
+      '<span>Nada foi lido nem gravado. Confira a internet e recarregue a página. O que está guardado neste aparelho continua aqui.</span>' +
+      '<button type="button" style="min-height:44px;border:0;border-radius:8px;background:#1D4F91;color:#fff;font:inherit;font-weight:650">Recarregar</button></div>';
+    d.querySelector('button').addEventListener('click', function () { location.reload(); });
+    document.body.appendChild(d);
+  }
   function init() {
+    if (!window.AMBIENTE || !window.AMBIENTE.supabaseUrl) { semAmbiente(); return false; }
     state = load() || normalize(clone(window.UNIFILAR_SEED));
     if (window.UNIFILAR_LOGO) $('brandLogo').src = window.UNIFILAR_LOGO.src;
     var ed = $('editor');
@@ -7199,10 +7219,10 @@
     mapa: function () { return mapa; },
     banco: function () { return banco; },
     drive: function () { return driveQ; },
+    recusadas: function () { return recusadas().length; },
     diffOps: diffOps,
     applyOps: applyOps
   };
 
-  init();
-  window.Unifilar.pronto = true;   // atualizar.js confere isto antes de confirmar ao app que uma versão baixada abriu bem
+  if (init() !== false) window.Unifilar.pronto = true;   // atualizar.js confere isto antes de confirmar ao app que uma versão baixada abriu bem
 })();

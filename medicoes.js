@@ -313,7 +313,7 @@
         h += '</div>';
       });
       h += '</div><nav class="md-pilulas" aria-label="Trocar de medição">' + d.ms.filter(function (x) { return !zeradas || valor(x.total); }).map(function (x) {
-        return botao('med', esc(op.medTxt(d.an, x.n)), ' data-n="' + x.n + '" aria-pressed="' + (String(x.n) === String(med)) + '"');
+        return botao('med', esc(op.medTxt(d.an, x.n)), ' data-n="' + esc(x.n) + '" aria-pressed="' + (String(x.n) === String(med)) + '"');
       }).join('') + '</nav></section><section class="card md-detalhe" id="mdDetalhe" aria-label="Medição escolhida">' + medicaoHtml(c, d, m) + '</section></div>';
       return h;
     }
@@ -436,7 +436,7 @@
           h += '<div><div class="md-hist-cab"><span>Med.</span><span>Competência</span><span></span><span>Valor (PI)</span></div>' + mostra.map(function (x) {
             var y = vm(pid, x.n);
             return botao('med', '<b>' + esc(x.n + 'ª' + (x.retificada ? '*' : '')) + '</b><span>' + esc(mesTxt(idx(x.ref))) + '</span><span class="md-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(y) / (mx || 1) * 100) + '%"></i></span><span class="md-num">' + esc(dinheiro(y)) + '</span>',
-              ' data-n="' + x.n + '" aria-pressed="' + (String(x.n) === String(m.n)) + '" aria-label="' + esc('Abrir a ' + x.n + 'ª medição, ' + mesTxt(idx(x.ref)) + ': ' + dinheiro(y)) + '"', 'md-hist');
+              ' data-n="' + esc(x.n) + '" aria-pressed="' + (String(x.n) === String(m.n)) + '" aria-label="' + esc('Abrir a ' + x.n + 'ª medição, ' + mesTxt(idx(x.ref)) + ': ' + dinheiro(y)) + '"', 'md-hist');
           }).join('') + '</div>';
           if (desc.length > 8) h += botao('ponte-todas', segTodas ? 'Mostrar só as 8 últimas ▴' : 'Ver as ' + desc.length + ' medições ▾', '', 'small ghost md-accent');
           h += '<div class="md-hist-acum"><span>Acumulado</span><span>' + esc(dinheiro(acum)) + '</span></div>';
@@ -494,7 +494,7 @@
       var fichas = carregados.map(function (c) {
         var d = dado(c), cell = d && d.porMes[mesSel];
         if (cell) { soma += cell.total; n += cell.ms.length; }
-        return '<article class="card md-card"><h3>' + esc(nome(c)) + '</h3>' + (cell ? cell.ms.map(function (m) { return botao('abrir', '<span>' + esc(op.medTxt(d.an, m.n)) + '<small>' + dinheiro(m.total) + ' PI' + (!valor(m.total) ? ' · zerada' : '') + '</small></span>', ' data-cid="' + esc(c.id) + '" data-n="' + m.n + '"'); }).join('') : vazio(!d ? 'Análise não carregada' : d.comps.length && mesSel >= d.comps[0] ? 'Sem medição no SIAC nos dados carregados' : 'Sem medição carregada para esta competência')) + '</article>';
+        return '<article class="card md-card"><h3>' + esc(nome(c)) + '</h3>' + (cell ? cell.ms.map(function (m) { return botao('abrir', '<span>' + esc(op.medTxt(d.an, m.n)) + '<small>' + dinheiro(m.total) + ' PI' + (!valor(m.total) ? ' · zerada' : '') + '</small></span>', ' data-cid="' + esc(c.id) + '" data-n="' + esc(m.n) + '"'); }).join('') : vazio(!d ? 'Análise não carregada' : d.comps.length && mesSel >= d.comps[0] ? 'Sem medição no SIAC nos dados carregados' : 'Sem medição carregada para esta competência')) + '</article>';
       }).join('');
       return h + '<section class="card md-card"><div class="md-top"><h2>' + esc(mesTxt(mesSel)) + ' · ' + nMed(n) + '</h2><strong>' + dinheiro(soma) + ' (PI)</strong></div><div class="md-fichas">' + fichas + '</div></section>';
     }

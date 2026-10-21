@@ -111,7 +111,7 @@
   function rede() { var c = navigator.connection; return c && c.type ? c.type : ''; }
 
   window.DriveFotos = function (opts) {
-    var n = 0, soAparelho = 0, total = 0, bytes = 0, busy = false, erro = null, enviadas = 0, timer = null;
+    var n = 0, soAparelho = 0, outras = 0, total = 0, bytes = 0, busy = false, erro = null, enviadas = 0, timer = null;
     // a fila fica parada até `espera` (sem sinal ou acesso recusado); `recusas`: do acesso, seguidas; `proxFila`: a foto que volta primeiro
     var espera = 0, recusas = 0, proxFila = 0;
     // `geracao` muda a cada entrada nova (resetCode com outro acesso; `marcaFila` diz de qual acesso é a recusa guardada);
@@ -157,6 +157,8 @@
     }
     function recount() {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
+        // fotos ainda não enviadas de outra pessoa (ou de quem saiu): não aparecem para quem entrou, mas contam no aviso de endereço
+        outras = (all || []).filter(function (r) { return r.situacao !== 'enviada' && !daPessoa(r); }).length;
         all = (all || []).filter(daPessoa);
         total = all.length;
         n = all.filter(function (r) { return r.situacao === 'fila'; }).length;
@@ -488,7 +490,7 @@
       info: function () {
         // próxima tentativa: o fim da pausa da fila ou a foto que volta primeiro (parada pelo acesso: só ao entrar de novo)
         var agora = Date.now(), prox = erro === 'codigo' ? null : parada(agora) ? espera : proxFila > agora && proxFila - agora <= 2 * PAUSA_MAX ? proxFila : null;
-        return { n: n, aparelho: soAparelho, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox, emEnvio: busy ? emEnvio : null,
+        return { n: n, aparelho: soAparelho, outras: outras, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox, emEnvio: busy ? emEnvio : null,
           pausado: !!lsLer(PAUSA_KEY), esperaWifi: esperaWifi() };
       }
     };

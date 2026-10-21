@@ -102,7 +102,7 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .btn svg{width:16px;height:16px}
 
 .menu{position:relative}
-.menu-pop{position:absolute;right:0;top:calc(100% + 6px);min-width:250px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column}
+.menu-pop{position:absolute;right:0;top:calc(100% + 6px);min-width:250px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;max-height:calc(100vh - 80px);max-height:calc(100dvh - 80px);overflow-y:auto;overscroll-behavior:contain}
 .menu-pop[hidden]{display:none}
 .menu-pop button{border:0;background:none;text-align:left;padding:9px 10px;border-radius:5px;font-size:13px}
 .menu-pop button:hover{background:var(--ground)}
@@ -1367,8 +1367,6 @@ span.an-chip{cursor:default}
         <button type="button" class="so-compacto" data-act="pdf" id="menuPdf">Exportar PDF (A3)</button>
         <button type="button" data-act="print">Imprimir ou salvar PDF pelo navegador</button>
         <button type="button" data-act="relfoto" hidden>Relatório fotográfico (PDF)</button>
-        <hr>
-        <button type="button" data-act="reset" class="danger">Restaurar dados iniciais</button>
       </div>
     </div>
   </div>
