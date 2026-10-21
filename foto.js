@@ -248,7 +248,7 @@
     '@media (max-width:560px){.ft-head{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:1px}.ft-head h2{grid-column:1;grid-row:1}.ft-head .ft-ct{grid-column:1;grid-row:2;white-space:normal;overflow:visible;line-height:1.3}.ft-head .ft-x{grid-column:2;grid-row:1 / span 2;min-width:44px;min-height:44px}}',
     '.ft-ct{font-size:12.5px;color:var(--ft-ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}',
     '.ft-x{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink);border-radius:8px;min-width:40px;min-height:40px;font-size:20px;line-height:1;cursor:pointer}',
-    '.ft-body{flex:1;overflow:auto;padding:16px}',
+    '.ft-body{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;padding:16px}',   /* nada arrasta a tela para o lado (iPhone) */
     '.ft-start{max-width:520px;margin:4vh auto 0;display:flex;flex-direction:column;gap:12px}',
     '.ft-start h3{margin:0;font-size:18px;text-wrap:balance}',
     '.ft-start p{margin:0;color:var(--ft-ink-2);line-height:1.5}',
@@ -276,8 +276,10 @@
     '.ft-lot b{font-weight:700}',
     '.ft-lot .ft-opts{gap:6px}',
     '.ft-lot .ft-fix{background:var(--ft-accent);border-color:var(--ft-accent);color:var(--ft-accent-ink)}',
-    '.ft-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}',
+    '.ft-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}',
     '.ft-f{display:flex;flex-direction:column;gap:3px;min-width:0}',
+    // nome longo do contrato num select ("Conservação 665 · km 642,40 a 743,80 · o km…") não alarga a coluna
+    '.ft-f select,.ft-f input,.ft-f textarea{min-width:0;max-width:100%;width:100%;box-sizing:border-box}',
     '.ft-f.full{grid-column:1/-1}',
     '.ft-f span{font-size:11.5px;font-weight:600;color:var(--ft-ink-3)}',
     '.ft input,.ft select,.ft textarea{font:inherit;color:var(--ft-ink);background:var(--ft-panel);border:1px solid var(--ft-line);border-radius:6px;min-height:34px;padding:4px 8px;width:100%;min-width:0}',
@@ -433,8 +435,8 @@
       '.ft-camlast{width:34px;height:34px}' +
       '.ft-shot{width:64px;height:64px}' +
     '}',
-    '@media (max-width:820px){.ft-work,.ft-batch{grid-template-columns:1fr}.ft-prev{position:static}.ft-prev canvas{max-height:58vh}.ft-body{padding:12px}}',
-    '@media (max-width:560px){.ft-item{grid-template-columns:1fr}.ft-thumb img{max-height:52vh}}',
+    '@media (max-width:820px){.ft-work,.ft-batch{grid-template-columns:minmax(0,1fr)}.ft-prev{position:static}.ft-prev canvas{max-height:58vh}.ft-body{padding:12px}}',
+    '@media (max-width:560px){.ft-item{grid-template-columns:minmax(0,1fr)}.ft-thumb img{max-height:52vh}}',
     // celular: no lote de fotos, os 4 botões ficam no alto (antes das fotos); com a folha aberta, a prévia encolhe para caber
     // em cima dela (--ft-livre vem de ajustaFolha)
     '@media (max-width:820px){' +
