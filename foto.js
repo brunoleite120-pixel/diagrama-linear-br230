@@ -727,7 +727,7 @@
       var c = contract();
       if (k === 'lado' && !st.side) return 'sem lado nesta foto';
       if (k === 'coord' && !st.ll && st.km == null) return 'sem local nesta foto';
-      if (k === 'ponto' && !findPoint(st.pid)) return 'nenhum ponto nesta foto';
+      if (k === 'ponto' && !findPoint(st.pid)) return semPontos() ? 'conservação: sem ponto' : 'nenhum ponto nesta foto';
       if (k === 'desc' && !(st.desc || '').trim()) return 'vazia nesta foto';
       if (k === 'executora' && !(c && c.executora)) return 'o contrato não tem';
       if (k === 'supervisora' && !(c && c.supervisora)) return 'o contrato não tem';
@@ -1021,7 +1021,7 @@
       o.noLoc = !o.ll;
       withItem(o, function () {
         var auto = o.km != null ? identify(o.km) : null;
-        o.pid = auto && auto.d <= 0.05 ? auto.p.id : (opts.initialPoint || '');
+        o.pid = pertoPonto(auto) ? auto.p.id : (opts.initialPoint || '');
         if (!o.ll && o.pid) { var p0 = findPoint(o.pid); if (p0) o.km = p0.kmIni; }
       });
     }
@@ -1036,10 +1036,13 @@
       pontosDe(c).forEach(function (p) {
         if (p.kmIni == null) return;
         var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni, d = km < a ? a - km : km > b ? km - b : 0;
-        if (!best || d < best.d) best = { p: p, d: d };
+        if (!best || d < best.d) best = { p: p, d: d, c: c };
       });
       return best;
     }
+    // até onde o km da foto escolhe o ponto sozinho: 150 m para cada lado da ponte (Proarte), 50 m nos outros
+    function raioPonto(c) { return c && c.tipo === 'oae' ? 0.15 : 0.05; }
+    function pertoPonto(a) { return !!a && a.d <= raioPonto(a.c); }
 
     function showWork() {
       root.classList.remove('many');
@@ -1060,7 +1063,9 @@
       renderOpts();
       scheduleDraw(0);
     }
-    function renderPontos() { q('#ftPonto').innerHTML = pontoOptions(); }
+    // conservação: só contrato e km; o campo Ponto some (os segmentos são divisão nossa)
+    function semPontos() { var c = contract(); return !!c && c.tipo === 'conserva'; }
+    function renderPontos() { var sp = q('#ftPonto'); sp.innerHTML = pontoOptions(); sp.closest('label').hidden = semPontos(); }
     function pontoOptions() {
       var c = contract(), list = c ? pontosDe(c).filter(function (p) { return p.kmIni != null; }).slice() : [];
       list.sort(function (a, b) { return a.kmIni - b.kmIni; });
@@ -1097,7 +1102,7 @@
       o.km = near ? loc.km : null;
       o.side = near && loc.dist >= 10 ? loc.side : '';
       o.dist = near && loc.dist >= 10 ? Math.round(loc.dist) : null;
-      withItem(o, function () { var auto = o.km != null ? identify(o.km) : null; if (auto && auto.d <= 0.05) o.pid = auto.p.id; });
+      withItem(o, function () { var auto = o.km != null ? identify(o.km) : null; if (pertoPonto(auto)) o.pid = auto.p.id; });
     }
     function useHere(btn, done) {
       var old = btn.textContent;
@@ -1132,7 +1137,8 @@
       var p = findPoint(st.pid);
       if (p && st.km != null) {
         var b = p.kmFim != null ? p.kmFim : p.kmIni;
-        if (st.km < p.kmIni - 0.05 || st.km > b + 0.05) h += ' <span class="ft-warn">O km está fora do ' + esc(p.nome) + ' (km ' + nf(p.kmIni, 2) + ' a ' + nf(b, 2) + ').</span>';
+        var r = raioPonto(contract());
+        if (st.km < p.kmIni - r || st.km > b + r) h += ' <span class="ft-warn">O km está fora do ' + esc(p.nome) + ' (km ' + nf(p.kmIni, 2) + ' a ' + nf(b, 2) + ').</span>';
       }
       return h;
     }
@@ -1204,7 +1210,7 @@
       pontosDe(c).forEach(function (p) {
         if (p.kmIni == null) return;
         var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni, d = km < a ? a - km : km > b ? km - b : 0;
-        if (d <= 0.05 && (!best || d < best.d)) best = { p: p, d: d };
+        if (d <= raioPonto(c) && (!best || d < best.d)) best = { p: p, d: d };
       });
       return best ? best.p : null;
     }
@@ -1214,7 +1220,7 @@
       st.cid = c.id;
       st.keepLot = '';
       var auto = st.km != null ? identify(st.km) : null;
-      st.pid = auto && auto.d <= 0.05 ? auto.p.id : '';
+      st.pid = pertoPonto(auto) ? auto.p.id : '';
       renderHead(); renderPontos(); renderSrc(); scheduleDraw(0);
       if (opts.setActiveContract) opts.setActiveContract(c.id);
       var p = findPoint(st.pid);
@@ -1377,7 +1383,7 @@
         var info = [
           c ? nomes.nome(c) : '',
           c && nomes.formal(c) !== nomes.nome(c) ? nomes.formal(c) : '',
-          p ? 'Ponto ' + p.nome : 'Sem ponto',
+          p ? 'Ponto ' + p.nome : semPontos() ? '' : 'Sem ponto',
           st.km != null ? kmLine(st.km, st.side, st.dist, true) : '',
           ll ? coordTxt(ll) : '',
           st.date ? dateTxt(st.date) : '',
@@ -1556,7 +1562,9 @@
         var lot = lotHtml(), box = el.querySelector('.ft-lot'), ls = el.querySelector('[data-b="lote"]');
         box.innerHTML = lot;
         box.hidden = !lot;
-        el.querySelector('[data-b="ponto"]').innerHTML = pontoOptions();
+        var bp = el.querySelector('[data-b="ponto"]');
+        bp.innerHTML = pontoOptions();
+        bp.closest('label').hidden = semPontos();
         if (ls) ls.innerHTML = loteOptions();
       });
       var c = batch.common.trim();
@@ -1627,7 +1635,7 @@
         it.cid = c.id;
         it.keepLot = '';
         var auto = it.km != null ? identify(it.km) : null;
-        it.pid = auto && auto.d <= 0.05 ? auto.p.id : '';
+        it.pid = pertoPonto(auto) ? auto.p.id : '';
       });
       return c;
     }
@@ -1886,6 +1894,7 @@
       if (loc.dist > 2000) h = 'GPS ativo · fora da ' + esc(rodovia()) + ' (' + nf(loc.dist / 1000, 1) + ' km do eixo)';
       else {
         var a = identify(loc.km);
+        if (a && a.c.tipo === 'oae' && !pertoPonto(a)) a = null;   // Proarte: só sugere a ponte a até 150 m dela
         h = 'GPS ativo · <b>' + esc(kmLine(loc.km, loc.dist >= 10 ? loc.side : '', loc.dist, true)) + '</b>' +
           (a ? ' · ' + esc(a.p.nome) + (a.d === 0 ? ' (aqui)' : ' a ' + (a.d < 1 ? Math.round(a.d * 1000) + ' m' : nf(a.d, 1) + ' km')) : '') + gpsLot(loc.km);
       }
@@ -2101,7 +2110,7 @@
           it.km = k != null && k >= ref.kmMin - 50 && k <= ref.kmMax + 50 ? k : null;
           if (it.src !== 'manual' && it.loc && it.km != null && Math.abs(it.km - it.loc.km) > 0.001) { it.src = 'manual'; it.ll = null; it.loc = null; }
           var auto = it.km != null ? identify(it.km) : null;
-          if (auto && auto.d <= 0.05) it.pid = auto.p.id;
+          if (pertoPonto(auto)) it.pid = auto.p.id;
         });
         refreshItem(i); renderBatchSum(); itemChanged(i, true);
       } else if (t.dataset.b === 'desc') { it.desc = t.value; itemChanged(i, true); }
@@ -2126,7 +2135,7 @@
         st.km = k != null && k >= ref.kmMin - 50 && k <= ref.kmMax + 50 ? k : null;
         if (st.src !== 'manual' && st.loc && st.km != null && Math.abs(st.km - st.loc.km) > 0.001) { st.src = 'manual'; st.ll = null; st.loc = null; }
         var auto = st.km != null ? identify(st.km) : null;
-        if (auto && auto.d <= 0.05) st.pid = auto.p.id;
+        if (pertoPonto(auto)) st.pid = auto.p.id;
         renderPontos(); renderSrc();
       } else if (t.id === 'ftDl') {
         var dl = parseNum(t.value); st.dist = dl != null ? Math.max(0, Math.round(dl)) : null;

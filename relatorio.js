@@ -335,6 +335,7 @@
       function chave(c, p, per) { return c.id + ':' + p.id + ':' + per.de + ':' + per.ate; }
       function grupos() {
         var c = contrato(), per = periodo(), porP = {}, sem = 0, total = 0;
+        if (conserva(c)) return gruposConserva(c, per);
         var pts = o.ordem(c), ids = {};
         pts.forEach(function (p) { ids[p.id] = 1; });
         a.itens.forEach(function (it) {
@@ -356,12 +357,29 @@
         });
         return { c: c, per: per, oae: oae, pts: lista, sem: sem, total: total };
       }
+      // conservação: os segmentos são divisão nossa, não vão no relatório. Entram todas as fotos marcadas do contrato, na ordem do km,
+      // em folhas de até 6; cada foto leva o km de onde foi tirada
+      function gruposConserva(c, per) {
+        var fs = a.itens.filter(function (it) { var d = diaDe(it.em); return it.cid === c.id && d && d >= per.de && d <= per.ate; });
+        if (!fs.length) return { c: c, per: per, oae: false, cons: true, pts: [], sem: 0, total: 0 };
+        fs.sort(function (x, y) {
+          var kx = x.km != null && x.km !== '' ? Number(x.km) : 1e9, ky = y.km != null && y.km !== '' ? Number(y.km) : 1e9;
+          return kx - ky || String(x.em || '').localeCompare(String(y.em || ''));
+        });
+        var ks = fs.map(function (it) { return it.km; }).filter(function (k) { return k != null && k !== '' && isFinite(k); }).map(Number);
+        var kmA = ks.length ? Math.min.apply(null, ks) : null, kmB = ks.length ? Math.max.apply(null, ks) : null;
+        var tit = 'CONSERVAÇÃO RODOVIÁRIA' + (kmA != null ? ' · KM ' + fmtKm(kmA) + (kmB !== kmA ? ' A ' + fmtKm(kmB) : '') : '');
+        var k = c.id + ':conserva:' + per.de + ':' + per.ate;
+        return { c: c, per: per, oae: false, cons: true, sem: 0, total: fs.length, pts: [{ p: { id: 'conserva', nome: 'Conservação' }, num: '', fotos: fs, corte: 0, titulo: tit, auto: '',
+          curto: 'CONSERVAÇÃO', desc: textos[k] != null ? textos[k] : '', chave: k, folhas: Math.ceil(fs.length / 6) }] };
+      }
+      function kmFoto(it) { return it.km != null && it.km !== '' && isFinite(it.km) ? 'KM ' + Number(it.km).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : ''; }
       // as folhas do PDF: cada ponto em pedaços de até 6 fotos (ponte com mais de 6: folhas equilibradas, 8 → 4 + 4, 13 → 5 + 4 + 4);
       // no modo "juntar", pedaços que cabem juntos (até 6 fotos) dividem a folha, na ordem dos pontos
       function folhasDoPdf() {
         var plano = [];
         G.pts.forEach(function (x) {
-          var blocos = [], i = 0, nf = G.oae ? x.folhas : 1;
+          var blocos = [], i = 0, nf = x.folhas || 1;
           for (var j = 0; j < nf; j++) { var q = Math.ceil((x.fotos.length - i) / (nf - j)); blocos.push(x.fotos.slice(i, i + q)); i += q; }
           var ini = 1;
           blocos.forEach(function (bl, j) {
@@ -383,7 +401,7 @@
           h += '<div class="rf-resumo">Nenhuma foto marcada com ★ ' + (S.modo === 'semana' ? 'nesta semana' : S.modo === 'mes' ? 'neste mês' : 'neste período') + ' para este contrato.</div>';
           return h;
         }
-        h += '<div class="rf-resumo"><b>' + plural(G.pts.length, G.oae ? 'ponte' : 'ponto', G.oae ? 'pontes' : 'pontos') + '</b> · ' +
+        h += '<div class="rf-resumo">' + (G.cons ? '' : '<b>' + plural(G.pts.length, G.oae ? 'ponte' : 'ponto', G.oae ? 'pontes' : 'pontos') + '</b> · ') +
           plural(G.pts.reduce(function (s, x) { return s + x.fotos.length; }, 0), 'foto', 'fotos') + ' · <b>' + plural(folhas, 'folha', 'folhas') + '</b> A4</div>';
         if (G.pts.length > 1) {
           h += '<div class="seg rf-folhas" role="group" aria-label="Folhas">' + [['juntar', 'Juntar ' + (G.oae ? 'pontes' : 'pontos') + ' (até 6 fotos por folha)'], ['ponto', 'Uma folha por ' + (G.oae ? 'ponte' : 'ponto')]].map(function (m) {
@@ -395,7 +413,7 @@
         if (G.sem) h += '<div class="rf-aviso">' + plural(G.sem, 'foto marcada não está ligada a', 'fotos marcadas não estão ligadas a') + ' nenhum ponto e ' + (G.sem === 1 ? 'fica' : 'ficam') + ' de fora.</div>';
         h += '<div class="rf-pts">' + G.pts.map(function (x, i) {
           return '<div class="rf-pt"><b>' + esc(x.titulo) + '</b><small>' + plural(x.fotos.length, 'foto', 'fotos') + (x.folhas > 1 ? ' · ' + x.folhas + ' folhas' : '') + '</small>' +
-            '<textarea data-i="' + i + '" maxlength="900" aria-label="' + esc('Descrição: ' + x.titulo) + '">' + esc(x.desc) + '</textarea>' +
+            '<textarea data-i="' + i + '" maxlength="900"' + (G.cons ? ' placeholder="Serviço executado (opcional)"' : '') + ' aria-label="' + esc('Descrição: ' + x.titulo) + '">' + esc(x.desc) + '</textarea>' +
             (x.desc !== x.auto ? '<button type="button" class="rf-auto" data-rf="auto" data-i="' + i + '">Voltar ao texto do app</button>' : '') + '</div>';
         }).join('') + '</div>';
         return h;
@@ -492,7 +510,8 @@
               return seq.then(function () {
                 if (ip > 0) doc.addPage('a4', 'portrait');
                 var um = pg.itens[0], varios = pg.itens.length > 1, legendas = null;
-                if (varios) {
+                if (G.cons) legendas = pg.fotos.map(function (it, j) { var km = kmFoto(it); return 'FOTO ' + pad2(um.numIni + j) + (km ? ' – ' + km : ''); });
+                else if (varios) {
                   legendas = [];
                   pg.itens.forEach(function (pd) { pd.fotos.forEach(function () { legendas.push('FOTO ' + pad2(legendas.length + 1) + ' – ' + pd.x.curto); }); });
                 }

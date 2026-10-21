@@ -372,6 +372,8 @@
   }
   // folga do km: 50 m, a mesma da tela Foto (foto.js), no trecho do contrato e no ponto
   var FOLGA_KM = 0.05;
+  // o km da foto escolhe a ponte (Proarte) a até 150 m dela; os outros pontos, a até 50 m
+  function raioPonto(c) { return c && c.tipo === 'oae' ? 0.15 : FOLGA_KM; }
   function noTrecho(c, km) { var t = c && trecho(c); return !!t && km >= t[0] - FOLGA_KM && km <= t[1] + FOLGA_KM; }
   // todos os contratos cujo trecho tem o km, na ordem da lista (nunca só "o primeiro": o de conservação e o de pontos críticos
   // cobrem o mesmo trecho, e a ordem não diz qual serviço foi fotografado)
@@ -474,7 +476,7 @@
     var c = ligarContrato(cs, nm, { numero: numero, nomes: nomes, pastas: ps, km: r.km }), p = null;
     if (c) {
       p = r.pnome ? pontosDe(c).find(function (x) { return x.nome === r.pnome; }) : null;
-      if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= FOLGA_KM) p = pp.p; }
+      if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= raioPonto(c)) p = pp.p; }
     }
     return { id: r.idApp && r.idApp.length >= 4 ? r.idApp.slice(0, 80) : 'drv_' + f.id, drive_id: f.id, drive_url: linkDrive(f.id) || null, nome_arquivo: n || 'foto.jpg',
       tamanho: f.tamanho || null, autor_nome: r.autor || 'Sem nome', contrato_id: c ? c.id : null, ponto_id: p ? p.id : null, ponto_nome: p ? p.nome : null,
@@ -680,6 +682,8 @@
 
     // ---------------------------------------------------------------- filtros
     function contratos() { return (o.contratos ? o.contratos() : []) || []; }
+    // conservação: a foto vai ao relatório só com o contrato e o km (os segmentos são divisão nossa; não se escolhe ponto)
+    function ehCons(cid) { var c = cid && contratos().find(function (x) { return x.id === cid; }); return !!c && c.tipo === 'conserva'; }
     // nome completo, para a foto aberta ("Pontos Críticos 314 · Lote 01 · CT 02 00314/2026"); contrato que não está neste
     // aparelho: o texto gravado com a foto
     function nomeContrato(cid, it) {
@@ -730,7 +734,7 @@
       itens.forEach(function (it) {
         var noCt = !filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid);
         if (it.pid && noCt) ps[it.pid] = it.pnome || 'Ponto';
-        if (!it.pid && noCt) semPonto++;
+        if (!it.pid && noCt && !ehCons(it.cid)) semPonto++;
         as[it.autor || 'Sem nome'] = 1;
         var k = mesKey(it.em); if (k) ms[k] = 1;
       });
@@ -741,7 +745,7 @@
       }
       var ordem = function (m) { return Object.keys(m).map(function (k) { return [k, m[k] === 1 ? k : m[k]]; }).sort(function (a, b) { return a[1].localeCompare(b[1], 'pt-BR', { numeric: true }); }); };
       var h = '';
-      if (Object.keys(ps).length || filtro.pid || semPonto) {
+      if ((Object.keys(ps).length || filtro.pid || semPonto) && !ehCons(filtro.cid)) {
         h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>';
       }
       if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
@@ -791,19 +795,19 @@
         return '<span class="gl-b fila">Na fila</span>';
       }
       if (aba === 'deletadas') return '<span class="gl-b erro">Apagada</span>';
-      if (!it.pid) return '<span class="gl-b sp">Sem ponto</span>';
+      if (!it.pid && !ehCons(it.cid)) return '<span class="gl-b sp">Sem ponto</span>';
       return locais[it.id] ? '<span class="gl-b">No aparelho</span>' : '';
     }
     // legenda em duas linhas: "P14 · km 756,30" em destaque; embaixo o dia (a hora, quando o grupo já é o dia) e quem tirou.
     // Em "Todos" os contratos, o nº do contrato na frente da 2ª linha ("314 · 16/10 · Bruno")
     function tile(it, i) {
-      var m = miniDe(it), l1 = [it.pnome, kmCurto(it.km)].filter(Boolean).join(' · ') || 'Sem ponto';
+      var m = miniDe(it), l1 = [it.pnome, kmCurto(it.km)].filter(Boolean).join(' · ') || (ehCons(it.cid) ? 'Sem km' : 'Sem ponto');
       var d = data(it.em), quando = !d ? '' : modo() === 'mes' && porDia() ? pad(d.getHours()) + ':' + pad(d.getMinutes()) : pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
       var quem = (aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa' && it.autor ? it.autor.split(' ')[0] : '';
       var nCt = !filtro.cid ? ((/(\d+)\s*$/.exec(curto(it.cid)) || [])[1] || curto(it.cid)) : '';
       var l2 = [nCt, quando, quem].filter(Boolean).join(' · ');
       var cap = l1 + (l2 ? ' · ' + l2 : '');
-      var rotulo = [it.pid ? '' : 'Sem ponto', it.pnome, kmTxt(it.km), quem ? it.autor : '', hora(it.em)].filter(Boolean).join(', ');
+      var rotulo = [it.pid || ehCons(it.cid) ? '' : 'Sem ponto', it.pnome, kmTxt(it.km), quem ? it.autor : '', hora(it.em)].filter(Boolean).join(', ');
       return '<button type="button" class="gl-t" data-i="' + i + '" data-id="' + esc(it.id) + '"' + (m ? '' : ' data-falta') +
         (selecionando ? ' aria-pressed="' + !!sel[it.id] + '"' : '') + ' aria-label="' + esc(rotulo) + '">' +
         (m ? '<img alt="" src="' + esc(m) + '">' : '<img alt="">') + badge(it) +
@@ -850,7 +854,7 @@
         relatorio: 'Fotos escolhidas para o relatório fotográfico.',
         deletadas: 'Apagadas do Drive por engenheiros. Ficam na pasta Deletados até você restaurar.'
       }[aba];
-      var semP = aba === 'relatorio' ? lista.filter(function (x) { return !x.pid; }).length : 0;
+      var semP = aba === 'relatorio' ? lista.filter(function (x) { return !x.pid && !ehCons(x.cid); }).length : 0;
       if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
       var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' +
         '<button type="button" class="btn small" data-g="drive-pastas">Pastas do Drive pelo nº do contrato</button>' : '';
@@ -1017,9 +1021,10 @@
       var src = grande && grande.id === it.id ? grande.url : miniDe(it);
       if (!src) pedirMini(it.id);
       var linhas = [];
-      var oae = ehOae(contratos().find(function (x) { return x.id === it.cid; }));
-      linhas.push('<b>' + esc([it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ')) + '</b>' +
-        (!it.pid && podeMover(it) ? ' <span class="gl-warn">· não entra no relatório</span>' : ''));
+      var oae = ehOae(contratos().find(function (x) { return x.id === it.cid; })), cons = ehCons(it.cid);
+      linhas.push('<b>' + esc([it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome && !cons ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : cons ? '' : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ')) + '</b>' +
+        (!it.pid && !cons && podeMover(it) ? ' <span class="gl-warn">· não entra no relatório</span>' : '') +
+        (cons && it.relatorio && it.km == null ? ' <span class="gl-warn">· sem km: vai ao relatório sem o km</span>' : ''));
       linhas.push(esc([kmTxt(it.km), it.lat != null ? Number(it.lat).toFixed(5) + ', ' + Number(it.lng).toFixed(5) : '', hora(it.em)].filter(Boolean).join(' · ')));
       if (it.autor) linhas.push('Tirada por ' + esc(it.autor));
       if (it.origem === 'local') {
@@ -1262,9 +1267,10 @@
     function pontosMover(primeira) {
       var c = contratos().find(function (x) { return x.id === q('#glMvC').value; }), sp = q('#glMvP');
       q('#glMvPl').textContent = ehOae(c) ? 'Ponte' : 'Ponto';
+      sp.closest('label').hidden = !!c && c.tipo === 'conserva';
       var ps = pontosDe(c), perto = mv.km != null && !mv.varios ? maisPerto(c, mv.km) : null, vai = '';
       if (primeira && mv.pid0 && ps.some(function (p) { return p.id === mv.pid0; })) vai = mv.pid0;
-      else if (perto && perto.d <= FOLGA_KM) vai = perto.p.id;
+      else if (perto && perto.d <= raioPonto(c)) vai = perto.p.id;
       sp.innerHTML = '<option value="">' + (ehOae(c) ? 'Sem ponte (não entra no relatório)' : 'Sem ponto (não entra no relatório)') + '</option>' +
         ps.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === vai ? ' selected' : '') + '>' + esc(rotuloPonto(c, p)) + '</option>'; }).join('');
       sugestao();
@@ -1296,10 +1302,11 @@
         '. ' + botoesCt(outros) + '</span>' : '';
       if (mv.varios) { box.innerHTML = 'As fotos foram tiradas em km diferentes: confira se são todas do mesmo ponto.' + (tambem ? ' ' + tambem : ''); return; }
       var perto = maisPerto(c, mv.km);
+      if (perto && ehOae(c) && perto.d > raioPonto(c)) perto = null;   // Proarte: só sugere a ponte a até 150 m dela, não no trecho todo
       if (!perto) { box.innerHTML = tambem; return; }
       mv.sug = perto.p;
       var rot = esc(ehOae(c) ? perto.p.nome || perto.p.codigo : 'Ponto ' + perto.p.nome);
-      box.innerHTML = 'Pelo km da foto (' + nf(mv.km, 2) + '): ' + (perto.d <= FOLGA_KM ? 'fica no ' + rot : 'o mais perto é ' + rot + ', a ' + metr(perto.d)) +
+      box.innerHTML = 'Pelo km da foto (' + nf(mv.km, 2) + '): ' + (perto.d <= raioPonto(c) ? 'fica no ' + rot : 'o mais perto é ' + rot + ', a ' + metr(perto.d)) +
         (sp.value === perto.p.id ? '' : ' <button type="button" class="btn small" data-g="mv-usar">Usar</button>') + (tambem ? ' ' + tambem : '');
     }
     function fecharMover() { mv = null; var el = root && q('.gl-mv'); if (el) el.remove(); }
