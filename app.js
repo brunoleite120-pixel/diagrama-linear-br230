@@ -14,6 +14,11 @@
     { key: 'oac', label: 'OAC / Drenagem', short: 'OAC / Drenagem' },
     { key: 'prelim', label: 'Sv. Preliminares', short: 'Sv. preliminares' }
   ];
+  // linhas a mais dos pontos críticos, só no contrato que as lista (c.gruposExtras), como na conservação.
+  // CT 267: gabião, estaca raiz e cortina atirantada
+  var PC_EXTRAS = [
+    { key: 'conten', label: 'Contenção', short: 'Contenção', extra: true }
+  ];
   // contrato de pontes (tipo 'oae', ex.: CT 424): um grupo de serviços por linha, uma coluna por ponte.
   // un = unidade da estimativa do dano feita pela supervisão (q = o que ela mede); rotina não tem quantidade.
   // nomes: rótulos próprios da linha (rotina fala de vegetação ou sujeira, não de dano). Plataforma e jato d'água
@@ -139,7 +144,7 @@
   var TRAF_ORDER = ['T', 'R', 'I'];
   function trafSt(sv) { var st = sv && sv.st; return TRAF_STATUS[st] ? st : 'NV'; }
   // todos os grupos de todos os tipos, para achar o nome pela chave (histórico, propostas, conflitos)
-  var GRUPOS_TODOS = SERVICES.concat(OAE_SERVICES, CONS_SERVICES, CONS_PAV_SERVICES.filter(function (s) { return !CONS_SERVICES.some(function (x) { return x.key === s.key; }); }), [TRAFEG], DESEMP_IND);
+  var GRUPOS_TODOS = SERVICES.concat(PC_EXTRAS, OAE_SERVICES, CONS_SERVICES, CONS_PAV_SERVICES.filter(function (s) { return !CONS_SERVICES.some(function (x) { return x.key === s.key; }); }), [TRAFEG], DESEMP_IND);
   function isOae(c) { return !!(c && c.tipo === 'oae'); }
   // grupos de serviço do tipo do contrato (TIPOS[...].servicos): pontos críticos, conservação ou pontes. Na conservação com a
   // pista pavimentada, os de CONS_PAV_SERVICES, com os extras só do contrato que os lista (c.gruposExtras)
@@ -147,6 +152,9 @@
     if (isPavimentada(c)) {
       var ex = Array.isArray(c.gruposExtras) ? c.gruposExtras : [];
       return CONS_PAV_SERVICES.filter(function (s) { return !s.extra || ex.indexOf(s.key) >= 0; });
+    }
+    if (ctTipo(c) === 'pc' && c && Array.isArray(c.gruposExtras) && c.gruposExtras.length) {
+      return SERVICES.concat(PC_EXTRAS.filter(function (s) { return c.gruposExtras.indexOf(s.key) >= 0; }));
     }
     return tipoInfo(c).servicos;
   }
@@ -756,13 +764,16 @@
     o.push(T(x, G.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
     o.push(T(x, G.yConc + 13.5, 'CONCLUSÃO', { size: 7, bold: true }));
     o.push(T(x, G.yServ - 4, 'SERVIÇOS', { size: 6, bold: true, fill: gray }));
-    SERVICES.forEach(function (s, i) {
-      o.push(T(x, G.yServ + i * G.servStep + 12.8, s.label, { size: 7.2, bold: true }));
+    var lista = servicesOf(c), passo = servPasso(lista);
+    lista.forEach(function (s, i) {
+      o.push(T(x, G.yServ + i * passo + 12.8, s.label, { size: 7.2, bold: true }));
     });
     o.push(T(x, G.yObs + 12, 'OBSERVAÇÕES', { size: 7, bold: true }));
     o.push(L(G.colLine, 106, G.colLine, G.yObs + G.obsH, { stroke: '#C9CECB', sw: 0.6 }));
   }
 
+  // passo das linhas de serviço na folha: 24 com as 5 de sempre; com a 6ª (Contenção), 21, para caber antes das observações
+  function servPasso(lista) { return lista.length > 5 ? 21 : G.servStep; }
   function drawPoint(o, p, bx, bw) {
     var cx = bx + bw / 2;
     o.push('<g data-pid="' + esc(p.id) + '">');
@@ -805,8 +816,9 @@
     o.push(T(cx, G.yConc + 13.6, fmtPct(pct), { size: r2(fitSize(fmtPct(pct), bw - 4, 9.2, true, 5.5)), bold: true, anchor: 'middle' }));
 
     // serviços
-    SERVICES.forEach(function (s, i) {
-      var sv = p.serv[s.key] || { st: 'NA', pct: 0 }, y = G.yServ + i * G.servStep, st = STATUS[sv.st] || STATUS.NA;
+    var lista = servicesOf(ownerOf(p)), passo = servPasso(lista);
+    lista.forEach(function (s, i) {
+      var sv = p.serv[s.key] || { st: 'NA', pct: 0 }, y = G.yServ + i * passo, st = STATUS[sv.st] || STATUS.NA;
       if (sv.st === 'NA') {
         o.push(R(bx, y, bw, G.servH, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
         o.push(T(cx, y + 12.8, 'N/A', { size: 7, bold: true, fill: '#7A817D', anchor: 'middle' }));
@@ -2853,7 +2865,7 @@
     var c = ownerOf(p);
     if (isOae(c)) return ponteHead(p, c);
     if (isConserva(c)) return segHead(p, c);
-    var dots = SERVICES.map(function (s) {
+    var dots = servicesOf(c).map(function (s) {
       var st = (p.serv[s.key] || {}).st || 'NA';
       return '<span class="dot ' + st + '" title="' + esc(s.short + ': ' + STATUS[st].name) + '"></span>';
     }).join('');
@@ -2930,7 +2942,7 @@
       h += '</div>';
 
       h += '<div class="section-title">Serviços</div>';
-      h += servHtml(p, SERVICES);
+      h += servHtml(p, servicesOf(ownerOf(p)));
 
       h += '<div class="section-title">Dispositivos de drenagem (OAC)<button type="button" class="btn small" data-act="add-dev" data-id="' + id + '">+ Dispositivo</button></div>';
       if (!p.disp.length) h += '<div class="empty">Nenhum dispositivo neste ponto.</div>';
@@ -3272,10 +3284,10 @@
         var a = (x.key.match(/^cap:([\d,.]+)/) || [, ''])[1].split(/[,.]/).map(Number), b = (y.key.match(/^cap:([\d,.]+)/) || [, ''])[1].split(/[,.]/).map(Number);
         return (a[0] || 0) - (b[0] || 0) || (a[1] || 0) - (b[1] || 0);
       });
-      h += '<div class="mg-lista">' + servicesOf(c).concat(capL, [cons ? MED_SEMLOCAL : MED_ACESSO]).map(function (g) {
+      h += '<div class="mg-lista">' + servicesOf(c).concat(capL, [MED_OUTROS, cons ? MED_SEMLOCAL : MED_ACESSO]).map(function (g) {
         var it = ord.filter(function (t) { return t.g === g.key; });
         if (!it.length) return '';
-        var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO || g === MED_SEMLOCAL;
+        var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO || g === MED_SEMLOCAL || g === MED_OUTROS;
         return '<div class="mg' + (ac ? ' acesso' : '') + '"><button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(cid) + '" data-g="' + g.key + '" aria-expanded="' + ab + '">' +
           '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? (cons ? 'sem local nos segmentos · ' + it.length + (it.length === 1 ? ' serviço' : ' serviços') : 'meio de execução · fora da vistoria') : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
           '<span class="mg-t"><b>' + fmtBRL(v) + '</b><small>' + pct(v / tot * 100) + '</small></span>' + ICON_CHEV + '</button>' +
@@ -3971,7 +3983,8 @@
   // serviços medidos, nos grupos da vistoria (na ordem da aba Vistoria) e, por último, "Acesso e limpeza" (plataforma e jato,
   // que não são grupo da vistoria). Por grupo só se soma o valor; a quantidade fica em cada serviço
   var MED_ACESSO = { key: 'acesso', short: 'Acesso e limpeza' };
-  var MED_SEMLOCAL = { key: 'semlocal', short: 'Transporte, administração e canteiro' };   // conservação: sem local na memória
+  var MED_SEMLOCAL = { key: 'semlocal', short: 'Transporte, administração e canteiro' };
+  var MED_OUTROS = { key: 'outros', short: 'Sinalização, desvio, transporte e outros' };   // fora das linhas da vistoria (CT 267)   // conservação: sem local na memória
   function gruposMedHtml(c, p, an, a, med) {
     var pid = p.id, k = String(med || ''), E = med ? 0 : etapaDe(an), ei = E ? etapaInfo(an, E) : null, ms = an.medicoes || [], mMed = null;
     var base = (a.servicos || []).filter(function (s) { return s.v > 0; }), temPor = base.some(function (s) { return s.por; });
@@ -3987,7 +4000,7 @@
       if (E) { var x = noEscopo([s], ei.ns, temPor)[0]; return x ? { q: x.q, v: x.v, tot: !temPor } : null; }
       return { q: s.q, v: s.v };
     }
-    var grupos = servicesOf(c).concat([MED_ACESSO]).map(function (g) {
+    var grupos = servicesOf(c).concat([MED_OUTROS, MED_ACESSO]).map(function (g) {
       var it = base.filter(function (s) { return s.g === g.key; }).sort(function (x, y) { return y.v - x.v; }).map(function (s) {
         var r = noRecorte(s); return r ? { s: s, q: r.q, v: r.v, tot: r.tot } : null;
       }).filter(Boolean);
@@ -3999,7 +4012,7 @@
     grupos.forEach(function (x) { if (x.v > 0 && (!maior || x.v > maior.v)) maior = x; });
     var h = '<div class="mg-lista">';
     grupos.forEach(function (x) {
-      var g = x.g, ac = g === MED_ACESSO, gi = a.grupos ? a.grupos[g.key] : null, n = x.it.length, ch = pid + '|' + g.key;
+      var g = x.g, ac = g === MED_ACESSO || g === MED_OUTROS, gi = a.grupos ? a.grupos[g.key] : null, n = x.it.length, ch = pid + '|' + g.key;
       var ab = Object.prototype.hasOwnProperty.call(ui.grpAb, ch) ? ui.grpAb[ch] : x === maior;
       if (ac && !n && !(gi && gi.ult)) return;   // acesso e limpeza só aparece se a ponte já teve
       var est;
@@ -4481,7 +4494,7 @@
       online: function () { return !!(banco.on && banco.login && window.Banco && window.Banco.analise); },
       carregar: function (c) { return carregarAnalise(c, true); },
       repetir: function (c) { if (parte(c, 'med') && analise.estado[c.id] === 'erro') delete analise.estado[c.id]; },
-      nome: function (c) { return ctNumeroCT(c) || ctNome(c); }, pontos: sortedPoints, grupos: function (c) { return servicesOf(c).concat([MED_ACESSO]); },
+      nome: function (c) { return ctNumeroCT(c) || ctNome(c); }, pontos: sortedPoints, grupos: function (c) { return servicesOf(c).concat([MED_OUTROS, MED_ACESSO]); },
       esc: esc, fmtN: fmtN, dinheiro: function (v) { return v == null || !isFinite(v) ? '—' : 'R$ ' + fmt(v, 2); },
       medTxt: medTxt, etapaInfo: etapaInfo, unTxt: unTxt, semLocal: MED_SEMLOCAL, data: fmtIsoDate,
       diagrama: function (c) { if (parte(c, 'med')) abrirDaVisao(c, null, false); },
@@ -4928,7 +4941,7 @@
           servicesOf(c).forEach(function (s) { serv[s.key] = { st: 'NV' }; });
           p = { id: uid('pt'), nome: 'Nova ponte', codigo: 'OAE ' + String(c.pontos.length + 1).padStart(2, '0'), kmIni: null, kmFim: null, extensao: null, largura: null, municipio: '', serv: serv, disp: [], obs: '' };
         } else {
-          SERVICES.forEach(function (s) { serv[s.key] = { st: 'P', pct: 0 }; });
+          servicesOf(c).forEach(function (s) { serv[s.key] = { st: 'P', pct: 0 }; });
           p = { id: uid('pt'), nome: 'P' + (c.pontos.length + 1), kmIni: base, kmFim: base != null ? base + 1 : null, enr: null, sb: null, serv: serv, disp: [], obs: '' };
         }
         c.pontos.push(p);
@@ -6855,7 +6868,7 @@
           (comQtd(k) && sv.pri ? ', prioridade' : '') + (comQtd(k) && sv.ci ? ', conclusão informada pela executora' : '');
       });
     } else {
-      partes = SERVICES.map(function (s) {
+      partes = servicesOf(c).map(function (s) {
         var sv = p.serv[s.key];
         if (!sv || sv.st === 'NA' || !STATUS[sv.st]) return '';
         return s.label + ': ' + STATUS[sv.st].name.toLowerCase() + (sv.st === 'OK' ? '' : ', ' + fmtPct(svcPct(sv)));
