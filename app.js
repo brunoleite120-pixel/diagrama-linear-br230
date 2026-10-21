@@ -1026,6 +1026,7 @@
   function reguaStatus(c) {
     var conv = reguaDe(c), eixo = window.SNV_BR230;
     if (!faixasDe(c)) return 'semFaixa';
+    if (c.kmLocal) return 'kmLocal';   // 731: km próprio do ramal (c.ramal), sem a régua do SNV
     if (typeof c.kmIniContrato !== 'number' || typeof c.kmFimContrato !== 'number' || !isFinite(c.kmIniContrato) || !isFinite(c.kmFimContrato)) return 'semCadastro';
     if (!conv || typeof conv.paraContrato !== 'function') return 'semRegua';
     if (!eixo || !eixo.versao) return 'semEixo';
@@ -1104,6 +1105,7 @@
     var st = reguaStatus(c), conv = reguaDe(c), eixo = window.SNV_BR230, out = [];
     var pista = pistaDe(c).nota;
     if (st === 'semFaixa') return [pista];
+    if (st === 'kmLocal') return ['KM LOCAL: km próprio do segmento ' + txtPdf(txtLimpo(c.ramal)) + ' do SNV, fora do eixo da BR-230 (sem km Atualizado). Estaca de 20 m: km = estaca x ' + fmt(c.estaca || 0.02, 2) + '.', pista];
     if (faixasDe(c).some(function (f) { return kmDoContrato(c, f[0]) && kmDoContrato(c, f[1]); })) {
       var sc = txtPdf(txtLimpo(c.snvContrato)), dp = [conv.de ? 'de ' + conv.de : '', conv.para ? 'para ' + conv.para : ''].filter(Boolean).join(' ');
       out.push('KM Atualizado: SNV ' + eixo.versao + ' (DNIT). KM do contrato' + (sc ? ': ' + sc + ',' : '') + ' pela tabela de conversão do SNV' + (dp ? ' (' + dp + ')' : '') + ': ' +
@@ -1150,7 +1152,7 @@
     // nas pontas, o km do cadastro, com "*" quando a régua discorda (o início do 437: 750,90*)
     function contr(k, s) { var r = kmDoContrato(c, s); return num(k) ? fmtKm(k) + (r && r.ast ? '*' : '') : '?'; }
     return [
-      { k: 'EXTENSÃO DO CONTRATO', v: e != null ? fmt(e, 2) + ' km' : '-', s: kmFaixaOk(c) ? 'km Atualizado ' + fmtKm(c.kmIni) + '–' + fmtKm(c.kmFim) : '' },
+      { k: 'EXTENSÃO DO CONTRATO', v: e != null ? fmt(e, 2) + ' km' : '-', s: kmFaixaOk(c) ? (c.kmLocal ? 'km local ' : 'km Atualizado ') + fmtKm(c.kmIni) + '–' + fmtKm(c.kmFim) : '' },
       { k: 'KM DO CONTRATO', v: num(ki) || num(kf) ? contr(ki, c.kmIni) + ' a ' + contr(kf, c.kmFim) : '-', s: txtPdf(txtLimpo(c.snvContrato)) },
       { k: 'EXECUÇÃO / VIGÊNCIA', v: ev.v, s: ev.s, prev: ev.prev, w: 160 },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
@@ -1254,9 +1256,9 @@
     o.push(T(x, y0 + 140, 'PISTA', { size: 7, bold: true }));
     o.push(T(x, y0 + 150, pistaDe(c).nome, { size: 6.2, fill: gray }));
     o.push(T(x, y0 + 158, '(predominante)', { size: 6.2, fill: gray }));
-    o.push(T(x, y0 + 178, 'KM ATUALIZADO', { size: 7, bold: true }));
-    if (versao) o.push(T(x, y0 + 186, 'SNV ' + versao, { size: 5.8, fill: gray }));
-    o.push(T(x, y0 + 206, 'KM DO CONTRATO', { size: 7, bold: true, fill: '#6B4E16' }));
+    o.push(T(x, y0 + 178, c.kmLocal ? 'KM LOCAL' : 'KM ATUALIZADO', { size: 7, bold: true }));
+    if (c.kmLocal ? c.ramal : versao) o.push(T(x, y0 + 186, 'SNV ' + (c.kmLocal ? c.ramal : versao), { size: 5.8, fill: gray }));
+    o.push(T(x, y0 + 206, c.kmLocal ? 'ESTACA (20 M)' : 'KM DO CONTRATO', { size: 7, bold: true, fill: '#6B4E16' }));
     var sc = txtPdf(txtLimpo(c.snvContrato)), ss = fitSize(sc, w, 5.8, false, 4.8);
     if (sc) o.push(T(x, y0 + 214, fitText(sc, w, ss), { size: r2(ss), fill: gray }));
 
@@ -1285,7 +1287,12 @@
     // km do contrato nas duas pontas da faixa, a régua não sai e o motivo fica no lugar dela, na mesma altura (nada sobe)
     var par = passoRegua(ppk), conv = reguaDe(c) || {}, ra = kmDoContrato(c, kA), rb = kmDoContrato(c, kB);
     reguaFaixa(o, 'site', y0 + GF.yRule, '#17201C', tracosRegua(kA, kB, par).map(function (t) { return { x: X(t.k), k: t.k, maior: t.maior }; }), fmtKm(kA), fmtKm(kB));
-    if (ra && rb) {
+    if (c.kmLocal) {
+      // 731: a 2ª régua é a das estacas (20 m), nos mesmos traços da régua do km local
+      var ee = c.estaca || 0.02;
+      reguaFaixa(o, 'contrato', y0 + GF.yRuleC, '#6B4E16', tracosRegua(kA, kB, par).map(function (t) { return { x: X(t.k), k: Math.round(t.k / ee), maior: t.maior }; }),
+        'E ' + Math.round(kA / ee), 'E ' + Math.round(kB / ee));
+    } else if (ra && rb) {
       var tc = typeof conv.paraSite !== 'function' ? [] : tracosRegua(ra.geom, rb.geom, par).map(function (t) {
         var s = conv.paraSite(t.k);
         return s != null && s > kA && s < kB ? { x: X(s), k: t.k, maior: t.maior } : null;
@@ -1955,7 +1962,7 @@
   function drawLabelsSeg(o, c, g) {
     var x = G.labelX, w = G.colLine - G.labelX - 6, gray = '#5C6661';
     sentidoFaixa(o, c, x, w, gray);
-    o.push(T(x, g.yKm + 3, fitText('km Atualizado (contr. em cima)', w, 6.2), { size: 6.2, fill: gray }));
+    o.push(T(x, g.yKm + 3, fitText(c.kmLocal ? 'km local (' + c.ramal + ')' : 'km Atualizado (contr. em cima)', w, 6.2), { size: 6.2, fill: gray }));
     o.push(T(x, g.yBand + 24, 'SEGMENTO', { size: 7, bold: true }));
     o.push(T(x, g.yBand + 35, 'código e segmento SNV', { size: 6.4, fill: gray }));
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
@@ -2103,7 +2110,7 @@
       out.push('KM Atualizado: SNV ' + window.SNV_BR230.versao + ' (DNIT); contr. = km do contrato' + (sc ? ', ' + sc + ',' : '') + ' pela tabela de conversão do SNV.' + (ast.length ? ' ' + ast.join(' ') : ''));
     } else if (c.pontos.length) {
       var stc = reguaStatus(c);
-      out.push(stc === 'semCadastro' ? 'Sem o km do contrato no cadastro: a folha mostra só o km Atualizado.' : stc === 'foraDominio' ? notaDominio(reguaDe(c)) :
+      out.push(stc === 'kmLocal' ? 'KM local: km próprio do segmento ' + txtPdf(txtLimpo(c.ramal)) + ' do SNV (fora do eixo); estaca de 20 m, km = estaca x ' + fmt(c.estaca || 0.02, 2) + '.' : stc === 'semCadastro' ? 'Sem o km do contrato no cadastro: a folha mostra só o km Atualizado.' : stc === 'foraDominio' ? notaDominio(reguaDe(c)) :
         'Sem a tabela de conversão do SNV neste aparelho: o km do contrato não aparece.');
     }
     return out;
@@ -2534,7 +2541,7 @@
   }
   function avisoKm(c) {
     function igual(a, b) { return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 0.5; }
-    if (!isConserva(c) || (!igual(c.kmIni, c.kmIniContrato) && !igual(c.kmFim, c.kmFimContrato))) return '';
+    if (!isConserva(c) || c.kmLocal || (!igual(c.kmIni, c.kmIniContrato) && !igual(c.kmFim, c.kmFimContrato))) return '';
     // quanto a régua desloca o km nas pontas (437: cerca de -7,1; SNV 2023–2025: +0,20): só avisa quando passa de 0,5 km
     var R = reguaDe(c), d = null;
     [c.kmFimContrato, c.kmIniContrato].forEach(function (k) { var s = R && typeof k === 'number' ? R.paraSite(k) : null; if (s != null && d == null) d = s - k; });
@@ -2554,7 +2561,8 @@
     '0200310/2023': [383.6, 388.6, 398.6, 406.9, 416.9, 426.9, 436.9, 446.9, 456.9, 466.9, 476.9, 488.5],
     '0200419/2023': [488.5, 498.5, 508.5, 518.5, 528.5, 538.5, 548.5, 555.3, 563.7],
     '0200264/2023': [564.1, 574, 584, 594, 604, 614, 624.7, 642.4],
-    '0200665/2024': [642.4, 652.4, 662.4, 672.4, 682.4, 692.4, 702.4, 712.4, 722.4, 732.4, 743.8]
+    '0200665/2024': [642.4, 652.4, 662.4, 672.4, 682.4, 692.4, 702.4, 712.4, 722.4, 732.4, 743.8],
+    '0200731/2022': [0, 2, 4, 6, 8, 10, 12, 15.22]
   };
   function trechosPadrao(c) {
     var k = txtLimpo(c && c.numero).replace(/\s+/g, '');
@@ -2743,17 +2751,20 @@
         // conservação: o km do site é o km Atualizado (o eixo de snv-br230.js); o do contrato é o dos documentos (SNV 2020–2022),
         // que a régua de snv-conversao.js converte. Sem largura da plataforma nem pontos por página (a folha é a faixa)
         var snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '';
-        h.push(field('KM inicial · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : ''), 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
-        h.push(field('KM final · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : ''), 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
+        var kmRot = c.kmLocal ? ' · km local (' + (c.ramal || 'ramal') + ')' : ' · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '');
+        h.push(field('KM inicial' + kmRot, 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
+        h.push(field('KM final' + kmRot, 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
         h.push(field('KM inicial do contrato', 'data-c="kmIniContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIniContrato)));
         h.push(field('KM final do contrato', 'data-c="kmFimContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFimContrato)));
         h.push('<div class="hint ct-aviso full" data-aviso="km">' + esc(avisoKm(c)) + '</div>');
         h.push(field('SNV do contrato', 'data-c="snvContrato" type="text"', c.snvContrato));
         // versão do SNV dos km do contrato: escolhe a régua (snv-conversao.js)
-        var vId = 'f-' + Math.random().toString(36).slice(2, 9), vAt = c.snvVersao || '202104A';
-        h.push('<div class="field"><label for="' + vId + '">Versão do SNV do km do contrato</label><select id="' + vId + '" data-c="snvVersao">' + SNV_VERSOES.map(function (o) {
-          return '<option value="' + o[0] + '"' + (o[0] === vAt ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
-        }).join('') + '</select></div>');
+        if (!c.kmLocal) {   // o km local (731) não usa a régua do SNV
+          var vId = 'f-' + Math.random().toString(36).slice(2, 9), vAt = c.snvVersao || '202104A';
+          h.push('<div class="field"><label for="' + vId + '">Versão do SNV do km do contrato</label><select id="' + vId + '" data-c="snvVersao">' + SNV_VERSOES.map(function (o) {
+            return '<option value="' + o[0] + '"' + (o[0] === vAt ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+          }).join('') + '</select></div>');
+        }
         h.push(field('Data da última vistoria', 'data-c="dataVistoria" type="date"', c.dataVistoria));
         // superfície da pista: escolhe os grupos da vistoria e os textos da folha; os extras só valem na pavimentada
         var sId = 'f-' + Math.random().toString(36).slice(2, 9), pav = isPavimentada(c);
@@ -2781,7 +2792,7 @@
         // limites dos trechos e dos segmentos: data-trechos (não data-c), gravado só ao sair do campo e só quando a lista vale
         // (onInput). O botão da lista validada só no 437 e no 438, com o campo vazio (hidden acompanha a gravação)
         var trId = 'trch-' + Math.random().toString(36).slice(2, 9), trPad = trechosPadrao(c), trLst = Array.isArray(c.trechos) ? c.trechos : [];
-        h.push('<div class="field"><label for="' + trId + '">Limites dos trechos e dos segmentos (km Atualizado)</label><textarea id="' + trId + '" data-trechos="1" rows="2">' + esc(trechosTxt(trLst)) + '</textarea></div>');
+        h.push('<div class="field"><label for="' + trId + '">Limites dos trechos e dos segmentos (' + (c.kmLocal ? 'km local' : 'km Atualizado') + ')</label><textarea id="' + trId + '" data-trechos="1" rows="2">' + esc(trechosTxt(trLst)) + '</textarea></div>');
         h.push('<div class="hint">Os km separados por ponto e vírgula, do km inicial ao final do contrato.</div>');
         h.push('<div class="hint ct-aviso full" data-aviso="trechos">' + esc(avisoTrechos(c)) + '</div>');
         if (trPad) h.push('<div data-trpad="1"' + (trLst.length ? ' hidden' : '') + '><button type="button" class="btn small" data-act="preencher-trechos">Preencher com a lista validada</button></div>');
@@ -3531,7 +3542,7 @@
     var h = '<article class="pt oae cons' + (open ? ' open' : '') + '" data-id="' + esc(p.id) + '">';
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + segHead(p, c) + '</button>';
     if (open) {
-      var id = esc(p.id), len = pointLen(p), snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '', kmR = ' · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '');
+      var id = esc(p.id), len = pointLen(p), snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '', kmR = c.kmLocal ? ' · km local (' + (c.ramal || 'ramal') + ')' : ' · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '');
       // com as medições: abas Vistoria e Medições, como na ponte; o analista (sem o acompanhamento) vê só as medições
       var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null, soMed = !parte(c, 'acomp');
       var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
@@ -4109,7 +4120,7 @@
         '<span class="sv">' + esc(s.nome || o[1]) + (o[6] ? ' <small>' + esc(o[6]) + '</small>' : '') + '</span>' +
         '<span class="q"><b>' + fmtN(o[5]) + ' <small>' + esc(unTxt(s.un)) + '</small></b><small>' + esc(o[0] + 'ª · ' + mesMed(an, o[0])) + '</small></span></div>';
     }).join('') + '</div>';
-    return h + '<div class="an-rod">km Atualizado, passado do km da memória pela régua do contrato. Trecho que passa do segmento aparece com a quantidade da linha inteira.</div></details>';
+    return h + '<div class="an-rod">' + (c.kmLocal ? 'km local (' + esc(c.ramal || '') + '), da estaca da memória (km = estaca x 0,02); a estaca vai no local.' : 'km Atualizado, passado do km da memória pela régua do contrato.') + ' Trecho que passa do segmento aparece com a quantidade da linha inteira.</div></details>';
   }
   // avisos da leitura das medições que tocam o segmento: a memória de cálculo não fecha com o que a medição pagou
   function avisosSegHtml(an, a, sel, E) {
@@ -5678,6 +5689,7 @@
     plataforma: 'largura da plataforma', dataVistoria: 'data da vistoria', porPagina: 'pontos por página', marcos: 'marcos',
     codigo: 'código da ponte', extensao: 'extensão (m)', largura: 'largura (m)', municipio: 'município', tipo: 'tipo de contrato',
     kmContrato: 'KM do contrato', kmConferir: 'KM a conferir', localRelatorio: 'local (relatório fotográfico)',
+    kmLocal: 'km local (fora do eixo)', ramal: 'segmento do SNV do km local', estaca: 'km por estaca',
     kmIniContrato: 'KM inicial do contrato', kmFimContrato: 'KM final do contrato', snvContrato: 'SNV do contrato', snvVersao: 'versão do SNV do contrato', superficie: 'superfície da pista', gruposExtras: 'grupos só deste contrato', kmFimMapa: 'fim do desenho no mapa', posEixo: 'posição no eixo', prazos: 'prazos', valores: 'valores (PI)',
     obsFolha: 'observações da folha', trechos: 'limites dos trechos', descricao: 'descrição', classe: 'classe do item'
   };

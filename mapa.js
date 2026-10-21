@@ -634,7 +634,7 @@
       q('.mp-t1').textContent = titulo(c);
       q('.mp-t2').textContent = range
         ? 'km ' + km2(range[0]) + ' a ' + km2(range[1]) + ' · SNV ' + snv.versao
-        : 'Sem km cadastrado';
+        : c.kmLocal ? 'km próprio (' + (c.ramal || 'ramal') + '): o mapa ainda não desenha esta travessia' : 'Sem km cadastrado';
       if (range) {
         var line = ref.slice(range[0], range[1]);
         Lf.polyline(line, { pane: 'mpRoad', className: 'mp-road-case', weight: 8, interactive: false }).addTo(ctLayer);

@@ -39,6 +39,14 @@
   function nf(n, d) { var f = NF[d] || (NF[d] = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })); return f.format(Number(n)); }
   function pc(v) { return (Math.round(v * 1000) / 1000) + '%'; }
   function num(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
+  // 731 (c.kmLocal): km próprio do ramal. Só no desenho, a raia começa no c.posEixo (624,70, sob o contorno planejado do 264);
+  // os textos mostram o km local
+  function kmVis(c, k) { return k != null && c.kmLocal && typeof c.posEixo === 'number' ? c.posEixo + (k - (c.kmIni || 0)) : k; }
+  function kmDesl(c) { return c.kmLocal && typeof c.posEixo === 'number' ? c.posEixo - (c.kmIni || 0) : 0; }
+  function kmTxt(x, ate) {
+    var d = kmDesl(x.c);
+    return (d ? 'km local ' : 'km ') + (x.p.kmConferir ? '~' : '') + nf(x.km - d, 2) + (ate ? ' a ' + nf(x.kf - d, 2) : '');
+  }
   // nomes do contrato: o app.js passa os seus em o.nomes. Esta cópia curta, com a mesma regra, vale quando eles não vêm:
   // nome de tela pelo tipo e número ("Pontos Críticos 314"), nome formal com o Lote da licitação e o nº do CT, ordem fixa
   // dos tipos (pontos críticos, conservação, pontes) e os rótulos da caixa "Contratos" e das raias
@@ -133,10 +141,10 @@
         // (o guardado que chega depois, como na carga parcial, aparece escolhido e sem a marca)
         if (ativo && vistosM && !vistosM[c.id] && !ok) novos[c.id] = true;
         // km do contrato fora da rodovia: não entra na faixa (faixaDe), mas entra no aviso
-        if (ok && [c.kmIni, c.kmFim].some(function (v) { var n = num(v); return n != null && !noKm(n); })) foraC++;
+        if (ok && [c.kmIni, c.kmFim].some(function (v) { var n = kmVis(c, num(v)); return n != null && !noKm(n); })) foraC++;
         // conservação (passo 2.4): os segmentos entram como trechos, na cor da pior situação do segmento
         c.pontos.forEach(function (p) {
-          var km = num(p.kmIni), kf = num(p.kmFim);
+          var km = kmVis(c, num(p.kmIni)), kf = kmVis(c, num(p.kmFim));
           if (km == null) { if (ok) semKm++; return; }
           if (!noKm(km)) { if (ok) fora++; return; }
           if (kf != null && !noKm(kf)) { if (ok) fora++; kf = null; }   // km final fora da rodovia: avisa e desenha só no km inicial
@@ -153,7 +161,7 @@
         escolha: escolha, ativo: ativo, aviso: aviso, novos: novos, fx: fx, por: por });
     }
     function faixaDe(c, its) {
-      var a = num(c.kmIni), b = num(c.kmFim);
+      var a = kmVis(c, num(c.kmIni)), b = kmVis(c, num(c.kmFim));
       if (!noKm(a)) a = null;
       if (!noKm(b)) b = null;
       if (a != null && b != null && a > b) { var t = a; a = b; b = t; }   // km do contrato digitado no sentido inverso
@@ -324,7 +332,7 @@
           }
           var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || '?'), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
           if (cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
-          var tip = (x.oae ? nome + (x.p.codigo ? ' · ' + x.p.codigo : '') : nome) + ' · km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + (g.t === 'barra' ? ' a ' + nf(x.kf, 2) : '') + ' · ' + x.st;
+          var tip = (x.oae ? nome + (x.p.codigo ? ' · ' + x.p.codigo : '') : nome) + ' · ' + kmTxt(x, g.t === 'barra') + ' · ' + x.st;
           mk += '<button type="button" class="vg-mk ' + g.t + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" style="left:' + pc(X(g.t === 'barra' ? x.km : mid)) +
             (g.t === 'barra' ? ';width:' + pc((x.kf - x.km) / R * 100) : '') + ';background:' + x.cor + '"></button>';
         });
@@ -333,7 +341,7 @@
         // computador: "Pontos Críticos 314" e "p. críticos · 18 na tela"; celular (coluna estreita): "314" e "p. críticos"
         var rotT = !mob && tp === 'conserva' ? N.palavra(tp).toLowerCase() : N.curto(tp);
         h += '<div class="vg-row vg-lane"><div class="vg-lab" title="' + esc(N.completo(c)) + '"><b>' + esc(mob ? N.numeroCurto(c) || N.nome(c) : N.nome(c)) + '</b><small>' +
-          esc(rotT) + (mob ? '' : ' · ' + xs.length + ' na tela') + '</small></div>' +
+          esc(rotT) + (c.kmLocal ? ' · km próprio' : '') + (mob ? '' : ' · ' + xs.length + ' na tela') + '</small></div>' +
           '<div class="vg-trk">' + grade + banda + rot + mk + '</div></div>';
       });
       h += '<div class="vg-row vg-eixo"><div class="vg-lab"></div><div class="vg-trk">' + ticks.map(function (t) {
@@ -355,7 +363,7 @@
         var pub = !!(o.publico && o.publico());
         var x = sel, inf = x.inf, nomeS = pub ? (x.oae ? 'Ponte' : 'Ponto') : x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
         var kmS = x.oae ? 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + (Number(x.p.extensao) ? ' · ' + nf(x.p.extensao, 1) + ' m de ponte' : '')
-          : 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + ' a ' + nf(x.kf, 2) + ' · ' + nf(x.kf - x.km, 2) + ' km';
+          : kmTxt(x, true) + ' · ' + nf(x.kf - x.km, 2) + ' km';
         var servs = (inf.servs || []).map(function (s) {
           return '<div class="vg-sv"><span>' + esc(s.label) + '</span><b><i style="background:' + esc(s.color) + '"></i>' + esc(s.text) + '</b></div>';
         }).join('');
@@ -365,7 +373,7 @@
           (!pub && (servs || x.p.obs) ? '<details class="vg-mais"' + ((st.mais != null ? st.mais : !mob) ? ' open' : '') + '><summary>' + (servs ? 'Serviços' + (x.p.obs ? ' e observações' : '') : 'Observações') + '</summary>' + servs +
             (x.p.obs ? '<p class="vg-obs">' + esc(x.p.obs) + '</p>' : '') + '</details>' : '') +
           '<div class="vg-acoes"><button type="button" class="btn primary" data-vg="abrir">' + (pub ? 'Entrar para ver' : 'Abrir no contrato') + '</button>' +
-          ((typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn" data-vg="mapa">Ver no mapa</button>' : '') +
+          (!x.c.kmLocal && (typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn" data-vg="mapa">Ver no mapa</button>' : '') +
           (o.temFotos && o.temFotos() ? '<button type="button" class="btn" data-vg="fotos">Fotos</button>' : '') + '</div></aside>';
       }
       h += '</div>';
@@ -409,7 +417,7 @@
       h += '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>No trecho da tela</h3><span>' + vis.length + (vis.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
         (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou ponte</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
         ord.slice(0, max).map(function (x) {
-          var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = (x.p.kmConferir ? '~' : '') + nf(x.km, 2);
+          var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local )?/, '');
           var sit = '<i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (!x.oae && x.inf.pctText ? ' · ' + esc(x.inf.pctText) : '');
           // celular: "314 · P1"; computador: o nome do contrato na primeira coluna
           if (mob) return '<button type="button" class="vg-tr m' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span><b>' + esc((N.numeroCurto(x.c) || N.nome(x.c)) + ' · ' + nome) + '</b><small class="s">' + sit + '</small></span><span class="n">km ' + km + '</span></button>';
@@ -484,7 +492,7 @@
         s += '<fieldset class="vg-pg ' + t + '"><legend class="vg-cap">' + esc(N.palavra(t)) + '</legend>' + cs.map(function (c) {
           var on = d.escolha && !!d.dentro[c.id], f = d.fx[c.id];
           return '<label class="vg-op' + (on ? ' on' : '') + '" title="' + esc(N.completo(c)) + '"><input type="checkbox" data-ck="' + esc(c.id) + '" data-fid="ck:' + esc(c.id) + '"' + (on ? ' checked' : '') + '>' +
-            '<span class="vg-op-s" aria-hidden="true"><i class="vg-sb ' + t + '"></i></span><span class="vg-op-t"><b>' + esc(N.nome(c) || 'Contrato') + '</b><small>' + (f ? 'km ' + nf(f[0], 1) + ' – ' + nf(f[1], 1) : 'sem km') + '</small></span>' +
+            '<span class="vg-op-s" aria-hidden="true"><i class="vg-sb ' + t + '"></i></span><span class="vg-op-t"><b>' + esc(N.nome(c) || 'Contrato') + '</b><small>' + (c.kmLocal ? 'km local ' + nf(c.kmIni, 1) + ' – ' + nf(c.kmFim, 1) + ' (km próprio)' : f ? 'km ' + nf(f[0], 1) + ' – ' + nf(f[1], 1) : 'sem km') + '</small></span>' +
             (d.novos[c.id] ? '<small class="vg-novo">novo</small>' : '') + '</label>';
         }).join('') + '</fieldset>';
       });
