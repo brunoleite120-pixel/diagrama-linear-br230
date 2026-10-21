@@ -323,11 +323,12 @@
   // nome do contrato no título do mapa e no KML: o app.js passa opts.nomes; esta cópia curta, com a mesma regra, vale na página
   // online, que embute este arquivo sem o app.js ("Pontos Críticos 314", "Conservação 437", "Proarte 424"; sem nº, o Lote)
   function nomesPadrao() {
-    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    // sinal: a conservação com rotuloTipo 'sinal' (709) tem o nome "Sinalização" (por baixo, conservação)
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização' };
     function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
     function nome(c) {
       if (!c) return '';
-      var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c.numero)), w = PAL[c.tipo === 'oae' ? 'oae' : c.tipo === 'conserva' ? 'conserva' : 'pc'];
+      var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c.numero)), w = PAL[c.tipo === 'oae' ? 'oae' : c.tipo === 'conserva' ? (c.rotuloTipo === 'sinal' ? 'sinal' : 'conserva') : 'pc'];
       return m ? w + ' ' + String(Number(m[1])) : lp(c.lote) || w;
     }
     function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }

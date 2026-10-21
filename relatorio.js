@@ -262,11 +262,12 @@
   // cópia curta das funções de nome do app.js (o app passa as dele em o.nomes): nome de tela pelo tipo e número do contrato,
   // lote da licitação ("Lote 01") e nº do CT, para o nome do arquivo
   function nomesPadrao() {
-    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    // sinal: a conservação com rotuloTipo 'sinal' (709) tem o nome "Sinalização" (por baixo, conservação)
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização' };
     function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
     function nome(c) {
       if (!c) return '';
-      var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c.numero)), w = PAL[c.tipo === 'oae' ? 'oae' : c.tipo === 'conserva' ? 'conserva' : 'pc'];
+      var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c.numero)), w = PAL[c.tipo === 'oae' ? 'oae' : c.tipo === 'conserva' ? (c.rotuloTipo === 'sinal' ? 'sinal' : 'conserva') : 'pc'];
       return m ? w + ' ' + String(Number(m[1])) : lp(c.lote) || w;
     }
     function loteReal(c) { var l = lp(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
@@ -368,10 +369,10 @@
         });
         var ks = fs.map(function (it) { return it.km; }).filter(function (k) { return k != null && k !== '' && isFinite(k); }).map(Number);
         var kmA = ks.length ? Math.min.apply(null, ks) : null, kmB = ks.length ? Math.max.apply(null, ks) : null;
-        var tit = 'CONSERVAÇÃO RODOVIÁRIA' + (kmA != null ? ' · KM ' + fmtKm(kmA) + (kmB !== kmA ? ' A ' + fmtKm(kmB) : '') : '');
+        var sin = c.rotuloTipo === 'sinal', tit = (sin ? 'SINALIZAÇÃO' : 'CONSERVAÇÃO') + ' RODOVIÁRIA' + (kmA != null ? ' · KM ' + fmtKm(kmA) + (kmB !== kmA ? ' A ' + fmtKm(kmB) : '') : '');
         var k = c.id + ':conserva:' + per.de + ':' + per.ate;
         return { c: c, per: per, oae: false, cons: true, sem: 0, total: fs.length, pts: [{ p: { id: 'conserva', nome: 'Conservação' }, num: '', fotos: fs, corte: 0, titulo: tit, auto: '',
-          curto: 'CONSERVAÇÃO', desc: textos[k] != null ? textos[k] : '', chave: k, folhas: Math.ceil(fs.length / 6) }] };
+          curto: sin ? 'SINALIZAÇÃO' : 'CONSERVAÇÃO', desc: textos[k] != null ? textos[k] : '', chave: k, folhas: Math.ceil(fs.length / 6) }] };
       }
       function kmFoto(it) { return it.km != null && it.km !== '' && isFinite(it.km) ? 'KM ' + Number(it.km).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : ''; }
       // as folhas do PDF: cada ponto em pedaços de até 6 fotos (ponte com mais de 6: folhas equilibradas, 8 → 4 + 4, 13 → 5 + 4 + 4);

@@ -36,9 +36,15 @@
       var completo = dinheiro(v) + (sufixo || '');
       return '<span title="' + esc(completo) + '" aria-label="' + esc(completo) + '">' + esc(compacto(v) + (sufixo || '')) + '</span>';
     }
-    function tipoCurto(c) { return c.tipo === 'oae' ? 'OAEs' : c.tipo === 'conserva' ? 'conservação' : 'pontos críticos'; }
-    function tipo(c) { return c.tipo === 'oae' ? 'Pontes (OAEs)' : c.tipo === 'conserva' ? 'Conservação' + (c.superficie === 'pavimentada' ? ' · pista pavimentada' : ' · revestimento primário') : 'Pontos críticos'; }
-    function faixa(c) { return [c.lote, c.kmIni != null && c.kmFim != null ? 'km ' + fmtN(c.kmIni) + ' a ' + fmtN(c.kmFim) : ''].filter(Boolean).join(' · '); }
+    // sinalização (709): conservação por baixo, com nome próprio (op.grupoNome, do app.js) e o km das MPs (op.kmMp; nos outros, null)
+    function sinal(c) { return !!(op.grupoNome && op.grupoNome(c) === 'Sinalização'); }
+    function kmMp(c, k) { var v = op.kmMp && k != null ? op.kmMp(c, k) : null; return typeof v === 'number' && isFinite(v) ? v : null; }
+    function tipoCurto(c) { return c.tipo === 'oae' ? 'OAEs' : sinal(c) ? 'sinalização' : c.tipo === 'conserva' ? 'conservação' : 'pontos críticos'; }
+    function tipo(c) { return c.tipo === 'oae' ? 'Pontes (OAEs)' : sinal(c) ? 'Sinalização · todo o eixo' : c.tipo === 'conserva' ? 'Conservação' + (c.superficie === 'pavimentada' ? ' · pista pavimentada' : ' · revestimento primário') : 'Pontos críticos'; }
+    function faixa(c) {
+      var a = kmMp(c, c.kmIni), b = kmMp(c, c.kmFim);
+      return [c.lote, a != null && b != null ? op.kmRotulo(c) + ' ' + fmtN(a) + ' a ' + fmtN(b) : c.kmIni != null && c.kmFim != null ? 'km ' + fmtN(c.kmIni) + ' a ' + fmtN(c.kmFim) : ''].filter(Boolean).join(' · ');
+    }
     function botao(act, txt, attrs, cls) { return '<button type="button" class="btn' + (cls ? ' ' + cls : '') + '" data-md="' + act + '"' + (attrs || '') + '>' + txt + '</button>'; }
     function vazio(txt) { return '<p class="md-vazio">' + esc(txt) + '</p>'; }
     function permitidos() { return op.contratos().filter(function (c) { return op.pode(c); }); }
@@ -168,7 +174,7 @@
     function inicioHtml(cs) {
       var soma = 0, n = 0, al = 0, ultTipos = {};
       cs.forEach(function (c) { var d = dado(c), t = tipoCurto(c); if (d && d.ms.length) { soma += d.total; n++; al += avisos(d).length; if (d.ultima != null && (ultTipos[t] == null || d.ultima > ultTipos[t])) ultTipos[t] = d.ultima; } });
-      var ult = ['OAEs', 'conservação', 'pontos críticos'].filter(function (t) { return ultTipos[t] != null; }).map(function (t) { return mesTxt(ultTipos[t]) + ' ' + t; }).join(' · ');
+      var ult = ['OAEs', 'conservação', 'sinalização', 'pontos críticos'].filter(function (t) { return ultTipos[t] != null; }).map(function (t) { return mesTxt(ultTipos[t]) + ' ' + t; }).join(' · ');
       var h = cabecalho(cs) + '<div class="md-filtros"><label class="md-busca">Buscar serviço<input type="search" id="mdBusca" placeholder="Nome ou código: roçada, 50821…" value="' + esc(busca) + '"></label>' +
         '<label class="md-ordenar">Ordenar<select id="mdOrdem">' + [['km', 'pelo km'], ['saldo', 'menor saldo'], ['antiga', 'medição mais antiga'], ['avisos', 'mais avisos']].map(function (x) { return '<option value="' + x[0] + '"' + (ordem === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>' +
         '<div id="mdBuscaRes" aria-live="polite">' + buscaHtml(cs) + '</div><div class="md-resumo card"><div><span class="md-label">Medido nos ' + n + ' contratos carregados (PI)</span><strong>' + moeda(soma) + '</strong></div><div><span class="md-label">Última competência</span><strong>' + esc(ult || '—') + '</strong></div><div><span class="md-label">Avisos para conferir</span><strong>' + al + '</strong></div></div>';
@@ -367,6 +373,9 @@
       function nomeP(pid) { var p = info[pid]; return (p && (p.nome || p.codigo)) || (an[pid] && an[pid].nome) || pid; }
       function kms(pid) { var p = info[pid] || {}; var ki = numero(p.kmIni), kf = numero(p.kmFim); if (ki == null) ki = kf; if (kf == null) kf = ki; return ki == null ? null : [Math.min(ki, kf), Math.max(ki, kf)]; }
       function ext(k) { var e = k[1] - k[0]; return e < 1 ? Math.round(e * 1000) + ' m' : decimal(e, 1) + ' km'; }
+      // km para o texto: no 709, o das MPs ("km MP 301,1"); nos outros, o do site
+      var mpK = kmMp(c, c.kmIni) != null, kmP = mpK ? 'km MP ' : 'km ';
+      function kt(v, cs) { return kmTxt(mpK ? kmMp(c, v) : v, cs); }
       function nMeds(pid) { return d.ms.filter(function (x) { return vm(pid, x.n) !== 0; }).length; }
       var todos = Object.keys(an).concat(ps.map(function (p) { return p.id; }).filter(function (id) { return !an[id]; }));
       var com = todos.filter(function (pid) { return vm(pid, m.n) !== 0; });
@@ -388,15 +397,15 @@
           (cons ? '<span>tamanho de cada bloco = extensão do segmento</span>' : '<span><i class="md-leg on"></i>com valor<i class="md-leg"></i>sem valor<i class="md-leg sel"></i>aberto</span>') + '</div>';
         h += '<div class="md-regua' + (cons ? ' md-regua-blocos' : '') + '">' + noTrecho.map(function (p) {
           var k = kms(p.id), v = vm(p.id, m.n), cls = (v ? 'on' : '') + (segAberto === p.id ? ' sel' : '');
-          var tip = nomeP(p.id) + ', km ' + kmTxt(k[0], casas) + (k[1] > k[0] ? ' a ' + kmTxt(k[1], casas) : '') + ', ' + (v ? dinheiro(v) : 'sem valor nesta medição');
+          var tip = nomeP(p.id) + ', ' + kmP + kt(k[0], casas) + (k[1] > k[0] ? ' a ' + kt(k[1], casas) : '') + ', ' + (v ? dinheiro(v) : 'sem valor nesta medição');
           var st = cons ? 'flex-grow:' + Math.max(k[1] - k[0], .1).toFixed(2) : 'left:' + ((k[0] - ka) / L * 100).toFixed(2) + '%;width:' + Math.max((k[1] - k[0]) / L * 100, .4).toFixed(2) + '%';
           return '<button type="button" class="' + cls + '" data-md="ponte" data-p="' + esc(p.id) + '" style="' + st + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + (cons ? esc(nomeP(p.id)) : '') + '</button>';
-        }).join('') + '</div><div class="md-regua-eixo"><span>km ' + kmTxt(ka, 1) + (cons ? ' · início do contrato' : '') + '</span><span>km ' + kmTxt(kb, 1) + (cons ? ' · fim' : '') + '</span></div></div>';
+        }).join('') + '</div><div class="md-regua-eixo"><span>' + kmP + kt(ka, 1) + (cons ? ' · início do contrato' : '') + '</span><span>' + kmP + kt(kb, 1) + (cons ? ' · fim' : '') + '</span></div></div>';
       }
       h += '<div class="md-segs md-segmentos' + (segAberto ? ' aberto' : '') + '">';
       lista.forEach(function (pid) {
         var k = kms(pid), v = vm(pid, m.n), on = segAberto === pid, nm = nMeds(pid);
-        var faixaKm = k ? (cons ? 'km ' + kmTxt(k[0], casas) + ' → km ' + kmTxt(k[1], casas) : 'km ' + kmTxt(k[0], casas) + (k[1] > k[0] ? ' a ' + kmTxt(k[1], casas) : '')) : 'sem km no cadastro';
+        var faixaKm = k ? (cons ? kmP + kt(k[0], casas) + ' → ' + kmP + kt(k[1], casas) : 'km ' + kmTxt(k[0], casas) + (k[1] > k[0] ? ' a ' + kmTxt(k[1], casas) : '')) : 'sem km no cadastro';
         var resto = (k && k[1] > k[0] ? ext(k) + ' · ' : '') + nMed(nm);
         var nomeH = cons ? '<span class="md-seg-nome cons"><b>' + esc(nomeP(pid)) + '</b><span><strong>' + esc(faixaKm) + '</strong><small>' + esc(resto) + '</small></span></span>'
           : '<span class="md-seg-nome"><b>' + esc(nomeP(pid)) + '</b><small>' + esc(faixaKm + ' · ' + resto) + '</small></span>';
@@ -415,7 +424,7 @@
         var tit = oae ? 'Ponte' + (p && p.codigo && p.codigo !== p.nome ? ' · ' + p.codigo : '') : cons ? 'Segmento · ' + nome(c) : 'Ponto · ' + nome(c);
         var h = '<section class="md-painel" aria-label="' + esc(nomeP(pid) + ': km e medições') + '"><div class="md-painel-top"><div><small>' + esc(tit) + '</small><h3>' + esc(nomeP(pid)) + '</h3></div>' +
           botao('ponte', '✕', ' data-p="' + esc(pid) + '" aria-label="Fechar"', 'small ghost') + '</div>';
-        h += '<div class="md-painel-kpis">' + [['km inicial', k ? kmTxt(k[0], 3) : '—'], ['km final', k ? kmTxt(k[1], 3) : '—'], ['extensão', k && k[1] > k[0] ? ext(k) : '—']].map(function (x) {
+        h += '<div class="md-painel-kpis">' + [[kmP + 'inicial', k ? kt(k[0], 3) : '—'], [kmP + 'final', k ? kt(k[1], 3) : '—'], ['extensão', k && k[1] > k[0] ? ext(k) : '—']].map(function (x) {
           return '<div><small>' + x[0] + '</small><b>' + esc(x[1]) + '</b></div>'; }).join('') + '</div>';
         h += '<p class="md-painel-txt">Entrou em <b>' + lin.length + ' de ' + d.ms.length + '</b> medições · ' + (v ? 'nesta (' + m.n + 'ª) ' + esc(dinheiro(v)) + (valor(m.total) ? ', ' + pctCurto(v / valor(m.total) * 100) + ' da medição' : '') : 'sem valor nesta medição') + '</p>';
         if (lin.length) {

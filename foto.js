@@ -513,11 +513,12 @@
   // que embute este arquivo sem o app.js: nome de tela pelo tipo e número ("Pontos Críticos 314"), nome formal com o Lote
   // da licitação e o nº do CT, pasta do Drive pelo número ("CT 02 00314-2026") e a pasta usada até a versão 51 (o Lote)
   function nomesPadrao() {
-    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte' };
+    // sinal: a conservação com rotuloTipo 'sinal' (709) tem o nome "Sinalização" (por baixo, conservação)
+    var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização' };
     function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
     function tipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
     function numeroCurto(c) { var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c && c.numero)); return m ? String(Number(m[1])) : ''; }
-    function nome(c) { if (!c) return ''; var n = numeroCurto(c); return n ? PAL[tipo(c)] + ' ' + n : lp(c.lote) || PAL[tipo(c)]; }
+    function nome(c) { if (!c) return ''; var n = numeroCurto(c), w = PAL[c.rotuloTipo === 'sinal' && tipo(c) === 'conserva' ? 'sinal' : tipo(c)]; return n ? w + ' ' + n : lp(c.lote) || w; }
     function loteReal(c) { var l = lp(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
     function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
     function formal(c) { return c ? [loteReal(c), numeroCT(c)].filter(Boolean).join(' · ') || nome(c) : ''; }
