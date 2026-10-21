@@ -29,6 +29,9 @@
  *   g.open({ cid, pagina: true, aoFechar })   celular: a galeria vira uma página entre a barra do topo e a das páginas (app.js),
  *                          sem o "Voltar" e sem a fila de contratos (vale o contrato aberto no app); aoFechar avisa quando ela
  *                          fecha sozinha (Esc, "Entrar"). g.close(true) fecha sem avisar
+ * Aba Drive (script versão 7): a pasta do Drive como ela é, por contrato (ou por pessoa) e ponto, com miniaturas; abrir baixa a
+ * foto inteira (fica guardada aqui) e selecionar usa a mesma janela de baixar. Engenheiro e Administrador veem todas; os outros, as
+ * que tiraram. Só lê o Drive (ver_listar, ver_minis, ver_baixar).
  * nomes: funções de nome do contrato do app.js (nome de tela, formal, pasta do Drive); sem elas, vale a cópia curta daqui.
  */
 (function () {
@@ -112,6 +115,32 @@
     '.gl-t[aria-pressed="true"] .gl-ck{background:var(--accent,#1D4F91)}',
     '.gl-t[aria-pressed="true"] .gl-ck::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}',
     '.gl-vazio{padding:40px 8px;text-align:center;color:var(--ink-3,#5C6661)}',
+    '.gl-dr-top{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center}',
+    '.gl-dr-busca{flex:1 1 220px;min-width:0;min-height:36px;box-sizing:border-box;padding:6px 10px;border:1px solid var(--line,#D5DAD6);border-radius:8px;background:var(--panel,#fff);color:inherit;font:inherit;font-size:14px}',
+    '.gl-dr-top .gl-chips{flex:0 0 auto}',
+    '.gl-dr-resto{flex:1 1 100%;display:flex;flex-direction:column;gap:8px;min-width:0}',
+    '.gl-dr-resto:empty{display:none}',
+    '.gl-trilha{display:flex;flex-wrap:wrap;align-items:center;gap:2px 5px;font-size:12.5px;color:var(--ink-3,#5C6661)}',
+    '.gl-trilha button{border:0;background:none;padding:2px 0;color:var(--accent,#1D4F91);font-weight:600;font-size:12.5px;cursor:pointer}',
+    '.gl-trilha b{color:var(--ink,#17201C);font-weight:650}',
+    '.gl-dr-pastas{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:8px;padding-top:4px}',
+    '.gl-pasta{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line,#D5DAD6);border-radius:10px;background:var(--panel,#fff);color:inherit;font:inherit;text-align:left;cursor:pointer}',
+    '.gl-pasta:hover{border-color:var(--accent,#1D4F91)}',
+    '.gl-pasta svg{flex:none;width:32px;height:32px}',
+    '.gl-pasta>span{flex:1;min-width:0}',
+    '.gl-pasta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.gl-pasta small{display:block;font-size:12px;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
+    '.gl-pasta i{flex:none;font-style:normal;padding:2px 8px;border-radius:999px;background:#FCF1DC;color:#9A5B00;font-size:11px;font-weight:700}',
+    '.gl-pasta em{flex:none;font-style:normal;color:var(--ink-3,#5C6661);font-size:18px}',
+    '.gl-dr-nota{margin:12px 0 0;padding:9px 12px;border-radius:10px;background:var(--accent-soft,#E7EEF7);font-size:12px;line-height:1.45;color:var(--ink-2,#3B4540)}',
+    '.gl-dr-arv{display:none}',
+    '@media (min-width:1000px){.gl-dr{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start}.gl-dr-arv{display:flex;flex-direction:column;gap:2px;position:sticky;top:8px;max-height:calc(100vh - 240px);overflow:auto;margin-top:8px;padding:8px 6px;border:1px solid var(--line,#D5DAD6);border-radius:10px;background:var(--panel,#fff)}}',
+    '.gl-dr-arv button{display:flex;align-items:center;gap:6px;width:100%;padding:6px 8px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;font-size:13px;text-align:left;cursor:pointer}',
+    '.gl-dr-arv button:hover{background:#F3F5F4}',
+    '.gl-dr-arv button span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.gl-dr-arv button small{color:var(--ink-3,#5C6661);font-size:12px;font-variant-numeric:tabular-nums}',
+    '.gl-dr-arv button[aria-current="true"]{background:var(--accent-soft,#E7EEF7);color:var(--accent,#1D4F91);font-weight:650}',
+    '.gl-dr-arv p{margin:6px 8px 0;padding-top:8px;border-top:1px solid var(--line,#D5DAD6);font-size:12px;color:var(--ink-3,#5C6661)}',
     '.gl-vazio .btn{margin-top:12px}',
     '.gl-bar{position:absolute;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:760px;margin:0 auto;',
     '  padding:10px 12px;background:var(--panel,#fff);border:1px solid var(--line,#D5DAD6);border-radius:10px;box-shadow:0 6px 24px rgba(23,32,28,.16)}',
@@ -241,7 +270,7 @@
   function mesNome(k) { var p = k.split('-'); return MESES[+p[1] - 1] + '/' + p[0]; }
   function kmCurto(km) { return km == null || km === '' ? '' : 'km ' + Number(km).toFixed(2).replace('.', ','); }
   function kmTxt(km) { return km == null || km === '' ? '' : 'km ' + Number(km).toFixed(3).replace('.', ','); }
-  function tam(b) { return !b ? '' : b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB'; }
+  function tam(b) { return !b ? '' : b >= 1073741824 ? (b / 1073741824).toFixed(1).replace('.', ',') + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB'; }
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
   // ---------------------------------------------------------------- período (dia, semana de segunda a domingo, mês, datas)
   // datas em "aaaa-mm-dd" no fuso do aparelho; a escolha fica neste aparelho (PER_KEY) e vale para todas as abas
@@ -404,10 +433,14 @@
     { k: 'local', t: 'No aparelho', nivel: 0 },
     { k: 'minhas', t: 'Minhas', nivel: 0, login: true },   // também o analista (o banco lista as dele: _faz_fotos)
     { k: 'todas', t: 'Equipe', nivel: 2 },
+    { k: 'drive', t: 'Drive', nivel: 0, login: true, drive: true },   // a pasta do Drive como ela é (script versão 7)
     { k: 'relatorio', t: 'Relatório ★', nivel: 2 },
     { k: 'deletadas', t: 'Lixeira', nivel: 3 }   // a pasta "Deletados" do Drive
   ];
-  var DRIVE_KEY = 'diagrama-linear.foto-drive', MANTER_KEY = 'diagrama-linear.manter-enviadas';   // DRIVE_KEY: a mesma da tela Foto (foto.js)
+  var DRIVE_KEY = 'diagrama-linear.foto-drive', MANTER_KEY = 'diagrama-linear.manter-enviadas';
+  // aba Drive: por contrato ou por pessoa, e quando cada pasta foi aberta (para contar as novas)
+  var DMODO_KEY = 'diagrama-linear.drive-ver-modo', DVISTO_KEY = 'diagrama-linear.drive-ver-vistos';
+  var IC_PASTA = '<svg viewBox="0 0 24 24" fill="#E9B949" stroke="#B8860B" stroke-width="1" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.3l2 2h8.7A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';   // DRIVE_KEY: a mesma da tela Foto (foto.js)
   function lsLer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsPor(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* sem armazenamento */ } }
   function rede() { var c = navigator.connection; return c && c.type ? c.type : ''; }
@@ -661,12 +694,17 @@
     // fLocal: filtro de No aparelho ('aparelho' só aqui, 'fila', 'enviada' no Drive); lote: as fotos que entraram na fila nesta
     // leva (id -> tamanho), para a barra contar "3 de 7" e os MB até a fila esvaziar; semRede: a aba do banco mostra as guardadas
     var fLocal = '', lote = {}, semRede = 0, bx = null, bs = null, cfg = false;
+    // aba Drive: dpath = a pasta aberta (nomes, a partir da raiz; em "por pessoa" o 1º é a pessoa); dlista = a última leitura do Drive
+    var dpath = [], dmodo = lsLer(DMODO_KEY) === 'pessoa' ? 'pessoa' : 'contrato', dbusca = '', dlista = null, semMini = {}, dvistos = {};
+    try { dvistos = JSON.parse(lsLer(DVISTO_KEY) || '{}') || {}; } catch (e) { dvistos = {}; }
     cacheIds().then(function (m) { guardadas = m; });
 
     function login() { return o.getLogin ? o.getLogin() : null; }
     function nv() { return o.nivel ? o.nivel() : 0; }
     function modo() { return nv() >= 2 ? agrupar || agruparPadrao(aba) : 'mes'; }
-    function abasVisiveis() { return ABAS.filter(function (a) { return (a.nivel === 0 && !a.login) || (login() && nv() >= a.nivel); }); }
+    function abasVisiveis() {
+      return ABAS.filter(function (a) { return ((a.nivel === 0 && !a.login) || (login() && nv() >= a.nivel)) && (!a.drive || !!(o.driveUrl && o.driveUrl() && o.drive && o.drive.post)); });
+    }
     function q(s) { return root.querySelector(s); }
     function msgErro(e) {
       var c = (e && (e.code || e.erro || e.message)) || '';
@@ -674,6 +712,8 @@
       if (c === 'codigo_invalido') return 'Seu acesso expirou ou mudou. Entre de novo.';
       if (c === 'sem_permissao' || c === 'so_criador') return 'Seu acesso não permite ver estas fotos.';
       if (c === 'sem_login') return 'Entre com o seu código para ver as fotos enviadas.';
+      if (c === 'acao_invalida') return 'O script do Drive ainda é a versão antiga: a aba Drive precisa da versão 7.';
+      if (c === PASTA_FORA) return 'A pasta principal do Drive está indisponível agora.';
       if (/fotos_listar|PGRST202|http_404/.test(c)) return 'O banco ainda não tem a galeria da equipe.';
       return 'Não foi possível carregar as fotos (' + c + ').';
     }
@@ -707,6 +747,7 @@
         var l = login();
         if (!l) { var e = new Error('sem_login'); e.code = 'sem_login'; throw e; }
         semRede = 0;
+        if (aba === 'drive') return listarDrive(l);
         return o.Banco.fotosListar(l.codigo, aba, 1000).then(function (arr) { return arr.map(deBanco); }, function (e) {
           if (!e || (e.code || e.erro || e.message) !== 'sem_rede') throw e;
           // sem sinal: as fotos baixadas para o app (dados e miniatura guardados), na regra da aba
@@ -736,11 +777,139 @@
         render();
       });
     }
+    // ---------------------------------------------------------------- aba Drive
+    function deDrive(f) {
+      var x = deArquivo(f), ps = (f.pastas || []).slice();
+      return { id: 'drv:' + f.id, nome: x.nome_arquivo, origem: 'drive', cid: x.contrato_id || '', pid: x.ponto_id || '',
+        pnome: x.ponto_nome || (ps[1] && ps[1] !== 'Sem ponto' ? ps[1] : ''), lote: x.lote || '', km: x.km, lat: x.lat, lng: x.lng, em: x.tirada_em,
+        desc: x.descricao || '', autor: x.autor_nome === 'Sem nome' ? '' : x.autor_nome, driveId: f.id, tamanho: f.tamanho || null, pastas: ps,
+        criado: f.criado || null, situacao: 'ativa' };
+    }
+    // a lista do Drive vale 3 min (trocar de aba ou de pasta não lê de novo); "Atualizar" lê na hora. Sem sinal: as baixadas daqui
+    function listarDrive(l) {
+      if (dlista && Date.now() - dlista.t < 180000) return Promise.resolve(dlista.itens.slice());
+      var url = o.driveUrl ? o.driveUrl() : null;
+      if (!url) { var e0 = new Error('sem_url'); e0.code = 'sem_url'; return Promise.reject(e0); }
+      return postDrive(url, { acao: 'ver_listar', ambiente: o.ambiente || 'oficial', codigo: l.codigo }).then(function (r) {
+        if (!r || !r.ok) { var e = new Error((r && r.erro) || 'erro'); e.code = (r && r.erro) || 'erro'; throw e; }
+        var arr = (r.fotos || []).map(deDrive);
+        dlista = { t: Date.now(), itens: arr, limite: !!r.limite, amplo: !!r.amplo };
+        if (!dvistos._base) { dvistos._base = new Date().toISOString(); guardarVistos(); }
+        return arr.slice();
+      }, function () {
+        return itensLer().then(function (gs) {
+          var arr = gs.filter(function (x) { return x.dados && x.dados.origem === 'drive'; }).map(function (x) { if (x.mini) minis[x.id] = x.mini; return x.dados; });
+          if (!arr.length) { var e = new Error('sem_rede'); e.code = 'sem_rede'; throw e; }
+          semRede = arr.length;
+          return arr;
+        });
+      });
+    }
+    function guardarVistos() { try { localStorage.setItem(DVISTO_KEY, JSON.stringify(dvistos)); } catch (e) { /* sem armazenamento */ } }
+    function caminhoDe(it) { return dmodo === 'pessoa' ? [it.autor || 'Sem nome'].concat(it.pastas || []) : (it.pastas || []); }
+    function dentro(c, path) { if (c.length < path.length) return false; for (var i = 0; i < path.length; i++) if (c[i] !== path[i]) return false; return true; }
+    function noCaminho(it) { return dentro(caminhoDe(it), dpath); }
+    function naBusca(it) {
+      var b = dbusca.trim().toLowerCase().replace(/^km\s+/, '');
+      if (!b) return true;
+      var c = caminhoDe(it);
+      return [it.nome, it.pnome, it.autor, it.desc, kmTxt(it.km), it.km != null ? String(it.km) : '', nomePasta(c[0] || '')].concat(c).join(' \u2022 ').toLowerCase().indexOf(b) >= 0;
+    }
+    // até aqui, cartões de pasta (contratos; em "por pessoa", pessoas e contratos); daqui para dentro, fichas dos pontos e a grade
+    function nivelGrade() { return dmodo === 'pessoa' ? 2 : 1; }
+    function emCartoes() { return aba === 'drive' && !dbusca.trim() && dpath.length < nivelGrade(); }
+    function chaveVisto(path) { return dmodo + ':' + path.join('/'); }
+    function filhosDe(path) {
+      var m = {}, ordem = [], base = dvistos._base || '';
+      itens.forEach(function (it) {
+        var c = caminhoDe(it);
+        if (c.length <= path.length || !dentro(c, path)) return;
+        var k = c[path.length];
+        if (!m[k]) { m[k] = { nome: k, n: 0, bytes: 0, novas: 0, sub: {} }; ordem.push(k); }
+        var x = m[k], v = dvistos[chaveVisto(path.concat([k]))] || base;
+        x.n++; x.bytes += it.tamanho || 0;
+        if (c.length > path.length + 1) x.sub[c[path.length + 1]] = 1;
+        if (v && it.criado && it.criado > v) x.novas++;
+      });
+      var ord = contratos().map(function (c) { return nomesCt.pasta(c); });
+      return ordem.map(function (k) { return m[k]; }).sort(function (a, b) {
+        var ia = ord.indexOf(a.nome), ib = ord.indexOf(b.nome);
+        if (ia >= 0 || ib >= 0) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+        return a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true });
+      });
+    }
+    // "CT 02 00315-2026" -> o nome do contrato no app ("Pontos Críticos 315")
+    function nomePasta(k) {
+      var ch = chaveCT(k), c = contratos().find(function (x) { return nomesCt.pasta(x) === k || (ch && chaveCT(x.numero) === ch); });
+      return c ? curto(c.id) : '';
+    }
+    function rotuloPasta(path, k) {
+      var nivelCt = dmodo === 'pessoa' ? 1 : 0;
+      if (path.length === nivelCt) { var n = nomePasta(k); return n ? n + ' \u00b7 ' + k : k; }
+      return k;
+    }
+    function irPasta(path) {
+      dpath = path; sel = {}; dbusca = '';
+      if (path.length) { dvistos[chaveVisto(path)] = new Date().toISOString(); guardarVistos(); }
+      render();
+      var corpo = q('.gl-body'); if (corpo) corpo.scrollTop = 0;
+    }
+    function botaoIr(path, html, extra) { return '<button type="button" data-g="dr-ir" data-p="' + esc(JSON.stringify(path)) + '"' + (extra || '') + '>' + html + '</button>'; }
+    function trilhaHtml() {
+      if (!dpath.length) return '';
+      var h = '<nav class="gl-trilha" aria-label="Pasta aberta">' + botaoIr([], 'Drive') + '<span aria-hidden="true">\u203a</span>';
+      dpath.forEach(function (k, i) {
+        var r = rotuloPasta(dpath.slice(0, i), k);
+        h += i === dpath.length - 1 ? '<b aria-current="page">' + esc(r) + '</b>' : botaoIr(dpath.slice(0, i + 1), esc(r)) + '<span aria-hidden="true">\u203a</span>';
+      });
+      return h + '</nav>';
+    }
+    function driveFil() {
+      var chipM = function (v, t) { return '<button type="button" class="gl-chip" data-g="dr-modo" data-v="' + v + '" aria-pressed="' + (dmodo === v) + '">' + t + '</button>'; };
+      var h = '<div class="gl-dr-top"><input type="search" class="gl-dr-busca" data-f="dbusca" value="' + esc(dbusca) + '" placeholder="Buscar pasta, ponto ou km" aria-label="Buscar no Drive" enterkeyhint="search">' +
+        '<div class="gl-chips" role="group" aria-label="Organizar">' + chipM('contrato', 'Por contrato') + chipM('pessoa', 'Por pessoa') + '</div></div><div class="gl-dr-resto">';
+      h += trilhaHtml();
+      if (!emCartoes()) {
+        var base = dpath.slice(0, nivelGrade()), fs = !dbusca.trim() ? filhosDe(base) : [];
+        if (fs.length > 1 || (fs.length === 1 && dpath.length > base.length)) {
+          h += '<div class="gl-chips" role="group" aria-label="Pastas">' + botaoIr(base, 'Todas \u00b7 ' + itens.filter(function (it) { return dentro(caminhoDe(it), base); }).length, ' class="gl-chip" aria-pressed="' + (dpath.length === base.length) + '"') +
+            fs.map(function (f) { return botaoIr(base.concat([f.nome]), esc(f.nome) + ' \u00b7 ' + f.n, ' class="gl-chip" aria-pressed="' + (dpath[base.length] === f.nome) + '"'); }).join('') + '</div>';
+        }
+        h += perHtml();
+      }
+      return h + '</div>';
+    }
+    function cartoesHtml() {
+      var fs = filhosDe(dpath);
+      if (!fs.length) return '<div class="gl-vazio">Nenhuma pasta aqui.</div>';
+      var h = '<div class="gl-dr-pastas">' + fs.map(function (f) {
+        var nSub = Object.keys(f.sub).length, nivelCt = dmodo === 'pessoa' ? 1 : 0;
+        var sub = (nSub ? plural(nSub, dpath.length === nivelCt ? 'pasta de ponto' : 'pasta', dpath.length === nivelCt ? 'pastas de ponto' : 'pastas') + ' \u00b7 ' : '') + plural(f.n, 'foto', 'fotos') + (f.bytes ? ' \u00b7 ' + tam(f.bytes) : '');
+        return botaoIr(dpath.concat([f.nome]), IC_PASTA + '<span><b>' + esc(rotuloPasta(dpath, f.nome)) + '</b><small>' + esc(sub) + '</small></span>' +
+          (f.novas ? '<i>' + plural(f.novas, 'nova', 'novas') + '</i>' : '') + '<em aria-hidden="true">\u203a</em>', ' class="gl-pasta"');
+      }).join('') + '</div>';
+      if (!dpath.length) h += '<p class="gl-dr-nota"><b>Só o que existe no Drive.</b> Aparecem também as fotos que alguém pôs direto na pasta pelo computador e que não estão na galeria da equipe.' +
+        (dlista && !dlista.amplo ? ' Aqui ficam só as fotos que você tirou.' : '') + '</p>';
+      return h;
+    }
+    function arvoreHtml() {
+      var h = '';
+      function nivel(path, prof) {
+        filhosDe(path).forEach(function (f) {
+          var p = path.concat([f.nome]), aberto = dentro(dpath, p), atual = dpath.length === p.length && aberto;
+          h += botaoIr(p, '<span style="padding-left:' + (prof * 14) + 'px">' + (aberto ? '\u25be ' : Object.keys(f.sub).length ? '\u25b8 ' : '') + esc(rotuloPasta(path, f.nome)) + '</span><small>' + f.n + '</small>', atual ? ' aria-current="true"' : '');
+          if (aberto && prof < 3) nivel(p, prof + 1);
+        });
+      }
+      nivel([], 0);
+      var bytes = itens.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0), aqui = itens.filter(noAparelho).length;
+      return h + '<p>' + (dlista && dlista.amplo ? 'Drive da equipe' : 'Suas fotos no Drive') + ' \u00b7 ' + plural(itens.length, 'foto', 'fotos') + (bytes ? ' \u00b7 ' + tam(bytes) : '') + (aqui ? '<br>Neste aparelho: ' + aqui : '') + '</p>';
+    }
     function miniDe(it) { var l = locais[it.id]; return (l && l.mini) || it.mini || minis[it.id] || null; }
 
     // miniaturas do banco: só as que aparecem na tela, em lotes de 40
     function pedirMini(id) {
-      if (minis[id] || pedindo[id] || (locais[id] && locais[id].mini)) return;
+      if (minis[id] || pedindo[id] || semMini[id] || (locais[id] && locais[id].mini)) return;
       fila[id] = 1;
       clearTimeout(filaT);
       filaT = setTimeout(buscarMinis, 60);
@@ -749,6 +918,8 @@
       var l = login(), ids = Object.keys(fila);
       fila = {};
       if (!l || !ids.length) return;
+      var drv = ids.filter(function (id) { return id.indexOf('drv:') === 0; });
+      if (drv.length) { minisDrive(drv); ids = ids.filter(function (id) { return id.indexOf('drv:') !== 0; }); }
       for (var i = 0; i < ids.length; i += 40) (function (lote) {
         lote.forEach(function (id) { pedindo[id] = 1; });
         o.Banco.fotosMini(l.codigo, lote).then(function (arr) {
@@ -756,6 +927,28 @@
           lote.forEach(function (id) { delete pedindo[id]; });
         }, function () { lote.forEach(function (id) { delete pedindo[id]; }); });
       })(ids.slice(i, i + 40));
+    }
+    // miniaturas do Drive (aba Drive): 12 por pedido, uma leva de cada vez; a grande que o Drive às vezes manda é reduzida aqui
+    function minisDrive(ids) {
+      var l = login(), url = o.driveUrl ? o.driveUrl() : null, cadeia = Promise.resolve();
+      if (!l || !url) return cadeia;
+      ids.forEach(function (id) { pedindo[id] = 1; });
+      partes(ids, 12).forEach(function (lote) {
+        cadeia = cadeia.then(function () {
+          return postDrive(url, { acao: 'ver_minis', ambiente: o.ambiente || 'oficial', codigo: l.codigo, ids: lote.map(function (id) { return id.slice(4); }) }).then(function (r) {
+            var cad = Promise.resolve();
+            ((r && r.minis) || []).forEach(function (m) {
+              var id = 'drv:' + m.id;
+              if (!m.jpeg) { semMini[id] = 1; return; }
+              cad = cad.then(function () { return m.leve ? m.jpeg : reduzir(b64Blob(m.jpeg, 'image/jpeg')); }).then(function (j) {
+                if (j) { minis[id] = 'data:image/jpeg;base64,' + j; mostrarMini(id); } else semMini[id] = 1;
+              });
+            });
+            return cad;
+          }, function () { /* sem sinal: tenta de novo na próxima vez que aparecer */ }).then(function () { lote.forEach(function (id) { delete pedindo[id]; }); });
+        });
+      });
+      return cadeia;
     }
     function mostrarMini(id) {
       if (!root) return;
@@ -787,10 +980,10 @@
           var url = o.driveUrl ? o.driveUrl() : null, lg = login();
           if (!url) throw { code: 'sem_url' };
           if (!lg) throw { code: 'sem_login' };
-          return o.drive.post(url, { acao: 'baixar', ambiente: o.ambiente || 'oficial', codigo: lg.codigo, driveId: it.driveId }).then(function (r) {
+          return o.drive.post(url, { acao: it.origem === 'drive' ? 'ver_baixar' : 'baixar', ambiente: o.ambiente || 'oficial', codigo: lg.codigo, driveId: it.driveId }).then(function (r) {
             if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
             var bl = b64Blob(r.dados, r.mime);
-            cacheGravar(it.driveId, bl).then(function () { guardadas[it.driveId] = 1; });
+            cacheGravar(it.driveId, bl).then(function () { guardadas[it.driveId] = 1; retile(it.id); });
             return bl;
           }, function () { throw { code: 'sem_rede' }; });
         });
@@ -827,6 +1020,7 @@
       return c ? nomesCt.nome(c) || 'Contrato' : 'Sem contrato';
     }
     function semPeriodo(it) {
+      if (aba === 'drive') return (dbusca.trim() ? true : noCaminho(it)) && naBusca(it);   // a busca vale para o Drive todo
       return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
         (!filtro.km || (it.km != null && isFinite(it.km) && Number(it.km) >= filtro.km[0] - FOLGA_KM && Number(it.km) <= filtro.km[1] + FOLGA_KM)) &&
         (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
@@ -863,6 +1057,7 @@
         (sem || filtro.cid === SEM ? chip(SEM, 'Sem contrato', sem, 'sem') : '');
     }
     function filtrosHtml() {
+      if (aba === 'drive') return driveFil();
       var ps = {}, as = {}, ms = {}, semPonto = 0;
       itens.forEach(function (it) {
         var noCt = !filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid);
@@ -899,7 +1094,11 @@
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>';
       }
-      // período em fichas; "Escolher…" abre a janela (hoje, semana passada, todas as datas, de… até…) e mostra o escolhido nela
+      return h + perHtml();
+    }
+    // período em fichas; "Escolher…" abre a janela (hoje, semana passada, todas as datas, de… até…) e mostra o escolhido nela
+    function perHtml() {
+      var h = '', iv = intervaloPer(per);
       var atual = per.modo === 'semana' ? (per.off ? '' : 'semana0') : per.modo, fichas = [['semana0', 'Esta semana'], ['sem2', '2 semanas'], ['mes', 'Mês'], ['mes3', '3 meses']];
       var outro = !fichas.some(function (f2) { return f2[0] === atual; });
       h += '<div class="gl-chips gl-pers" role="group" aria-label="Período">' + fichas.map(function (f2) {
@@ -948,7 +1147,12 @@
         if (lo.erro && lo.erro !== 'rede') return '<span class="gl-s erro" title="Tentando de novo">!</span>';
         return '<span class="gl-s fila" title="Na fila do Drive">fila</span>';
       }
-      if (it.origem !== 'banco') return '';
+      if (it.origem !== 'banco' && it.origem !== 'drive') return '';
+      // no download em andamento: a vez de cada uma
+      if (bx && bx.pos && bx.pos[it.id] != null && bx.alvo !== 'mini' && !(it.driveId && guardadas[it.driveId])) {
+        if (bx.pos[it.id] === bx.i) return '<span class="gl-s sobe" title="Baixando"></span>';
+        if (bx.pos[it.id] > bx.i) return '<span class="gl-s fila" title="Na fila do download">fila</span>';
+      }
       return it.driveId && guardadas[it.driveId] ? '<span class="gl-s" title="Baixada neste aparelho">' + IC_APAR + '</span>'
         : '<span class="gl-s nuvem" title="Só no Drive">' + IC_BAIXA + '</span>';
     }
@@ -969,7 +1173,7 @@
     function tile(it, i) {
       var m = miniDe(it), l1 = [it.pnome, kmCurto(it.km)].filter(Boolean).join(' · ') || (ehCons(it.cid) ? 'Sem km' : 'Sem ponto');
       var d = data(it.em), quando = !d ? '' : modo() === 'mes' && porDia() ? pad(d.getHours()) + ':' + pad(d.getMinutes()) : pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
-      var quem = (aba === 'todas' || aba === 'relatorio' || aba === 'deletadas') && modo() !== 'pessoa' && it.autor ? it.autor.split(' ')[0] : '';
+      var quem = (aba === 'todas' || aba === 'relatorio' || aba === 'deletadas' || aba === 'drive') && modo() !== 'pessoa' && it.autor ? it.autor.split(' ')[0] : '';
       var nCt = !filtro.cid ? ((/(\d+)\s*$/.exec(curto(it.cid)) || [])[1] || curto(it.cid)) : '';
       var l2 = [nCt, quando, quem].filter(Boolean).join(' · ');
       var cap = l1 + (l2 ? ' · ' + l2 : '');
@@ -1013,6 +1217,16 @@
         b += '<button type="button" class="gl-cfg" data-g="cfg">' + IC_CFG + 'Espaço e envio</button>';
         return '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
       }
+      if (aba === 'drive') {
+        var cartoes = emCartoes(), base = cartoes ? itens.filter(noCaminho) : lista;
+        var bD = base.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0), aquiD = base.filter(noAparelho).length;
+        var ivD = cartoes ? null : intervaloPer(per), faltamD = selecionando ? lista.filter(function (x) { return !noAparelho(x); }).length : 0;
+        return '<span class="gl-txt">' + (ivD ? esc(faixaTxt(ivD[0], ivD[1])) + ' \u00b7 ' : '') + '<b>' + plural(base.length, 'foto', 'fotos') + '</b>' + (bD ? ' \u00b7 ' + tam(bD) : '') +
+          (aquiD ? ' \u00b7 ' + aquiD + ' j\u00e1 neste aparelho' : '') + (cartoes ? '' : foraHtml()) +
+          (dlista && dlista.limite ? ' \u00b7 <span class="gl-warn">o Drive tem mais fotos do que a lista mostra (as primeiras 4.000)</span>' : '') +
+          ' \u00b7 <button type="button" class="gl-lk" data-g="dr-atualizar">Atualizar</button></span>' +
+          (faltamD && faltamD < lista.length ? '<button type="button" class="btn small" data-g="dr-falta">S\u00f3 as que n\u00e3o tenho (' + faltamD + ')</button>' : '') + (cartoes ? '' : selBtn());
+      }
       var txt = {
         minhas: 'Fotos que você enviou, de qualquer aparelho.',
         todas: 'Fotos de toda a equipe. Marque com ★ as que vão para o relatório fotográfico.',
@@ -1041,13 +1255,19 @@
           '<button type="button" class="btn small" data-g="baixar-tudo">Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length) + '</button>';
     }
     function corpoHtml() {
+      if (aba !== 'drive') return corpoAba();
+      var dentroH = itens.length && !erroTxt && emCartoes() ? cartoesHtml() : corpoAba();
+      return itens.length && !erroTxt ? '<div class="gl-dr"><nav class="gl-dr-arv" aria-label="Pastas do Drive">' + arvoreHtml() + '</nav><div class="gl-dr-main">' + dentroH + '</div></div>' : dentroH;
+    }
+    function corpoAba() {
       if (carregando && !itens.length) return '<div class="gl-vazio">Carregando…</div>';
       if (erroTxt) return '<div class="gl-vazio">' + esc(erroTxt) + (login() ? '' : '<br><button type="button" class="btn small primary" data-g="entrar">Entrar</button>') + '</div>';
       if (!itens.length) {
         return '<div class="gl-vazio">' + ({
           local: 'Nenhuma foto guardada neste aparelho. As fotos com carimbo (botão Foto) ficam aqui assim que você tira.',
           minhas: 'Você ainda não enviou fotos.', todas: 'Nenhuma foto enviada pela equipe ainda.',
-          relatorio: 'Nenhuma foto marcada para o relatório. Marque com ★ em "Equipe".', deletadas: 'Nenhuma foto na lixeira.'
+          relatorio: 'Nenhuma foto marcada para o relatório. Marque com ★ em "Equipe".', deletadas: 'Nenhuma foto na lixeira.',
+          drive: 'Nenhuma foto no Drive ainda' + (dlista && !dlista.amplo ? ' tirada por você' : '') + '.'
         }[aba]) + '</div>';
       }
       if (!lista.length) {
@@ -1056,7 +1276,7 @@
             (per.modo === 'semana' ? '<button type="button" class="btn small" data-g="per-ant">Ver a semana anterior</button> ' : '') +
             '<button type="button" class="btn small" data-g="per-tudo">Todas as datas</button></div>';
         }
-        return '<div class="gl-vazio">Nenhuma foto com esses filtros.</div>';
+        return '<div class="gl-vazio">' + (aba === 'drive' && dbusca.trim() ? 'Nada no Drive com “' + esc(dbusca.trim()) + '” aqui.' : 'Nenhuma foto com esses filtros.') + '</div>';
       }
       var rotG = modo() === 'pessoa' ? 'Selecionar as da pessoa' : porDia() ? 'Selecionar o dia' : 'Selecionar a semana';
       return grupos().map(function (g) {
@@ -1113,7 +1333,7 @@
       var n = nv(), a = [];
       if (!ls.length) return a;
       a.push({ k: 'baixar', t: ls.length === 1 ? 'Baixar' : 'Baixar (' + ls.length + ')', c: 'primary' });
-      if (n >= 2 && aba !== 'local' && aba !== 'deletadas') {
+      if (n >= 2 && aba !== 'local' && aba !== 'deletadas' && aba !== 'drive') {
         var todas = ls.every(function (x) { return x.relatorio; });
         a.push({ k: todas ? 'tirar-rel' : 'por-rel', t: todas ? '☆ Tirar do relatório' : '★ Relatório' });
       }
@@ -1148,8 +1368,15 @@
           (a.k === aba && itens.length ? '<small>' + itens.length + '</small>' : '') + '</button>';
       }).join('') : '';
       renderEnv();
-      q('.gl-cts').innerHTML = contratosHtml();
-      q('.gl-fil').innerHTML = filtrosHtml();
+      q('.gl-cts').innerHTML = aba === 'drive' ? '' : contratosHtml();
+      var fil = q('.gl-fil'), bus = fil.querySelector('.gl-dr-busca');
+      if (aba === 'drive' && bus && document.activeElement === bus) {   // digitando: só o resto do filtro muda
+        var tmp = document.createElement('div'); tmp.innerHTML = filtrosHtml();
+        var r0 = fil.querySelector('.gl-dr-resto'), r1 = tmp.querySelector('.gl-dr-resto');
+        if (r0 && r1) r0.innerHTML = r1.innerHTML;
+        var m0 = fil.querySelector('.gl-dr-top .gl-chips'), m1 = tmp.querySelector('.gl-dr-top .gl-chips');
+        if (m0 && m1) m0.innerHTML = m1.innerHTML;
+      } else fil.innerHTML = filtrosHtml();
       q('.gl-info').innerHTML = carregando && !itens.length ? '' : infoHtml();
       corpo.innerHTML = corpoHtml();
       corpo.scrollTop = top;
@@ -1230,14 +1457,16 @@
       fecharBaixar();
       if (!ls.length) return;
       var nomes = nomesUnicos(ls);
-      bx = { ls: ls, nomes: nomes, alvo: alvo, wifi: wifi, i: 0, ok: 0, falhas: 0, feitos: 0, arquivos: [], rotulo: ({ local: 'Fotos deste aparelho', minhas: 'Minhas fotos', todas: 'Fotos da equipe', relatorio: 'Relatório fotográfico', deletadas: 'Fotos apagadas' }[aba]) + ' ' + new Date().toISOString().slice(0, 10),
+      bx = { ls: ls, nomes: nomes, alvo: alvo, wifi: wifi, i: 0, ok: 0, falhas: 0, feitos: 0, arquivos: [], rotulo: ({ local: 'Fotos deste aparelho', minhas: 'Minhas fotos', todas: 'Fotos da equipe', relatorio: 'Relatório fotográfico', deletadas: 'Fotos apagadas', drive: 'Fotos do Drive' }[aba]) + ' ' + new Date().toISOString().slice(0, 10),
         total: alvo === 'mini' ? 0 : ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0) };
+      bx.pos = {}; ls.forEach(function (x, k) { bx.pos[x.id] = k; });
       selecionando = false; sel = {};
       render();
       baixaPasso();
     }
     function miniPara(it) {
       if (minis[it.id]) return Promise.resolve(minis[it.id]);
+      if (it.origem === 'drive') return minisDrive([it.id]).then(function () { return minis[it.id] || null; });
       var lg = login();
       if (!lg || !o.Banco || !o.Banco.fotosMini) return Promise.resolve(null);
       return o.Banco.fotosMini(lg.codigo, [it.id]).then(function (arr) {
@@ -1259,15 +1488,23 @@
       var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return itemGravar(it, m); })
         : arquivo(it).then(function (bl) {
           if (b.alvo === 'galeria') b.arquivos.push({ name: b.nomes[k], blob: bl, date: data(it.em) || new Date() });
-          else if (it.origem === 'banco') return miniPara(it).then(function (m) { return itemGravar(it, m); }).then(function () { return bl; });
+          else if (it.origem === 'banco' || it.origem === 'drive') return miniPara(it).then(function (m) { return itemGravar(it, m); }).then(function () { return bl; });
           return bl;
         });
-      passo.then(function (bl) { b.ok++; b.feitos += (bl && bl.size) || it.tamanho || 0; }, function () { b.falhas++; }).then(function () {
+      passo.then(function (bl) { b.ok++; b.feitos += (bl && bl.size) || it.tamanho || 0; if (b.alvo === 'app' && it.driveId) guardadas[it.driveId] = 1; }, function () { b.falhas++; }).then(function () {
         b.rodando = false;
         if (bx !== b) return;
         b.i++;
+        retile(it.id); if (b.ls[b.i]) retile(b.ls[b.i].id);
         baixaPasso();
       });
+    }
+    // o selo de uma miniatura na tela, sem desenhar a grade de novo
+    function retile(id) {
+      var t = root && root.querySelector('.gl-t[data-id="' + cssId(id) + '"]'), it = lista.find(function (x) { return x.id === id; });
+      if (!t || !it) return;
+      var s0 = t.querySelector('.gl-s'), novo = estado(it);
+      if (s0) s0.outerHTML = novo; else if (novo) t.insertAdjacentHTML('beforeend', novo);
     }
     function concluirBaixa() {
       var b = bx;
@@ -1381,8 +1618,9 @@
       } else {
         if (it.relatorio) linhas.push('★ No relatório fotográfico' + (it.relPor ? ' (marcada por ' + esc(it.relPor) + ')' : ''));
         if (it.situacao === 'deletada') linhas.push('Apagada do Drive' + (it.delPor ? ' por ' + esc(it.delPor) : '') + (it.delEm ? ' em ' + esc(hora(it.delEm)) : ''));
+        if (it.origem === 'drive' && (it.pastas || []).length) linhas.push('No Drive: ' + esc(it.pastas.join(' › ')));
         if (locais[it.id]) linhas.push('Também guardada neste aparelho');
-        else if (it.driveId && guardadas[it.driveId]) linhas.push('Foto inteira já baixada neste aparelho');
+        else if (it.driveId && guardadas[it.driveId]) linhas.push(it.origem === 'drive' ? 'Já guardada neste aparelho (abre sem sinal)' : 'Foto inteira já baixada neste aparelho');
       }
       if (it.tamanho) linhas.push(esc(it.nome) + ' · ' + tam(it.tamanho));
       if (it.desc) linhas.push('<span class="gl-desc">' + esc(it.desc) + '</span>');
@@ -2021,6 +2259,10 @@
       if (g === 'per') { pfAbrir(); return; }
       if (g === 'per-chip') { var kc = t.getAttribute('data-k'); mudarPer(kc === 'semana0' ? { modo: 'semana', off: 0, de: '', ate: '' } : { modo: kc, off: 0, de: '', ate: '' }); return; }
       if (g === 'fl') { fLocal = t.getAttribute('data-v') || ''; sel = {}; render(); return; }
+      if (g === 'dr-ir') { var pth = []; try { pth = JSON.parse(t.getAttribute('data-p') || '[]'); } catch (e2) { pth = []; } irPasta(Array.isArray(pth) ? pth : []); return; }
+      if (g === 'dr-modo') { var mv0 = t.getAttribute('data-v') === 'pessoa' ? 'pessoa' : 'contrato'; if (mv0 !== dmodo) { dmodo = mv0; lsPor(DMODO_KEY, mv0); irPasta([]); } return; }
+      if (g === 'dr-atualizar') { dlista = null; semMini = {}; carregar(); return; }
+      if (g === 'dr-falta') { sel = {}; lista.forEach(function (x) { if (!noAparelho(x)) sel[x.id] = 1; }); render(); return; }
       if (g === 'env-pausa' || g === 'env-cont') { if (o.drive && o.drive.pausar) o.drive.pausar(g === 'env-pausa'); setTimeout(renderEnv, 50); return; }
       if (g === 'bx-pausa' && bx) { bx.pausa = true; avisaBaixa(); return; }
       if (g === 'bx-cont' && bx) { bx.pausa = false; baixaPasso(); return; }
@@ -2088,9 +2330,14 @@
       if (e.target.id === 'glCfManter') { lsPor(MANTER_KEY, e.target.value || null); limparEnviadas(o.drive).then(function (k) { if (k) { o.toast(plural(k, 'foto enviada saiu', 'fotos enviadas saíram') + ' deste aparelho (continuam no Drive).'); carregar(); } renderCfg(); }); return; }
       if (e.target.id === 'glMvP') { sugestao(); return; }
       var f = e.target.getAttribute('data-f');
-      if (!f) return;
+      if (!f || f === 'dbusca') return;
       if (f === 'agrupar') agrupar = e.target.value;
       else { filtro[f] = e.target.value; if (f === 'cid') filtro.pid = ''; }
+      render();
+    }
+    function onInput(e) {
+      if (!e.target.getAttribute || e.target.getAttribute('data-f') !== 'dbusca') return;
+      dbusca = e.target.value; sel = {};
       render();
     }
     function onKey(e) {
@@ -2115,6 +2362,7 @@
           '<div class="gl-tabs" role="tablist"></div><div class="gl-env"></div><div class="gl-cts" role="group" aria-label="Contrato"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
         root.addEventListener('click', onClick);
         root.addEventListener('change', onChange);
+        root.addEventListener('input', onInput);
         document.addEventListener('keydown', onKey);
         document.body.appendChild(root);
       }
