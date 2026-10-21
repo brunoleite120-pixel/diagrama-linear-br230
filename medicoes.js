@@ -8,6 +8,7 @@
   window.Medicoes = function (op) {
     var host = op.host, esc = op.esc, fmtN = op.fmtN, dinheiro = op.dinheiro;
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
+    var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
     var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null;
     var meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -357,15 +358,94 @@
         return '<tr><td>' + esc(r.s.cod || '—') + '</td><td>' + esc(r.s.nome) + '</td><td class="md-num">' + (r.q == null ? '—' : fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un))) + '</td><td class="md-num">' + dinheiro(r.v) + '</td><td>' + esc(r.locais.length ? r.locais.join(' · ') : r.semPonte ? 'Sem ponte' : 'Sem local informado') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     }
+    // Por ponte / por segmento / por ponto: o km de cada um na lista, a régua do trecho do contrato e, ao tocar,
+    // o painel com km inicial e final, a extensão e todas as medições que ele teve (o mesmo dado da lista: an.pontes[pid].meses)
     function segmentosHtml(c, d, m) {
-      var ns = {}, ps = op.pontos(c);
-      ps.forEach(function (p) { ns[p.id] = p.nome || p.codigo || p.id; });
-      var ordem = {}; ps.forEach(function (p, i) { ordem[p.id] = i; });
-      // na ordem do km (o banco guarda as chaves em outra ordem)
-      var ks = Object.keys(d.an.pontes || {}).filter(function (pid) { return valor(d.an.pontes[pid].meses && d.an.pontes[pid].meses[m.n]) !== 0; })
-        .sort(function (x, y) { return (ordem[x] == null ? 1e9 : ordem[x]) - (ordem[y] == null ? 1e9 : ordem[y]); });
-      return ks.length ? '<div class="md-segmentos">' + ks.map(function (pid) { var p = d.an.pontes[pid]; return '<div class="md-segmento"><b>' + esc(ns[pid] || p.nome || pid) + '</b><span>' + dinheiro(p.meses[m.n]) + '</span></div>'; }).join('') + '</div><small>' + (c.tipo === 'oae' || c.tipo === 'conserva' ? 'Valores localizados na memória de cálculo.' : 'Valores pelo ponto de cada capítulo do SIAC.') + ' Serviços sem local entram apenas no total da medição.</small>' : vazio('Esta medição não tem valores localizados ' + (c.tipo === 'oae' ? 'nas pontes' : c.tipo === 'conserva' ? 'nos segmentos' : 'nos pontos') + '.');
+      var cons = c.tipo === 'conserva', oae = c.tipo === 'oae', casas = cons ? 1 : 3, ps = op.pontos(c), an = d.an.pontes || {}, info = {}, ordemKm = {};
+      ps.forEach(function (p, i) { info[p.id] = p; ordemKm[p.id] = i; });
+      function vm(pid, n) { var x = an[pid]; return valor(x && x.meses && x.meses[n]); }
+      function nomeP(pid) { var p = info[pid]; return (p && (p.nome || p.codigo)) || (an[pid] && an[pid].nome) || pid; }
+      function kms(pid) { var p = info[pid] || {}; var ki = numero(p.kmIni), kf = numero(p.kmFim); if (ki == null) ki = kf; if (kf == null) kf = ki; return ki == null ? null : [Math.min(ki, kf), Math.max(ki, kf)]; }
+      function ext(k) { var e = k[1] - k[0]; return e < 1 ? Math.round(e * 1000) + ' m' : decimal(e, 1) + ' km'; }
+      function nMeds(pid) { return d.ms.filter(function (x) { return vm(pid, x.n) !== 0; }).length; }
+      var todos = Object.keys(an).concat(ps.map(function (p) { return p.id; }).filter(function (id) { return !an[id]; }));
+      var com = todos.filter(function (pid) { return vm(pid, m.n) !== 0; });
+      if (!com.length) return vazio('Esta medição não tem valores localizados ' + (oae ? 'nas pontes' : cons ? 'nos segmentos' : 'nos pontos') + '.');
+      var mostrarSem = segSem == null ? cons : segSem;
+      var lista = (mostrarSem ? todos.filter(function (pid) { return an[pid] || info[pid]; }) : com).slice().sort(function (x, y) {
+        if (segOrdem === 'valor') return vm(y, m.n) - vm(x, m.n);
+        return (ordemKm[x] == null ? 1e9 : ordemKm[x]) - (ordemKm[y] == null ? 1e9 : ordemKm[y]);
+      });
+      if (segAberto && lista.indexOf(segAberto) < 0) { if (todos.indexOf(segAberto) >= 0) lista.push(segAberto); else segAberto = ''; }
+      var rot = oae ? 'pontes' : cons ? 'segmentos' : 'pontos', h = '';
+      // régua: do km inicial ao final do contrato, cada um no seu lugar
+      var ka = numero(c.kmIni), kb = numero(c.kmFim);
+      ps.forEach(function (p) { var k = kms(p.id); if (!k) return; if (ka == null || k[0] < ka) ka = k[0]; if (kb == null || k[1] > kb) kb = k[1]; });
+      var noTrecho = ps.filter(function (p) { return kms(p.id); });
+      if (ka != null && kb > ka && noTrecho.length) {
+        var L = kb - ka;
+        h += '<div class="md-regua-box"><div class="md-regua-top"><span><b>' + (cons ? 'Os ' + noTrecho.length + ' segmentos no trecho' : 'Onde ficam') + '</b> · ' + (cons ? '' : noTrecho.length + ' ' + rot + ' no trecho, ') + com.length + ' com valor nesta medição</span>' +
+          (cons ? '<span>tamanho de cada bloco = extensão do segmento</span>' : '<span><i class="md-leg on"></i>com valor<i class="md-leg"></i>sem valor<i class="md-leg sel"></i>aberto</span>') + '</div>';
+        h += '<div class="md-regua' + (cons ? ' md-regua-blocos' : '') + '">' + noTrecho.map(function (p) {
+          var k = kms(p.id), v = vm(p.id, m.n), cls = (v ? 'on' : '') + (segAberto === p.id ? ' sel' : '');
+          var tip = nomeP(p.id) + ', km ' + kmTxt(k[0], casas) + (k[1] > k[0] ? ' a ' + kmTxt(k[1], casas) : '') + ', ' + (v ? dinheiro(v) : 'sem valor nesta medição');
+          var st = cons ? 'flex-grow:' + Math.max(k[1] - k[0], .1).toFixed(2) : 'left:' + ((k[0] - ka) / L * 100).toFixed(2) + '%;width:' + Math.max((k[1] - k[0]) / L * 100, .4).toFixed(2) + '%';
+          return '<button type="button" class="' + cls + '" data-md="ponte" data-p="' + esc(p.id) + '" style="' + st + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + (cons ? esc(nomeP(p.id)) : '') + '</button>';
+        }).join('') + '</div><div class="md-regua-eixo"><span>km ' + kmTxt(ka, 1) + (cons ? ' · início do contrato' : '') + '</span><span>km ' + kmTxt(kb, 1) + (cons ? ' · fim' : '') + '</span></div></div>';
+      }
+      h += '<div class="md-segs md-segmentos' + (segAberto ? ' aberto' : '') + '">';
+      lista.forEach(function (pid) {
+        var k = kms(pid), v = vm(pid, m.n), on = segAberto === pid, nm = nMeds(pid);
+        var faixaKm = k ? (cons ? 'km ' + kmTxt(k[0], casas) + ' → km ' + kmTxt(k[1], casas) : 'km ' + kmTxt(k[0], casas) + (k[1] > k[0] ? ' a ' + kmTxt(k[1], casas) : '')) : 'sem km no cadastro';
+        var resto = (k && k[1] > k[0] ? ext(k) + ' · ' : '') + nMed(nm);
+        var nomeH = cons ? '<span class="md-seg-nome cons"><b>' + esc(nomeP(pid)) + '</b><span><strong>' + esc(faixaKm) + '</strong><small>' + esc(resto) + '</small></span></span>'
+          : '<span class="md-seg-nome"><b>' + esc(nomeP(pid)) + '</b><small>' + esc(faixaKm + ' · ' + resto) + '</small></span>';
+        h += '<button type="button" class="md-seg-btn' + (on ? ' on' : '') + '" data-md="ponte" data-p="' + esc(pid) + '" aria-expanded="' + on + '">' + nomeH +
+          '<span class="md-seg-v' + (v ? '' : ' zero') + '">' + (v ? dinheiro(v) : 'sem valor') + '</span><span class="md-seg-seta" aria-hidden="true">' + (on ? '‹' : '›') + '</span></button>';
+        if (on) h += painelHtml(pid);
+      });
+      var nSem = todos.filter(function (pid) { return (an[pid] || info[pid]) && vm(pid, m.n) === 0; }).length;
+      h += '<div class="md-seg-mais">' + (nSem ? botao('ponte-sem', mostrarSem ? 'Esconder os ' + nSem + ' sem valor nesta medição' : 'Mostrar os ' + nSem + ' sem valor nesta medição', ' data-v="' + (mostrarSem ? '0' : '1') + '"', 'small ghost') : '') +
+        botao('ponte-ordem', segOrdem === 'valor' ? 'Ordenar pelo km' : 'Ordenar por valor', '', 'small ghost') + '</div></div>';
+      return h + '<small>' + (oae || cons ? 'Valores localizados na memória de cálculo.' : 'Valores pelo ponto de cada capítulo do SIAC.') + ' Serviços sem local entram apenas no total da medição. Toque ' + (oae ? 'numa ponte' : cons ? 'num segmento' : 'num ponto') + ' para ver o km e as medições.</small>';
+
+      function painelHtml(pid) {
+        var p = info[pid], k = kms(pid), v = vm(pid, m.n), lin = d.ms.filter(function (x) { return vm(pid, x.n) !== 0; }), acum = 0, mx = 0;
+        lin.forEach(function (x) { acum += vm(pid, x.n); mx = Math.max(mx, Math.abs(vm(pid, x.n))); });
+        var tit = oae ? 'Ponte' + (p && p.codigo && p.codigo !== p.nome ? ' · ' + p.codigo : '') : cons ? 'Segmento · ' + nome(c) : 'Ponto · ' + nome(c);
+        var h = '<section class="md-painel" aria-label="' + esc(nomeP(pid) + ': km e medições') + '"><div class="md-painel-top"><div><small>' + esc(tit) + '</small><h3>' + esc(nomeP(pid)) + '</h3></div>' +
+          botao('ponte', '✕', ' data-p="' + esc(pid) + '" aria-label="Fechar"', 'small ghost') + '</div>';
+        h += '<div class="md-painel-kpis">' + [['km inicial', k ? kmTxt(k[0], 3) : '—'], ['km final', k ? kmTxt(k[1], 3) : '—'], ['extensão', k && k[1] > k[0] ? ext(k) : '—']].map(function (x) {
+          return '<div><small>' + x[0] + '</small><b>' + esc(x[1]) + '</b></div>'; }).join('') + '</div>';
+        h += '<p class="md-painel-txt">Entrou em <b>' + lin.length + ' de ' + d.ms.length + '</b> medições · ' + (v ? 'nesta (' + m.n + 'ª) ' + esc(dinheiro(v)) + (valor(m.total) ? ', ' + pctCurto(v / valor(m.total) * 100) + ' da medição' : '') : 'sem valor nesta medição') + '</p>';
+        if (lin.length) {
+          h += '<div class="md-col" aria-hidden="true">' + d.ms.map(function (x) {
+            var y = vm(pid, x.n);
+            return '<i class="' + (y ? '' : 'zero') + (String(x.n) === String(m.n) ? ' atual' : '') + '" style="height:' + (y ? Math.max(Math.abs(y) / (mx || 1) * 100, 4).toFixed(1) + '%' : '2px') + '" title="' + esc(x.n + 'ª · ' + mesTxt(idx(x.ref)) + ': ' + (y ? dinheiro(y) : 'sem valor')) + '"></i>';
+          }).join('') + '</div><div class="md-regua-eixo"><span>' + esc(d.ms[0].n + 'ª · ' + mesTxt(idx(d.ms[0].ref))) + '</span><span>' + esc(d.ms[d.ms.length - 1].n + 'ª · ' + mesTxt(idx(d.ms[d.ms.length - 1].ref))) + '</span></div>';
+          var desc = lin.slice().reverse(), mostra = segTodas ? desc : desc.filter(function (x, i) { return i < 8 || String(x.n) === String(m.n); });
+          h += '<div><div class="md-hist-cab"><span>Med.</span><span>Competência</span><span></span><span>Valor (PI)</span></div>' + mostra.map(function (x) {
+            var y = vm(pid, x.n);
+            return botao('med', '<b>' + esc(x.n + 'ª' + (x.retificada ? '*' : '')) + '</b><span>' + esc(mesTxt(idx(x.ref))) + '</span><span class="md-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(y) / (mx || 1) * 100) + '%"></i></span><span class="md-num">' + esc(dinheiro(y)) + '</span>',
+              ' data-n="' + x.n + '" aria-pressed="' + (String(x.n) === String(m.n)) + '" aria-label="' + esc('Abrir a ' + x.n + 'ª medição, ' + mesTxt(idx(x.ref)) + ': ' + dinheiro(y)) + '"', 'md-hist');
+          }).join('') + '</div>';
+          if (desc.length > 8) h += botao('ponte-todas', segTodas ? 'Mostrar só as 8 últimas ▴' : 'Ver as ' + desc.length + ' medições ▾', '', 'small ghost md-accent');
+          h += '<div class="md-hist-acum"><span>Acumulado</span><span>' + esc(dinheiro(acum)) + '</span></div>';
+        }
+        h += '<div class="md-painel-acoes">' + (p && op.diagramaPonto ? botao('ponte-diag', 'Ver no diagrama', ' data-p="' + esc(pid) + '"', 'small primary') : '') +
+          (p && op.fotos && op.fotos(c) ? botao('ponte-fotos', 'Fotos ' + (oae ? 'da ponte' : cons ? 'do segmento' : 'do ponto'), ' data-p="' + esc(pid) + '"', 'small') : '') +
+          botao('ponte-serv', 'Serviços nesta medição', ' data-p="' + esc(pid) + '" aria-pressed="' + segServ + '"', 'small') + '</div>';
+        if (segServ) {
+          var rows = ((an[pid] && an[pid].servicos) || []).map(function (s) { var qv = s.por && s.por[m.n]; return qv && (valor(qv[0]) || valor(qv[1])) ? { s: s, q: numero(qv[0]), v: valor(qv[1]) } : null; }).filter(Boolean)
+            .sort(function (x, y) { return y.v - x.v; });
+          h += rows.length ? '<div class="md-scroll" tabindex="0" role="region" aria-label="Serviços nesta medição"><table class="md-tabela md-tabela-p"><thead><tr><th scope="col">Serviço</th><th scope="col">Quantidade</th><th scope="col">Valor (PI)</th></tr></thead><tbody>' + rows.map(function (r) {
+            return '<tr><td>' + esc((r.s.cod ? r.s.cod + ' · ' : '') + (r.s.nome || r.s.id || '')) + '</td><td class="md-num">' + (r.q == null ? '—' : fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un))) + '</td><td class="md-num">' + dinheiro(r.v) + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : vazio('Sem serviços localizados nesta medição.');
+        }
+        return h + '</section>';
+      }
     }
+    function kmTxt(v, casas) { return v == null ? '—' : decimal(v, casas); }
     function avisosHtml(als) {
       // os avisos para a fiscalização (SIAC × MP e os de vistoria) vêm primeiro e em destaque
       var fisc = function (a) { return a.tipo === 'siac' || a.tipo === 'fiscal' ? 1 : 0; };
@@ -428,7 +508,7 @@
     }
     function abrir(id, n) {
       if (!contrato(id)) return;
-      cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false;
+      cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segSem = null; segOrdem = 'km';
       var d = dado(contrato(id));
       if (d && n != null) d.ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; });
       render(); window.scrollTo(0, 0);
@@ -439,11 +519,21 @@
       var act = b.dataset.md;
       if (act === 'diagrama') { var c = contrato(b.dataset.cid); if (c) op.diagrama(c); return; }
       if (act === 'abrir') { abrir(b.dataset.cid, b.dataset.n); return; }
-      if (act === 'voltar') { cid = ''; med = null; }
+      if (act === 'ponte-diag' || act === 'ponte-fotos') {
+        var cp = contrato(cid), pp = cp && op.pontos(cp).filter(function (x) { return x.id === b.dataset.p; })[0];
+        if (pp) (act === 'ponte-diag' ? op.diagramaPonto : op.fotos)(cp, pp);
+        return;
+      }
+      if (act === 'voltar') { cid = ''; med = null; segAberto = ''; }
       else if (act === 'modo') { modo = b.dataset.v === 'mes' ? 'mes' : 'contrato'; cid = ''; matrizScroll = null; }
       else if (act === 'med') { med = b.dataset.n; grupo = null; semValor = false; }
       else if (act === 'etapa') { var d = dado(contrato(cid)), key = b.dataset.e; etapas[key] = !(Object.prototype.hasOwnProperty.call(etapas, key) ? etapas[key] : d && d.ult && String(d.ult.etapa) === key); }
       else if (act === 'aba') aba = b.dataset.v;
+      else if (act === 'ponte') { segAberto = segAberto === b.dataset.p ? '' : b.dataset.p; segTodas = false; segServ = false; }
+      else if (act === 'ponte-todas') segTodas = !segTodas;
+      else if (act === 'ponte-serv') segServ = !segServ;
+      else if (act === 'ponte-sem') segSem = b.dataset.v === '1';
+      else if (act === 'ponte-ordem') segOrdem = segOrdem === 'valor' ? 'km' : 'valor';
       else if (act === 'grupo') grupo = grupo === b.dataset.g ? '' : b.dataset.g;
       else if (act === 'semvalor') semValor = !semValor;
       else if (act === 'resumo') resumoCel = !resumoCel;
@@ -455,7 +545,7 @@
       else return;
       render();
       var alvos = host.querySelectorAll('[data-md="' + act + '"]');
-      for (var i = 0; i < alvos.length; i++) if (alvos[i].dataset.n === b.dataset.n && alvos[i].dataset.g === b.dataset.g && alvos[i].dataset.e === b.dataset.e && alvos[i].dataset.v === b.dataset.v) { alvos[i].focus({ preventScroll: true }); break; }
+      for (var i = 0; i < alvos.length; i++) if (alvos[i].dataset.n === b.dataset.n && alvos[i].dataset.g === b.dataset.g && alvos[i].dataset.e === b.dataset.e && alvos[i].dataset.v === b.dataset.v && alvos[i].dataset.p === b.dataset.p && alvos[i].className === b.className) { alvos[i].focus({ preventScroll: true }); break; }
     });
     host.addEventListener('change', function (ev) {
       if (!op.ativa()) return;

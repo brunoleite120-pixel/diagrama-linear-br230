@@ -4484,7 +4484,16 @@
       nome: function (c) { return ctNumeroCT(c) || ctNome(c); }, pontos: sortedPoints, grupos: function (c) { return servicesOf(c).concat([MED_ACESSO]); },
       esc: esc, fmtN: fmtN, dinheiro: function (v) { return v == null || !isFinite(v) ? '—' : 'R$ ' + fmt(v, 2); },
       medTxt: medTxt, etapaInfo: etapaInfo, unTxt: unTxt, semLocal: MED_SEMLOCAL, data: fmtIsoDate,
-      diagrama: function (c) { if (parte(c, 'med')) abrirDaVisao(c, null, false); }
+      diagrama: function (c) { if (parte(c, 'med')) abrirDaVisao(c, null, false); },
+      // painel da ponte/segmento: o ponto no diagrama e as fotos dele (conservação: pelo km do segmento, as fotos não têm ponto)
+      diagramaPonto: function (c, p) { if (parte(c, 'med')) abrirDaVisao(c, p, false); },
+      fotos: function (c, p) {
+        if (!galeriaOn() || ctsFoto().indexOf(c) < 0) return false;
+        if (!p) return true;
+        if (c.tipo === 'conserva') abrirGaleria({ cid: c.id, km: [Number(p.kmIni), Number(p.kmFim)], kmNome: p.nome || p.codigo || '' });
+        else abrirGaleria({ cid: c.id, pid: p.id });
+        return true;
+      }
     });
     medicoes.render(); medicoes.carregar();
     return true;
