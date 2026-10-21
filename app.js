@@ -4205,6 +4205,43 @@
       return P.Share.share({ title: name, files: [res.uri] });
     });
   }
+  // várias fotos para a galeria do celular (Galeria › Baixar › Na galeria de fotos do celular): no app, o compartilhar do sistema
+  // com os arquivos, até 30 por vez (no iPhone, "Salvar N imagens"); no navegador do celular, o compartilhar com arquivos, depois
+  // de um toque. No computador a galeria monta o .zip (podeCompartilharFotos = false)
+  function celular() { return isIOS() || /Android/i.test(navigator.userAgent); }
+  function podeCompartilharFotos() {
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    if (isNativeApp()) return !!(P && P.Filesystem && P.Share);
+    if (!celular() || typeof File !== 'function') return false;
+    return canShareFile(new File([new Blob(['x'], { type: 'image/jpeg' })], 'a.jpg', { type: 'image/jpeg' }));
+  }
+  function blobB64(blob) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result).split(',')[1]); };
+      r.onerror = function () { reject(r.error); };
+      r.readAsDataURL(blob);
+    });
+  }
+  function salvarFotos(files, rotulo) {
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    if (isNativeApp() && P && P.Filesystem && P.Share) {
+      var partes = [];
+      for (var i = 0; i < files.length; i += 30) partes.push(files.slice(i, i + 30));
+      return partes.reduce(function (pr, parte, k) {
+        return pr.then(function () {
+          return Promise.all(parte.map(function (f) {
+            return blobB64(f.blob).then(function (b64) { return P.Filesystem.writeFile({ path: 'fotos/' + f.name, data: b64, directory: 'CACHE', recursive: true }); });
+          })).then(function (rs) {
+            return P.Share.share({ title: rotulo + (partes.length > 1 ? ' (' + (k + 1) + ' de ' + partes.length + ')' : ''), files: rs.map(function (r) { return r.uri; }) });
+          }).catch(function (err) { if (err && /cancel/i.test(err.message || String(err))) return; throw err; });
+        });
+      }, Promise.resolve());
+    }
+    var fs = files.map(function (f) { return new File([f.blob], f.name, { type: f.blob.type || 'image/jpeg' }); });
+    offerShare(fs, rotulo);
+    return Promise.resolve();
+  }
   function saveBlob(name, blob, msg) {
     var nat = nativeSave(name, blob);
     if (nat) {
@@ -4224,7 +4261,8 @@
     toast(msg || ('Arquivo salvo: ' + name));
     return Promise.resolve();
   }
-  function offerShare(file) {
+  function offerShare(file, rotulo) {
+    var files = Array.isArray(file) ? file : [file];
     var old = document.getElementById('shareReady');
     if (old) old.remove();
     var bar = document.createElement('div');
@@ -4232,13 +4270,13 @@
     bar.className = 'share-ready';
     bar.setAttribute('role', 'status');
     bar.innerHTML = '<span></span><button type="button" class="btn primary">Salvar / compartilhar</button><button type="button" class="btn" aria-label="Fechar">×</button>';
-    bar.querySelector('span').textContent = 'Arquivo pronto: ' + file.name;
+    bar.querySelector('span').textContent = files.length > 1 ? files.length + ' fotos prontas' + (rotulo ? ': ' + rotulo : '') : 'Arquivo pronto: ' + files[0].name;
     var b = bar.querySelectorAll('button');
     b[0].addEventListener('click', function () {
-      navigator.share({ files: [file], title: file.name }).then(function () { bar.remove(); }, function (err) {
+      navigator.share({ files: files, title: rotulo || files[0].name }).then(function () { bar.remove(); }, function (err) {
         if (err && err.name === 'AbortError') return;
         bar.remove();
-        downloadLink(file.name, file);
+        files.forEach(function (f) { downloadLink(f.name, f); });
       });
     });
     b[1].addEventListener('click', function () { bar.remove(); });
@@ -4272,8 +4310,11 @@
         drive: driveQ && {
           ready: driveReady,
           add: function (items) { return driveQ.add(items); },
+          apagar: function (ids) { return driveQ.apagar(ids); },
           status: driveStatus
         },
+        // "Ver na galeria" da foto tirada: abre em No aparelho
+        abrirGaleria: function () { if (galeriaOn()) abrirGaleria({ aba: 'local' }); },
         getTeamLogo: function () { return (banco.on && banco.cfg.fotoLogo) || null; },
         canSetTeamLogo: function () { return banco.on && isResp(); },
         setTeamLogo: function (v) { return saveTeamLogo({ t: 'config', chave: 'fotoLogo', valor: v }); },
@@ -6736,6 +6777,21 @@
       conferir: function (cred) { return window.Banco.sessao(cred).then(function (x) { return !!x; }); },
       onChange: onDriveChange
     });
+    // as já enviadas saem do aparelho depois do prazo escolhido em Galeria › Espaço e envio (padrão: nunca)
+    setTimeout(function () {
+      if (!driveQ) return;
+      if (window.Galeria && window.Galeria.limparEnviadas) window.Galeria.limparEnviadas(driveQ);
+      // foto guardada sozinha enquanto era editada e o app fechou antes de sair dela: com o envio automático ligado, vai para a fila
+      // (menos a que estiver aberta agora na tela Foto)
+      var auto = true;
+      try { auto = localStorage.getItem('diagrama-linear.foto-drive') !== '0'; } catch (e) { /* sem armazenamento */ }
+      if (!auto) return;
+      driveQ.list().then(function (l) {
+        var cur = foto && foto._state ? foto._state() : null;
+        var ids = l.filter(function (r) { return r.situacao === 'aparelho' && r.meta && r.meta.rascunho && (!cur || r.id !== cur.uid); }).map(function (r) { return r.id; });
+        if (ids.length) driveQ.enviar(ids, true);
+      }).catch(function () { /* segue */ });
+    }, 8000);
   }
   // ---------------- galeria (galeria.js): fotos deste aparelho e da equipe, conforme o acesso
   var galeria = null;
@@ -6760,6 +6816,7 @@
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
         contratos: ctsFoto, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
+        podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, onBaixa: renderGaleriaBtn,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });
     }
@@ -6810,15 +6867,15 @@
     var b = $('btnGaleria');
     if (!b) return;
     b.hidden = !galeriaOn();
-    var n = driveQ ? driveQ.info().n : 0, el = b.querySelector('.gl-pend');
-    if (el) { el.textContent = n; el.hidden = !n; }
-    b.title = n ? n + (n === 1 ? ' foto esperando envio' : ' fotos esperando envio') : 'Fotos deste aparelho e da equipe';
+    var n = driveQ ? driveQ.info().n : 0, el = b.querySelector('.gl-pend'), bx = galeria && galeria.baixando ? galeria.baixando() : 0;
+    if (el) { el.textContent = n + bx; el.hidden = !(n + bx); }
+    b.title = [n ? n + (n === 1 ? ' foto esperando envio' : ' fotos esperando envio') : '', bx ? bx + (bx === 1 ? ' foto baixando' : ' fotos baixando') : ''].filter(Boolean).join(' · ') || 'Fotos deste aparelho e da equipe';
     var nb = document.querySelector('#pgNav [data-pg="galeria"]');
     if (nb) {
       var era = nb.hidden, ep = nb.querySelector('.gl-pend');
       nb.hidden = !galeriaOn();
       nb.title = b.title;
-      if (ep) { ep.textContent = n; ep.hidden = !n; }
+      if (ep) { ep.textContent = n + bx; ep.hidden = !(n + bx); }
       if (era !== nb.hidden) aplicaPg();
     }
   }

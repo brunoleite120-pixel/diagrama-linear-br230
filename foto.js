@@ -20,6 +20,8 @@
   var LOGO_SEL_KEY = 'diagrama-linear.foto-logo-escolhida';
   var DNIT_KEY = 'diagrama-linear.foto-logo-dnit';         // '1': a logo do DNIT já foi posta como padrão neste aparelho
   var OLD_LOGO_KEY = 'diagrama-linear.foto-logo';           // versão 9: uma logo só
+  var NUVEM = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 19a5 5 0 0 1-.7-9.95A6.5 6.5 0 0 1 18.6 9 4.5 4.5 0 0 1 17.5 19z"/></svg>';
+  function celular() { return /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
   var DRIVE_KEY = 'diagrama-linear.foto-drive';             // '0': fotos novas ficam só no aparelho (desmarcadas para o Drive)
   var MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
   var FIELDS = [
@@ -299,6 +301,30 @@
     '.ft-checks small{font-size:10.5px;color:var(--ft-ink-3)}',
     '.ft-chk{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;min-height:32px;cursor:pointer}',
     '.ft-drvsec .ft-chk{min-height:44px}',
+    // foto única: "Guardada no app" logo abaixo da foto, o cartão do Drive (interruptor do envio automático) e "Também posso"
+    '.ft-drvsec{gap:8px}',
+    '.ft-gd{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:#E3F3EA;border:1px solid #B9DEC8}',
+    '.ft-gd i{flex:none;width:26px;height:26px;border-radius:50%;background:#1E7A47;color:#fff;font-style:normal;font-weight:800;display:flex;align-items:center;justify-content:center}',
+    '.ft-gd b{color:#1E7A47}',
+    '.ft-gd div div{font-size:12.5px;color:var(--ft-ink-2);line-height:1.4}',
+    '.ft-gd.ag{background:var(--ft-bg);border-color:var(--ft-line)}.ft-gd.ag i{background:#9AA39E}.ft-gd.ag b{color:var(--ft-ink-2)}',
+    '.ft-gd.er{background:#FCEBE8;border-color:#F3C2BA}.ft-gd.er i{background:var(--danger,#B42318)}.ft-gd.er b{color:var(--danger,#B42318)}',
+    '.ft-dv{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--ft-line)}',
+    '.ft-dv>svg{flex:none;width:20px;height:20px;color:var(--ft-accent)}',
+    '.ft-dv>div{flex:1;min-width:0}',
+    '.ft-dvs{font-size:12px;color:var(--ft-ink-3);line-height:1.4}',
+    '.ft-sw{flex:none;position:relative;width:44px;height:26px;cursor:pointer}',
+    '.ft-sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}',
+    '.ft-sw i{position:absolute;inset:0;border-radius:13px;background:#C9CFCB;pointer-events:none;transition:background .15s}',
+    '.ft-sw i::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}',
+    '.ft-sw input:checked+i{background:var(--ft-accent)}.ft-sw input:checked+i::after{left:21px}',
+    '.ft-sw input:focus-visible+i{outline:2px solid var(--ft-accent);outline-offset:2px}',
+    '.ft-tb h4{margin:0}',
+    '.ft-tbg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
+    '.ft-tbg .ft-btn{justify-content:center;min-height:46px;text-align:center;white-space:normal;line-height:1.2;padding:6px 10px}',
+    '.ft-btn.perigo{color:var(--danger,#B42318)}',
+    '.ft-foot .ft-big2{flex:1 1 140px;justify-content:center;min-height:46px}',
+    '.ft-big2 svg{width:18px;height:18px}',
     '.ft-chk input{width:20px;height:20px;min-height:0;margin:0;flex:none;accent-color:var(--ft-accent)}',
     '.ft-item .ft-chk{font-weight:500;font-size:13px}',
     '.ft-bdrv{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px}',
@@ -606,9 +632,16 @@
                   '<label class="ft-f full"><span>Descrição</span><textarea id="ftDesc" maxlength="240" placeholder="Ex.: lançamento de enrocamento no bueiro"></textarea></label>' +
                 '</div>' +
               '</section>' +
-              '<section class="ft-sec ft-drvsec" hidden><label class="ft-chk"><input type="checkbox" id="ftDrive"> Enviar ao Drive da equipe</label>' +
-                '<div class="ft-src">Desmarcada, a foto fica só neste aparelho (Fotos › Neste aparelho) e dá para enviar depois.</div>' +
-                '<div class="ft-mini">A escolha vale para as próximas fotos · <b>salva neste aparelho</b></div></section>' +
+              '<section class="ft-sec ft-drvsec" hidden>' +
+                '<div class="ft-gd ag" role="status"><i aria-hidden="true">✓</i><div><b class="ft-gdt">Guardando no app…</b><div class="ft-gds"></div></div></div>' +
+                '<div class="ft-dv">' + NUVEM + '<div><b>Drive da equipe</b><div class="ft-dvs"></div></div>' +
+                  '<label class="ft-sw"><input type="checkbox" id="ftDrive" role="switch" aria-label="Enviar ao Drive automaticamente"><i></i></label></div>' +
+                '<div class="ft-mini">Envio automático: vale para as próximas fotos · <b>salvo neste aparelho</b></div></section>' +
+              '<section class="ft-sec ft-tb"><h4>Também posso</h4><div class="ft-tbg">' +
+                '<button type="button" class="ft-btn" data-ft="save">' + (celular() ? 'Salvar na galeria do celular' : 'Baixar a foto') + '</button>' +
+                (opts.share ? '<button type="button" class="ft-btn" data-ft="share">Compartilhar</button>' : '') +
+                '<button type="button" class="ft-btn" data-ft="editar">Editar carimbo</button>' +
+                '<button type="button" class="ft-btn perigo" data-ft="descartar">Descartar</button></div></section>' +
             '</div>' +
           '</div>' +
           '<div class="ft-batch" hidden>' +
@@ -632,12 +665,13 @@
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="ft-foot" hidden><span class="ft-prog ft-many" role="status"></span><span class="ft-dstat" role="status" hidden></span>' +
-          '<button type="button" class="ft-btn" data-ft="new"><span class="ft-one">Nova foto</span><span class="ft-many">Nova seleção</span></button>' +
-          '<button type="button" class="ft-btn ft-one ft-drv" data-ft="drive" hidden>Enviar ao Drive</button><button type="button" class="ft-btn ft-many ft-drv" data-ft="b-drive" hidden>Enviar todas ao Drive</button>' +
-          (opts.share ? '<button type="button" class="ft-btn ft-one" data-ft="share">Compartilhar</button><button type="button" class="ft-btn ft-many" data-ft="b-share">Compartilhar todas</button>' : '') +
-          '<button type="button" class="ft-btn primary ft-one" data-ft="save">Salvar foto</button>' +
-          '<button type="button" class="ft-btn primary ft-many" data-ft="b-save">Salvar todas (.zip)</button></div>' +
+        '<div class="ft-foot" hidden><span class="ft-prog ft-many" role="status"></span><span class="ft-dstat ft-many" role="status" hidden></span>' +
+          (opts.abrirGaleria ? '<button type="button" class="ft-btn ft-one ft-big2" data-ft="ver-gal">Ver na galeria</button>' : '') +
+          '<button type="button" class="ft-btn ft-many" data-ft="new">Nova seleção</button>' +
+          '<button type="button" class="ft-btn ft-many ft-drv" data-ft="b-drive" hidden>Enviar todas ao Drive</button>' +
+          (opts.share ? '<button type="button" class="ft-btn ft-many" data-ft="b-share">Compartilhar todas</button>' : '') +
+          '<button type="button" class="ft-btn primary ft-many" data-ft="b-save">Salvar todas (.zip)</button>' +
+          '<button type="button" class="ft-btn primary ft-one ft-big2" data-ft="new">' + CAM + 'Tirar outra</button></div>' +
         // folha de opções: um grupo por vez (o do botão tocado)
         '<div class="ft-camada" hidden><div class="ft-fundo" data-ft="folha-fecha" aria-hidden="true"></div>' +
           '<div class="ft-folha" id="ftFolha" role="dialog" aria-modal="true" aria-labelledby="ftFolhaT" tabindex="-1">' +
@@ -1049,6 +1083,9 @@
     function showWork() {
       root.classList.remove('many');
       moveShared(q('.ft-work .ft-side'));
+      var side = q('.ft-work .ft-side'), dv = q('.ft-drvsec');
+      if (dv && side.firstChild !== dv) side.insertBefore(dv, side.firstChild);
+      renderGuarda();
       q('.ft-start').hidden = true;
       q('.ft-batch').hidden = true;
       q('.ft-work').hidden = false;
@@ -1327,11 +1364,83 @@
       return out.slice(0, 4);
     }
     function scheduleDraw(ms) {
+      if (st && !batch) { st.ver = (st.ver || 0) + 1; agendaGuarda(); }
       clearTimeout(drawTimer);
       drawTimer = setTimeout(function () {
         if (batch) { batch.items.forEach(function (it, i) { if (it.img && !it.gone) queueDraw(i); }); return; }
         if (st) draw(q('.ft-prev canvas'), 1600);
       }, ms == null ? 90 : ms);
+    }
+
+    // ---------------- guardar no app (galeria › No aparelho) sem a pessoa apertar nada
+    // A foto entra no aparelho como "só aqui" logo que abre e a cada mudança (1,5 s depois da última); vai para a fila do Drive
+    // (se o envio automático estiver ligado) só ao sair dela: Tirar outra, Ver na galeria ou fechar. Assim o Drive recebe uma
+    // vez, já com o carimbo final. Fechado à força no meio, a foto continua no aparelho e dá para enviar pela galeria.
+    var guardaT = null, guardaP = Promise.resolve();
+    function agendaGuarda() { if (!opts.drive) return; clearTimeout(guardaT); guardaT = setTimeout(function () { guardaT = null; guardarFoto(false); }, st && st.feita == null ? 400 : 1500); }
+    // o app foi para o fundo (outra tela, celular travado): guarda já a última mudança
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && guardaT) guardarFoto(false); });
+    function guardarFoto(final) {
+      var a = st;
+      clearTimeout(guardaT); guardaT = null;
+      if (!a || !opts.drive || a.descartada) return guardaP;
+      var como = final && a.drive !== false ? 'fila' : 'aparelho';
+      if (a.como === 'fila' || (a.feita === a.ver && (a.como === como || !final))) return guardaP;
+      var ver = a.ver;
+      a.guardando = true; renderGuarda();
+      guardaP = guardaP.then(function () {
+        if (a.descartada) return;
+        return withItem(a, function () { var nome = fileName(); return makeBlob().then(function (b) { return { b: b, nome: nome }; }); }).then(function (r) {
+          if (a.descartada) return;
+          if (!r.b) throw new Error('blob');
+          var item = driveItem(a, r.b, r.nome);
+          item.enviar = como === 'fila';
+          // guardada no meio da edição: se o app fechar antes de sair da foto, ela vai para a fila ao abrir de novo (app.js)
+          if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1 });
+          return opts.drive.add([item]).then(function () {
+            a.feita = ver; a.como = como; a.erroG = false; a.guardando = false;
+            if (como === 'fila') refreshDrive();
+          });
+        });
+      }).then(null, function () { a.erroG = true; a.guardando = false; }).then(function () { if (st === a) renderGuarda(); });
+      return guardaP;
+    }
+    function renderGuarda() {
+      if (!root) return;
+      var g = q('.ft-gd'), dv = q('.ft-dvs');
+      if (!g || !st) return;
+      var er = !!st.erroG, ok = st.feita != null && !st.guardando;
+      g.className = 'ft-gd' + (er ? ' er' : ok ? '' : ' ag');
+      g.querySelector('i').textContent = er ? '!' : '✓';
+      q('.ft-gdt').textContent = er ? 'Não deu para guardar no app' : ok ? 'Guardada no app' : 'Guardando no app…';
+      q('.ft-gds').textContent = er ? 'O aparelho está sem espaço ou não deixou guardar. Use "Salvar na galeria do celular".'
+        : 'Fica em Galeria › No aparelho. Não precisa apertar nada para não perder.';
+      if (dv) {
+        var on = st.drive !== false;
+        dv.textContent = !driveOn() ? 'O envio ao Drive começa depois que você entrar com o seu código; a foto espera guardada no app.'
+          : on ? 'Vai para o Drive quando você tocar em Tirar outra, Ver na galeria ou fechar. Dá para mudar o carimbo até lá.'
+          : 'Fica só neste aparelho. Dá para enviar depois em Galeria › No aparelho.';
+      }
+    }
+    // tocar duas vezes: a primeira só pergunta (no botão)
+    var descT = null;
+    function descartar(b) {
+      if (!st) return;
+      if (!b.classList.contains('conf')) {
+        b.classList.add('conf'); b.textContent = 'Tocar de novo para descartar';
+        clearTimeout(descT); descT = setTimeout(function () { b.classList.remove('conf'); b.textContent = 'Descartar'; }, 4000);
+        return;
+      }
+      clearTimeout(descT);
+      b.classList.remove('conf'); b.textContent = 'Descartar';
+      var a = st, ja = a.feita != null;
+      a.descartada = true;
+      clearTimeout(guardaT); guardaT = null;
+      guardaP.then(function () { return ja && opts.drive && opts.drive.apagar ? opts.drive.apagar([a.uid]) : null; }).then(function () { notify('Foto descartada.'); refreshDrive(); }, function () { notify('Não foi possível tirar a foto do aparelho.'); });
+      startView();
+    }
+    function sair(depois) {
+      guardarFoto(true).then(function () { if (depois) depois(); });
     }
 
     // ---------------- salvar
@@ -1358,7 +1467,7 @@
       busy(true);
       makeBlob().then(function (blob) {
         if (!blob) { notify('Não foi possível gerar a foto. Tente com uma imagem menor.'); return; }
-        toDrive([driveItem(st, blob, fileName())], true);
+        if (!opts.drive) toDrive([driveItem(st, blob, fileName())], true);
         return opts.saveBlob(fileName(), blob);
       }).then(function () { busy(false); }, function () { busy(false); });
     }
@@ -1366,10 +1475,10 @@
       if (!st) return;
       busy(true);
       makeBlob().then(function (blob) {
-        toDrive([driveItem(st, blob, fileName())], true);
+        if (!opts.drive) toDrive([driveItem(st, blob, fileName())], true);
         var f = new File([blob], fileName(), { type: 'image/jpeg' });
         if (navigator.canShare && navigator.canShare({ files: [f] })) return navigator.share({ files: [f], title: fileName() });
-        notify('Este navegador não compartilha arquivos. Use Salvar foto.');
+        notify('Este navegador não compartilha arquivos. Use "' + (celular() ? 'Salvar na galeria do celular' : 'Baixar a foto') + '".');
       }).catch(function () { /* compartilhamento cancelado */ }).then(function () { busy(false); });
     }
 
@@ -1411,16 +1520,6 @@
         refreshDrive();
       }, function () { notify('Não foi possível guardar a foto para o Drive neste aparelho.'); });
     }
-    function sendDrive() {
-      if (!st || !driveOn()) return;
-      busy(true);
-      makeBlob().then(function (blob) {
-        if (!blob) { notify('Não foi possível gerar a foto. Tente com uma imagem menor.'); return; }
-        st.drive = true;
-        q('#ftDrive').checked = true;
-        toDrive([driveItem(st, blob, fileName())]);
-      }).then(function () { busy(false); }, function () { busy(false); });
-    }
     function sendAllDrive() {
       if (!batch || batch.busy || !driveOn()) return;
       var b = batch;
@@ -1441,6 +1540,7 @@
       if (ds) ds.hidden = !opts.drive;
       var el = q('.ft-dstat');
       if (el) { var t = on && opts.drive.status ? opts.drive.status() : ''; el.textContent = t; el.hidden = !t; }
+      renderGuarda();
     }
 
     // ---------------- várias fotos de uma vez (Arquivos do celular): cada uma com o km, o ponto e o lote do próprio GPS
@@ -2038,7 +2138,6 @@
       if (b.dataset.ft === 'b-save') { saveAll(); return; }
       if (b.dataset.ft === 'b-share') { shareAll(); return; }
       if (b.dataset.ft === 'b-drive') { sendAllDrive(); return; }
-      if (b.dataset.ft === 'drive') { sendDrive(); return; }
       if (b.dataset.ft === 'b-fixall') { if (batch) fixAll(); return; }
       if (b.dataset.ft === 'b-fixto') { if (batch) fixTo(b.dataset.cid); return; }
       if ((b.dataset.ft === 'b-drv-all' || b.dataset.ft === 'b-drv-none') && batch) {
@@ -2048,8 +2147,11 @@
         renderBatchSum();
         return;
       }
-      if (b.dataset.ft === 'close') close();
-      else if (b.dataset.ft === 'new') { startView(); }
+      if (b.dataset.ft === 'close') { if (st && !batch) sair(); close(); }
+      else if (b.dataset.ft === 'new') { if (st && !batch) sair(); startView(); }
+      else if (b.dataset.ft === 'ver-gal') { var vg = opts.abrirGaleria; if (st && !batch) sair(function () { if (vg) vg(); }); close(); }
+      else if (b.dataset.ft === 'descartar') descartar(b);
+      else if (b.dataset.ft === 'editar') { var bb = q('.ft-bb[data-folha="leg"]'); if (bb) bb.click(); }
       else if (b.dataset.ft === 'save') save();
       else if (b.dataset.ft === 'share') share();
       else if (b.dataset.ft === 'logo-del') removeLogo();
@@ -2159,7 +2261,7 @@
         return;
       }
       if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; guarda(); renderOpts(); scheduleDraw(0); return; }
-      if (t.id === 'ftDrive') { if (st) st.drive = t.checked; padraoDrive(t.checked); return; }
+      if (t.id === 'ftDrive') { if (st) st.drive = t.checked; padraoDrive(t.checked); renderGuarda(); return; }
       if (batch && t.dataset && t.dataset.b === 'drive') { var bi = batch.items[+t.dataset.i]; if (bi) { bi.drive = t.checked; renderBatchSum(); } return; }
       if (batch && t.tagName === 'SELECT' && batchInput(t)) return;
       if (!st) return;

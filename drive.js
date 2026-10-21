@@ -36,6 +36,8 @@
  *     'script' (o script recusou, mas o banco confirmou que o acesso vale), 'codigo' (o banco confirmou que o acesso não vale
  *     mais: a fila para até entrar de novo, d.resetCode()), 'banco' (o banco não aceitou o registro), ou o motivo da recusa de uma foto
  *   d.pump()   d.pump(true): "Enviar agora", a pessoa pediu: não espera as pausas
+ *   d.pausar(sim)  a pessoa pausou o envio (Galeria › No aparelho; fica guardado no aparelho); "Enviar agora" passa por cima
+ *   d.soWifi(sim)  envia só no Wi-Fi: no 4G a fila espera. Só onde o aparelho diz o tipo de rede (Android); no iPhone não há como saber
  */
 (function () {
   'use strict';
@@ -101,6 +103,12 @@
       return new Promise(function (r) { cv.toBlob(r, 'image/jpeg', 0.62); });
     }).then(function (b) { return b ? new Response(b).arrayBuffer() : null; }, function () { return null; });
   }
+
+  var PAUSA_KEY = 'diagrama-linear.drive-pausa', WIFI_KEY = 'diagrama-linear.drive-so-wifi';
+  function lsLer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsPor(k, v) { try { if (v) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) { /* sem armazenamento */ } }
+  // tipo da rede: só o Android (Chrome e o app) diz; 'cellular' = dados móveis
+  function rede() { var c = navigator.connection; return c && c.type ? c.type : ''; }
 
   window.DriveFotos = function (opts) {
     var n = 0, soAparelho = 0, total = 0, bytes = 0, busy = false, erro = null, enviadas = 0, timer = null;
@@ -385,6 +393,7 @@
         later(espera - Date.now());
       });
     }
+    function esperaWifi() { return !!lsLer(WIFI_KEY) && rede() === 'cellular'; }
     function seguir(forcar) { busy = false; return recount().then(function () { pump(forcar); }); }
     // as duas etapas de uma foto; cada uma termina gravando sobre o registro lido de novo (concluir). g: a geração do acesso
     function enviarFoto(url, login, r, forcar, g) {
@@ -425,6 +434,7 @@
       var url = opts.getUrl(), login = opts.getLogin(), g = geracao;
       if (busy) return;
       if (!url || !login || navigator.onLine === false) { change(); return; }
+      if (!forcar && (lsLer(PAUSA_KEY) || esperaWifi())) { change(); return; }   // pausado, ou só no Wi-Fi e está no 4G
       if (!forcar && erro === 'codigo') { change(); return; }   // acesso que não vale mais: espera entrar de novo
       if (!forcar && parada(Date.now())) { later(espera - Date.now()); change(); return; }
       busy = true;
@@ -469,12 +479,17 @@
       pump();
     });
     setInterval(function () { pump(); }, 60000);
+    if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener('change', function () { pump(); });
     return {
       add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, corrigir: corrigir, pump: pump, resetCode: resetCode, post: post,
+      pausar: function (v) { lsPor(PAUSA_KEY, v); if (!v) pump(); else change(); },
+      soWifi: function (v) { if (v != null) { lsPor(WIFI_KEY, v); pump(); } return !!lsLer(WIFI_KEY); },
+      sabeRede: function () { return !!rede(); },
       info: function () {
         // próxima tentativa: o fim da pausa da fila ou a foto que volta primeiro (parada pelo acesso: só ao entrar de novo)
         var agora = Date.now(), prox = erro === 'codigo' ? null : parada(agora) ? espera : proxFila > agora && proxFila - agora <= 2 * PAUSA_MAX ? proxFila : null;
-        return { n: n, aparelho: soAparelho, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox, emEnvio: busy ? emEnvio : null };
+        return { n: n, aparelho: soAparelho, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox, emEnvio: busy ? emEnvio : null,
+          pausado: !!lsLer(PAUSA_KEY), esperaWifi: esperaWifi() };
       }
     };
   };

@@ -1,11 +1,17 @@
 /*
  * Galeria de fotos do app: as guardadas neste aparelho (drive.js) e as da equipe (banco: dados e miniatura; foto inteira no Drive).
- *   Neste aparelho  tudo o que está guardado aqui, com a situação do envio (na fila, enviada)
- *   Minhas          as que eu enviei, de qualquer aparelho
- *   Todas           as de toda a equipe, por pessoa (engenheiro e criador)
- *   Relatório       as marcadas com ★ para o relatório fotográfico, que sai em PDF (relatorio.js) (engenheiro e Administrador)
- *   Deletados       as apagadas do Drive por engenheiros (só o criador; dá para restaurar)
+ *   No aparelho     tudo o que está guardado aqui, com a situação do envio (só aqui, na fila, subindo, no Drive) e a barra de envio
+ *   Minhas          as que eu enviei, de qualquer aparelho (o analista também)
+ *   Equipe          as de toda a equipe, por pessoa (engenheiro e criador)
+ *   Relatório ★     as marcadas com ★ para o relatório fotográfico, que sai em PDF (relatorio.js) (engenheiro e Administrador)
+ *   Lixeira         as apagadas do Drive por engenheiros (pasta Deletados do Drive; só o criador; dá para restaurar)
  * A galeria mostra só a miniatura leve; a foto inteira vem do aparelho (se estiver aqui) ou do Drive ao abrir ou baixar.
+ * Período em fichas (Esta semana, 2 semanas, Mês, 3 meses, Escolher…): só filtra o que já veio do banco, a grade não recarrega.
+ * Baixar várias: para o app (abrir sem sinal), para a galeria do celular (o compartilhar do celular; no computador, .zip) ou só
+ * as miniaturas, com a barra de download (quantas, MB) que segue enquanto o app estiver aberto, mesmo com a galeria fechada.
+ * As baixadas para o app ficam em "diagrama-linear-inteiras" (foto inteira, loja "arq", e os dados com a miniatura, loja "item"):
+ * sem sinal, as abas do banco mostram essas. "Espaço e envio" (No aparelho): espaço usado, envio automático, só no Wi-Fi
+ * (Android), por quanto tempo as já enviadas ficam no aparelho e liberar espaço.
  *
  * As fotos ficam separadas por contrato (fila de contratos no alto). Na foto aberta ou em várias selecionadas, "Contrato e ponto"
  * corrige o contrato e o ponto (ou ponte): no aparelho e, se já foi enviada, no banco (migração 06). Quem tirou corrige as dele;
@@ -101,7 +107,7 @@
     '.gl-b.sp{background:#FEF0C7;color:#7A2E0E}',
     '.gl-info .gl-lk{border:0;background:none;padding:0;color:var(--accent,#1D4F91);font-size:12.5px;text-decoration:underline}',
     '.gl-star{position:absolute;top:4px;right:6px;color:#FDB022;font-size:17px;text-shadow:0 1px 2px rgba(0,0,0,.5)}',
-    '.gl-ck{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}',
+    '.gl-ck{position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}',
     '.gl-t[aria-pressed="true"]{outline:3px solid var(--accent,#1D4F91);outline-offset:-3px}',
     '.gl-t[aria-pressed="true"] .gl-ck{background:var(--accent,#1D4F91)}',
     '.gl-t[aria-pressed="true"] .gl-ck::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}',
@@ -149,7 +155,75 @@
     '.gl-pag .gl-top,.gl-pag .gl-cts{display:none}',
     '.gl-pag .gl-body{padding-bottom:84px}',
     '.gl.gl-pag:has(.gl-ver),.gl.gl-pag:has(.gl-mv){top:0;bottom:0;z-index:3000;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}',
+    // situação de cada foto, no canto de cima à direita: ☁ no Drive, ▯ só aqui, fila, subindo, ⤓ só no Drive (não baixada)
+    '.gl-s{position:absolute;top:5px;right:5px;min-width:20px;height:20px;box-sizing:border-box;padding:0 5px;border-radius:999px;background:rgba(255,255,255,.93);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;line-height:1;color:var(--ink-2,#3B4540);box-shadow:0 1px 2px rgba(0,0,0,.2)}',
+    '.gl-s svg{width:13px;height:13px}',
+    '.gl-s.ok{color:#1E7A47}.gl-s.fila{color:#9A5B00;font-size:10px}.gl-s.nuvem{color:var(--accent,#1D4F91)}.gl-s.erro{color:#B42318}',
+    '.gl-s.sobe{padding:0;width:20px}.gl-s.sobe::after{content:"";width:11px;height:11px;box-sizing:border-box;border-radius:50%;border:2px solid #C9D8EC;border-top-color:var(--accent,#1D4F91);animation:glgira 1s linear infinite}',
+    '@keyframes glgira{to{transform:rotate(360deg)}}',
+    '@media (prefers-reduced-motion:reduce){.gl-s.sobe::after{animation:none}}',
+    '.gl-t .gl-star{right:30px}',
+    '.gl-leg{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 12px;margin:16px auto 0;padding:6px 12px;width:max-content;max-width:100%;box-sizing:border-box;border:1px solid var(--line,#D5DAD6);border-radius:14px;background:var(--panel,#fff);font-size:11.5px;color:var(--ink-2,#3B4540)}',
+    '.gl-leg span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}',
+    '.gl-leg .gl-s{position:static;box-shadow:none;border:1px solid var(--line,#D5DAD6)}',
+    // barra de envio ao Drive e barra de download (no alto da galeria)
+    '.gl-prg{margin:10px 16px 0;padding:10px 12px;border-radius:10px;background:var(--accent-soft,#E7EEF7);border:1px solid #C5D5EA;font-size:13px}',
+    '.gl-prg.pausa{background:#FCF1DC;border-color:#F0D49A}',
+    '.gl-prg-l{display:flex;justify-content:space-between;align-items:baseline;gap:8px}',
+    '.gl-prg-l b{color:var(--accent,#1D4F91)}',
+    '.gl-prg.pausa .gl-prg-l b{color:#7A4A00}',
+    '.gl-prg-l span{font-variant-numeric:tabular-nums;color:var(--ink-2,#3B4540);white-space:nowrap}',
+    '.gl-prg-b{height:7px;border-radius:7px;background:#C9D8EC;overflow:hidden;margin:7px 0 6px}',
+    '.gl-prg.pausa .gl-prg-b{background:#EED9AE}',
+    '.gl-prg-b i{display:block;height:100%;background:var(--accent,#1D4F91);border-radius:7px;transition:width .3s}',
+    '.gl-prg-r{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:11.5px;color:var(--ink-3,#5C6661)}',
+    '.gl-prg-r span{flex:1 1 160px;min-width:0}',
+    '.gl-prg-r button{border:0;background:none;padding:4px 0;color:var(--accent,#1D4F91);font-weight:650;font-size:12.5px}',
+    // filtros do aparelho (Todas, Só aqui, Na fila, No Drive) e do período (Esta semana, 2 semanas, Mês, 3 meses, Escolher…)
+    '.gl-chips{flex:1 1 100%;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}',
+    '.gl-chips::-webkit-scrollbar{display:none}',
+    '.gl-chip{flex:none;min-height:32px;padding:0 11px;border:1px solid var(--line,#D5DAD6);border-radius:8px;background:var(--panel,#fff);color:var(--ink-2,#3B4540);font-size:12.5px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}',
+    '.gl-chip[aria-pressed="true"]{border-color:var(--accent,#1D4F91);background:var(--accent-soft,#E7EEF7);color:var(--accent,#1D4F91);font-weight:650}',
+    '.gl-chip svg{flex:none}',
+    '.gl-info .gl-cfg{border:0;background:none;padding:2px 0;color:var(--accent,#1D4F91);font-weight:650;font-size:12.5px;display:inline-flex;align-items:center;gap:4px}',
+    // janelas que sobem de baixo: baixar e "Fotos neste aparelho"
+    '.gl-sh{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-end;justify-content:center;background:rgba(14,19,17,.45)}',
+    '.gl-sh-box{width:100%;max-width:520px;max-height:92%;overflow:auto;display:grid;gap:10px;padding:8px 16px calc(18px + env(safe-area-inset-bottom,0px));background:var(--panel,#fff);color:var(--ink,#17201C);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25);box-sizing:border-box}',
+    '.gl-sh-box::before{content:"";justify-self:center;width:40px;height:4px;border-radius:2px;background:#C9CFCB}',
+    '@media (min-width:640px){.gl-sh{align-items:center}.gl-sh-box{border-radius:16px;padding-top:16px}.gl-sh-box::before{display:none}}',
+    '.gl-sh-top{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+    '.gl-sh-top h3{margin:0;font-size:16px;font-weight:700}',
+    '.gl-op{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--line,#D5DAD6);background:var(--panel,#fff);text-align:left;color:var(--ink,#17201C);font:inherit}',
+    '.gl-op i{flex:none;width:20px;height:20px;box-sizing:border-box;border-radius:50%;border:2px solid #9AA39E;margin-top:1px;display:flex;align-items:center;justify-content:center}',
+    '.gl-op[aria-pressed="true"]{border:2px solid var(--accent,#1D4F91);background:var(--accent-soft,#E7EEF7);padding:9px 11px}',
+    '.gl-op[aria-pressed="true"] i{border-color:var(--accent,#1D4F91)}',
+    '.gl-op[aria-pressed="true"] i::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--accent,#1D4F91)}',
+    '.gl-op b{display:block;font-size:14px}',
+    '.gl-op small{display:block;font-size:12px;color:var(--ink-3,#5C6661);line-height:1.35}',
+    '.gl-ckl{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2,#3B4540)}',
+    '.gl-ckl input{width:18px;height:18px;margin:0;flex:none}',
+    '.gl-sh-acts{display:flex;gap:8px}',
+    '.gl-sh-acts .btn{flex:1;min-height:46px;justify-content:center}',
+    '.gl-uso{padding:12px;border-radius:10px;border:1px solid var(--line,#D5DAD6)}',
+    '.gl-uso-t{display:flex;justify-content:space-between;font-weight:650;font-variant-numeric:tabular-nums}',
+    '.gl-uso-b{display:flex;height:10px;border-radius:5px;overflow:hidden;margin:8px 0 6px;background:#E6EAE7}',
+    '.gl-uso-l{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--ink-2,#3B4540)}',
+    '.gl-cx{border-radius:10px;border:1px solid var(--line,#D5DAD6);overflow:hidden}',
+    '.gl-cx h4{margin:0;padding:9px 12px 2px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3,#5C6661)}',
+    '.gl-ln{display:flex;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #EEF0EE}',
+    '.gl-cx h4+.gl-ln{border-top:0}',
+    '.gl-ln div{flex:1;min-width:0}',
+    '.gl-ln b{display:block;font-size:14px}',
+    '.gl-ln small{display:block;font-size:12px;color:var(--ink-3,#5C6661);line-height:1.35}',
+    '.gl-ln select{flex:none;min-height:36px;max-width:46%;border:1px solid var(--line,#D5DAD6);border-radius:8px;background:var(--panel,#fff);font-size:13px;color:var(--ink,#17201C)}',
+    '.gl-ln .btn{flex:none}',
+    '.gl-sw{flex:none;position:relative;width:44px;height:26px;border-radius:13px;border:0;padding:0;background:#C9CFCB}',
+    '.gl-sw::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}',
+    '.gl-sw[aria-checked="true"]{background:var(--accent,#1D4F91)}',
+    '.gl-sw[aria-checked="true"]::after{left:21px}',
+    '.gl-off{margin:10px 16px 0;padding:8px 12px;border-radius:10px;background:#FCF1DC;color:#7A4A00;font-size:12.5px}',
     '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-cts,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
+    '  .gl-prg,.gl-off{margin-left:12px;margin-right:12px}',
     '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}'
   ].join('\n');
 
@@ -173,7 +247,7 @@
   // datas em "aaaa-mm-dd" no fuso do aparelho; a escolha fica neste aparelho (PER_KEY) e vale para todas as abas
   var MESL = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
   var SEMN = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  var PER_KEY = 'diagrama-linear.galeria-periodo', PER_MODOS = ['tudo', 'hoje', 'semana', 'mes', 'datas'];
+  var PER_KEY = 'diagrama-linear.galeria-periodo', PER_MODOS = ['tudo', 'hoje', 'semana', 'sem2', 'mes', 'mes3', 'datas'];
   function isoDia(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function dDia(s) { var p = String(s).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
   function maisDias(s, n) { var d = dDia(s); d.setDate(d.getDate() + n); return isoDia(d); }
@@ -194,7 +268,9 @@
     if (!p || p.modo === 'tudo') return null;
     if (p.modo === 'hoje') return [h, h];
     if (p.modo === 'semana') { var s = maisDias(segundaDe(h), 7 * (p.off || 0)), e = maisDias(s, 6); return [s, e > h ? h : e]; }
+    if (p.modo === 'sem2') return [maisDias(h, -13), h];
     if (p.modo === 'mes') return [h.slice(0, 8) + '01', h];
+    if (p.modo === 'mes3') { var m3 = dDia(h.slice(0, 8) + '01'); m3.setMonth(m3.getMonth() - 2); return [isoDia(m3), h]; }
     if (p.modo === 'datas' && validoIso(p.de) && validoIso(p.ate)) return p.de <= p.ate ? [p.de, p.ate] : [p.ate, p.de];
     return null;
   }
@@ -203,6 +279,8 @@
     if (!iv) return 'Todas as datas';
     if (p.modo === 'hoje') return 'Hoje';
     if (p.modo === 'mes') return 'Este mês';
+    if (p.modo === 'sem2') return '2 semanas';
+    if (p.modo === 'mes3') return '3 meses';
     if (p.modo === 'datas') return ddmm(iv[0]) + ' a ' + ddmm(iv[1]);
     return !p.off ? 'Esta semana' : p.off === -1 ? 'Semana passada' : 'Semana ' + ddmm(iv[0]) + '–' + ddmm(maisDias(iv[0], 6));
   }
@@ -225,15 +303,19 @@
   // fotos inteiras trazidas do Drive ficam guardadas neste aparelho (IndexedDB "diagrama-linear-inteiras", pela id do
   // arquivo no Drive): abrir de novo, baixar ou pôr no relatório não baixa outra vez. Loja "info" (tamanho, último uso)
   // separada da loja "arq" (o arquivo), para a limpeza não precisar ler as fotos; passou do limite, saem as menos usadas.
-  var CDB = 'diagrama-linear-inteiras', CINFO = 'info', CARQ = 'arq', CACHE_MAX = 250 * 1048576;
+  // versão 2: loja "item" (dados da foto e a miniatura, pela id da foto), para as abas do banco abrirem sem sinal
+  var CDB = 'diagrama-linear-inteiras', CINFO = 'info', CARQ = 'arq', CITEM = 'item', CACHE_MAX = 250 * 1048576;
   function cacheTx(mode, fn) {
     return new Promise(function (ok, no) {
       if (!window.indexedDB) { no(new Error('sem_indexeddb')); return; }
-      var r = indexedDB.open(CDB, 1);
-      r.onupgradeneeded = function () { r.result.createObjectStore(CINFO, { keyPath: 'id' }); r.result.createObjectStore(CARQ, { keyPath: 'id' }); };
+      var r = indexedDB.open(CDB, 2);
+      r.onupgradeneeded = function () {
+        var db = r.result;
+        [CINFO, CARQ, CITEM].forEach(function (n) { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, { keyPath: 'id' }); });
+      };
       r.onerror = function () { no(r.error); };
       r.onsuccess = function () {
-        var db = r.result, t = db.transaction([CINFO, CARQ], mode), req = fn(t.objectStore(CINFO), t.objectStore(CARQ));
+        var db = r.result, t = db.transaction([CINFO, CARQ, CITEM], mode), req = fn(t.objectStore(CINFO), t.objectStore(CARQ), t.objectStore(CITEM));
         t.oncomplete = function () { db.close(); ok(req && 'result' in req ? req.result : undefined); };
         t.onerror = t.onabort = function () { db.close(); no(t.error); };
       };
@@ -264,6 +346,19 @@
       });
     }).catch(function () { /* sem espaço ou sem IndexedDB: só não guarda */ });
   }
+  // espaço das baixadas: fotos inteiras (bytes, quantas) e itens guardados com a miniatura
+  function cacheUso() {
+    return cacheTx('readonly', function (i, a, it) { var r = { info: i.getAll(), itens: it.getAll() }; return { result: r }; }).then(function (r) {
+      var inf = (r && r.info && r.info.result) || [], its = (r && r.itens && r.itens.result) || [];
+      return { bytes: inf.reduce(function (t, x) { return t + (x.tam || 0); }, 0), n: inf.length, itens: its.length,
+        mini: its.reduce(function (t, x) { return t + (x.mini ? x.mini.length * 0.75 : 0); }, 0) };
+    }, function () { return { bytes: 0, n: 0, itens: 0, mini: 0 }; });
+  }
+  function itemGravar(it, mini) {
+    var d = {}; Object.keys(it).forEach(function (k) { if (k !== 'mini') d[k] = it[k]; });
+    return cacheTx('readwrite', function (i, a, s) { s.put({ id: it.id, dados: d, mini: mini || null, em: Date.now() }); }).catch(function () { /* sem espaço: só não guarda */ });
+  }
+  function itensLer() { return cacheTx('readonly', function (i, a, s) { return s.getAll(); }).then(function (l) { return l || []; }, function () { return []; }); }
   function cacheIds() { return cacheTx('readonly', function (i) { return i.getAllKeys(); }).then(function (l) { var m = {}; (l || []).forEach(function (k) { m[k] = 1; }); return m; }, function () { return {}; }); }
 
   var CRC_T = null;
@@ -306,12 +401,32 @@
   }
 
   var ABAS = [
-    { k: 'local', t: 'Neste aparelho', nivel: 0 },
-    { k: 'minhas', t: 'Minhas', nivel: 1 },
-    { k: 'todas', t: 'Todas', nivel: 2 },
-    { k: 'relatorio', t: 'Relatório', nivel: 2 },
-    { k: 'deletadas', t: 'Deletados', nivel: 3 }
+    { k: 'local', t: 'No aparelho', nivel: 0 },
+    { k: 'minhas', t: 'Minhas', nivel: 0, login: true },   // também o analista (o banco lista as dele: _faz_fotos)
+    { k: 'todas', t: 'Equipe', nivel: 2 },
+    { k: 'relatorio', t: 'Relatório ★', nivel: 2 },
+    { k: 'deletadas', t: 'Lixeira', nivel: 3 }   // a pasta "Deletados" do Drive
   ];
+  var DRIVE_KEY = 'diagrama-linear.foto-drive', MANTER_KEY = 'diagrama-linear.manter-enviadas';   // DRIVE_KEY: a mesma da tela Foto (foto.js)
+  function lsLer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsPor(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* sem armazenamento */ } }
+  function rede() { var c = navigator.connection; return c && c.type ? c.type : ''; }
+  function mb(b) { return b ? tam(b) : '0 MB'; }
+  var IC_NUVEM = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 19a5 5 0 0 1-.7-9.95A6.5 6.5 0 0 1 18.6 9 4.5 4.5 0 0 1 17.5 19z"/></svg>';
+  var IC_APAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/></svg>';
+  var IC_BAIXA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+  var IC_SOBE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9M7 14l5-5 5 5M5 4h14"/></svg>';
+  var IC_CFG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>';
+  // as já enviadas saem deste aparelho depois de N dias ("Espaço e envio" › Manter no aparelho); as que não subiram, nunca
+  function limparEnviadas(drive) {
+    var d = +lsLer(MANTER_KEY);
+    if (!drive || !drive.list || !drive.apagar || !(d > 0)) return Promise.resolve(0);
+    var lim = Date.now() - d * 864e5;
+    return drive.list().then(function (l) {
+      var ids = l.filter(function (r) { return r.situacao === 'enviada' && r.enviada && r.enviada < lim; }).map(function (r) { return r.id; });
+      return ids.length ? drive.apagar(ids).then(function () { return ids.length; }) : 0;
+    }).catch(function () { return 0; });
+  }
   // agrupar: por mês ou por pessoa (escolha só para engenheiro e Administrador; o fiscal só vê as fotos dele, por mês)
   var AGRUPAR = { mes: 'Por data', pessoa: 'Por pessoa' };   // por data: por dia até 16 dias; período maior, por semana
   var MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -543,16 +658,19 @@
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
     var ver = -1, grande = null, ocupado = null, cancelar = false, cidAuto = false, mv = null, guardadas = {}, carregando = null;
+    // fLocal: filtro de No aparelho ('aparelho' só aqui, 'fila', 'enviada' no Drive); lote: as fotos que entraram na fila nesta
+    // leva (id -> tamanho), para a barra contar "3 de 7" e os MB até a fila esvaziar; semRede: a aba do banco mostra as guardadas
+    var fLocal = '', lote = {}, semRede = 0, bx = null, bs = null, cfg = false;
     cacheIds().then(function (m) { guardadas = m; });
 
     function login() { return o.getLogin ? o.getLogin() : null; }
     function nv() { return o.nivel ? o.nivel() : 0; }
     function modo() { return nv() >= 2 ? agrupar || agruparPadrao(aba) : 'mes'; }
-    function abasVisiveis() { return ABAS.filter(function (a) { return a.nivel === 0 || (login() && nv() >= a.nivel); }); }
+    function abasVisiveis() { return ABAS.filter(function (a) { return (a.nivel === 0 && !a.login) || (login() && nv() >= a.nivel); }); }
     function q(s) { return root.querySelector(s); }
     function msgErro(e) {
       var c = (e && (e.code || e.erro || e.message)) || '';
-      if (c === 'sem_rede') return 'Sem conexão. As fotos guardadas neste aparelho continuam em "Neste aparelho".';
+      if (c === 'sem_rede') return 'Sem conexão. As fotos guardadas neste aparelho continuam em "No aparelho"; as baixadas aparecem aqui quando houver alguma.';
       if (c === 'codigo_invalido') return 'Seu acesso expirou ou mudou. Entre de novo.';
       if (c === 'sem_permissao' || c === 'so_criador') return 'Seu acesso não permite ver estas fotos.';
       if (c === 'sem_login') return 'Entre com o seu código para ver as fotos enviadas.';
@@ -588,7 +706,20 @@
         if (aba === 'local') return loc.map(function (r) { return locais[r.id]; });
         var l = login();
         if (!l) { var e = new Error('sem_login'); e.code = 'sem_login'; throw e; }
-        return o.Banco.fotosListar(l.codigo, aba, 1000).then(function (arr) { return arr.map(deBanco); });
+        semRede = 0;
+        return o.Banco.fotosListar(l.codigo, aba, 1000).then(function (arr) { return arr.map(deBanco); }, function (e) {
+          if (!e || (e.code || e.erro || e.message) !== 'sem_rede') throw e;
+          // sem sinal: as fotos baixadas para o app (dados e miniatura guardados), na regra da aba
+          return itensLer().then(function (gs) {
+            var uid = l.uid || null;
+            var arr = gs.map(function (x) { if (x.mini) minis[x.id] = x.mini; return x.dados; }).filter(function (it) {
+              return aba === 'todas' ? true : aba === 'relatorio' ? !!it.relatorio : aba === 'minhas' ? (uid ? it.autorUid === uid : it.autor === l.nome) : false;
+            });
+            if (!arr.length) throw e;
+            semRede = arr.length;
+            return arr;
+          });
+        });
       }).then(function (arr) {
         if (g !== geracao || !arr) return;
         arr.sort(function (a, b) { return String(b.em || '').localeCompare(String(a.em || '')); });
@@ -697,7 +828,8 @@
     }
     function semPeriodo(it) {
       return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
-        (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes);
+        (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
+        (aba !== 'local' || !fLocal || (!!locais[it.id] && locais[it.id].situacao === fLocal));
     }
     function noPeriodo(it, iv) { if (!iv) return true; var k = diaDaFoto(it.em); return !!k && k >= iv[0] && k <= iv[1]; }
     function filtrar() {
@@ -745,20 +877,34 @@
       }
       var ordem = function (m) { return Object.keys(m).map(function (k) { return [k, m[k] === 1 ? k : m[k]]; }).sort(function (a, b) { return a[1].localeCompare(b[1], 'pt-BR', { numeric: true }); }); };
       var h = '';
+      // No aparelho: Todas · Só aqui · Na fila · No Drive (cada uma com a quantidade; só as que têm foto)
+      if (aba === 'local' && itens.length) {
+        var cs = { aparelho: 0, fila: 0, enviada: 0 };
+        itens.forEach(function (it) { var lo = locais[it.id]; if (lo && cs[lo.situacao] != null) cs[lo.situacao]++; });
+        var chipL = function (v, t, k) { return '<button type="button" class="gl-chip" data-g="fl" data-v="' + v + '" aria-pressed="' + (fLocal === v) + '">' + t + ' · ' + k + '</button>'; };
+        h += '<div class="gl-chips" role="group" aria-label="Situação das fotos">' + chipL('', 'Todas', itens.length) +
+          [['aparelho', 'Só aqui'], ['fila', 'Na fila'], ['enviada', 'No Drive']].filter(function (x) { return cs[x[0]] || fLocal === x[0]; })
+            .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>';
+      }
       if ((Object.keys(ps).length || filtro.pid || semPonto) && !ehCons(filtro.cid)) {
         h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>';
       }
       if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
       var iv = intervaloPer(per);
-      h += '<button type="button" class="gl-per' + (iv ? ' on' : '') + '" data-g="per" aria-haspopup="dialog" aria-label="Período: ' + esc(rotuloPer(per)) + '">' + CAL +
-        '<span>' + esc(rotuloPer(per)) + '</span><span aria-hidden="true">▾</span></button>';
       if (itens.length && nv() >= 2) {
         var g = modo();
         h += '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).map(function (k) {
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>';
       }
-      if (per.modo === 'semana' && iv) {
+      // período em fichas; "Escolher…" abre a janela (hoje, semana passada, todas as datas, de… até…) e mostra o escolhido nela
+      var atual = per.modo === 'semana' ? (per.off ? '' : 'semana0') : per.modo, fichas = [['semana0', 'Esta semana'], ['sem2', '2 semanas'], ['mes', 'Mês'], ['mes3', '3 meses']];
+      var outro = !fichas.some(function (f2) { return f2[0] === atual; });
+      h += '<div class="gl-chips gl-pers" role="group" aria-label="Período">' + fichas.map(function (f2) {
+        return '<button type="button" class="gl-chip" data-g="per-chip" data-k="' + f2[0] + '" aria-pressed="' + (atual === f2[0]) + '">' + f2[1] + '</button>';
+      }).join('') + '<button type="button" class="gl-chip gl-per" data-g="per" aria-haspopup="dialog" aria-pressed="' + outro + '" aria-label="Período: ' + esc(outro ? rotuloPer(per) : 'escolher') + '">' +
+        CAL + '<span>' + esc(outro ? rotuloPer(per) : 'Escolher…') + '</span></button></div>';
+      if (per.modo === 'semana' && iv && per.off) {
         var off = per.off || 0;
         h += '<div class="gl-sem"><button type="button" data-g="per-ant" aria-label="Semana anterior">‹</button><div><b>' +
           esc(!off ? 'Esta semana' : off === -1 ? 'Semana passada' : 'Semana') + '</b><small>' + esc(faixaTxt(iv[0], maisDias(iv[0], 6))) + ' · segunda a domingo</small></div>' +
@@ -787,16 +933,34 @@
     }
 
     // ---------------------------------------------------------------- tela
-    function badge(it) {
-      if (it.origem === 'local') {
-        if (it.situacao === 'enviada') return '<span class="gl-b ok">Enviada</span>';
-        if (it.situacao === 'aparelho') return '<span class="gl-b ap">Só no aparelho</span>';
-        if (it.erro && it.erro !== 'rede') return '<span class="gl-b erro">Tentando de novo</span>';
-        return '<span class="gl-b fila">Na fila</span>';
+    // onde a foto está, no canto de cima à direita: ☁ no Drive (e aqui), ▯ só aqui, fila, subindo, ! tentando de novo;
+    // da equipe: ▯ baixada neste aparelho, ⤓ só no Drive
+    function estado(it) {
+      if (aba === 'deletadas') return '';
+      var lo = locais[it.id];
+      if (lo) {
+        var sobe = o.drive && o.drive.info ? o.drive.info().emEnvio : null;
+        if (lo.situacao === 'enviada') return '<span class="gl-s ok" title="No Drive e neste aparelho">' + IC_NUVEM + '</span>';
+        if (lo.situacao === 'aparelho') return '<span class="gl-s" title="Só neste aparelho">' + IC_APAR + '</span>';
+        if (it.id === sobe) return '<span class="gl-s sobe" title="Subindo para o Drive"></span>';
+        if (lo.erro && lo.erro !== 'rede') return '<span class="gl-s erro" title="Tentando de novo">!</span>';
+        return '<span class="gl-s fila" title="Na fila do Drive">fila</span>';
       }
+      if (it.origem !== 'banco') return '';
+      return it.driveId && guardadas[it.driveId] ? '<span class="gl-s" title="Baixada neste aparelho">' + IC_APAR + '</span>'
+        : '<span class="gl-s nuvem" title="Só no Drive">' + IC_BAIXA + '</span>';
+    }
+    function badge(it) {
+      if (selecionando) return '';
       if (aba === 'deletadas') return '<span class="gl-b erro">Apagada</span>';
-      if (!it.pid && !ehCons(it.cid)) return '<span class="gl-b sp">Sem ponto</span>';
-      return locais[it.id] ? '<span class="gl-b">No aparelho</span>' : '';
+      if (it.origem === 'banco' && !it.pid && !ehCons(it.cid)) return '<span class="gl-b sp">Sem ponto</span>';
+      return '';
+    }
+    function legendaHtml() {
+      var s1 = function (c, ic, t) { return '<span><span class="gl-s ' + c + '">' + ic + '</span>' + t + '</span>'; };
+      if (aba === 'local') return '<div class="gl-leg">' + s1('ok', IC_NUVEM, 'no Drive') + s1('', IC_APAR, 'só aqui') + s1('fila', 'fila', 'vai subir') + s1('sobe', '', 'subindo') + '</div>';
+      if (aba === 'deletadas') return '';
+      return '<div class="gl-leg">' + s1('nuvem', IC_BAIXA, 'só no Drive') + s1('', IC_APAR, 'baixada neste aparelho') + '</div>';
     }
     // legenda em duas linhas: "P14 · km 756,30" em destaque; embaixo o dia (a hora, quando o grupo já é o dia) e quem tirou.
     // Em "Todos" os contratos, o nº do contrato na frente da 2ª linha ("314 · 16/10 · Bruno")
@@ -810,7 +974,7 @@
       var rotulo = [it.pid || ehCons(it.cid) ? '' : 'Sem ponto', it.pnome, kmTxt(it.km), quem ? it.autor : '', hora(it.em)].filter(Boolean).join(', ');
       return '<button type="button" class="gl-t" data-i="' + i + '" data-id="' + esc(it.id) + '"' + (m ? '' : ' data-falta') +
         (selecionando ? ' aria-pressed="' + !!sel[it.id] + '"' : '') + ' aria-label="' + esc(rotulo) + '">' +
-        (m ? '<img alt="" src="' + esc(m) + '">' : '<img alt="">') + badge(it) +
+        (m ? '<img alt="" src="' + esc(m) + '">' : '<img alt="">') + badge(it) + estado(it) +
         (it.relatorio && !selecionando ? '<span class="gl-star" title="No relatório">★</span>' : '') +
         (selecionando ? '<span class="gl-ck"></span>' : '') + '<span class="gl-cap" title="' + esc(cap) + '"><b>' + esc(l1) + '</b>' + (l2 ? '<span>' + esc(l2) + '</span>' : '') + '</span></button>';
     }
@@ -843,9 +1007,8 @@
         if (soAp) t += ' · ' + plural(soAp, 'só no aparelho (não vai para o Drive)', 'só no aparelho (não vão para o Drive)');
         var b = '';
         if (soAp) b += '<button type="button" class="btn small primary" data-g="enviar-ap">Enviar ' + (soAp === 1 ? 'esta' : 'as ' + soAp) + ' ao Drive</button>';
-        if (pend && login() && !inf.busy) b += '<button type="button" class="btn small" data-g="enviar">Enviar agora</button>';
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
-        if (env) b += '<button type="button" class="btn small" data-g="limpar">Liberar espaço (' + env + ')</button>';
+        b += '<button type="button" class="gl-cfg" data-g="cfg">' + IC_CFG + 'Espaço e envio</button>';
         return '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
       }
       var txt = {
@@ -860,8 +1023,9 @@
         '<button type="button" class="btn small" data-g="drive-pastas">Pastas do Drive pelo nº do contrato</button>' : '';
       // Administrador: confere se a galeria e a pasta Deletados do Drive dizem a mesma coisa (só lê; nada muda)
       if (aba === 'deletadas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl()) trazer += '<button type="button" class="btn small" data-g="drive-conferir">Conferir com o Drive</button>';
-      var ivI = intervaloPer(per);
-      return '<span class="gl-txt"><b>' + plural(lista.length, 'foto', 'fotos') + '</b>' + (ivI ? ' · ' + esc(faixaTxt(ivI[0], ivI[1])) : '') + foraHtml() + ' · ' + txt + '</span>' + trazer +
+      var ivI = intervaloPer(per), bytesL = lista.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
+      return '<span class="gl-txt">' + (ivI ? esc(faixaTxt(ivI[0], ivI[1])) + ' · ' : '') + '<b>' + plural(lista.length, 'foto', 'fotos') + '</b>' +
+        (bytesL ? ' · ' + tam(bytesL) + ' no tamanho original' : '') + foraHtml() + ' · ' + txt + '</span>' + trazer +
         (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
     }
     function foraHtml() {
@@ -870,7 +1034,7 @@
     }
     function selBtn() {
       if (!lista.length) return '';
-      return selecionando ? '<button type="button" class="btn small" data-g="todas">Selecionar todas (' + lista.length + ')</button>'
+      return selecionando ? '<button type="button" class="btn small" data-g="todas">' + (intervaloPer(per) ? 'Tudo do período' : 'Selecionar todas') + ' (' + lista.length + ')</button>'
         : '<button type="button" class="btn small" data-g="selecionar">Selecionar</button>' +
           '<button type="button" class="btn small" data-g="baixar-tudo">Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length) + '</button>';
     }
@@ -879,9 +1043,9 @@
       if (erroTxt) return '<div class="gl-vazio">' + esc(erroTxt) + (login() ? '' : '<br><button type="button" class="btn small primary" data-g="entrar">Entrar</button>') + '</div>';
       if (!itens.length) {
         return '<div class="gl-vazio">' + ({
-          local: 'Nenhuma foto guardada neste aparelho. As fotos com carimbo (botão Foto) ficam aqui até você apagar.',
+          local: 'Nenhuma foto guardada neste aparelho. As fotos com carimbo (botão Foto) ficam aqui assim que você tira.',
           minhas: 'Você ainda não enviou fotos.', todas: 'Nenhuma foto enviada pela equipe ainda.',
-          relatorio: 'Nenhuma foto marcada para o relatório. Marque com ★ em "Todas".', deletadas: 'Nenhuma foto apagada do Drive.'
+          relatorio: 'Nenhuma foto marcada para o relatório. Marque com ★ em "Equipe".', deletadas: 'Nenhuma foto na lixeira.'
         }[aba]) + '</div>';
       }
       if (!lista.length) {
@@ -892,11 +1056,13 @@
         }
         return '<div class="gl-vazio">Nenhuma foto com esses filtros.</div>';
       }
+      var rotG = modo() === 'pessoa' ? 'Selecionar as da pessoa' : porDia() ? 'Selecionar o dia' : 'Selecionar a semana';
       return grupos().map(function (g) {
-        return '<h3 class="gl-g">' + esc(g.nome) + ' <small>' + plural(g.idx.length, 'foto', 'fotos') + '</small>' +
-          (selecionando ? '<button type="button" data-g="sel-grupo" data-idx="' + g.idx.join(',') + '">Selecionar o grupo</button>' : '') + '</h3>' +
+        var bg = g.idx.reduce(function (a, i) { return a + (lista[i].tamanho || 0); }, 0);
+        return '<h3 class="gl-g">' + esc(g.nome) + ' <small>' + plural(g.idx.length, 'foto', 'fotos') + (bg && !selecionando ? ' · ' + tam(bg) : '') + '</small>' +
+          (selecionando ? '<button type="button" data-g="sel-grupo" data-idx="' + g.idx.join(',') + '">' + rotG + '</button>' : '') + '</h3>' +
           '<div class="gl-grid">' + g.idx.map(function (i) { return tile(lista[i], i); }).join('') + '</div>';
-      }).join('');
+      }).join('') + legendaHtml();
     }
     // ---------------------------------------------------------------- janela do período
     function pfAbrir() {
@@ -966,7 +1132,8 @@
       if (ocupado) return '<div class="gl-bar"><span class="gl-prog">' + esc(ocupado) + '</span><button type="button" class="btn small" data-g="cancelar">Parar</button></div>';
       if (!selecionando) return '';
       var ls = selecionadas();
-      return '<div class="gl-bar"><span class="gl-n">' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') : 'Toque nas fotos') + '</span>' +
+      var bs0 = ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
+      return '<div class="gl-bar"><span class="gl-n">' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') + (bs0 ? ' · ' + tam(bs0) : '') : 'Toque nas fotos') + '</span>' +
         acoes(ls).map(function (a) { return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '">' + esc(a.t) + '</button>'; }).join('') +
         '<button type="button" class="btn small" data-g="sair-sel">Cancelar</button></div>';
     }
@@ -978,6 +1145,7 @@
         return '<button type="button" class="gl-tab" role="tab" data-aba="' + a.k + '" aria-selected="' + (a.k === aba) + '">' + esc(a.t) +
           (a.k === aba && itens.length ? '<small>' + itens.length + '</small>' : '') + '</button>';
       }).join('') : '';
+      renderEnv();
       q('.gl-cts').innerHTML = contratosHtml();
       q('.gl-fil').innerHTML = filtrosHtml();
       q('.gl-info').innerHTML = carregando && !itens.length ? '' : infoHtml();
@@ -988,6 +1156,183 @@
       if (ver >= 0) renderVer();
     }
     function renderBar() { if (root) q('.gl-barhost').innerHTML = barHtml(); }
+    function renderEnv() { if (root) { var e = q('.gl-env'); if (e) e.innerHTML = envioHtml() + baixaHtml() + (semRede && aba !== 'local' ? '<div class="gl-off">Sem conexão: mostrando ' + (semRede === 1 ? 'a foto baixada' : 'as ' + semRede + ' fotos baixadas') + ' neste aparelho.</div>' : ''); } }
+
+    // ---------------------------------------------------------------- barra de envio ao Drive
+    function envioHtml() {
+      if (!o.drive || !o.drive.info) return '';
+      var fila = Object.keys(locais).filter(function (k) { return locais[k].situacao === 'fila'; });
+      if (!fila.length) { lote = {}; return ''; }
+      fila.forEach(function (k) { lote[k] = locais[k].tamanho || 0; });
+      var ids = Object.keys(lote).filter(function (k) { return locais[k]; }), tot = 0, feito = 0, nf0 = 0;
+      ids.forEach(function (k) { tot += lote[k]; if (locais[k].situacao === 'enviada') { feito += lote[k]; nf0++; } });
+      var inf = o.drive.info(), n = ids.length, agora = Math.min(n, nf0 + (inf.busy ? 1 : 0)) || 1;
+      var pd = inf.prox ? new Date(inf.prox) : null, quando = pd ? ' (tenta às ' + pad(pd.getHours()) + ':' + pad(pd.getMinutes()) + ')' : '';
+      var parado = !login() || inf.pausado || inf.esperaWifi || inf.erro === 'codigo';
+      var motivo = !login() ? 'Entre com o seu código para enviar.' : inf.erro === 'codigo' ? 'Seu acesso mudou: entre de novo para enviar.'
+        : inf.pausado ? 'Pausado por você. As fotos esperam neste aparelho.' : inf.esperaWifi ? 'Esperando o Wi-Fi ("só no Wi-Fi" está ligado).'
+        : inf.erro === 'rede' || navigator.onLine === false ? 'Sem sinal: envia sozinho quando voltar' + quando + '.'
+        : inf.busy ? 'Segue sozinho enquanto o app estiver aberto.' : 'Esperando a vez' + quando + '.';
+      var bts = !login() ? (o.entrar ? '<button type="button" data-g="entrar">Entrar</button>' : '')
+        : inf.pausado ? '<button type="button" data-g="env-cont">Continuar</button>'
+        : '<button type="button" data-g="env-pausa">Pausar</button>' + (!inf.busy && inf.erro !== 'codigo' ? '<button type="button" data-g="enviar">Enviar agora</button>' : '');
+      var pct = tot ? Math.round(100 * feito / tot) : Math.round(100 * nf0 / n);
+      return '<div class="gl-prg' + (parado ? ' pausa' : '') + '" role="status"><div class="gl-prg-l"><b>' + IC_SOBE + ' ' + (parado ? 'Envio ao Drive parado · ' + nf0 + ' de ' + n + (n === 1 ? ' enviada' : ' enviadas') : 'Enviando ao Drive · ' + agora + ' de ' + n) + '</b>' +
+        '<span>' + mb(feito) + ' de ' + mb(tot) + '</span></div><div class="gl-prg-b"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="gl-prg-r"><span>' + esc(motivo) + '</span>' + bts + '</div></div>';
+    }
+
+    // ---------------------------------------------------------------- baixar várias: para onde, quanto ocupa e o andamento
+    function noAparelho(it) { return !!((locais[it.id] && locais[it.id].temArquivo) || (it.driveId && guardadas[it.driveId])); }
+    function abrirBaixar(ls) {
+      var faltam = ls.filter(function (x) { return !noAparelho(x); });
+      bs = { ls: ls, alvo: faltam.length && aba !== 'local' ? 'app' : 'galeria', wifi: false };
+      renderBaixar();
+    }
+    function fecharBaixar() { bs = null; var el = root && q('.gl-sh.bx'); if (el) el.remove(); }
+    function renderBaixar() {
+      if (!root || !bs) return;
+      var ls = bs.ls, n = ls.length, faltam = ls.filter(function (x) { return !noAparelho(x); });
+      var soma = function (l) { return l.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0); }, bTot = soma(ls), bFal = soma(faltam);
+      var comp = o.podeCompartilharFotos ? o.podeCompartilharFotos() : false;
+      var op = function (v, t, d) { return '<button type="button" class="gl-op" data-g="bx-op" data-v="' + v + '" aria-pressed="' + (bs.alvo === v) + '"><i aria-hidden="true"></i><span><b>' + t + '</b><small>' + d + '</small></span></button>'; };
+      var h = '<div class="gl-sh-box" role="dialog" aria-modal="true" aria-labelledby="glBxT"><div class="gl-sh-top"><h3 id="glBxT">Baixar ' + plural(n, 'foto', 'fotos') + (bTot ? ' · ' + tam(bTot) : '') + '</h3>' +
+        '<button type="button" class="btn small" data-g="bx-fechar" aria-label="Fechar">✕</button></div>';
+      if (aba !== 'local') h += op('app', 'No app (abrir sem internet)', faltam.length ? 'Ficam nesta galeria para abrir sem sinal. Ocupa ' + mb(bFal) + ' neste aparelho' + (faltam.length < n ? ' (' + (n - faltam.length) + ' já estão aqui)' : '') + '.' : 'Todas já estão neste aparelho.');
+      h += comp ? op('galeria', 'Na galeria de fotos do celular', 'Abre o compartilhar do celular: no iPhone, toque em <b>Salvar ' + (n === 1 ? 'imagem' : n + ' imagens') + '</b>; no Android, escolha Galeria, Fotos ou Arquivos.')
+        : op('galeria', 'No computador (.zip)', 'Vai para a pasta de downloads' + (n > POR_ZIP ? ', em ' + Math.ceil(n / POR_ZIP) + ' arquivos .zip de até ' + POR_ZIP + ' fotos' : ', num arquivo .zip') + '.');
+      if (aba !== 'local') h += op('mini', 'Só as miniaturas', 'Para ver sem sinal sem ocupar espaço: cerca de ' + mb(n * 25000) + '.');
+      if (o.drive && o.drive.sabeRede && o.drive.sabeRede()) h += '<label class="gl-ckl"><input type="checkbox" id="glBxWifi"' + (bs.wifi ? ' checked' : '') + '> Só no Wi-Fi' + (rede() === 'cellular' ? ' (você está nos dados móveis: começa quando conectar)' : '') + '</label>';
+      h += '<p class="gl-mv-nota">O download segue enquanto o app estiver aberto, mesmo com a galeria fechada; a barra mostra quantas faltam e os MB.</p>';
+      var bt = bs.alvo === 'app' ? (faltam.length ? 'Baixar ' + mb(bFal) : 'Já estão aqui') : bs.alvo === 'mini' ? 'Guardar miniaturas' : 'Baixar' + (bTot ? ' ' + tam(bTot) : '');
+      h += '<div class="gl-sh-acts"><button type="button" class="btn" data-g="bx-fechar">Cancelar</button><button type="button" class="btn primary" data-g="bx-ir"' + (bs.alvo === 'app' && !faltam.length ? ' disabled' : '') + '>' + IC_BAIXA.replace('aria-hidden', 'width="15" height="15" aria-hidden') + ' ' + bt + '</button></div></div>';
+      var el = q('.gl-sh.bx');
+      if (!el) { el = document.createElement('div'); el.className = 'gl-sh bx'; root.appendChild(el); }
+      el.innerHTML = h;
+    }
+    function baixaHtml() {
+      if (!bx) return '';
+      var n = bx.ls.length, pct = bx.total ? Math.round(100 * bx.feitos / bx.total) : Math.round(100 * bx.i / n), parado = bx.pausa || bx.esperaWifi;
+      var oque = bx.alvo === 'mini' ? 'Guardando miniaturas' : bx.alvo === 'app' ? 'Baixando para o app' : 'Baixando';
+      var motivo = bx.pausa ? 'Pausado.' : bx.esperaWifi ? 'Esperando o Wi-Fi.' : bx.montando ? 'Preparando os arquivos…' : 'Segue enquanto o app estiver aberto, mesmo com a galeria fechada.';
+      return '<div class="gl-prg' + (parado ? ' pausa' : '') + '" role="status"><div class="gl-prg-l"><b>' + IC_BAIXA.replace('aria-hidden', 'width="14" height="14" aria-hidden') + ' ' + oque + ' · ' + Math.min(n, bx.i + 1) + ' de ' + n + '</b>' +
+        (bx.total ? '<span>' + mb(bx.feitos) + ' de ' + mb(bx.total) + '</span>' : '') + '</div><div class="gl-prg-b"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="gl-prg-r"><span>' + esc(motivo) + (bx.falhas ? ' ' + plural(bx.falhas, 'não veio', 'não vieram') + '.' : '') + '</span>' +
+        (bx.montando ? '' : (bx.pausa ? '<button type="button" data-g="bx-cont">Continuar</button>' : '<button type="button" data-g="bx-pausa">Pausar</button>') + '<button type="button" data-g="bx-parar">Cancelar</button>') + '</div></div>';
+    }
+    function avisaBaixa() { renderEnv(); if (o.onBaixa) o.onBaixa(); }
+    function iniciarBaixa() {
+      if (!bs || bx) return;
+      var alvo = bs.alvo, ls = alvo === 'app' ? bs.ls.filter(function (x) { return !noAparelho(x); }) : bs.ls.slice();
+      var wifi = bs.wifi;
+      fecharBaixar();
+      if (!ls.length) return;
+      var nomes = nomesUnicos(ls);
+      bx = { ls: ls, nomes: nomes, alvo: alvo, wifi: wifi, i: 0, ok: 0, falhas: 0, feitos: 0, arquivos: [], rotulo: ({ local: 'Fotos deste aparelho', minhas: 'Minhas fotos', todas: 'Fotos da equipe', relatorio: 'Relatório fotográfico', deletadas: 'Fotos apagadas' }[aba]) + ' ' + new Date().toISOString().slice(0, 10),
+        total: alvo === 'mini' ? 0 : ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0) };
+      selecionando = false; sel = {};
+      render();
+      baixaPasso();
+    }
+    function miniPara(it) {
+      if (minis[it.id]) return Promise.resolve(minis[it.id]);
+      var lg = login();
+      if (!lg || !o.Banco || !o.Banco.fotosMini) return Promise.resolve(null);
+      return o.Banco.fotosMini(lg.codigo, [it.id]).then(function (arr) {
+        var m = arr && arr[0] ? 'data:image/jpeg;base64,' + arr[0].jpeg : null;
+        if (m) { minis[it.id] = m; mostrarMini(it.id); }
+        return m;
+      }, function () { return null; });
+    }
+    function baixaPasso() {
+      if (!bx || bx.rodando) return;
+      if (bx.parar) { bx = null; avisaBaixa(); if (o.toast) o.toast('Download cancelado.'); return; }
+      if (bx.pausa) { avisaBaixa(); return; }
+      if (bx.wifi && rede() === 'cellular') { bx.esperaWifi = true; avisaBaixa(); return; }   // volta no evento da rede
+      bx.esperaWifi = false;
+      if (bx.i >= bx.ls.length) { concluirBaixa(); return; }
+      var b = bx, it = b.ls[b.i], k = b.i;
+      b.rodando = true;
+      avisaBaixa();
+      var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return itemGravar(it, m); })
+        : arquivo(it).then(function (bl) {
+          if (b.alvo === 'galeria') b.arquivos.push({ name: b.nomes[k], blob: bl, date: data(it.em) || new Date() });
+          else if (it.origem === 'banco') return miniPara(it).then(function (m) { return itemGravar(it, m); }).then(function () { return bl; });
+          return bl;
+        });
+      passo.then(function (bl) { b.ok++; b.feitos += (bl && bl.size) || it.tamanho || 0; }, function () { b.falhas++; }).then(function () {
+        b.rodando = false;
+        if (bx !== b) return;
+        b.i++;
+        baixaPasso();
+      });
+    }
+    function concluirBaixa() {
+      var b = bx;
+      var fim = function (t) {
+        bx = null;
+        cacheIds().then(function (m) { guardadas = m; if (root && !selecionando) render(); });
+        avisaBaixa();
+        if (o.toast && t) o.toast(t + (b.falhas ? ' ' + plural(b.falhas, 'foto não veio', 'fotos não vieram') + ' (sem conexão ou ainda não chegaram ao Drive).' : ''), b.falhas ? 7000 : 4000);
+      };
+      if (b.alvo !== 'galeria') { fim(b.alvo === 'mini' ? plural(b.ok, 'miniatura guardada', 'miniaturas guardadas') + ' para ver sem sinal.' : plural(b.ok, 'foto baixada', 'fotos baixadas') + ' para o app (abre sem sinal).'); return; }
+      if (!b.arquivos.length) { fim('Nenhuma foto veio.'); return; }
+      b.montando = true; avisaBaixa();
+      (o.salvarFotos && o.podeCompartilharFotos && o.podeCompartilharFotos() ? o.salvarFotos(b.arquivos, b.rotulo) : salvarZip(b.arquivos, b.rotulo)).then(function () { fim(''); }, function () { fim('Não foi possível entregar as fotos. Tente com menos fotos.'); });
+    }
+    function salvarZip(files, rotulo) {
+      var partes = Math.ceil(files.length / POR_ZIP), cadeia = Promise.resolve();
+      for (var i = 0; i < partes; i++) (function (i) {
+        cadeia = cadeia.then(function () { return zip(files.slice(i * POR_ZIP, (i + 1) * POR_ZIP)); }).then(function (z) { return o.saveBlob(rotulo + (partes > 1 ? ' - parte ' + (i + 1) : '') + '.zip', z); });
+      })(i);
+      return cadeia;
+    }
+    if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener('change', function () { if (bx && bx.esperaWifi) baixaPasso(); });
+
+    // ---------------------------------------------------------------- Espaço e envio (No aparelho)
+    function abrirCfg() { cfg = true; renderCfg(); }
+    function fecharCfg() { cfg = false; var el = root && q('.gl-sh.cf'); if (el) el.remove(); }
+    function renderCfg() {
+      if (!root || !cfg) return;
+      cacheUso().then(function (u) {
+        if (!root || !cfg) return;
+        var all = Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.temArquivo; });
+        var aqui = all.filter(function (x) { return x.situacao !== 'enviada'; }).reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
+        var envs = all.filter(function (x) { return x.situacao === 'enviada'; }), noDrive = envs.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
+        var tot = aqui + noDrive + u.bytes + u.mini, pc = function (b) { return tot ? Math.max(b ? 1 : 0, Math.round(100 * b / tot)) : 0; };
+        var auto = lsLer(DRIVE_KEY) !== '0', manter = lsLer(MANTER_KEY) || '';
+        var sw = function (g, on, rot) { return '<button type="button" class="gl-sw" role="switch" data-g="' + g + '" aria-checked="' + on + '" aria-label="' + esc(rot) + '"></button>'; };
+        var h = '<div class="gl-sh-box" role="dialog" aria-modal="true" aria-labelledby="glCfT"><div class="gl-sh-top"><h3 id="glCfT">Fotos neste aparelho</h3><button type="button" class="btn small" data-g="cfg-fechar" aria-label="Fechar">✕</button></div>' +
+          '<div class="gl-uso"><div class="gl-uso-t"><span>Espaço usado pelas fotos</span><span>' + mb(tot) + '</span></div>' +
+          '<div class="gl-uso-b"><span style="width:' + pc(aqui) + '%;background:#9A5B00"></span><span style="width:' + pc(noDrive) + '%;background:#1E7A47"></span><span style="width:' + pc(u.bytes) + '%;background:var(--accent,#1D4F91)"></span><span style="width:' + pc(u.mini) + '%;background:#8E9A93"></span></div>' +
+          '<div class="gl-uso-l"><span><b style="color:#9A5B00">■</b> só aqui ' + mb(aqui) + '</span><span><b style="color:#1E7A47">■</b> já no Drive ' + mb(noDrive) + '</span><span><b style="color:var(--accent,#1D4F91)">■</b> baixadas do Drive ' + mb(u.bytes) + '</span><span><b style="color:#8E9A93">■</b> miniaturas ' + mb(u.mini) + '</span></div></div>' +
+          '<div class="gl-cx"><h4>Ao tirar a foto</h4>' +
+          '<div class="gl-ln"><div><b>Enviar ao Drive automaticamente</b><small>Vai para a fila ao sair da foto (Tirar outra, Ver na galeria, fechar); sobe quando houver sinal.</small></div>' + sw('cfg-auto', auto, 'Enviar ao Drive automaticamente') + '</div>' +
+          (o.drive && o.drive.sabeRede && o.drive.sabeRede() ? '<div class="gl-ln"><div><b>Enviar só no Wi-Fi</b><small>Nos dados móveis a foto espera na fila.</small></div>' + sw('cfg-wifi', o.drive.soWifi(), 'Enviar só no Wi-Fi') + '</div>' : '') +
+          '</div><div class="gl-cx"><h4>Manter no aparelho</h4>' +
+          '<div class="gl-ln"><div><b>Fotos já enviadas</b><small>Depois disso saem deste aparelho e ficam só no Drive (continuam em Minhas e Equipe).</small></div><select id="glCfManter" aria-label="Manter as já enviadas">' +
+            [['', 'Sempre'], ['7', '1 semana'], ['14', '2 semanas'], ['30', '1 mês'], ['90', '3 meses']].map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === manter ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></div>' +
+          '<div class="gl-ln"><div><b>Fotos que ainda não subiram</b><small>Nunca saem sozinhas.</small></div></div>' +
+          '<div class="gl-ln"><div><b>Liberar espaço agora</b><small>' + (envs.length ? 'Tirar deste aparelho as ' + plural(envs.length, 'foto', 'fotos') + ' que já estão no Drive (' + mb(noDrive) + ').' : 'Nenhuma foto enviada guardada aqui.') + '</small></div>' +
+            '<button type="button" class="btn small danger" data-g="limpar"' + (envs.length ? '' : ' disabled') + '>Liberar</button></div>' +
+          '<div class="gl-ln"><div><b>Baixadas do Drive</b><small>' + (u.n || u.itens ? plural(u.n, 'foto inteira', 'fotos inteiras') + ' (' + mb(u.bytes) + ')' + (u.itens ? ' e ' + plural(u.itens, 'miniatura', 'miniaturas') : '') + '.' : 'Nenhuma.') + '</small></div>' +
+            '<button type="button" class="btn small danger" data-g="cfg-cache"' + (u.n || u.itens ? '' : ' disabled') + '>Apagar</button></div>' +
+          '</div></div>';
+        var el = q('.gl-sh.cf');
+        if (!el) { el = document.createElement('div'); el.className = 'gl-sh cf'; root.appendChild(el); }
+        el.innerHTML = h;
+      });
+    }
+    function apagarCache() {
+      o.confirmar({ titulo: 'Apagar as fotos baixadas do Drive?', botao: 'Apagar', perigo: true,
+        html: '<p>Saem só deste aparelho: continuam no Drive e na galeria da equipe. Sem sinal, elas não abrem mais aqui.</p>' }).then(function (ok) {
+        if (!ok) return;
+        window.GaleriaLimparCache();
+        guardadas = {};
+        o.toast('Fotos baixadas apagadas deste aparelho.');
+        render(); renderCfg();
+      });
+    }
 
     // ---------------------------------------------------------------- foto aberta
     function soltarGrande() { if (grande) { URL.revokeObjectURL(grande.url); grande = null; } }
@@ -1067,6 +1412,7 @@
     }
     function baixar(ls) {
       if (!ls.length || ocupado) return;
+      if (bx && ls.length > 1) { o.toast('Espere o download que está em andamento (ou cancele na barra).', 5000); return; }
       if (ls.length === 1) {
         var it = ls[0];
         if (o.toast) o.toast('Baixando a foto…');
@@ -1074,40 +1420,7 @@
         p.then(function (b) { return o.saveBlob(nomesUnicos([it])[0], b); }, function (e) { o.toast(erroArquivo(e), 5000); });
         return;
       }
-      var partes = Math.ceil(ls.length / POR_ZIP), total = ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
-      o.confirmar({ titulo: 'Baixar ' + ls.length + ' fotos', botao: 'Baixar',
-        html: '<p>As fotos inteiras vêm ' + (ls.every(function (x) { return locais[x.id] && locais[x.id].temArquivo; }) ? 'deste aparelho' : 'do Drive da equipe') +
-          (total ? ' (cerca de ' + tam(total) + ')' : '') + ' e são salvas em ' + (partes === 1 ? 'um arquivo .zip' : partes + ' arquivos .zip de até ' + POR_ZIP + ' fotos') + '.</p>' +
-          (total > 50 * 1048576 ? '<p>É bastante coisa: prefira uma rede Wi-Fi.</p>' : '') }).then(function (ok) {
-        if (!ok) return;
-        cancelar = false;
-        var nomes = nomesUnicos(ls), falhas = 0, parte = 0;
-        var rotulo = ({ local: 'Fotos deste aparelho', minhas: 'Minhas fotos', todas: 'Fotos da equipe', relatorio: 'Relatório fotográfico', deletadas: 'Fotos apagadas' }[aba]) +
-          ' ' + new Date().toISOString().slice(0, 10);
-        function lote(ini) {
-          if (cancelar || ini >= ls.length) return Promise.resolve();
-          parte++;
-          var files = [], fim = Math.min(ls.length, ini + POR_ZIP);
-          var cadeia = Promise.resolve();
-          for (var i = ini; i < fim; i++) (function (i) {
-            cadeia = cadeia.then(function () {
-              if (cancelar) return;
-              ocupado = 'Baixando ' + (i + 1) + ' de ' + ls.length + '…'; renderBar();
-              return arquivo(ls[i]).then(function (b) { files.push({ name: nomes[i], blob: b, date: data(ls[i].em) || new Date() }); }, function () { falhas++; });
-            });
-          })(i);
-          return cadeia.then(function () {
-            if (cancelar || !files.length) return;
-            ocupado = 'Montando o .zip…'; renderBar();
-            return zip(files).then(function (z) { return o.saveBlob(rotulo + (partes > 1 ? ' - parte ' + parte : '') + '.zip', z); });
-          }).then(function () { return lote(fim); });
-        }
-        lote(0).then(function () {
-          ocupado = null; renderBar();
-          if (cancelar) o.toast('Download parado.');
-          else if (falhas) o.toast(plural(falhas, 'foto não pôde ser baixada', 'fotos não puderam ser baixadas') + ' (sem conexão ou ainda não chegaram ao Drive).', 6000);
-        }, function () { ocupado = null; renderBar(); o.toast('Não foi possível montar o arquivo. Tente com menos fotos.', 6000); });
-      });
+      abrirBaixar(ls);
     }
     function relatorio(ls, marcar) {
       var l = login(), ids = ls.filter(function (x) { return x.origem === 'banco' && x.situacao === 'ativa'; }).map(function (x) { return x.id; });
@@ -1203,7 +1516,7 @@
           ocupado = null;
           if (ver >= 0) fecharVer();
           sel = {}; selecionando = false;
-          var t = feitos ? plural(feitos, apagar ? 'foto foi para Deletados' : 'foto restaurada', apagar ? 'fotos foram para Deletados' : 'fotos restauradas') + '.' : '';
+          var t = feitos ? plural(feitos, apagar ? 'foto foi para a Lixeira' : 'foto restaurada', apagar ? 'fotos foram para a Lixeira' : 'fotos restauradas') + '.' : '';
           var f0 = falhas.indexOf('nao_desfeito') >= 0 ? 'nao_desfeito' : falhas.indexOf('sem_rede') >= 0 ? 'sem_rede' : falhas[0];
           if (falhas.length) t += ' ' + plural(falhas.length, 'não foi', 'não foram') + ' (' + motivoDrive(f0) + ').';
           o.toast(t.trim(), 6000);
@@ -1678,6 +1991,7 @@
 
     function onClick(e) {
       if (pf && e.target.classList && e.target.classList.contains('gl-pf')) { pfFechar(); return; }   // toque no fundo escuro
+      if (e.target.classList && e.target.classList.contains('gl-sh')) { if (bs) fecharBaixar(); else fecharCfg(); return; }
       var t = e.target.closest('[data-g],[data-aba],[data-ct],.gl-t');
       if (!t || !root.contains(t)) return;
       if (t.hasAttribute('data-ct')) {
@@ -1690,7 +2004,7 @@
       if (t.hasAttribute('data-aba')) {
         var a = t.getAttribute('data-aba');
         if (a === aba) return;
-        aba = a; agrupar = ''; filtro.autor = ''; sel = {}; selecionando = false; itens = [];
+        aba = a; agrupar = ''; filtro.autor = ''; sel = {}; selecionando = false; itens = []; fLocal = ''; semRede = 0;
         carregar();
         return;
       }
@@ -1703,6 +2017,22 @@
       }
       var g = t.getAttribute('data-g');
       if (g === 'per') { pfAbrir(); return; }
+      if (g === 'per-chip') { var kc = t.getAttribute('data-k'); mudarPer(kc === 'semana0' ? { modo: 'semana', off: 0, de: '', ate: '' } : { modo: kc, off: 0, de: '', ate: '' }); return; }
+      if (g === 'fl') { fLocal = t.getAttribute('data-v') || ''; sel = {}; render(); return; }
+      if (g === 'env-pausa' || g === 'env-cont') { if (o.drive && o.drive.pausar) o.drive.pausar(g === 'env-pausa'); setTimeout(renderEnv, 50); return; }
+      if (g === 'bx-pausa' && bx) { bx.pausa = true; avisaBaixa(); return; }
+      if (g === 'bx-cont' && bx) { bx.pausa = false; baixaPasso(); return; }
+      if (g === 'bx-parar' && bx) { if (bx.rodando) { bx.parar = true; avisaBaixa(); } else { bx.parar = true; baixaPasso(); } return; }
+      if (g === 'bx-fechar') { fecharBaixar(); return; }
+      if (g === 'bx-op' && bs) { bs.alvo = t.getAttribute('data-v'); renderBaixar(); return; }
+      if (g === 'bx-ir') { iniciarBaixa(); return; }
+      if (g === 'cfg') { abrirCfg(); return; }
+      if (g === 'cfg-fechar') { fecharCfg(); return; }
+      if (g === 'cfg-auto') { var on = lsLer(DRIVE_KEY) === '0'; lsPor(DRIVE_KEY, on ? '1' : '0'); renderCfg(); return; }
+      if (g === 'cfg-wifi' && o.drive && o.drive.soWifi) { o.drive.soWifi(!o.drive.soWifi()); renderCfg(); setTimeout(renderEnv, 50); return; }
+      if (g === 'cfg-cache') { apagarCache(); return; }
+      if (t.closest('.gl-sh') && g !== 'limpar') return;
+      if (e.target.classList && e.target.classList.contains('gl-sh')) { fecharBaixar(); fecharCfg(); return; }
       if (g === 'per-ant') { mudarPer({ modo: 'semana', off: (per.modo === 'semana' ? per.off || 0 : 0) - 1, de: '', ate: '' }); return; }
       if (g === 'per-prox') { if (per.modo === 'semana' && (per.off || 0) < 0) mudarPer({ modo: 'semana', off: (per.off || 0) + 1, de: '', ate: '' }); return; }
       if (g === 'per-tudo') { pfFechar(); mudarPer({ modo: 'tudo', off: 0, de: '', ate: '' }); return; }
@@ -1727,6 +2057,7 @@
       else if (g === 'enviar-ap') enviarDrive(Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'aparelho'; }), true);
       else if (g === 'limpar') {
         var env = Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'enviada'; });
+        fecharCfg();
         apagarLocal(env);
       }
       else if (g === 'cancelar') { cancelar = true; ocupado = 'Parando…'; renderBar(); }
@@ -1750,6 +2081,8 @@
         return;
       }
       if (e.target.id === 'glMvC') { pontosMover(); return; }
+      if (e.target.id === 'glBxWifi' && bs) { bs.wifi = e.target.checked; return; }
+      if (e.target.id === 'glCfManter') { lsPor(MANTER_KEY, e.target.value || null); limparEnviadas(o.drive).then(function (k) { if (k) { o.toast(plural(k, 'foto enviada saiu', 'fotos enviadas saíram') + ' deste aparelho (continuam no Drive).'); carregar(); } renderCfg(); }); return; }
       if (e.target.id === 'glMvP') { sugestao(); return; }
       var f = e.target.getAttribute('data-f');
       if (!f) return;
@@ -1761,6 +2094,7 @@
       if (!root || document.querySelector('.modal')) return;
       if (mv && (e.key !== 'Escape' || mv.salvando)) return;   // no painel de contrato e ponto as setas são das listas (e salvando, nada)
       if (pf) { if (e.key === 'Escape') pfFechar(); return; }
+      if (bs || cfg) { if (e.key === 'Escape') { fecharBaixar(); fecharCfg(); } return; }
       if (e.key === 'Escape') { if (mv) fecharMover(); else if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
       else if (ver >= 0 && e.key === 'ArrowLeft' && ver > 0) abrir(ver - 1);
       else if (ver >= 0 && e.key === 'ArrowRight' && ver < lista.length - 1) abrir(ver + 1);
@@ -1775,7 +2109,7 @@
         root.className = 'gl';
         root.setAttribute('aria-label', 'Fotos');
         root.innerHTML = '<div class="gl-top"><button type="button" class="btn small" data-g="fechar">← Voltar</button><h2>Fotos</h2></div>' +
-          '<div class="gl-tabs" role="tablist"></div><div class="gl-cts" role="group" aria-label="Contrato"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
+          '<div class="gl-tabs" role="tablist"></div><div class="gl-env"></div><div class="gl-cts" role="group" aria-label="Contrato"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
         root.addEventListener('click', onClick);
         root.addEventListener('change', onChange);
         document.addEventListener('keydown', onKey);
@@ -1796,7 +2130,9 @@
       fecharMover();
       var vis = abasVisiveis().map(function (a) { return a.k; });
       aba = f.aba && vis.indexOf(f.aba) >= 0 ? f.aba : (f.pid ? (vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local') : (vis.indexOf(aba) >= 0 ? aba : 'local'));
-      sel = {}; selecionando = false; ver = -1; itens = [];
+      sel = {}; selecionando = false; ver = -1; itens = []; fLocal = ''; semRede = 0; bs = null; cfg = false;
+      cacheIds().then(function (m) { guardadas = m; });
+      limparEnviadas(o.drive).then(function (k) { if (k && root && aba === 'local') carregar(); });
       carregar();
     }
     function close(semAviso) {
@@ -1812,13 +2148,24 @@
       if (cb && semAviso !== true) cb();
     }
     var mudouT = null;
+    // a fila do aparelho mudou: No aparelho recarrega; nas outras abas, só a barra de envio (os dados do aparelho de novo)
     function changed() {
-      if (!root || aba !== 'local' || ocupado) return;
+      if (!root || ocupado) return;
       clearTimeout(mudouT);
-      mudouT = setTimeout(function () { if (root && aba === 'local' && ver < 0 && !selecionando) carregar(); else if (root) { var i = q('.gl-info'); if (i && aba === 'local') i.innerHTML = infoHtml(); } }, 400);
+      mudouT = setTimeout(function () {
+        if (!root) return;
+        if (aba === 'local' && ver < 0 && !selecionando && !bs && !cfg) { carregar(); return; }
+        (o.drive ? o.drive.list().catch(function () { return null; }) : Promise.resolve(null)).then(function (loc) {
+          if (!root || !loc) return;
+          loc.forEach(function (r) { var m = locais[r.id]; if (m) { m.situacao = r.situacao; m.erro = r.erro; m.enviada = r.enviada; m.etapa = r.etapa; } });
+          renderEnv();
+          if (aba === 'local') { var i = q('.gl-info'); if (i) i.innerHTML = infoHtml(); }
+        });
+      }, 400);
     }
-    return { open: open, close: close, changed: changed, isOpen: function () { return !!root; } };
+    return { open: open, close: close, changed: changed, isOpen: function () { return !!root; }, baixando: function () { return bx ? bx.ls.length - bx.i : 0; } };
   };
   // as contas sem tela, para o teste em ferramentas/teste-galeria.js (node, sem banco)
+  window.Galeria.limparEnviadas = limparEnviadas;
   window.Galeria.puras = { linkDrive: linkDrive, ctsDoKm: ctsDoKm, porKm: porKm, partes: partes, resumoMover: resumoMover, FOLGA_KM: FOLGA_KM, POR_MOVER: POR_MOVER };
 })();
