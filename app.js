@@ -6183,7 +6183,7 @@
       var code = err && err.code;
       if (code === 'sem_rede') { banco.online = false; syncStatus(); return; }
       if (code === 'codigo_invalido') { logout(true); toast('Seu acesso mudou ou foi desativado. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
-      if (code === 'muitas_tentativas') { toast('O banco bloqueou esta rede por muitas tentativas com código errado. Tente de novo em 15 minutos.', 7000); syncStatus(); return; }
+      if (code === 'muitas_tentativas') { toast('O banco bloqueou esta rede por muitas tentativas com código errado. Tente de novo em 5 minutos.', 7000); syncStatus(); return; }
       if (!recusaDefinitiva(err)) {
         // falha do servidor (5xx, tempo esgotado, banco reiniciando, função ainda sendo trocada...): nada sai da fila;
         // tenta de novo sozinho, esperando cada vez mais (10 s, 20 s, 40 s... até 5 min)
@@ -6630,7 +6630,7 @@
     var c = err && err.code;
     return c === 'sem_rede' ? 'Sem conexão com o banco. Tente quando tiver sinal.'
       : c === 'codigo_invalido' ? 'Código errado ou acesso desativado.'
-      : c === 'muitas_tentativas' ? 'Muitas tentativas erradas nesta rede (Wi-Fi ou dados do celular). Espere 15 minutos e tente de novo.'
+      : c === 'muitas_tentativas' ? 'Muitas tentativas erradas nesta rede (Wi-Fi ou dados do celular). Espere 5 minutos e tente de novo.'
       : c === 'codigo_curto' ? 'O código precisa de pelo menos 6 caracteres (o do Administrador, 8).'
       : c === 'codigo_admin' ? 'Para dar acesso de Administrador, defina um código novo com pelo menos 8 caracteres.'
       : c === 'codigo_em_uso' ? 'Esse código já é de outra pessoa (ou é um código geral). Escolha outro.'
