@@ -9,7 +9,8 @@
     var host = op.host, esc = op.esc, fmtN = op.fmtN, dinheiro = op.dinheiro;
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
     var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
-    var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null;
+    var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '';
+    var mqCel = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
     var meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
     function numero(v) { return v == null || v === '' || !isFinite(Number(v)) ? null : Number(v); }
@@ -466,37 +467,104 @@
     }
 
     function tom(v) { return v > 2000000 ? 5 : v > 1000000 ? 4 : v > 500000 ? 3 : v > 250000 ? 2 : 1; }
+    function mil(v) { return v === 0 ? '0' : fmtN(Math.round(v / 1000)); }
+    // Por mês: no celular (até 700 px) 6 meses com o contrato parado à esquerda; no computador 16 meses, barra do total, "12 meses" e "Última"
+    var TIPOS = [['conserva', 'Conservação', 'Cons.'], ['pc', 'Pontos críticos', 'PC'], ['oae', 'Pontes', 'OAE'], ['sinal', 'Sinalização', 'Sinal.']];
+    function tipoChave(c) { return c.tipo === 'oae' ? 'oae' : sinal(c) ? 'sinal' : c.tipo === 'conserva' ? 'conserva' : 'pc'; }
+    function tipoNome(c, i) { var k = tipoChave(c); return TIPOS.filter(function (t) { return t[0] === k; })[0][i]; }
+    function loteCurto(c) { var m = /lote\s*(\d+|único|unico)/i.exec(String(c.lote || '')); return !m ? '' : /^\d/.test(m[1]) ? 'L' + m[1] : 'Único'; }
+    function curto(c) { return nome(c).replace(/\/\d{4}$/, ''); }
+    function celular() { return !!(mqCel && mqCel.matches); }
+    // ok/zero: tem medição · antes: antes da 1ª · sem: buraco entre medições · falta: depois da última, ainda não saiu no SIAC · fim: depois do fim da execução
+    function estadoMes(d, i) {
+      var cell = d.porMes[i];
+      if (cell) return cell.total === 0 ? 'zero' : 'ok';
+      if (!d.comps.length || i < d.comps[0]) return 'antes';
+      if (i > d.comps[d.comps.length - 1]) return d.fim != null && i > d.fim ? 'fim' : 'falta';
+      return 'sem';
+    }
     function mensalHtml(cs) {
       var min = null, max = hoje() - 1, recente = null;
       cs.forEach(function (c) { var d = dado(c); if (!d || !d.comps.length) return; min = min == null ? d.comps[0] : Math.min(min, d.comps[0]); recente = recente == null ? d.comps[d.comps.length - 1] : Math.max(recente, d.comps[d.comps.length - 1]); max = Math.max(max, recente); });
       if (min == null) return cabecalho(cs) + vazio('Aguardando medições com competência registrada.') + '<div class="md-cards">' + cs.filter(function (c) { return !semMedicoes(c); }).map(cartao).join('') + '</div>' + semMedicoesHtml(cs, false);
       if (mesSel == null) mesSel = recente;
-      var de = janela == null ? Math.max(min, max - 15) : Math.max(min, Math.min(janela, Math.max(min, max - 15))), fim = Math.min(max, de + 15), cols = [], totais = {};
-      for (var i = de; i <= fim; i++) { cols.push(i); totais[i] = 0; }
-      var h = cabecalho(cs) + '<div class="md-top"><p>Cada célula mostra o valor em R$ mil (PI). Toque no valor para abrir a medição; no mês para ver os contratos.</p><div class="md-links">' + botao('janela', '← Anteriores', ' data-v="' + (de - 16) + '"' + (de <= min ? ' disabled' : '')) + botao('janela', 'Mais recentes →', ' data-v="' + (de + 16) + '"' + (fim >= max ? ' disabled' : '')) + '</div></div>';
-      h += '<div class="card md-scroll md-matriz-scroll" tabindex="0" role="region" aria-label="Matriz de medições, com rolagem horizontal"><table class="md-matriz"><caption class="sr-only">Valor PI por contrato e competência, em R$ mil</caption><thead><tr><th scope="col">Contrato</th>' + cols.map(function (i) { return '<th scope="col">' + botao('mes', esc(mesTxt(i)), ' data-v="' + i + '" aria-pressed="' + (i === mesSel) + '"') + '</th>'; }).join('') + '</tr></thead><tbody>';
-      var carregados = cs.filter(function (c) { var d = dado(c); return d && d.ms.length; }), consultas = [];
+      var todos = cs.filter(function (c) { var d = dado(c); return d && d.ms.length; });
+      var presentes = TIPOS.filter(function (t) { return todos.some(function (c) { return tipoChave(c) === t[0]; }); });
+      if (tipoMes && !presentes.some(function (t) { return t[0] === tipoMes; })) tipoMes = '';
+      var carregados = todos.filter(function (c) { return !tipoMes || tipoChave(c) === tipoMes; });
+      var cel = celular(), span = cel ? 6 : 16, doze = max - 11;
+      var de = janela == null ? Math.max(min, max - span + 1) : Math.max(min, Math.min(janela, Math.max(min, max - span + 1))), fim = Math.min(max, de + span - 1), cols = [];
+      for (var i = de; i <= fim; i++) cols.push(i);
+      var consultas = [];
+      todos.forEach(function (c) { var s = dado(c).an.siac, q = s && s.consulta; if (q && consultas.indexOf(q) < 0) consultas.push(q); });
+      var consultaTxt = consultas.length ? ' (consulta de ' + consultas.sort().map(dataTxt).join(', ') + ')' : '';
+      function stat(i) {
+        var s = { tot: 0, k: 0, nf: 0 };
+        carregados.forEach(function (c) { var d = dado(c), e = estadoMes(d, i); if (e === 'ok' || e === 'zero') { s.tot += d.porMes[i].total; s.k++; } else if (e === 'falta') s.nf++; });
+        return s;
+      }
+      var st = {}; cols.forEach(function (i) { st[i] = stat(i); });
+      var topo = Math.max.apply(null, cols.map(function (i) { return st[i].tot; })) || 1;
+      var h = cabecalho(cs) + '<p class="md-mes-ajuda">Valor em R$ mil (PI). Toque num número para abrir a medição; no mês, para ver a lista dele.' + (cel ? '' : ' As barras em cima são o total de cada mês.') + '</p>';
+      var chips = [['', 'Todos', todos.length]].concat(presentes.map(function (t) { return [t[0], t[1], todos.filter(function (c) { return tipoChave(c) === t[0]; }).length]; }));
+      h += '<div class="md-mes-ctl">' + (presentes.length > 1 ? '<div class="md-chips" role="group" aria-label="Tipo de contrato">' + chips.map(function (t) {
+        return botao('tipomes', esc(t[1]) + '<small>' + t[2] + '</small>', ' data-v="' + t[0] + '" aria-pressed="' + (tipoMes === t[0]) + '"', 'md-chip');
+      }).join('') + '</div>' : '') + '<div class="md-links md-janela">' + botao('janela', cel ? '‹ Anteriores' : '← Anteriores', ' data-v="' + (de - span) + '"' + (de <= min ? ' disabled' : '')) +
+        (cel ? '<span>' + esc(mesTxt(de) + ' a ' + mesTxt(fim)) + '</span>' : '') + botao('janela', cel ? '›' : 'Mais recentes →', ' data-v="' + (de + span) + '"' + (cel ? ' aria-label="Mais recentes"' : '') + (fim >= max ? ' disabled' : '')) + '</div></div>';
+      h += '<div class="card md-scroll md-matriz-scroll ' + (cel ? 'md-cel' : 'md-pc') + '" tabindex="0" role="region" aria-label="Matriz de medições, com rolagem horizontal"><table class="md-matriz"><caption class="sr-only">Valor PI por contrato e competência, em R$ mil</caption><thead><tr><th scope="col" class="md-nm">' + (cel ? '' : 'Contrato') + '</th>' + cols.map(function (i) {
+        var s = st[i], parc = s.nf > 0, sub = parc ? 'faltam ' + s.nf : s.k ? s.k + '/' + s.k : '', tot = 'Total de ' + mesTxt(i) + ': ' + dinheiro(s.tot) + ' PI' + (parc ? ' (parcial)' : '');
+        return '<th scope="col">' + (cel ? '' : '<button type="button" class="md-barra-mes" data-md="mes" data-v="' + i + '" aria-pressed="' + (i === mesSel) + '" aria-label="' + esc(tot) + '" title="' + esc(tot) + '"><i class="' + (i === mesSel ? 's' : parc ? 'p' : '') + '" style="height:' + Math.max(2, s.tot / topo * 44).toFixed(1) + 'px"></i></button>') +
+          botao('mes', esc(mesTxt(i)) + '<small>' + (sub || '&nbsp;') + '</small>', ' data-v="' + i + '" aria-pressed="' + (i === mesSel) + '"' + (parc ? ' aria-label="' + esc(mesTxt(i) + ', faltam ' + s.nf + ' contratos no SIAC') + '"' : ''), 'md-mh' + (parc ? ' parc' : '')) + '</th>';
+      }).join('') + (cel ? '' : '<th scope="col" class="md-x">12 meses<small>' + esc(mesTxt(doze) + ' a ' + mesTxt(max)) + '</small></th><th scope="col" class="md-x">Última<small>no SIAC</small></th>') + '</tr></thead><tbody>';
+      var t12 = 0;
       carregados.forEach(function (c) {
-        var d = dado(c);
-        var consulta = d.an.siac && d.an.siac.consulta;
-        if (consulta && consultas.indexOf(consulta) < 0) consultas.push(consulta);
-        h += '<tr><th scope="row" title="' + esc(nome(c)) + '">' + esc(nome(c).replace(/\/\d{4}$/, '')) + '<small>' + esc(c.tipo === 'oae' ? 'pontes (OAEs)' : [c.lote, tipoCurto(c)].filter(Boolean).join(' · ')) + '</small></th>' + cols.map(function (i) {
-          var cell = d && d.porMes[i], txt, cls, tip;
-          if (cell) { totais[i] += cell.total; txt = cell.total === 0 ? '0' : fmtN(Math.round(cell.total / 1000)); cls = cell.total === 0 ? 'md-zero' : 'md-tom' + tom(cell.total); tip = nome(c) + ' · ' + mesTxt(i) + ' · ' + dinheiro(cell.total) + ' PI' + (cell.total === 0 ? ' · medição zerada' : ''); }
-          else { txt = '—'; cls = 'md-ausente'; tip = nome(c) + ' · ' + mesTxt(i) + ': ' + (i < d.comps[0] ? 'sem medição carregada' : 'sem medição no SIAC' + (consulta ? ' (consulta de ' + dataTxt(consulta) + ')' : ' nos dados carregados')); }
+        var d = dado(c), consulta = d.an.siac && d.an.siac.consulta, lt = loteCurto(c);
+        h += '<tr><th scope="row" class="md-nm" title="' + esc(nome(c)) + '">' + (cel ? '<b>' + esc(curto(c).replace(/^CT /, '')) + '</b><small>' + esc(tipoNome(c, 2) + (lt && c.tipo !== 'oae' ? ' · ' + lt : '')) + '</small>'
+          : esc(curto(c)) + '<small>' + esc(c.tipo === 'oae' ? 'pontes (OAEs)' : [c.lote, tipoCurto(c)].filter(Boolean).join(' · ')) + '</small>') + '</th>' + cols.map(function (i) {
+          var e = estadoMes(d, i), cell = d.porMes[i], txt, cls, tip = nome(c) + ' · ' + mesTxt(i);
+          if (cell) { txt = cell.total === 0 ? '0' : mil(cell.total); cls = cell.total === 0 ? 'md-zero' : 'md-tom' + tom(cell.total); tip += ' · ' + dinheiro(cell.total) + ' PI' + (cell.total === 0 ? ' · medição zerada' : ''); }
+          else if (e === 'falta') { txt = '…'; cls = 'md-pend'; tip += ': ainda não saiu no SIAC' + (consulta ? ' (consulta de ' + dataTxt(consulta) + ')' : ''); }
+          else if (e === 'sem') { txt = '—'; cls = 'md-ausente'; tip += ': sem medição neste mês'; }
+          else { txt = ''; cls = 'md-branco'; tip += e === 'antes' ? ': antes da 1ª medição' : ': depois do fim da execução (' + mesTxt(d.fim) + ')'; }
           return '<td>' + botao(cell ? 'celula' : 'mes', esc(txt), ' data-cid="' + esc(c.id) + '" data-v="' + i + '" aria-label="' + esc(tip) + '" title="' + esc(tip) + '" aria-pressed="' + (i === mesSel) + '"', cls) + '</td>';
-        }).join('') + '</tr>';
+        }).join('');
+        if (!cel) {
+          var s12 = 0, atraso = d.ultima == null ? 0 : Math.max(0, hoje() - 1 - d.ultima), acabou = d.fim != null && d.fim < hoje() - 1 && d.ultima >= d.fim;
+          for (var j = doze; j <= max; j++) if (d.porMes[j]) s12 += d.porMes[j].total;
+          t12 += s12;
+          h += '<td class="md-x"><b>' + mil(s12) + '</b></td><td class="md-x">' + (d.ult ? esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)) + '<small' + (atraso >= 3 && !acabou ? ' class="md-atraso"' : '') + '>' + (acabou ? 'fim da execução' : atraso ? 'há ' + atraso + (atraso === 1 ? ' mês' : ' meses') : 'em dia') + '</small>' : '—') + '</td>';
+        }
+        h += '</tr>';
       });
-      h += '<tr><th scope="row">Total do mês (PI)<small>contratos carregados</small></th>' + cols.map(function (i) { return '<td>' + botao('mes', fmtN(Math.round(totais[i] / 1000)), ' data-v="' + i + '" aria-pressed="' + (i === mesSel) + '"') + '</td>'; }).join('') + '</tr></tbody></table></div>';
+      h += '<tr><th scope="row" class="md-nm">' + (cel ? '<b>Total</b><small>R$ mil</small>' : 'Total do mês<small>R$ mil (PI)</small>') + '</th>' + cols.map(function (i) {
+        return '<td>' + botao('mes', mil(st[i].tot) + (st[i].nf ? '<small>parcial</small>' : ''), ' data-v="' + i + '" aria-pressed="' + (i === mesSel) + '"', 'md-tot') + '</td>';
+      }).join('') + (cel ? '' : '<td class="md-x"><b>' + mil(t12) + '</b></td><td></td>') + '</tr></tbody></table></div>';
       h += semMedicoesHtml(cs, false);
-      h += '<div class="md-legenda">R$ mil: ' + [[1, 'até 250'], [2, '250 a 500'], [3, '500 a 1.000'], [4, '1.000 a 2.000'], [5, 'mais de 2.000'], ['zero', 'medição zerada'], ['ausente', 'sem medição no SIAC' + (consultas.length ? ' (consulta de ' + consultas.sort().map(dataTxt).join(', ') + ')' : ' nos dados carregados')]].map(function (x) { return '<span><i class="md-swatch ' + (typeof x[0] === 'number' ? 'md-tom' : 'md-') + x[0] + '"></i>' + esc(x[1]) + '</span>'; }).join('') + '</div>';
-      var soma = 0, n = 0;
-      var fichas = carregados.map(function (c) {
-        var d = dado(c), cell = d && d.porMes[mesSel];
-        if (cell) { soma += cell.total; n += cell.ms.length; }
-        return '<article class="card md-card"><h3>' + esc(nome(c)) + '</h3>' + (cell ? cell.ms.map(function (m) { return botao('abrir', '<span>' + esc(op.medTxt(d.an, m.n)) + '<small>' + dinheiro(m.total) + ' PI' + (!valor(m.total) ? ' · zerada' : '') + '</small></span>', ' data-cid="' + esc(c.id) + '" data-n="' + esc(m.n) + '"'); }).join('') : vazio(!d ? 'Análise não carregada' : d.comps.length && mesSel >= d.comps[0] ? 'Sem medição no SIAC nos dados carregados' : 'Sem medição carregada para esta competência')) + '</article>';
+      h += '<div class="md-legenda">' + (cel ? [[1, 'até 250'], [3, '500 a 1.000'], [5, 'mais de 2.000']] : [[1, 'até 250'], [2, '250 a 500'], [3, '500 a 1.000'], [4, '1.000 a 2.000'], [5, 'mais de 2.000']]).map(function (x) { return '<span><i class="md-swatch md-tom' + x[0] + '"></i>' + esc(x[1]) + '</span>'; }).join('') +
+        '<span><i class="md-swatch md-zero"></i>zerada</span><span><i class="md-swatch md-ausente"></i>— sem medição no mês</span><span><i class="md-swatch md-pend"></i>' + esc('… ainda não saiu no SIAC' + consultaTxt) + '</span>' + (cel ? '' : '<span>em branco: antes da 1ª medição</span>') + '</div>';
+      // o mês escolhido: só quem mediu, do maior para o menor, e uma caixa com os que ainda não saíram no SIAC
+      var s = stat(mesSel), quem = [], grupos = {}, sem = [];
+      carregados.forEach(function (c) {
+        var d = dado(c), cell = d.porMes[mesSel], e = estadoMes(d, mesSel);
+        if (cell) cell.ms.forEach(function (m) { quem.push({ c: c, m: m }); });
+        else if (e === 'falta') (grupos[d.ultima] = grupos[d.ultima] || []).push(c);
+        else if (e === 'sem') sem.push(c);
+      });
+      quem.sort(function (a, b) { return valor(b.m.total) - valor(a.m.total); });
+      var maior = quem.reduce(function (x, q) { return Math.max(x, Math.abs(valor(q.m.total))); }, 0) || 1;
+      var lista = quem.map(function (q) {
+        var v = valor(q.m.total), lt = loteCurto(q.c);
+        return '<button type="button" class="md-linha-mes" data-md="abrir" data-cid="' + esc(q.c.id) + '" data-n="' + esc(q.m.n) + '" aria-label="' + esc('Abrir a ' + q.m.n + 'ª medição de ' + nome(q.c) + ', ' + dinheiro(v) + ' PI') + '"><span><b>' + esc(curto(q.c)) + '</b> <small>' + esc(tipoNome(q.c, 1) + (lt && q.c.tipo !== 'oae' ? ' · ' + lt : '') + ' · ' + q.m.n + 'ª medição' + (v ? '' : ' · zerada')) + '</small></span><b>' + esc(dinheiro(v)) + '</b><span aria-hidden="true">›</span><span class="md-linha-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(v) / maior * 100) + '%"></i></span></button>';
       }).join('');
-      return h + '<section class="card md-card"><div class="md-top"><h2>' + esc(mesTxt(mesSel)) + ' · ' + nMed(n) + '</h2><strong>' + dinheiro(soma) + ' (PI)</strong></div><div class="md-fichas">' + fichas + '</div></section>';
+      var box = s.nf ? '<div class="md-pend-box"><b>' + s.nf + (s.nf === 1 ? ' contrato ainda sem a medição de ' : ' contratos ainda sem a medição de ') + esc(mesTxt(mesSel)) + ' no SIAC</b>' + esc(consultaTxt) + Object.keys(grupos).map(Number).sort(function (a, b) { return a - b; }).map(function (u) {
+        var n = Math.max(0, hoje() - 1 - u);
+        return '<div>Última em <b>' + esc(mesTxt(u)) + '</b>' + (n >= 3 ? ' · <b>' + n + ' meses</b>' : '') + ': ' + esc(grupos[u].map(curto).join(' · ')) + '</div>';
+      }).join('') + '</div>' : '';
+      if (sem.length) box += '<p class="md-sem-mes">Sem medição neste mês: ' + esc(sem.map(curto).join(' · ')) + '</p>';
+      var esperado = s.k + s.nf;
+      return h + '<section class="card md-card md-mes-det' + (box && quem.length ? ' com-pend' : '') + '"><div><div class="md-top"><h2>' + esc(mesTxt(mesSel)) + (s.nf ? ' <span class="md-tag">parcial</span>' : '') + '</h2><strong>' + dinheiro(s.tot) + ' (PI)</strong></div>' +
+        '<p class="md-mes-sub">' + (s.k ? (s.nf ? s.k + ' de ' + esperado + ' contratos já mediram' : s.k + (s.k === 1 ? ' contrato mediu' : ' contratos mediram')) + ' · ' + nMed(quem.length) : 'Nenhuma medição de ' + esc(mesTxt(mesSel)) + ' nos dados carregados') + '</p>' +
+        (lista ? '<div class="md-linhas">' + lista + '</div>' : '') + '</div>' + (box ? '<div>' + box + '</div>' : '') + '</section>';
     }
 
     function render() {
@@ -547,6 +615,7 @@
       else if (act === 'semvalor') semValor = !semValor;
       else if (act === 'resumo') resumoCel = !resumoCel;
       else if (act === 'janela') janela = Number(b.dataset.v);
+      else if (act === 'tipomes') tipoMes = b.dataset.v || '';
       else if (act === 'mes' || act === 'celula') {
         mesSel = Number(b.dataset.v);
         if (act === 'celula') { var dm = dado(contrato(b.dataset.cid)), ce = dm && dm.porMes[mesSel]; if (ce && ce.ms.length === 1) { abrir(b.dataset.cid, ce.ms[0].n); return; } }
@@ -556,6 +625,8 @@
       var alvos = host.querySelectorAll('[data-md="' + act + '"]');
       for (var i = 0; i < alvos.length; i++) if (alvos[i].dataset.n === b.dataset.n && alvos[i].dataset.g === b.dataset.g && alvos[i].dataset.e === b.dataset.e && alvos[i].dataset.v === b.dataset.v && alvos[i].dataset.p === b.dataset.p && alvos[i].className === b.className) { alvos[i].focus({ preventScroll: true }); break; }
     });
+    // celular ⇄ computador (girar o tablet, mudar a janela): a matriz troca de 6 para 16 meses
+    if (mqCel) { var trocou = function () { if (op.ativa() && modo === 'mes' && !cid) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
     host.addEventListener('change', function (ev) {
       if (!op.ativa()) return;
       if (ev.target.id === 'mdOrdem') ordem = ev.target.value;
