@@ -2384,6 +2384,7 @@
       (window.AMBIENTE && window.AMBIENTE.previa ? '<span class="ctm-prev">Prévia</span>' : '') + '</span>' + ICON_DESCE + '</button>' +
       '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
       '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>');
+    nav.classList.toggle('com-med', !!nav.querySelector('.tab-medicoes'));
     var cc = $('ctCurto');
     if (cc) cc.innerHTML = esc(at ? ctCurto(at) : 'Contratos') + ICON_DESCE;
     var atl = $('atalhos');
@@ -4600,7 +4601,7 @@
   var INICIO_KEY = 'diagrama-linear.no-contrato', visao = null;
   // Medições: no celular só o ícone (cifrão sobre a régua), para o nome do contrato aberto caber no botão ao lado
   var ICON_MED = '<svg class="tm-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 20v-3M10 20v-3M14 20v-3M18 20v-3"/><path d="M15 5.5c-.6-.9-1.7-1.5-3-1.5-1.7 0-3 1-3 2.3s1.3 1.9 3 2.2c1.7.3 3 1 3 2.3S13.7 13 12 13c-1.3 0-2.4-.6-3-1.5"/><path d="M12 2.5v1.5M12 13v1.5"/></svg>';
-  var ICON_VISAO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 12h20"/><path d="M6 8v8"/><path d="M13 8v8"/><path d="M18 9.5v5"/></svg>';
+  var ICON_VISAO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h18M7 8v8M12 8v8M17 8v8"/></svg>';
   var visaoOn = (function () { try { return sessionStorage.getItem(INICIO_KEY) !== '1'; } catch (e) { return true; } })();
   function setVisao(on) {
     if (medicoesOn) { medicoesOn = false; hashMedicoes(false); }
@@ -6773,7 +6774,7 @@
     // itens do menu Dados conforme o papel
     // fiscal e analista: sem backup (o menu fica com a conta, o PDF e a impressão do que veem)
     var equipe = !banco.on || isEng();
-    var show = { arquivados: isAdmin(), lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isEng(), mpversoes: banco.on && isEng(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
+    var show = { arquivados: isAdmin(), lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isEng(), mpversoes: banco.on && isEng(), aprovar: isEng() || (isFiscal() && minhasPropostas() > 0), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
@@ -7360,19 +7361,35 @@
     ss.parentNode.insertBefore(b, ss);
     renderAprov();
   }
+  function minhasPropostas() {
+    if (!banco.login) return 0;
+    return (banco.propostas || []).filter(function (x) { return (x.autor_uid && x.autor_uid === banco.login.uid) || (!x.autor_uid && x.autor_nome === banco.login.nome); }).length;
+  }
+  // no computador, o botão amarelo "Aprovar (3)"; no celular e no tablet, o mesmo número num selo no ≡ e o item dentro do menu
   function renderAprov() {
     var b = $('btnAprov');
     if (!b) return;
-    var all = banco.propostas || [], n = all.length;
-    if (isEng() && n) { b.hidden = false; b.textContent = 'Aprovar (' + n + ')'; b.title = n + ' mudança(s) de fiscais aguardando aprovação'; }
+    var all = banco.propostas || [], n = all.length, k = 0, minhas = 0;
+    if (isEng() && n) { k = n; b.hidden = false; b.textContent = 'Aprovar (' + n + ')'; b.title = n + ' mudança(s) de fiscais aguardando aprovação'; }
     else if (isFiscal()) {
-      var minhas = all.filter(function (x) { return (x.autor_uid && x.autor_uid === banco.login.uid) || (!x.autor_uid && x.autor_nome === banco.login.nome); }).length;
+      minhas = k = minhasPropostas();
       b.hidden = !minhas;
-      b.textContent = minhas + (minhas === 1 ? ' aguardando aprovação' : ' aguardando aprovação');
+      b.textContent = minhas + ' aguardando aprovação';
       b.title = 'Suas mudanças que ainda não foram aprovadas';
     } else b.hidden = true;
     var it = document.querySelector('#menuPop [data-act="aprovar"]');
-    if (it) it.textContent = 'Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '');
+    if (it) {
+      if (isFiscal()) { it.hidden = !minhas; it.textContent = 'Suas mudanças aguardando aprovação' + (minhas ? ' (' + minhas + ')' : ''); }
+      else it.textContent = 'Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '');
+      it.classList.toggle('tem-aprov', !!k);
+    }
+    var m = $('btnMenu');
+    if (m) {
+      var sl = m.querySelector('.menu-selo');
+      if (!sl) { sl = document.createElement('span'); sl.className = 'menu-selo'; sl.setAttribute('aria-hidden', 'true'); m.appendChild(sl); }
+      sl.hidden = !k; sl.textContent = k ? String(k) : '';
+      m.setAttribute('aria-label', 'Dados' + (k ? (isFiscal() ? ' · ' + k + (k === 1 ? ' mudança sua aguardando' : ' mudanças suas aguardando') + ' aprovação' : ' · ' + k + (k === 1 ? ' mudança de fiscal' : ' mudanças de fiscais') + ' para aprovar') : ''));
+    }
   }
   function openAprov() {
     var all = banco.propostas || [];
@@ -7725,7 +7742,7 @@
     [mmCel, mmMd, mmPc, mmLargo].forEach(function (m) {
       if (m && m.addEventListener) m.addEventListener('change', function () {
         aplicaPg();
-        if (pgAtivo() && $('editor').classList.contains('md') !== mdOn()) renderEditor();
+        if (pgAtivo() && $('editor').classList.contains('ld') !== mdOn()) renderEditor();
         if (view === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); }
       });
     });

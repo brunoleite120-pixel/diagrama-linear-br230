@@ -58,7 +58,9 @@ button{cursor:pointer}
 .tm-ic{display:none}
 /* celular: o botão do contrato mostra só o número ("267"), pedido de 22/10/2026; o nome inteiro fica na lista que desce */
 .ctm-cur{display:none}
-@media (max-width:600px){.ctm-btn .ctm-longo{display:none}.ctm-btn .ctm-cur{display:inline}}
+/* celular: com a aba Medições, o botão do contrato mostra só o número ("267"); sem ela (fiscal), o nome inteiro cabe */
+@media (max-width:600px){.com-med .ctm-btn .ctm-longo{display:none}.com-med .ctm-btn .ctm-cur{display:inline}}
+.menu-selo{display:none}
 .ctm-seta{width:15px;height:15px;margin-left:6px;flex:none}
 .ctm-btn[aria-expanded="true"] .ctm-seta{transform:rotate(180deg)}
 .ctm-pop{position:absolute;left:0;top:calc(100% + 6px);z-index:40;min-width:290px;max-width:calc(100vw - 32px);max-height:min(70vh,560px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column}
@@ -402,9 +404,6 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .tabs .tab{min-height:44px;font-size:13.5px}
   .tab-visao{width:44px;padding:0;justify-content:center}
   .tab-visao .tv-txt{display:none}
-  .tab-medicoes{width:44px;padding:0;justify-content:center}
-  .tab-medicoes .tm-txt{display:none}
-  .tab-medicoes .tm-ic{display:block;width:20px;height:20px}
   .tab-visao svg{width:18px;height:18px}
   .ctmenu{flex:1 1 auto}
   .ctm-btn{width:100%;justify-content:space-between;text-align:left}
@@ -423,6 +422,12 @@ button.vg-tr.sel{background:var(--accent-soft)}
   #btnMenu svg{width:18px;height:18px}
   #btnMenu .btn-txt,#btnMenu .ic-desce,.topbar #btnLogin{display:none}
   #btnMenu .ic-menu{display:block}
+  /* o "Aprovar (3)" vira um selo no ≡ (o topo fica numa linha, como nas telas aprovadas); o item fica dentro do menu */
+  #btnAprov{display:none}
+  #btnMenu{position:relative;overflow:visible}
+  .menu-selo:not([hidden]){display:block;position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;
+    background:#F5B83D;color:#3D2A00;font-size:12px;font-weight:700;line-height:16px;text-align:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums}
+  #menuPop .tem-aprov{font-weight:650;color:#7A5200}
   .save-state{grid-area:est;display:none;min-width:0;text-align:left}
   .save-state.warn{display:block}
   .so-compacto{display:block}
@@ -490,11 +495,8 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .pgnav .pg-foto{background:var(--accent);color:var(--accent-ink);font-weight:600}
   .map-host{height:calc(100vh - 69px);height:calc(100dvh - 69px);min-height:220px}
 }
-/* ---------- tablet (701 a 1100 px): a barra do topo mostra "Visão geral" por extenso ---------- */
-@media (min-width:701px) and (max-width:1100px){
-  .tab-visao{width:auto;padding:0 14px}
-  .tab-visao .tv-txt{display:inline}
-  .tab-visao svg{display:none}
+/* ---------- tablet (701 a 1100 px, não o celular deitado): como nos quadros aprovados, Visão geral no ícone e "Medições" escrito ---------- */
+@media (min-width:701px) and (max-width:1100px) and (min-height:501px){
   .ctmenu{flex:0 1 340px}
   .brand img{height:36px}
 }
