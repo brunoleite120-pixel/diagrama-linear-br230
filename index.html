@@ -1072,6 +1072,8 @@ span.an-chip{cursor:default}
 .last-edit b{color:var(--ink-2);font-weight:600}
 .card-body .last-edit{padding-top:0}
 .conf-bar{align-items:flex-start;max-height:min(60vh,420px);overflow:auto;border-color:#E5B800;box-shadow:0 0 0 3px #FBF3D0,var(--shadow)}
+.aba-bar{top:calc(8px + env(safe-area-inset-top,0px));bottom:auto;z-index:4002;align-items:center;justify-content:space-between}
+.aba-bar .aba-txt{flex:1 1 240px;min-width:0}
 .conf-body{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:4px}
 .conf-body span{color:var(--ink-3)}
 .conf-body ul{margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;overflow-wrap:anywhere}
@@ -1359,7 +1361,8 @@ span.an-chip{cursor:default}
         <button type="button" data-act="backup">Salvar backup (.json)</button>
         <button type="button" data-act="restore">Abrir backup…</button>
         <button type="button" data-act="lixeira" hidden>Lixeira e cópias de segurança</button>
-        <button type="button" data-act="recusadas" hidden>Alterações recusadas</button>
+        <button type="button" data-act="arquivados" hidden>Contratos arquivados</button>
+        <button type="button" data-act="recusadas" hidden>Alterações guardadas</button>
         <button type="button" data-act="aprovar" hidden>Aprovar mudanças dos fiscais</button>
         <button type="button" data-act="usuarios" hidden>Usuários e acessos</button>
         <button type="button" data-act="cargamed" hidden>Carregar medições (arquivo)…</button>

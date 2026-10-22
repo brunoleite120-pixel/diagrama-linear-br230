@@ -2277,23 +2277,29 @@
     } catch (e) { /* sem acesso ao armazenamento */ }
     return null;
   }
-  var saveTimer = null;
+  var saveTimer = null, localFalhou = false;
   function save() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () {
-      saveTimer = null;
-      var el = document.getElementById('saveState');
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify(state));
-        var d = new Date();
-        el.textContent = 'Salvo às ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-        el.classList.remove('warn');
-      } catch (e) {
-        el.textContent = 'Não salvou no navegador: use "Salvar backup"';
-        el.classList.add('warn');
-      }
-      if (banco.on) { trackChanges(); syncStatus(); }
-    }, 300);
+    saveTimer = setTimeout(gravarAgora, 300);
+  }
+  // grava já o que está esperando os 300 ms (a página vai sumir: troca de app, aba fechada, outra aba assumiu a edição)
+  function flushSave() { if (saveTimer) { clearTimeout(saveTimer); gravarAgora(); } }
+  function gravarAgora() {
+    saveTimer = null;
+    if (aba.ro) return;   // outra aba edita: esta não grava por cima
+    var el = document.getElementById('saveState');
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      localFalhou = false;
+      var d = new Date();
+      el.textContent = 'Salvo às ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      el.classList.remove('warn');
+    } catch (e) {
+      localFalhou = true;
+      el.textContent = 'Não salvou no navegador: use "Salvar backup"';
+      el.classList.add('warn');
+    }
+    if (banco.on) { trackChanges(); syncStatus(); }
   }
   function active() {
     return state.contracts.find(function (c) { return c.id === state.activeId; }) || state.contracts[0];
@@ -2881,7 +2887,7 @@
           field('Nome', 'data-marco="' + i + '" data-mf="nome" type="text"', m.nome) + kmF +
           '<button type="button" class="icon-btn" data-act="del-marco" data-idx="' + i + '" aria-label="Remover marco ' + esc(m.nome) + '">' + ICON_TRASH + '</button></div>');
       });
-      h.push('<div><button type="button" class="btn small danger" data-act="del-contract">Excluir este contrato</button></div>');
+      if (!banco.on || isAdmin()) h.push('<div><button type="button" class="btn small danger" data-act="del-contract">' + (banco.on ? 'Arquivar este contrato' : 'Excluir este contrato') + '</button></div>');
       h.push('</div>');
     }
     h.push('</section>');
@@ -5157,8 +5163,9 @@
         abrirNovoContrato(active());
         return;
       case 'del-contract':
-        if (state.contracts.length < 2) { toast('Este é o único contrato. Crie outro antes de excluir este.'); return; }
-        excluirContrato(c);
+        if (banco.on && !isAdmin()) { toast('Só o Administrador arquiva contratos.'); return; }
+        if (state.contracts.length < 2) { toast('Este é o único contrato. Crie outro antes de ' + (banco.on ? 'arquivar' : 'excluir') + ' este.'); return; }
+        if (banco.on) arquivarContrato(c); else excluirContrato(c);
         return;
       default:
         return;
@@ -5291,6 +5298,31 @@
         afterEdit('add-point', cc);
         toast(It + ' ' + (copia.nome || '') + ' de volta.');
       });
+    });
+  }
+  // com o banco ninguém exclui contrato: o Administrador arquiva (sai de todas as telas e os dados ficam guardados, D-2)
+  function arquivarContrato(c) {
+    var nome = ctNome(c) || 'Contrato', cid = c.id;
+    confirmar({
+      titulo: 'Arquivar o contrato ' + nome + '?',
+      html: '<p>O contrato <b>' + esc(ctCompleto(c)) + '</b> sai de todas as telas, para todos: lista, Visão geral, Medições, mapa, foto e galeria.</p>' +
+        '<p>Nada é apagado: os <b>' + c.pontos.length + ' ' + itensTxt(c) + '</b>, as fotos e as medições ficam guardados no banco. Você restaura quando quiser em Dados › Contratos arquivados.</p>',
+      digitar: nome, botao: 'Arquivar contrato', perigo: true
+    }).then(function (r) {
+      if (!r || !contractById(cid) || state.contracts.length < 2) return;
+      var cc = contractById(cid);
+      banco.arquivados = (banco.arquivados || []).concat([{ id: cid, nome: nome, completo: ctCompleto(cc), n: cc.pontos.length, it: itensTxt(cc), em: new Date().toISOString(), por: (banco.login && banco.login.nome) || null }]);
+      // sai do estado e da base juntos (a posição dos outros contratos não muda: nenhuma "ordem das abas" vai junto) e o
+      // arquivamento entra na fila como operação própria
+      state.contracts = state.contracts.filter(function (x) { return x.id !== cid; });
+      if (banco.base) banco.base.contracts = banco.base.contracts.filter(function (x) { return x.id !== cid; });
+      if (state.activeId === cid) state.activeId = state.contracts[0].id;
+      enqueue([{ t: 'arquivar_contrato', id: cid, nome: nome, em: new Date().toISOString() }]);
+      scheduleFlush(300);
+      ui.open = {};
+      renderAll();
+      afterEdit('del-contract', active());
+      toast('Contrato ' + nome + ' arquivado. Para trazer de volta: Dados › Contratos arquivados.', 6000);
     });
   }
   function excluirContrato(c) {
@@ -5567,6 +5599,7 @@
     // na visão o contrato ativo está escondido: o relatório começa em "Todos"
     else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: visaoOn ? '' : active().id });
     else if (act === 'lixeira') openLixeira();
+    else if (act === 'arquivados') openArquivados();
     else if (act === 'recusadas') openRecusadas();
     else if (act === 'usuarios') openUsuarios();
     else if (act === 'cargamed') { if (!banco.login || !isResp()) { toast('Só o Administrador carrega medições.'); return; } $('fileMed').click(); }
@@ -5582,14 +5615,89 @@
   var OLD_KEY = 'diagrama-linear.antes-do-banco';   // o que estava só neste aparelho antes do banco da equipe
   var RECUSA_KEY = 'diagrama-linear.recusadas';     // alterações que o banco recusou de vez (guardadas, nunca apagadas sozinhas)
   var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], acesso: null, base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false,
-    falhas: 0, espera: 0, lote: 0 };   // falhas seguidas do servidor, quando tentar de novo e tamanho do lote ao separar uma recusa
+    falhas: 0, espera: 0, lote: 0,   // falhas seguidas do servidor, quando tentar de novo e tamanho do lote ao separar uma recusa
+    semEspaco: false, arquivados: [], envio: 0 };   // fila sem cópia no aparelho; contratos arquivados (só o Administrador recebe); nº do envio em andamento
   var flushTimer = null;
 
+  // ---------------- uma aba por vez edita (decisão D-3 de 21/10/2026). Duas abas (ou o app instalado e uma aba do navegador)
+  // gravariam a fila inteira na mesma chave, e uma apagaria a da outra. A trava do navegador (Web Locks) fica com a primeira
+  // aba e solta sozinha quando ela fecha; as outras ficam só para consulta: não gravam, não enviam e não mandam fotos.
+  // "Editar nesta aba" toma a trava (a outra grava o que estava esperando e vira consulta) e recarrega para ler o que ela deixou.
+  // Sem a trava (navegador antigo), cada aba edita como antes.
+  //   pronto: já se sabe se esta aba edita (até lá não envia nada); dono: esta aba editava (ao perder, grava antes de parar)
+  var aba = { ro: false, pronto: false, dono: false, trava: ((window.AMBIENTE && window.AMBIENTE.prefixo) || '') + 'diagrama-linear.edicao' };
+  var ABA_ASSUMIR = 'diagrama-linear.aba-assumir';
+  function initAba() {
+    if (!navigator.locks || !navigator.locks.request) { aba.pronto = true; return; }
+    var assumir = false;
+    try { assumir = sessionStorage.getItem(ABA_ASSUMIR) === '1'; sessionStorage.removeItem(ABA_ASSUMIR); } catch (e) { /* sem armazenamento */ }
+    pegarAba(assumir);
+  }
+  function pegarAba(assumir) {
+    navigator.locks.request(aba.trava, assumir ? { steal: true } : { ifAvailable: true }, function (lock) {
+      if (!lock) { abaSoLeitura(); esperarAba(); return null; }
+      abaEdita();
+      return new Promise(function () { /* segura enquanto a aba estiver aberta */ });
+    }).catch(function () { abaSoLeitura(); esperarAba(); });   // outra aba tomou a edição
+  }
+  // a outra aba fechou: esta pega a trava e oferece recarregar para editar (lendo o que a outra deixou gravado)
+  function esperarAba() {
+    navigator.locks.request(aba.trava, function () {
+      abaBarra('livre');
+      return new Promise(function () { /* segura até recarregar */ });
+    }).catch(function () { abaSoLeitura(); esperarAba(); });
+  }
+  function abaEdita() {
+    aba.pronto = true; aba.dono = true; aba.ro = false;
+    var b = $('abaBar');
+    if (b) b.remove();
+    if (banco.pend.length && banco.login) scheduleFlush(300);
+    if (driveQ) driveQ.pump();
+    syncStatus();
+  }
+  function abaSoLeitura() {
+    if (aba.dono) { flushSave(); keepSync(); }   // era a aba que editava: grava o que estava esperando antes de parar
+    aba.dono = false; aba.ro = true; aba.pronto = true;
+    clearTimeout(flushTimer);
+    abaBarra('outra');
+    aplicaPapel();
+    renderAll();
+    syncStatus();
+  }
+  function abaBarra(tipo) {
+    var b = $('abaBar');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'abaBar';
+      b.className = 'share-ready conf-bar aba-bar';
+      b.setAttribute('role', 'status');
+      document.body.appendChild(b);
+    }
+    b.innerHTML = tipo === 'livre'
+      ? '<span class="aba-txt">A outra aba foi fechada. Recarregue para editar nesta.</span><button type="button" class="btn primary small">Recarregar</button>'
+      : '<span class="aba-txt"><b>Só consulta.</b> O app está aberto em outra aba ou janela, e só uma edita por vez. O que você mudar aqui não é gravado.</span><button type="button" class="btn small">Editar nesta aba</button>';
+    b.querySelector('button').addEventListener('click', function () {
+      if (tipo === 'livre') { location.reload(); return; }
+      try { sessionStorage.setItem(ABA_ASSUMIR, '1'); } catch (e) { /* sem armazenamento */ }
+      // toma a trava já (a outra grava e para), espera ela terminar e recarrega para ler o que ficou gravado
+      navigator.locks.request(aba.trava, { steal: true }, function () { return new Promise(function () { /* até recarregar */ }); }).catch(function () { /* outra tomou de novo */ });
+      b.querySelector('button').disabled = true;
+      setTimeout(function () { location.reload(); }, 900);
+    });
+  }
+
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
-  function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
-  function keepSync() { lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas, acesso: banco.acesso }); }
+  function lsPut(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  // a fila guardada no aparelho; sem espaço, as alterações ficam só na memória: a barra avisa até voltar a gravar
+  function keepSync() {
+    if (aba.ro) return true;   // outra aba edita: esta não grava a fila por cima da dela
+    var ok = lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas, acesso: banco.acesso, arquivados: banco.arquivados });
+    if (!ok && !banco.semEspaco && banco.pend.length) toast('Este aparelho está sem espaço: ' + banco.pend.length + (banco.pend.length === 1 ? ' alteração está' : ' alterações estão') + ' só na memória. Deixe o app aberto com internet ou salve um backup (menu Dados).', 9000);
+    banco.semEspaco = !ok;
+    return ok;
+  }
   // sem código ou analista: só consulta
-  function readOnly() { return banco.on && (!banco.login || isAnalista()); }
+  function readOnly() { return aba.ro || (banco.on && (!banco.login || isAnalista())); }
   // papéis (revisoes/2026-10-19-decisoes-acessos.md): Administrador (criador) e engenheiro (tudo; só o Administrador mexe na
   // conta de outro Administrador), auxiliar de engenharia (edita, aprova, lixeira, medições), analista (só vê, nos contratos e
   // partes liberados) e fiscal de campo (vistoria e fotos, nos contratos liberados, com aprovação). O banco confere tudo de
@@ -5700,7 +5808,7 @@
       });
       Object.keys(old).forEach(function (id) { ops.push({ t: 'apagar_ponto', cid: c.id, id: id, nome: old[id].nome || '', em: em }); });
     });
-    a.contracts.forEach(function (c) { if (!bm[c.id]) ops.push({ t: 'apagar_contrato', id: c.id }); });
+    a.contracts.forEach(function (c) { if (!bm[c.id]) ops.push({ t: 'arquivar_contrato', id: c.id, nome: ctNome(c), em: em }); });
     return ops;
   }
   // aplica as operações ainda não enviadas sobre o que veio do banco
@@ -5715,8 +5823,10 @@
       } else if (op.t === 'contrato_campos' && c) {
         applyFields(c, op.campos);
         if (op.ordem != null) { s.contracts.splice(s.contracts.indexOf(c), 1); s.contracts.splice(Math.min(op.ordem, s.contracts.length), 0, c); }
-      } else if (op.t === 'apagar_contrato') {
-        if (c) s.contracts.splice(s.contracts.indexOf(c), 1);
+      } else if (op.t === 'apagar_contrato' || op.t === 'arquivar_contrato') {
+        if (c) c.arquivado = { em: op.em || new Date().toISOString(), por: (banco.login && banco.login.nome) || null };   // sai da tela (separarArquivados)
+      } else if (op.t === 'desarquivar_contrato') {
+        if (c) delete c.arquivado;
       } else if (op.t === 'ponto' && c) {
         var np = clone(op.dados), k = c.pontos.findIndex(function (x) { return x.id === op.id; });
         np.id = op.id;
@@ -5733,10 +5843,12 @@
   function opKey(op) {
     if (/^(ponto|ponto_campos|apagar_ponto)$/.test(op.t)) return 'p:' + op.cid + ':' + op.id;
     if (op.t === 'config' || op.t === 'apagar_config') return 'g:' + op.chave;
+    if (op.t === 'arquivar_contrato' || op.t === 'desarquivar_contrato') return 'a:' + op.id;   // não junta com as edições do contrato
     return 'c:' + op.id;
   }
   // junta uma alteração nova com a que ainda espera na fila para o mesmo ponto/contrato
   function mergeOp(old, op) {
+    if (old.t !== op.t && /arquivar_contrato$/.test(old.t) && /arquivar_contrato$/.test(op.t)) return null;   // arquivou e restaurou antes de subir
     if (!/_campos$/.test(op.t)) return op;                        // exclusão, registro novo, configuração: vale a nova
     if (old.t === 'ponto' || old.t === 'contrato') {               // registro novo que ainda não subiu: continua completo
       var full = clone(old), em = null;
@@ -5862,6 +5974,8 @@
         if (td && td.length <= 300) t = td;
       } else if (op.t === 'contrato') t = (ctNome(op.dados) || 'Contrato') + ' (novo contrato)';
       else if (op.t === 'apagar_contrato') t = 'Contrato excluído';
+      else if (op.t === 'arquivar_contrato') t = loteOf(op.id, op.nome) + ': contrato arquivado';
+      else if (op.t === 'desarquivar_contrato') t = loteOf(op.id, op.nome) + ': contrato restaurado do arquivo';
       else t = 'Configuração';
       if (names.indexOf(t) < 0) names.push(t);
     });
@@ -6010,7 +6124,8 @@
   function flush() {
     if (!banco.on || banco.busy || !banco.pend.length || !banco.login) { syncStatus(); return; }
     if (banco.espera > Date.now()) { scheduleFlush(banco.espera - Date.now()); return; }   // o servidor falhou há pouco: espera
-    var ops = banco.pend.slice(0, banco.lote || 500), n = ops.length, envL = {};
+    if (aba.ro || !aba.pronto) { syncStatus(); return; }   // outra aba edita (ela é que envia), ou ainda não se sabe
+    var ops = banco.pend.slice(0, banco.lote || 500), n = ops.length, envL = {}, envio = ++banco.envio;
     // prazos e valores (PI) são um campo só (fica a lista inteira de quem alterou por último): guarda a lista como sai agora,
     // para o aviso de conflito (a da fila é a mesma da tela e muda se alguém digitar durante o envio)
     ops.forEach(function (o) {
@@ -6020,12 +6135,13 @@
     banco.sending = n;
     syncStatus();
     window.Banco.salvarCampos(banco.login.codigo, banco.login.nome, opsResumo(ops), ops).then(function (res) {
+      if (envio !== banco.envio) { envioVelho(envio, true); return; }   // saiu ou entrou outra pessoa no meio do envio
       var v = Number(res && res.versao), conf = (res && res.conflitos) || [];
       banco.busy = false;
       banco.sending = 0;
       banco.online = true;
       banco.at = new Date();
-      banco.pend.splice(0, n);
+      banco.pend = banco.pend.filter(function (o) { return ops.indexOf(o) < 0; });   // só as que foram neste envio
       banco.falhas = 0; banco.espera = 0;
       if (!banco.pend.length) banco.lote = 0; else if (banco.lote) banco.lote = Math.min(500, banco.lote * 2);   // separou a recusa: volta a crescer
       if (res && res.propostas != null) {                            // fiscal: vira proposta, o banco não muda
@@ -6044,6 +6160,7 @@
       if (banco.pend.length) scheduleFlush(300);
       syncStatus();
     }, function (err) {
+      if (envio !== banco.envio) { envioVelho(envio, false); return; }
       banco.busy = false;
       banco.sending = 0;
       var code = err && err.code;
@@ -6063,18 +6180,18 @@
       // o banco recusou de vez (dado ou permissão). O lote é uma transação só: nada dele foi gravado. Manda em lotes
       // menores até sobrar só a alteração recusada; as outras sobem normalmente.
       if (n > 1) { banco.lote = Math.ceil(n / 2); scheduleFlush(300); return; }
-      var op = banco.pend[0];
+      var op = ops[0];
       if (!guardarRecusada(op, err)) {   // sem espaço no aparelho para guardar: não apaga; avisa e para de tentar
         banco.espera = Date.now() + 300000;
         toast('O banco recusou uma alteração e não há espaço neste aparelho para guardá-la à parte. Ela continua na fila: salve um backup (menu Dados).', 9000);
         syncStatus();
         return;
       }
-      banco.pend.splice(0, 1);
+      banco.pend = banco.pend.filter(function (o) { return o !== op; });
       if (!banco.pend.length) banco.lote = 0;
       keepSync();
-      toast((code === 'so_status' ? 'Fiscal de campo só altera o status dos serviços.' : 'O banco recusou uma alteração (' + ((err && err.message) || 'erro') + ').') +
-        ' A alteração "' + opsResumo([op]) + '" ficou guardada em Dados › Alterações recusadas; as outras seguem para o banco.', 9000);
+      toast((code === 'so_status' ? 'Fiscal de campo só altera o status dos serviços.' : code === 'so_admin_arquiva' ? 'Só o Administrador arquiva contratos.' : 'O banco recusou uma alteração (' + ((err && err.message) || 'erro') + ').') +
+        ' A alteração "' + opsResumo([op]) + '" ficou guardada em Dados › Alterações guardadas; as outras seguem para o banco.', 9000);
       refresh();
       if (banco.pend.length) scheduleFlush(300);
     });
@@ -6088,33 +6205,112 @@
     return pg === 'P0001' || /^2[23]/.test(pg);                    // erro das nossas funções, dado inválido ou regra do banco
   }
   // ---- alterações recusadas: ficam neste aparelho até alguém baixar, mandar de novo ou apagar (menu Dados)
+  // Alterações guardadas neste aparelho (Dados › Alterações guardadas), cada uma com quem fez:
+  //   tipo 'recusada': o banco recusou de vez (dado ou permissão);
+  //   tipo 'sessao': a sessão terminou (saiu, o acesso mudou, entrou outra pessoa) antes de ela subir. Volta sozinha para a
+  //   fila quando a mesma pessoa entrar de novo; nunca sobe com o código de outra pessoa (o Administrador reenvia em nome dela,
+  //   e o histórico diz de quem era).
+  //   envio: o nº do envio que estava a caminho do banco quando a sessão terminou (se a resposta chegar e gravou, sai daqui)
   function recusadas() { var l = lsGet(RECUSA_KEY); return Array.isArray(l) ? l : []; }
+  function gravarRecusadas(l) { if (aba.ro) return false; try { if (l.length) localStorage.setItem(RECUSA_KEY, JSON.stringify(l)); else localStorage.removeItem(RECUSA_KEY); return true; } catch (e) { return false; } }
+  function autorAgora() { var l = banco.login; return { por: (l && l.nome) || null, uid: (l && l.uid) || null, papel: (l && l.papel) || null }; }
   function guardarRecusada(op, err) {
-    var l = recusadas();
-    l.push({ em: new Date().toISOString(), por: (banco.login && banco.login.nome) || null, erro: (err && err.message) || 'erro', op: op });
-    try { localStorage.setItem(RECUSA_KEY, JSON.stringify(l)); return true; } catch (e) { return false; }
+    var a = autorAgora(), l = recusadas();
+    l.push({ em: new Date().toISOString(), por: a.por, uid: a.uid, papel: a.papel, tipo: 'recusada', erro: (err && err.message) || 'erro', op: op });
+    return gravarRecusadas(l);
   }
-  function openRecusadas() {
+  function chaveGuardada(x) { return String(x.em) + '|' + JSON.stringify(x.op); }
+  // a alteração guardada é desta pessoa? (pelo id da conta; as antigas, sem id, pelo nome; sem nome nenhum: de quem estiver)
+  function minhaGuardada(x, l) { l = l || banco.login; if (!l) return false; return x.uid ? x.uid === l.uid : !x.por || x.por === l.nome; }
+  // a sessão terminou com alterações na fila: guarda com o nome de quem fez (as que estavam a caminho, marcadas com o envio)
+  var guardadasMem = null, ultimaGuarda = '';   // sem espaço para guardar: ficam aqui até a pessoa baixar o arquivo
+  function guardarDaSessao(ops, envio, nEnvio) {
+    var a = autorAgora(), em = new Date().toISOString();
+    var novas = ops.map(function (op, i) {
+      var x = { em: em, por: a.por, uid: a.uid, papel: a.papel, tipo: 'sessao', erro: 'a sessão terminou antes de enviar', op: op };
+      if (envio && i < nEnvio) x.envio = envio;
+      return x;
+    });
+    if (gravarRecusadas(recusadas().concat(novas))) {
+      ultimaGuarda = ops.length + (ops.length === 1 ? ' alteração que não tinha subido ficou guardada' : ' alterações que não tinham subido ficaram guardadas') + ' com o nome de ' + (a.por || 'quem saiu') + '. ' +
+        (ops.length === 1 ? 'Sobe' : 'Sobem') + ' quando você entrar de novo neste aparelho.';
+      toast(ops.length + (ops.length === 1 ? ' alteração que não tinha subido ficou guardada' : ' alterações que não tinham subido ficaram guardadas') + ' com o nome de ' + (a.por || 'quem saiu') +
+        ' (Dados › Alterações guardadas). ' + (ops.length === 1 ? 'Sobe' : 'Sobem') + ' quando ' + (a.por || 'a pessoa') + ' entrar de novo neste aparelho.', 9000);
+      return;
+    }
+    guardadasMem = (guardadasMem || []).concat(novas);
+    setTimeout(avisarGuardadasMem, 400);
+  }
+  function avisarGuardadasMem() {
+    if (!guardadasMem || !guardadasMem.length) return;
+    var n = guardadasMem.length;
+    var f = modal('<h2 id="modalTitle">Alterações sem lugar para guardar</h2><p>' + n + (n === 1 ? ' alteração não tinha subido' : ' alterações não tinham subido') +
+      ' quando a sessão terminou, e este aparelho está sem espaço para guardá-las. Baixe o arquivo agora: se o app fechar, elas se perdem.</p>' +
+      '<div class="modal-foot"><button type="button" class="btn primary" data-mem="baixar">Baixar (.json)</button></div>');
+    f.addEventListener('click', function (e) {
+      if (!e.target.closest('[data-mem]')) return;
+      saveBlob('alteracoes-guardadas-' + todayIso() + '.json', new Blob([JSON.stringify(guardadasMem, null, 2)], { type: 'application/json' }), 'Arquivo das alterações salvo.');
+      guardadasMem = null;
+      closeModal();
+    });
+  }
+  // a resposta de um envio que estava a caminho quando a sessão terminou: se gravou, as guardadas dele saem; senão ficam
+  function envioVelho(envio, gravou) {
     var l = recusadas();
-    if (!l.length) { toast('Nenhuma alteração recusada neste aparelho.'); return; }
-    var f = modal('<h2 id="modalTitle">Alterações recusadas</h2>' +
-      '<p>O banco recusou estas alterações deste aparelho. Elas não foram gravadas, mas ficaram guardadas aqui. Baixe o arquivo para conferir ou guardar, ou mande de novo se o motivo já foi resolvido (por exemplo, o acesso foi corrigido).</p>' +
-      '<ul class="rec-lista">' + l.map(function (x) {
-        return '<li><b>' + esc(opsResumo([x.op])) + '</b><small>' + esc(new Date(x.em).toLocaleString('pt-BR')) + (x.por ? ' · ' + esc(x.por) : '') + ' · motivo: ' + esc(x.erro) + '</small></li>';
-      }).join('') + '</ul>' +
-      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button>' +
-      '<button type="button" class="btn danger" data-rec="apagar">Apagar a lista</button>' +
-      '<button type="button" class="btn" data-rec="baixar">Baixar (.json)</button>' +
-      (banco.login ? '<button type="button" class="btn primary" data-rec="reenviar">Mandar de novo</button>' : '') + '</div>');
+    if (gravou) gravarRecusadas(l.filter(function (x) { return x.envio !== envio; }));
+    else { l.forEach(function (x) { if (x.envio === envio) delete x.envio; }); gravarRecusadas(l); }
+    banco.busy = false;
+    syncStatus();
+    if (banco.pend.length && banco.login) scheduleFlush(300);
+  }
+  // a pessoa entrou de novo: as alterações dela que a sessão anterior deixou guardadas voltam para a fila
+  function devolverGuardadas(l) {
+    var todas = recusadas(), minhas = todas.filter(function (x) { return x.tipo === 'sessao' && (x.uid ? x.uid === l.uid : !!x.por && x.por === l.nome); });
+    if (!minhas.length) return;
+    if (!gravarRecusadas(todas.filter(function (x) { return minhas.indexOf(x) < 0; }))) return;
+    enqueue(minhas.map(function (x) { return x.op; }));
+    banco.espera = 0;
+    scheduleFlush(1500);
+    // depois do "Olá" da entrada, que tomaria o lugar deste aviso
+    setTimeout(function () { toast(minhas.length + (minhas.length === 1 ? ' alteração sua que estava guardada voltou' : ' alterações suas que estavam guardadas voltaram') + ' para a fila e ' + (minhas.length === 1 ? 'sobe' : 'sobem') + ' agora.', 6000); }, 2500);
+  }
+  // cada pessoa vê e manda de novo só as dela; o Administrador vê todas e reenvia as de outra pessoa em nome dela
+  function openRecusadas() {
+    if (!banco.login) { toast('Entre com o seu código para ver as alterações guardadas neste aparelho.', 5000); return; }
+    var todas = recusadas(), adm = isAdmin(), grupos = [], porK = {};
+    todas.forEach(function (x) {
+      if (!adm && !minhaGuardada(x)) return;
+      var k = x.uid || ('n:' + (x.por || ''));
+      if (!porK[k]) { porK[k] = { autor: x.por || 'sem nome', papel: x.papel, minha: minhaGuardada(x), itens: [] }; grupos.push(porK[k]); }
+      porK[k].itens.push(x);
+    });
+    if (!grupos.length) { toast(todas.length ? 'As alterações guardadas neste aparelho são de outra pessoa: só ela ou o Administrador as veem.' : 'Nenhuma alteração guardada neste aparelho.', 5000); return; }
+    var f = modal('<h2 id="modalTitle">Alterações guardadas neste aparelho</h2>' +
+      '<p>Não foram gravadas no banco: ou o banco recusou, ou a sessão terminou antes de elas subirem. As da sessão voltam sozinhas quando a pessoa entra de novo neste aparelho.</p>' +
+      grupos.map(function (g, gi) {
+        return '<h3 class="rec-autor">' + esc(g.autor) + (g.papel ? ' · ' + esc(papelNome(g.papel)) : '') + ' · ' + g.itens.length + '</h3><ul class="rec-lista">' + g.itens.map(function (x) {
+          return '<li><b>' + esc(opsResumo([x.op])) + '</b><small>' + esc(new Date(x.em).toLocaleString('pt-BR')) + ' · ' + (x.tipo === 'sessao' ? 'a sessão terminou antes de enviar' : 'recusada pelo banco: ' + esc(x.erro)) + '</small></li>';
+        }).join('') + '</ul><div class="modal-foot rec-acoes">' +
+          '<button type="button" class="btn danger" data-rec="apagar" data-g="' + gi + '">Apagar</button>' +
+          '<button type="button" class="btn" data-rec="baixar" data-g="' + gi + '">Baixar (.json)</button>' +
+          (g.minha ? '<button type="button" class="btn primary" data-rec="reenviar" data-g="' + gi + '">Mandar de novo</button>'
+            : adm ? '<button type="button" class="btn primary" data-rec="admin" data-g="' + gi + '">Reenviar em nome de ' + esc(g.autor) + '</button>' : '') + '</div>';
+      }).join('') +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
+    function tirar(g) {
+      var ks = g.itens.map(chaveGuardada);
+      return gravarRecusadas(recusadas().filter(function (x) { return ks.indexOf(chaveGuardada(x)) < 0; }));
+    }
     f.addEventListener('click', function (e) {
       var b = e.target.closest('[data-rec]');
       if (!b) return;
-      var k = b.dataset.rec;
+      var k = b.dataset.rec, g = grupos[Number(b.dataset.g)];
+      if (!g) return;
+      var ops = g.itens.map(function (x) { return x.op; });
       if (k === 'baixar') {
-        saveBlob('alteracoes-recusadas-' + todayIso() + '.json', new Blob([JSON.stringify(recusadas(), null, 2)], { type: 'application/json' }), 'Arquivo das alterações recusadas salvo.');
+        saveBlob('alteracoes-guardadas-' + todayIso() + '.json', new Blob([JSON.stringify(g.itens, null, 2)], { type: 'application/json' }), 'Arquivo das alterações guardadas salvo.');
       } else if (k === 'reenviar') {
-        var ops = recusadas().map(function (x) { return x.op; });
-        lsPut(RECUSA_KEY, null);
+        if (!tirar(g)) { toast('Não deu para mexer na lista deste aparelho.'); return; }
         closeModal();
         enqueue(ops);
         keepSync();
@@ -6122,12 +6318,27 @@
         refresh();          // mostra o banco com estas alterações por cima, como as outras da fila
         scheduleFlush(300);
         toast('Mandando de novo ' + ops.length + (ops.length === 1 ? ' alteração.' : ' alterações.'));
+      } else if (k === 'admin') {
+        closeModal();
+        confirmar({ titulo: 'Reenviar as alterações de ' + g.autor + '?', texto: ops.length + (ops.length === 1 ? ' alteração vai' : ' alterações vão') + ' direto para o banco, sem passar pela aprovação. O histórico registra que eram de ' + g.autor + ' e que você reenviou.', botao: 'Reenviar' }).then(function (r) {
+          if (!r) return;
+          var me = banco.login.nome || 'Administrador', resumo = ('Reenviado por ' + me + ' (de ' + g.autor + '): ' + opsResumo(ops)).slice(0, 300);
+          window.Banco.salvarCampos(banco.login.codigo, me, resumo, ops).then(function (res) {
+            tirar(g);
+            var conf = (res && res.conflitos) || [];
+            if (conf.length) showConflicts(conf);
+            refresh();
+            toast('Reenviadas ' + ops.length + (ops.length === 1 ? ' alteração' : ' alterações') + ' de ' + g.autor + '.', 5000);
+          }, function (err) {
+            toast('Não deu para reenviar agora (' + ((err && err.message) || 'erro') + '). Continuam guardadas.', 7000);
+          });
+        });
       } else if (k === 'apagar') {
         closeModal();
-        confirmar({ titulo: 'Apagar as alterações recusadas?', texto: 'Elas somem deste aparelho. Se quiser guardar, baixe o arquivo antes.', botao: 'Apagar', perigo: true }).then(function (r) {
+        confirmar({ titulo: 'Apagar as alterações guardadas de ' + g.autor + '?', texto: 'Elas somem deste aparelho. Se quiser guardar, baixe o arquivo antes.', botao: 'Apagar', perigo: true }).then(function (r) {
           if (!r) return;
-          lsPut(RECUSA_KEY, null);
-          toast('Lista apagada.');
+          tirar(g);
+          toast('Apagadas deste aparelho.');
         });
       }
     });
@@ -6160,6 +6371,8 @@
     if (!banco.on) return Promise.resolve();
     if (!force && typing()) { banco.want = true; return Promise.resolve(); }
     banco.want = false;
+    // aba só de consulta: a fila é a da aba que edita (relê a que ela gravou)
+    if (aba.ro) { var sk = lsGet(SYNC_KEY); banco.pend = sk && Array.isArray(sk.pend) ? sk.pend : []; }
     var credR = banco.login && banco.login.codigo;
     return window.Banco.carregar(credR).then(function (r) {
       if (!force && typing()) { banco.want = true; return; }
@@ -6181,6 +6394,7 @@
         if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
         trackChanges();   // o que acabou de ser mudado aqui entra na fila antes de trocar o estado
         state = normalize(applyOps(fromServer(r), banco.pend));
+        separarArquivados(state);
         banco.base = clone(state);
         try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
         renderAll();
@@ -6208,7 +6422,9 @@
   function syncStatus() {
     if (!banco.on) return;
     var el = $('saveState'), n = banco.pend.length, t, warn = false;
-    if (banco.busy) t = 'Enviando ao banco…';
+    if (aba.ro) { t = 'Só consulta: o app está aberto em outra aba'; warn = true; }
+    else if (n && banco.semEspaco) { t = 'Aparelho sem espaço · ' + n + (n === 1 ? ' alteração só na memória' : ' alterações só na memória') + ' · salve um backup'; warn = true; }
+    else if (banco.busy) t = 'Enviando ao banco…';
     else if (n && !banco.login) { t = n + (n === 1 ? ' alteração não enviada' : ' alterações não enviadas') + ': entre para enviar'; warn = true; }
     else if (n && banco.falhas) { t = 'Banco com falha · ' + n + (n === 1 ? ' alteração guardada' : ' alterações guardadas') + ' · tenta de novo às ' + hhmm(new Date(banco.espera)); warn = true; }
     else if (n && isFiscal()) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' mudança para enviar à aprovação' : ' mudanças para enviar à aprovação'); warn = banco.online === false; }
@@ -6216,6 +6432,7 @@
     else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
     else if (banco.at) t = (window.AMBIENTE && AMBIENTE.previa ? 'Banco de teste · ' : 'Banco da equipe · ') + hhmm(banco.at);
     else t = 'Conectando ao banco…';
+    if (localFalhou && !aba.ro) { t += ' · não salvou no navegador'; warn = true; }
     var dq = driveQ && driveReady() ? driveQ.info() : null;
     if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo' || dq.erro === 'recusado' || dq.erro === 'script'; }
     el.textContent = t;
@@ -6232,9 +6449,13 @@
   // a mesma pessoa com o mesmo papel: trocar de pessoa, ou a mesma pessoa com outro papel, limpa o aparelho
   function mesmaPessoa(a, b) { return !a && !b || !!(a && b && (a.codigo === b.codigo || (a.uid && a.uid === b.uid)) && a.papel === b.papel); }
   function setLogin(l, inicio) {
-    if (banco.on && !inicio && !mesmaPessoa(banco.login, l)) limparDadosAparelho();
+    var limpou = banco.on && !inicio && !mesmaPessoa(banco.login, l);
+    if (limpou) limparDadosAparelho();
     banco.login = l;
     lsPut(LOGIN_KEY, l);
+    if (banco.on && l) devolverGuardadas(l);
+    // o aparelho ficou vazio: lê o banco já com o acesso novo (sem esperar alguém gravar algo para a versão mudar)
+    if (limpou) { banco.versao = 0; setTimeout(function () { refresh(true); }, 0); }
     analiseInit();
     aplicaPapel();
     renderLoginBtn();
@@ -6254,22 +6475,66 @@
     // itens do menu Dados conforme o papel
     // fiscal e analista: sem backup (o menu fica com a conta, o PDF e a impressão do que veem)
     var equipe = !banco.on || isEng();
-    var show = { lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
+    var show = { arquivados: isAdmin(), lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
     });
   }
+  // contratos arquivados (decisão D-2): saem de todas as telas, mas os dados ficam no banco; só o Administrador os recebe e
+  // restaura (Dados › Contratos arquivados). Aqui fica só o resumo de cada um
+  function separarArquivados(s) {
+    var arq = [], ids = {};
+    s.contracts = s.contracts.filter(function (c) {
+      if (!c.arquivado) return true;
+      ids[c.id] = true;
+      arq.push({ id: c.id, nome: ctNome(c) || 'Contrato', completo: ctCompleto(c), n: c.pontos.length, it: itensTxt(c), em: c.arquivado.em || null, por: c.arquivado.por || null });
+      return false;
+    });
+    banco.arquivados = arq;
+    banco.propostas = (banco.propostas || []).filter(function (x) { return !ids[x.contrato_id]; });
+    if (!s.contracts.some(function (c) { return c.id === s.activeId; })) s.activeId = s.contracts[0] ? s.contracts[0].id : null;
+  }
+  function openArquivados() {
+    if (!isAdmin()) { toast('Só o Administrador vê os contratos arquivados.'); return; }
+    var l = banco.arquivados || [];
+    var f = modal('<h2 id="modalTitle">Contratos arquivados</h2>' +
+      '<p>Saíram de todas as telas, para todos. Nada foi apagado: os ' + itensTxt(null) + ', as fotos e as medições continuam no banco. Ao restaurar, o contrato volta como estava.</p>' +
+      (l.length ? '<ul class="rec-lista">' + l.map(function (x, i) {
+        return '<li><b>' + esc(x.completo || x.nome) + '</b><small>' + x.n + ' ' + esc(x.it || 'pontos') + (x.em ? ' · arquivado em ' + esc(new Date(x.em).toLocaleString('pt-BR')) : '') + (x.por ? ' por ' + esc(x.por) : '') + '</small>' +
+          '<button type="button" class="btn small" data-arq="' + i + '">Restaurar</button></li>';
+      }).join('') + '</ul>' : '<p><b>Nenhum contrato arquivado.</b></p>') +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
+    f.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-arq]');
+      if (!b) return;
+      var x = l[Number(b.dataset.arq)];
+      if (!x) return;
+      closeModal();
+      enqueue([{ t: 'desarquivar_contrato', id: x.id, nome: x.nome, em: new Date().toISOString() }]);
+      banco.arquivados = banco.arquivados.filter(function (y) { return y.id !== x.id; });
+      keepSync();
+      banco.espera = 0;
+      scheduleFlush(0);
+      setTimeout(function () { refresh(true); }, 1500);
+      toast('Restaurando ' + x.nome + '. Ele volta para a lista assim que o banco responder.', 6000);
+    });
+  }
   function limparDadosAparelho() {
     if (medicoes) medicoes.limpar();
+    flushSave();   // o último toque de quem sai entra na fila dele antes de guardar
     state = { version: (state && state.version) || 1, activeId: null, contracts: [] };
-    // as alterações que não subiram eram da pessoa anterior: não vão com o código de quem entra agora
-    if (banco.pend.length) toast(banco.pend.length + (banco.pend.length === 1 ? ' alteração' : ' alterações') + ' que não tinham subido foram descartadas: eram de quem saiu.', 7000);
-    banco.pend = []; banco.sending = 0; banco.cfg = {}; banco.conf = [];
-    banco.base = clone(state); banco.meta = {}; banco.propostas = []; banco.acesso = null;
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
+    // as alterações que não subiram são da pessoa anterior: não vão com o código de quem entra agora. Ficam guardadas com o
+    // nome dela e voltam quando ela entrar de novo (guardarDaSessao)
+    if (banco.pend.length) guardarDaSessao(banco.pend, banco.busy ? banco.envio : 0, banco.sending);
+    banco.envio++;   // a resposta de um envio a caminho não mexe mais na fila
+    banco.pend = []; banco.sending = 0; banco.cfg = {}; banco.conf = []; banco.arquivados = [];
+    banco.base = clone(state); banco.meta = {}; banco.propostas = []; banco.acesso = null;
     lsPut(AN_KEY, null);
     if (window.GaleriaLimparCache) window.GaleriaLimparCache();
+    // a galeria aberta por quem saiu (listas do Drive e do banco guardadas por alguns minutos) não serve para quem entra (A8)
+    if (galeria) { try { galeria.close(true); } catch (e) { /* já fechada */ } galeria = null; }
     setVisao(true);
     keepSync();
   }
@@ -6289,7 +6554,8 @@
     setLogin(null);
     renderAll();
     syncStatus();
-    if (!silent) toast('Você saiu. Sem o código, este aparelho mostra só a visão geral.');
+    if (!silent) toast(ultimaGuarda ? 'Você saiu. ' + ultimaGuarda : 'Você saiu. Sem o código, este aparelho mostra só a visão geral.', ultimaGuarda ? 8000 : undefined);
+    ultimaGuarda = '';
   }
   function aparelho() {
     var ua = navigator.userAgent;
@@ -6486,14 +6752,14 @@
       else if (a === 'lixeira') openLixeira();
       else if (a === 'aprov') openAprov();
       else if (a === 'sair') {
+        // as alterações que não subiram ficam guardadas com o nome de quem sai (limparDadosAparelho) e sobem quando ele voltar
         var sair = function () {
           var tok = banco.login && banco.login.codigo;
-          banco.pend = []; keepSync();
           closeModal(); logout(); refresh(true);
           if (tok && String(tok).indexOf('tk_') === 0) window.Banco.sair(tok).catch(function () { /* sem sinal: a sessão expira sozinha */ });
         };
         if (!banco.pend.length) { sair(); return; }
-        confirmar({ titulo: 'Sair e descartar?', texto: 'Há ' + banco.pend.length + ' alteração(ões) deste aparelho que ainda não subiram para o banco. Se sair agora, elas se perdem.', botao: 'Sair e descartar', perigo: true })
+        confirmar({ titulo: 'Sair com alterações sem enviar?', texto: 'Há ' + banco.pend.length + (banco.pend.length === 1 ? ' alteração' : ' alterações') + ' deste aparelho que ainda não ' + (banco.pend.length === 1 ? 'subiu' : 'subiram') + ' para o banco. ' + (banco.pend.length === 1 ? 'Ela fica guardada' : 'Elas ficam guardadas') + ' neste aparelho com o seu nome e ' + (banco.pend.length === 1 ? 'sobe' : 'sobem') + ' quando você entrar de novo aqui.', botao: 'Sair e guardar' })
           .then(function (r) { if (r) sair(); });
       }
     });
@@ -6894,6 +7160,7 @@
     driveQ = window.DriveFotos({
       getUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
       getLogin: function () { return banco.login; },
+      podeEnviar: function () { return aba.pronto && !aba.ro; },   // só a aba que edita manda as fotos
       ambiente: window.AMBIENTE.nome,
       registrar: function (cred, f, mini) { return window.Banco.fotoRegistrar(cred, f, mini); },
       // o envio foi recusado pelo acesso: a mesma conferência da sessão (null = não vale mais; falha = banco ou rede fora)
@@ -6937,7 +7204,7 @@
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
-        contratos: ctsFoto, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
+        contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
         podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, onBaixa: renderGaleriaBtn,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
@@ -7036,6 +7303,7 @@
     renderGaleriaBtn();
     $('btnGaleria').addEventListener('click', function () { abrirGaleria(); });
     banco.propostas = s && Array.isArray(s.propostas) ? s.propostas : [];
+    banco.arquivados = s && Array.isArray(s.arquivados) ? s.arquivados : [];
     setLogin(lsGet(LOGIN_KEY), true);
     if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
@@ -7046,8 +7314,10 @@
     });
     window.addEventListener('online', function () { banco.online = true; banco.espera = 0; flush(); poll(); });
     window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
+    // trocar de app ou fechar a aba: o último toque grava já, sem esperar os 300 ms (o sistema pode encerrar o app)
+    window.addEventListener('pagehide', flushSave);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible') { flushSave(); return; }
       poll();
       if (isEng() || isAnalista()) {
         conferirAcesso();   // quem tem a análise no aparelho: confere se ainda tem o acesso
@@ -7173,7 +7443,7 @@
     }
     $('btnMenu').addEventListener('click', function () {
       var pop = $('menuPop'), rec = pop.querySelector('[data-act="recusadas"]'), nr = recusadas().length;
-      if (rec) { rec.hidden = !nr; rec.textContent = 'Alterações recusadas (' + nr + ')'; }
+      if (rec) { rec.hidden = !nr; rec.textContent = 'Alterações guardadas (' + nr + ')'; }
       pop.hidden = !pop.hidden;
       $('btnMenu').setAttribute('aria-expanded', String(!pop.hidden));
     });
@@ -7203,6 +7473,7 @@
     window.addEventListener('orientationchange', function () { setTimeout(syncTopbar, 300); });
     window.addEventListener('pageshow', syncTopbar);
     setTimeout(syncTopbar, 500); setTimeout(syncTopbar, 2000);
+    initAba();
     initBanco();
     renderAll();
     if (view === 'mapa') setView('mapa');

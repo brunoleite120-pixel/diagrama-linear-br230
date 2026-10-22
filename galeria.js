@@ -764,6 +764,9 @@
         });
       }).then(function (arr) {
         if (g !== geracao || !arr) return;
+        // fotos de contrato arquivado (só o Administrador as recebe) não aparecem: o contrato saiu de todas as telas
+        var oc = o.ocultos ? o.ocultos() : [];
+        if (oc.length) arr = arr.filter(function (x) { return oc.indexOf(x.cid) < 0; });
         arr.sort(function (a, b) { return String(b.em || '').localeCompare(String(a.em || '')); });
         itens = arr; carregando = false;
         if (cidAuto) {

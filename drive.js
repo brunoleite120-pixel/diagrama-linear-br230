@@ -435,6 +435,7 @@
       forcar = forcar === true;
       var url = opts.getUrl(), login = opts.getLogin(), g = geracao;
       if (busy) return;
+      if (opts.podeEnviar && !opts.podeEnviar()) { change(); return; }   // outra aba do app é que envia
       if (!url || !login || navigator.onLine === false) { change(); return; }
       if (!forcar && (lsLer(PAUSA_KEY) || esperaWifi())) { change(); return; }   // pausado, ou só no Wi-Fi e está no 4G
       if (!forcar && erro === 'codigo') { change(); return; }   // acesso que não vale mais: espera entrar de novo

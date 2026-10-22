@@ -53,7 +53,7 @@
     }
     if (p.aparelho) linhas.push(plural(p.aparelho, 'foto está', 'fotos estão') + ' só neste aparelho (marcadas para não enviar): envie ao Drive ou salve na galeria do celular e apague daqui antes.');
     if (p.outras) linhas.push(plural(p.outras, 'foto', 'fotos') + ' de outra pessoa' + (p.login ? '' : ' (ou de quem saiu)') + ' ainda não ' + (p.outras === 1 ? 'foi enviada' : 'foram enviadas') + ': quem tirou precisa entrar aqui com o código dele e enviar.');
-    if (p.recusadas) linhas.push(plural(p.recusadas, 'alteração recusada', 'alterações recusadas') + ' pelo banco ' + (p.recusadas === 1 ? 'está guardada' : 'estão guardadas') + ' só aqui: abra Dados › Alterações recusadas e mande de novo, ou baixe o arquivo e apague a lista.');
+    if (p.recusadas) linhas.push(plural(p.recusadas, 'alteração está guardada', 'alterações estão guardadas') + ' só aqui, sem ter ido para o banco: abra Dados › Alterações guardadas e mande de novo, ou baixe o arquivo e apague.');
     if (!linhas.length) return { ok: true, t: 'Tudo enviado: pode trocar de endereço.' };
     return { ok: false, t: linhas.join(' ') + ' Não apague o atalho antigo antes disso.' };
   }

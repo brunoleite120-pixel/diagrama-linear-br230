@@ -52,9 +52,11 @@
       o.signal = ctl.signal;
       timer = setTimeout(function () { ctl.abort(); }, 20000);
     }
+    // o prazo de 20 s vale até a resposta chegar inteira: com o sinal caindo no meio do corpo, r.text() ficaria parado e o
+    // envio da fila e das fotos travava até recarregar o app
     return fetch(BASE + path, o).then(function (r) {
-      clearTimeout(timer);
       return r.text().then(function (t) {
+        clearTimeout(timer);
         var j = null;
         try { j = t ? JSON.parse(t) : null; } catch (e) { j = null; }
         if (!r.ok) {
@@ -65,6 +67,12 @@
           throw err;
         }
         return j;
+      }, function () {
+        clearTimeout(timer);
+        var e1 = new Error('A resposta do banco não chegou inteira');
+        e1.code = 'sem_rede';   // como sem sinal: nada sai da fila, tenta de novo depois
+        e1.status = 0;
+        throw e1;
       });
     }, function () {
       clearTimeout(timer);
