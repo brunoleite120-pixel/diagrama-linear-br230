@@ -198,8 +198,11 @@
       }
     }
     if (out.date) {
+      // data zerada ("0000:00:00 00:00:00", de alguns aplicativos) virava 1899: sem data, vale a do arquivo
       var m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/.exec(out.date);
-      out.date = m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+      var ok = m && +m[1] >= 1990 && +m[2] >= 1 && +m[2] <= 12 && +m[3] >= 1 && +m[3] <= 31;
+      out.date = ok ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+      if (out.date && !isFinite(out.date.getTime())) out.date = null;
     }
     return out;
   }
@@ -930,6 +933,7 @@
 
     function startView() {
       fechaFolha(true);
+      if (cam && cam.shots.length) avisoCapturas(cam.shots.length);
       stopCam();
       clearBatch();
       if (st && st.url) URL.revokeObjectURL(st.url);
@@ -1397,7 +1401,7 @@
           var item = driveItem(a, r.b, r.nome);
           item.enviar = como === 'fila';
           // guardada no meio da edição: se o app fechar antes de sair da foto, ela vai para a fila ao abrir de novo (app.js)
-          if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1 });
+          if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1, querEnviar: a.drive !== false });
           return opts.drive.add([item]).then(function () {
             a.feita = ver; a.como = como; a.erroG = false; a.guardando = false;
             if (como === 'fila') refreshDrive();
@@ -1458,8 +1462,9 @@
       return new Promise(function (resolve) {
         var cv = document.createElement('canvas');
         var a = arq();
-        draw(cv, a[0]);
-        cv.toBlob(function (b) { resolve(b); }, 'image/jpeg', a[1]);
+        try { draw(cv, a[0]); } catch (e) { cv.width = cv.height = 0; resolve(null); return; }
+        // a imagem de 1.920 px sai da memória logo depois (no iPhone o navegador demora a liberar sozinho)
+        cv.toBlob(function (b) { cv.width = cv.height = 0; resolve(b); }, 'image/jpeg', a[1]);
       });
     }
     function busy(on) { root.querySelectorAll('[data-ft="save"],[data-ft="share"],[data-ft="drive"]').forEach(function (b) { b.disabled = on; }); }
@@ -1514,6 +1519,7 @@
     function toDrive(list, auto) {
       if (!opts.drive || !list.length) return;
       opts.drive.add(list).then(function () {
+        if (batch) { var ids = list.map(function (x) { return x.id; }); batch.items.forEach(function (it) { if (ids.indexOf(it.uid) >= 0) it.salva = true; }); }
         var nd = list.filter(function (x) { return x.enviar !== false; }).length, na = list.length - nd;
         if (!auto) notify(((nd ? (nd === 1 ? 'Foto na fila' : nd + ' fotos na fila') + ' para o Drive da equipe.' : '') +
           (na ? ' ' + (na === 1 ? '1 ficou' : na + ' ficaram') + ' só neste aparelho.' : '')).trim());
@@ -1558,7 +1564,7 @@
       if (extra > 0) files = files.slice(0, MAX_FOTOS);
       clearBatch();
       var b = batch = { common: '', ver: 0, out: null, busy: false, items: files.map(function (f, i) {
-        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true, preset: presets ? presets[i] : null, uid: newUid(), drive: padraoDrive() };
+        return { file: f, name: f.name || 'Foto ' + (i + 1), from: from, bi: i, desc: '', wait: true, preset: presets ? presets[i] : null, uid: (presets && presets[i] && presets[i].uid) || newUid(), drive: padraoDrive() };
       }) };
       showBatch();
       if (extra > 0) notify('Abertas as primeiras ' + MAX_FOTOS + ' fotos. Salve estas e depois abra as outras ' + extra + '.');
@@ -1607,6 +1613,7 @@
     }
     function clearBatch() {
       if (!batch) return;
+      avisoCapturas(batch.items.filter(function (it) { return it.from === 'camapp' && !it.salva && !it.err; }).length);
       batch.items.forEach(function (it) { if (it.url) URL.revokeObjectURL(it.url); if (it.prevUrl) URL.revokeObjectURL(it.prevUrl); });
       batch = null;
       drawQ = [];
@@ -2073,8 +2080,10 @@
         c.busy = false;
         btn.disabled = false;
         if (!blob) { notify('Não foi possível capturar a foto. Tente de novo.'); return; }
-        var name = 'Foto ' + pad(when.getHours()) + 'h' + pad(when.getMinutes()) + 'm' + pad(when.getSeconds()) + 's.jpg';
-        c.shots.push({ file: new File([blob], name, { type: 'image/jpeg', lastModified: when.getTime() }), meta: { live: true, date: when, ll: fix ? fix.ll : null, acc: fix ? fix.acc : null } });
+        var name = 'Foto ' + pad(when.getHours()) + 'h' + pad(when.getMinutes()) + 'm' + pad(when.getSeconds()) + 's.jpg', uid = newUid();
+        var sh = { uid: uid, file: new File([blob], name, { type: 'image/jpeg', lastModified: when.getTime() }), meta: { live: true, date: when, ll: fix ? fix.ll : null, acc: fix ? fix.acc : null, uid: uid } };
+        c.shots.push(sh);
+        sh.guarda = guardarCaptura(sh, blob, name);
         if (c.lastUrl) URL.revokeObjectURL(c.lastUrl);
         c.lastUrl = URL.createObjectURL(blob);
         c.sure = 0;
@@ -2082,6 +2091,24 @@
         if (c.shots.length >= MAX_FOTOS) notify('Limite de ' + MAX_FOTOS + ' fotos: toque em Concluir para salvar estas; depois continue fotografando.');
         else if (!fix) notify('Foto sem local: o GPS ainda não respondeu.');
       });
+    }
+    // A4: cada foto da câmera entra no aparelho na hora em que é tirada (Galeria › No aparelho, sem carimbo e sem ir ao Drive).
+    // Se o app fechar, o celular recarregar ou alguém tocar em × ou em Nova seleção, a foto e o GPS dela não se perdem. Ao
+    // terminar o lote (salvar, compartilhar ou enviar), a versão com carimbo entra no lugar dela (mesmo id)
+    function guardarCaptura(sh, blob, name) {
+      if (!opts.drive) return Promise.resolve(false);
+      var m = sh.meta, ll = m.ll, loc = ll ? ref.locate(ll[0], ll[1]) : null, km = loc && loc.dist <= 2000 ? loc.km : null;
+      var a = km != null ? identify(km) : null, c = a ? a.c : null, p = a && pertoPonto(a) ? a.p : null;
+      var info = ['Câmera com GPS (sem carimbo)', km != null ? kmLine(km, '', null, true) : '', ll ? coordTxt(ll) : '', dateTxt(m.date)].filter(Boolean).join('\n');
+      return opts.drive.add([{ id: sh.uid, nome: name, blob: blob, pastas: [(c && nomes.pasta(c)) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], pastaAntiga: nomes.pastaAntiga(c),
+        descricao: info, enviar: false,
+        meta: { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? nomes.formal(c) : null, km: km != null ? Math.round(km * 1000) / 1000 : null,
+          lat: ll ? ll[0] : null, lng: ll ? ll[1] : null, em: m.date.toISOString(), desc: null, rascunho: 1, camera: 1 } }])
+        .then(function () { return true; }, function () { notify('O aparelho não deixou guardar esta foto (sem espaço?). Toque em Concluir e salve as fotos agora.'); return false; });
+    }
+    // fotos da câmera que ainda não foram salvas com o carimbo: continuam em Galeria › No aparelho
+    function avisoCapturas(n) {
+      if (n && opts.drive) notify(n === 1 ? 'A foto da câmera ficou guardada em Galeria › No aparelho (sem carimbo).' : 'As ' + n + ' fotos da câmera ficaram guardadas em Galeria › No aparelho (sem carimbo).');
     }
     function camDone() {
       if (!cam || cam.busy) return;
@@ -2098,6 +2125,12 @@
         b.textContent = 'Toque de novo para descartar ' + cam.shots.length;
         setTimeout(function () { if (cam && Date.now() - cam.sure >= 3000) renderCam(); }, 3100);
         return;
+      }
+      var shots = cam.shots.slice();
+      cam.shots = [];   // descartadas de propósito: não contam como "ficaram guardadas"
+      if (shots.length && opts.drive && opts.drive.apagar) {
+        Promise.all(shots.map(function (s) { return s.guarda; })).then(function () { return opts.drive.apagar(shots.map(function (s) { return s.uid; })); })
+          .then(function () { notify(shots.length === 1 ? 'Foto descartada.' : shots.length + ' fotos descartadas.'); }, function () { /* ficam na galeria */ });
       }
       startView();
     }
@@ -2166,6 +2199,7 @@
       var it = batch.items[i];
       if (!it || it.gone) return;
       if (b.dataset.ft === 'b-del') {
+        if (it.from === 'camapp' && !it.salva && opts.drive) { it.salva = true; notify('Foto ' + (i + 1) + ' tirada da seleção. Ela continua em Galeria › No aparelho (sem carimbo).'); }
         it.gone = true;
         batch.ver++;
         if (it.url) URL.revokeObjectURL(it.url);
@@ -2403,6 +2437,7 @@
     }
     function close() {
       fechaFolha(true);
+      if (cam && cam.shots.length) avisoCapturas(cam.shots.length);
       stopCam();
       stopGps();
       if (root && root.parentNode) root.parentNode.removeChild(root);

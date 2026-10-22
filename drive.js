@@ -100,7 +100,8 @@
       cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
       cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
       if (img.close) img.close();
-      return new Promise(function (r) { cv.toBlob(r, 'image/jpeg', 0.62); });
+      // a imagem sai da memória logo depois de virar miniatura (M20)
+      return new Promise(function (r) { cv.toBlob(function (b) { cv.width = cv.height = 0; r(b); }, 'image/jpeg', 0.62); });
     }).then(function (b) { return b ? new Response(b).arrayBuffer() : null; }, function () { return null; });
   }
 

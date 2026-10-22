@@ -4309,6 +4309,19 @@
   }
   // app iOS (Capacitor): grava no cache do app e abre a folha de compartilhar nativa (Salvar Imagem / Salvar em Arquivos)
   function isNativeApp() { var C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); }
+  // cópias que o app grava no cache do aparelho só para o compartilhar do sistema (PDF, .zip, fotos para a galeria): saem
+  // depois de entregues; as que sobraram (app fechado no meio), ao abrir. Nunca mexe nas fotos da galeria do app (IndexedDB)
+  var TEMP_KEY = 'diagrama-linear.temporarios';
+  function tempLista() { var l = lsGet(TEMP_KEY); return Array.isArray(l) ? l : []; }
+  function tempMarca(paths) { lsPut(TEMP_KEY, tempLista().concat(paths).slice(-500)); }
+  function tempApaga(paths) {
+    var P = window.Capacitor && window.Capacitor.Plugins;
+    if (!P || !P.Filesystem) return Promise.resolve();
+    return Promise.all(paths.map(function (p) { return P.Filesystem.deleteFile({ path: p, directory: 'CACHE' }).catch(function () { /* já saiu */ }); })).then(function () {
+      lsPut(TEMP_KEY, tempLista().filter(function (p) { return paths.indexOf(p) < 0; }));
+    });
+  }
+  function tempLimpar() { if (isNativeApp()) { var l = tempLista(); if (l.length) tempApaga(l); } }
   function nativeSave(name, blob) {
     var P = window.Capacitor && window.Capacitor.Plugins;
     if (!isNativeApp() || !P || !P.Filesystem || !P.Share) return null;
@@ -4318,9 +4331,11 @@
       r.onerror = function () { reject(r.error); };
       r.readAsDataURL(blob);
     }).then(function (b64) {
+      tempMarca([name]);
       return P.Filesystem.writeFile({ path: name, data: b64, directory: 'CACHE' });
     }).then(function (res) {
-      return P.Share.share({ title: name, files: [res.uri] });
+      var fim = function () { tempApaga([name]); };
+      return P.Share.share({ title: name, files: [res.uri] }).then(function (x) { fim(); return x; }, function (err) { fim(); throw err; });
     });
   }
   // várias fotos para a galeria do celular (Galeria › Baixar › Na galeria de fotos do celular): no app, o compartilhar do sistema
@@ -4348,11 +4363,13 @@
       for (var i = 0; i < files.length; i += 30) partes.push(files.slice(i, i + 30));
       return partes.reduce(function (pr, parte, k) {
         return pr.then(function () {
-          return Promise.all(parte.map(function (f) {
-            return blobB64(f.blob).then(function (b64) { return P.Filesystem.writeFile({ path: 'fotos/' + f.name, data: b64, directory: 'CACHE', recursive: true }); });
+          var paths = parte.map(function (f) { return 'fotos/' + f.name; });
+          tempMarca(paths);
+          return Promise.all(parte.map(function (f, j) {
+            return blobB64(f.blob).then(function (b64) { return P.Filesystem.writeFile({ path: paths[j], data: b64, directory: 'CACHE', recursive: true }); });
           })).then(function (rs) {
             return P.Share.share({ title: rotulo + (partes.length > 1 ? ' (' + (k + 1) + ' de ' + partes.length + ')' : ''), files: rs.map(function (r) { return r.uri; }) });
-          }).catch(function (err) { if (err && /cancel/i.test(err.message || String(err))) return; throw err; });
+          }).then(function () { tempApaga(paths); }, function (err) { tempApaga(paths); if (err && /cancel/i.test(err.message || String(err))) return; throw err; });
         });
       }, Promise.resolve());
     }
@@ -7169,6 +7186,7 @@
     });
     // as já enviadas saem do aparelho depois do prazo escolhido em Galeria › Espaço e envio (padrão: nunca)
     setTimeout(function () {
+      tempLimpar();
       if (!driveQ) return;
       if (window.Galeria && window.Galeria.limparEnviadas) window.Galeria.limparEnviadas(driveQ);
       // foto guardada sozinha enquanto era editada e o app fechou antes de sair dela: com o envio automático ligado, vai para a fila
@@ -7178,7 +7196,7 @@
       if (!auto) return;
       driveQ.list().then(function (l) {
         var cur = foto && foto._state ? foto._state() : null;
-        var ids = l.filter(function (r) { return r.situacao === 'aparelho' && r.meta && r.meta.rascunho && (!cur || r.id !== cur.uid); }).map(function (r) { return r.id; });
+        var ids = l.filter(function (r) { return r.situacao === 'aparelho' && r.meta && r.meta.rascunho && r.meta.querEnviar === true && !r.meta.camera && (!cur || r.id !== cur.uid); }).map(function (r) { return r.id; });
         if (ids.length) driveQ.enviar(ids, true);
       }).catch(function () { /* segue */ });
     }, 8000);
@@ -7206,7 +7224,7 @@
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
         contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
-        podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, onBaixa: renderGaleriaBtn,
+        podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, nativo: isNativeApp, onBaixa: renderGaleriaBtn,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });
     }

@@ -359,21 +359,25 @@
       return new Blob([r.buf], { type: r.tipo || 'image/jpeg' });
     }, function () { return null; });
   }
-  function cacheGravar(id, blob) {
+  // fixa: a pessoa pediu "Baixar para o app" (fica até ela apagar em Espaço e envio); as abertas de passagem saem quando passa
+  // do limite, das menos usadas para as mais usadas. Responde true se gravou (false: sem espaço ou sem IndexedDB)
+  function cacheGravar(id, blob, fixa) {
     return new Response(blob).arrayBuffer().then(function (buf) {
       return cacheTx('readwrite', function (i, a) {
         a.put({ id: id, buf: buf, tipo: blob.type || 'image/jpeg' });
-        i.put({ id: id, tam: buf.byteLength, usada: Date.now() });
+        var g0 = i.get(id);
+        g0.onsuccess = function () { i.put({ id: id, tam: buf.byteLength, usada: Date.now(), fixa: !!(fixa || (g0.result && g0.result.fixa)) }); };
       });
     }).then(function () {
       return cacheTx('readwrite', function (i, a) {
         var g = i.getAll();
         g.onsuccess = function () {
-          var l = (g.result || []).sort(function (x, y) { return x.usada - y.usada; }), tot = l.reduce(function (t, x) { return t + (x.tam || 0); }, 0);
-          for (var k = 0; k < l.length - 1 && tot > CACHE_MAX; k++) { i.delete(l[k].id); a.delete(l[k].id); tot -= l[k].tam || 0; }
+          var l = (g.result || []).filter(function (x) { return !x.fixa && x.id !== id; }).sort(function (x, y) { return x.usada - y.usada; });
+          var tot = (g.result || []).reduce(function (t, x) { return t + (x.tam || 0); }, 0);
+          for (var k = 0; k < l.length && tot > CACHE_MAX; k++) { i.delete(l[k].id); a.delete(l[k].id); tot -= l[k].tam || 0; }
         };
       });
-    }).catch(function () { /* sem espaço ou sem IndexedDB: só não guarda */ });
+    }).then(function () { return true; }, function () { return false; });
   }
   // espaço das baixadas: fotos inteiras (bytes, quantas) e itens guardados com a miniatura
   function cacheUso() {
@@ -973,22 +977,24 @@
 
     // foto inteira: do aparelho (tirada aqui ou já baixada antes), ou do Drive pelo script (confere quem pode ver);
     // a que vem do Drive fica guardada para a próxima vez
-    function arquivo(it) {
+    // fixar: "Baixar para o app": espera a gravação e falha se o aparelho não guardou (a contagem do fim não promete o que não ficou)
+    function arquivo(it, fixar) {
       var l = locais[it.id];
       var aqui = l && l.temArquivo && o.drive ? o.drive.arquivo(it.id) : Promise.resolve(null);
       return aqui.then(function (b) {
         if (b) return b;
         if (!it.driveId) throw { code: 'sem_drive' };
         return cacheLer(it.driveId).then(function (c) {
-          if (c) return c;
+          if (c) return fixar ? cacheGravar(it.driveId, c, true).then(function () { return c; }) : c;
           var url = o.driveUrl ? o.driveUrl() : null, lg = login();
           if (!url) throw { code: 'sem_url' };
           if (!lg) throw { code: 'sem_login' };
           return o.drive.post(url, { acao: it.origem === 'drive' ? 'ver_baixar' : 'baixar', ambiente: o.ambiente || 'oficial', codigo: lg.codigo, driveId: it.driveId }).then(function (r) {
             if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
             var bl = b64Blob(r.dados, r.mime);
-            cacheGravar(it.driveId, bl).then(function () { guardadas[it.driveId] = 1; retile(it.id); });
-            return bl;
+            var g = cacheGravar(it.driveId, bl, fixar).then(function (ok) { if (ok) { guardadas[it.driveId] = 1; retile(it.id); } return ok; });
+            if (!fixar) return bl;
+            return g.then(function (ok) { if (!ok) throw { code: 'sem_espaco' }; return bl; });
           }, function () { throw { code: 'sem_rede' }; });
         });
       });
@@ -1464,6 +1470,14 @@
       bx = { ls: ls, nomes: nomes, alvo: alvo, wifi: wifi, i: 0, ok: 0, falhas: 0, feitos: 0, arquivos: [], rotulo: ({ local: 'Fotos deste aparelho', minhas: 'Minhas fotos', todas: 'Fotos da equipe', relatorio: 'Relatório fotográfico', deletadas: 'Fotos apagadas', drive: 'Fotos do Drive' }[aba]) + ' ' + new Date().toISOString().slice(0, 10),
         total: alvo === 'mini' ? 0 : ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0) };
       bx.pos = {}; ls.forEach(function (x, k) { bx.pos[x.id] = k; });
+      if (alvo === 'galeria') {
+        // no app: o compartilhar do sistema, 30 por vez, entregue enquanto baixa; no navegador do celular, o compartilhar (um
+        // toque, todas juntas) só até 40 fotos, acima disso .zip; no computador, .zip de 40 em 40
+        var podeF = o.salvarFotos && o.podeCompartilharFotos && o.podeCompartilharFotos(), nat = podeF && o.nativo && o.nativo();
+        bx.entrega = !podeF ? 'zip' : nat ? 'app' : ls.length <= POR_ZIP ? 'share' : 'zip';
+        bx.grupo = bx.entrega === 'app' ? 30 : POR_ZIP;
+        bx.partes = Math.ceil(ls.length / bx.grupo); bx.parte = 0; bx.entregues = 0; bx.falhaEntrega = false;
+      }
       selecionando = false; sel = {};
       render();
       baixaPasso();
@@ -1490,9 +1504,12 @@
       b.rodando = true;
       avisaBaixa();
       var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return itemGravar(it, m); })
-        : arquivo(it).then(function (bl) {
-          if (b.alvo === 'galeria') b.arquivos.push({ name: b.nomes[k], blob: bl, date: data(it.em) || new Date() });
-          else if (it.origem === 'banco' || it.origem === 'drive') return miniPara(it).then(function (m) { return itemGravar(it, m); }).then(function () { return bl; });
+        : arquivo(it, b.alvo === 'app').then(function (bl) {
+          if (b.alvo === 'galeria') {
+            b.arquivos.push({ name: b.nomes[k], blob: bl, date: data(it.em) || new Date() });
+            // a parte completou: entrega já e solta da memória
+            if (b.entrega !== 'share' && b.arquivos.length >= b.grupo) return entregar(b, b.arquivos.splice(0)).then(function () { return bl; });
+          } else if (it.origem === 'banco' || it.origem === 'drive') return miniPara(it).then(function (m) { return itemGravar(it, m); }).then(function () { return bl; });
           return bl;
         });
       passo.then(function (bl) { b.ok++; b.feitos += (bl && bl.size) || it.tamanho || 0; if (b.alvo === 'app' && it.driveId) guardadas[it.driveId] = 1; }, function () { b.falhas++; }).then(function () {
@@ -1510,18 +1527,35 @@
       var s0 = t.querySelector('.gl-s'), novo = estado(it);
       if (s0) s0.outerHTML = novo; else if (novo) t.insertAdjacentHTML('beforeend', novo);
     }
+    // uma parte das fotos para a galeria do celular (ou um .zip); a falha não para o download das outras
+    function entregar(b, files) {
+      if (!files.length) return Promise.resolve();
+      b.parte++; b.entregues += files.length;
+      var rot = b.rotulo + (b.partes > 1 ? ' - parte ' + b.parte : '');
+      var p = b.entrega === 'zip' ? zip(files).then(function (z) { return o.saveBlob(rot + '.zip', z); }) : o.salvarFotos(files, rot);
+      return Promise.resolve(p).then(null, function () { b.falhaEntrega = true; });
+    }
     function concluirBaixa() {
       var b = bx;
       var fim = function (t) {
         bx = null;
         cacheIds().then(function (m) { guardadas = m; if (root && !selecionando) render(); });
         avisaBaixa();
-        if (o.toast && t) o.toast(t + (b.falhas ? ' ' + plural(b.falhas, 'foto não veio', 'fotos não vieram') + ' (sem conexão ou ainda não chegaram ao Drive).' : ''), b.falhas ? 7000 : 4000);
+        if (o.toast && t) o.toast(t + (b.falhas ? ' ' + plural(b.falhas, 'foto não veio', 'fotos não vieram') + ' (sem conexão, sem espaço ou ainda não chegaram ao Drive).' : ''), b.falhas ? 7000 : 4000);
       };
-      if (b.alvo !== 'galeria') { fim(b.alvo === 'mini' ? plural(b.ok, 'miniatura guardada', 'miniaturas guardadas') + ' para ver sem sinal.' : plural(b.ok, 'foto baixada', 'fotos baixadas') + ' para o app (abre sem sinal).'); return; }
-      if (!b.arquivos.length) { fim('Nenhuma foto veio.'); return; }
+      if (b.alvo === 'app') {
+        // confere no aparelho quantas ficaram mesmo (o navegador pode ter recusado por falta de espaço)
+        cacheIds().then(function (m) {
+          var fic = b.ls.filter(function (x) { return (x.driveId && m[x.driveId]) || (locais[x.id] && locais[x.id].temArquivo); }).length;
+          fim(fic === b.ls.length ? plural(fic, 'foto disponível', 'fotos disponíveis') + ' sem sinal neste aparelho.'
+            : fic + ' de ' + b.ls.length + ' fotos ficaram disponíveis sem sinal neste aparelho.');
+        });
+        return;
+      }
+      if (b.alvo !== 'galeria') { fim(plural(b.ok, 'miniatura guardada', 'miniaturas guardadas') + ' para ver sem sinal.'); return; }
+      if (!b.arquivos.length && !b.entregues) { fim('Nenhuma foto veio.'); return; }
       b.montando = true; avisaBaixa();
-      (o.salvarFotos && o.podeCompartilharFotos && o.podeCompartilharFotos() ? o.salvarFotos(b.arquivos, b.rotulo) : salvarZip(b.arquivos, b.rotulo)).then(function () { fim(''); }, function () { fim('Não foi possível entregar as fotos. Tente com menos fotos.'); });
+      entregar(b, b.arquivos.splice(0)).then(function () { fim(b.falhaEntrega ? 'Parte das fotos não foi entregue. Tente de novo com menos fotos.' : ''); });
     }
     function salvarZip(files, rotulo) {
       var partes = Math.ceil(files.length / POR_ZIP), cadeia = Promise.resolve();
