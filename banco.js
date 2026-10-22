@@ -64,6 +64,7 @@
           err.code = (j && j.message) || 'http_' + r.status;
           err.status = r.status;          // 4xx: o banco respondeu e recusou; 5xx: falha do servidor
           err.pg = (j && j.code) || '';   // código do Postgres (P0001 = recusa das nossas funções)
+          err.detalhe = (j && j.details) || '';
           throw err;
         }
         return j;
@@ -159,6 +160,19 @@
     analiseOcorrGravar: function (cred, cid, linhas, inicio) {
       return rpc('analise_ocorr_gravar', { p_cred: cred, p_contrato: cid, p_linhas: linhas, p_inicio: inicio }).then(Number);
     },
+    // medições por MP (migração 21, decisão D-15): base do contrato + versão atual de cada MP; o app monta a análise (medmp.js)
+    medicoes: function (cred, cid) { return rpc('medicoes_ler', { p_cred: cred, p_contrato: cid }); },
+    medicoesOcorr: function (cred, cid, ki, kf) { return rpc('medicoes_ocorr_ler', { p_cred: cred, p_contrato: cid, p_km_ini: ki, p_km_fim: kf }); },
+    medicoesVersoes: function (cred, cid, n) { return rpc('medicoes_versoes', { p_cred: cred, p_contrato: cid, p_n: n == null ? null : Number(n) }).then(function (r) { return r || []; }); },
+    medicaoVersao: function (cred, cid, n, v) { return rpc('medicao_versao_ler', { p_cred: cred, p_contrato: cid, p_n: Number(n), p_versao: Number(v) }); },
+    medicaoVoltar: function (cred, cid, n, v, motivo) { return rpc('medicao_voltar', { p_cred: cred, p_contrato: cid, p_n: Number(n), p_versao: Number(v), p_motivo: motivo }); },
+    medicoesQuando: function (cred) { return rpc('medicoes_quando', { p_cred: cred }).then(function (r) { return r || {}; }); },
+    // carga em partes, com troca única no fim: iniciar (base nova ou null) -> mp (dados, ou null para retirar) -> ocorr -> concluir
+    cargaIniciar: function (cred, cid, base, fonte, motivo) { return rpc('carga_iniciar', { p_cred: cred, p_contrato: cid, p_base: base || null, p_fonte: fonte || '', p_motivo: motivo || '' }).then(Number); },
+    cargaMp: function (cred, carga, n, dados) { return rpc('carga_mp', { p_cred: cred, p_carga: carga, p_n: Number(n), p_dados: dados }).then(Number); },
+    cargaOcorr: function (cred, carga, n, linhas, inicio) { return rpc('carga_ocorr', { p_cred: cred, p_carga: carga, p_n: Number(n), p_linhas: linhas, p_inicio: inicio }).then(Number); },
+    cargaConcluir: function (cred, carga, esperado) { return rpc('carga_concluir', { p_cred: cred, p_carga: carga, p_esperado: esperado }); },
+    cargaCancelar: function (cred, carga) { return rpc('carga_cancelar', { p_cred: cred, p_carga: carga }); },
     // marca "medido sem execução" (uso interno): med = nº da medição, ou null para tirar
     analiseMarcar: function (cred, cid, pid, grupo, med) {
       return rpc('analise_marcar', { p_cred: cred, p_contrato: cid, p_ponte: pid, p_grupo: grupo, p_medicao: med == null ? null : Number(med) });

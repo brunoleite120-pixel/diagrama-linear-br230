@@ -1025,6 +1025,19 @@ span.an-chip{cursor:default}
 .ap-list{display:flex;flex-direction:column;gap:6px}
 .ap-row{display:flex;gap:10px;align-items:flex-start;padding:8px 2px;border-bottom:1px solid var(--line-2);font-size:13px}
 .ap-row input{margin-top:3px}
+/* carga das medições por MP e versões de cada MP (fase 5) */
+.modal-box.cg-box,.modal-box.mpv-box{max-width:620px}
+.cg-h{font-size:13px;margin:12px 0 4px}
+.cg-l{margin:0 0 6px;padding-left:18px;font-size:13px;max-height:180px;overflow:auto}
+.cg-alerta{border:1px solid #F0C7C2;background:#FDF1EF;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}
+.cg-alerta label{display:flex;gap:6px;align-items:center;margin-top:6px;font-weight:600}
+.cg-prog{font-size:12.5px;color:var(--ink-2);margin:6px 0 0}
+.mpv{display:flex;flex-direction:column}
+.mpv-row,.mpv-v{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line-2);font-size:13px}
+.mpv-v{padding-left:14px;background:var(--ground)}
+.mpv-txt{flex:1 1 240px;min-width:0;overflow-wrap:anywhere}
+.mpv-txt small{display:block;color:var(--ink-3);font-size:12px;margin-top:2px}
+.med-nova{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;background:#fff;border:1px solid var(--line);box-shadow:0 4px 16px rgba(0,0,0,.15);border-radius:999px;padding:6px 8px 6px 14px;font-size:13px;display:flex;gap:10px;align-items:center;max-width:calc(100% - 32px)}
 /* listas da lixeira, cópias e usuários */
 .modal-box.wide{max-width:600px}
 .hint{font-size:12px;color:var(--ink-3);margin:0}
@@ -1366,6 +1379,7 @@ span.an-chip{cursor:default}
         <button type="button" data-act="aprovar" hidden>Aprovar mudanças dos fiscais</button>
         <button type="button" data-act="usuarios" hidden>Usuários e acessos</button>
         <button type="button" data-act="cargamed" hidden>Carregar medições (arquivo)…</button>
+        <button type="button" data-act="mpversoes" hidden>Medições carregadas (versões)…</button>
         <hr>
         <button type="button" class="so-compacto" data-act="pdf" id="menuPdf">Exportar PDF (A3)</button>
         <button type="button" data-act="print">Imprimir ou salvar PDF pelo navegador</button>
@@ -1448,6 +1462,7 @@ span.an-chip{cursor:default}
 <script src="relatorio.js"></script>
 <script src="visao.js"></script>
 <script src="medicoes.js"></script>
+<script src="medmp.js"></script>
 <script src="app.js"></script>
 <script src="aviso-endereco.js"></script>
 <script>

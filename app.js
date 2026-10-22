@@ -3263,6 +3263,22 @@
     });
     return r;
   }
+  // medições por MP (migração 21, D-15): a base e a versão atual de cada MP, somadas aqui (medmp.js) no mesmo formato da
+  // análise antiga; mps = o que se sabe de cada MP (versão, quando, quem, ocorrências), sem os dados. Banco ainda sem a
+  // migração 21: a análise antiga.
+  var anQuando = {};
+  function lerAnalise(cred, cid) {
+    if (!window.Banco.medicoes || !window.MedMP) return window.Banco.analise(cred, cid);
+    return window.Banco.medicoes(cred, cid).then(function (r) {
+      if (!r || !r.base) return null;
+      var mps = r.mps || [];
+      return { dados: window.MedMP.montar(r.base, mps.map(function (x) { return { n: x.n, dados: x.dados }; })), fonte: r.fonte, em: r.em, por: r.por, marcas: r.marcas,
+        mps: mps.map(function (x) { return { n: x.n, v: x.v, em: x.em, por: x.por, ocorr: x.ocorr, versoes: x.versoes }; }) };
+    }, function (e) {
+      if (e && (e.pg === 'PGRST202' || e.status === 404)) return window.Banco.analise(cred, cid);
+      throw e;
+    });
+  }
   function carregarAnalise(c, naArea) {
     if (!c || (!naArea && !(isOae(c) || isConserva(c))) || !banco.on || !parte(c, 'med') || !window.Banco || !window.Banco.analise) return Promise.resolve();
     var e = analise.estado[c.id];
@@ -3270,11 +3286,13 @@
     if (e === 'ok' || e === 'vazia' || e === 'erro') return Promise.resolve();   // erro: só de novo ao trocar de aba ou voltar ao app
     analise.estado[c.id] = 'carregando';
     var cred = banco.login.codigo, cid = c.id;
-    return (anPedidos[cid] = window.Banco.analise(cred, cid).then(function (r) {
+    return (anPedidos[cid] = lerAnalise(cred, cid).then(function (r) {
       if (!banco.login || banco.login.codigo !== cred || !parte(contractById(cid), 'med')) return;
       if (r && r.dados && typeof r.dados === 'object') {
         analise.dados[cid] = r.dados;
         analise.dados[cid].sobre = { fonte: r.fonte || '', em: r.em || null, por: r.por || '' };
+        if (r.mps) analise.dados[cid].mpsInfo = r.mps; else delete analise.dados[cid].mpsInfo;
+        anQuando[cid] = r.em || null;
         // medido sem execução; sem o campo, o banco ainda não tem a migração 07 e a marca não aparece
         if (r.marcas && typeof r.marcas === 'object' && !Array.isArray(r.marcas)) analise.dados[cid].marcas = r.marcas;
         else delete analise.dados[cid].marcas;
@@ -4175,7 +4193,11 @@
     var ki = p.kmIni, kf = p.kmFim, segs = sortedPoints(c).filter(function (q) { return q.kmIni != null && q.kmFim != null; });
     if (segs.length && !segs.some(function (q) { return q.kmIni < p.kmIni; })) ki = -1e5;
     if (segs.length && !segs.some(function (q) { return q.kmFim > p.kmFim; })) kf = 1e5;
-    window.Banco.analiseOcorr(cred, cid, ki, kf).then(function (r) {
+    var ler = window.Banco.medicoesOcorr ? window.Banco.medicoesOcorr(cred, cid, ki, kf).catch(function (e) {
+      if (e && (e.pg === 'PGRST202' || e.status === 404)) return window.Banco.analiseOcorr(cred, cid, ki, kf);
+      throw e;
+    }) : window.Banco.analiseOcorr(cred, cid, ki, kf);
+    ler.then(function (r) {
       if (!anOcorr[k] || anOcorr[k].cred !== cred) return;
       anOcorr[k] = { estado: 'ok', cred: cred, ki: p.kmIni, kf: p.kmFim, l: Array.isArray(r) ? r : [] };
       refaz();
@@ -5550,51 +5572,255 @@
     reader.readAsText(file);
   }
 
-  // ---- carga das medições de um contrato (Administrador): arquivo { tipo: 'carga-medicoes', contrato, fonte, dados, ocorr }
-  // gerado na extração das MPs. Grava com o login de quem está no app: a análise (analise_gravar) e, na conservação, as
-  // ocorrências km a km (analise_ocorr_gravar, em partes de 2000). Substitui o que o banco tinha para o contrato.
+  // ---- carga das medições (fase 5: D-12, D-13, D-14 e D-15). Quem carrega: Administrador, engenheiro e auxiliar.
+  // Arquivo do contrato inteiro { tipo: 'carga-medicoes', contrato, fonte, dados, ocorr } (o dos geradores, como sempre) ou de
+  // algumas MPs { tipo: 'carga-mp', contrato, fonte, base?, mps: { '<n>': { dados, ocorr } } } (dados no formato por MP).
+  // O app compara cada MP com a versão atual do banco e só envia as novas e as que mudaram; a MP que não está no arquivo fica
+  // como está (o arquivo nunca apaga MP). A MP igual a uma versão guardada volta para ela, com motivo (D-13); a retificada
+  // que chega sem as ocorrências que tinha pede confirmação (D-14). Tudo entra numa carga só, que os outros só veem no fim.
   var CARGA_PARTE = 2000;
+  function brl2(v) { return v == null || !isFinite(v) ? '–' : 'R$ ' + fmt(v, 2); }   // com centavos: retificação muda às vezes só centavos
+  function ocAssin(l) { var q = 0, k = 0; l.forEach(function (o) { q += Number(o[5]) || 0; k += Number(o[2]) || 0; }); return { n: l.length, q: q, k: k }; }
+  function mesmoNum(a, b) { a = Number(a) || 0; b = Number(b) || 0; return Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a)); }
+  function ocIgual(as, x) { return as.n === (Number(x.ocorr) || 0) && mesmoNum(as.q, x.oq) && mesmoNum(as.k, x.okm); }
+  function igualJson(a, b) {
+    if (a === b) return true;
+    if (typeof a === 'number' && typeof b === 'number') return a === b;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) return a.length === b.length && a.every(function (x, i) { return igualJson(x, b[i]); });
+    var ka = Object.keys(a).filter(function (k) { return a[k] !== undefined; }), kb = Object.keys(b).filter(function (k) { return b[k] !== undefined; });
+    return ka.length === kb.length && ka.every(function (k) { return Object.prototype.hasOwnProperty.call(b, k) && igualJson(a[k], b[k]); });
+  }
+  function errCarga(e) {
+    var c = e && e.code, d = {};
+    try { d = JSON.parse((e && e.detalhe) || '{}') || {}; } catch (x) { d = {}; }
+    return c === 'carga_em_andamento' ? 'Outra carga deste contrato está em andamento' + (d.por ? ', começada por ' + d.por + (d.em ? ' às ' + hhmm(new Date(d.em)) : '') : '') + '. Espere ela terminar (ou 30 minutos sem andamento) e carregue de novo.'
+      : c === 'carga_incompleta' ? 'O banco não recebeu tudo' + (e.detalhe ? ' (' + e.detalhe + ')' : '') + '. Nada mudou; carregue o arquivo de novo.'
+      : c === 'contrato_arquivado' ? 'Este contrato está arquivado: restaure antes de carregar medições.'
+      : c === 'contrato_inexistente' ? 'O contrato do arquivo não está no banco.'
+      : c === 'sem_base' ? 'A primeira carga deste contrato precisa do arquivo do contrato inteiro.'
+      : c === 'dados_invalidos' || c === 'medicao_invalida' ? 'O banco recusou o arquivo: formato de medição inválido.'
+      : c === 'motivo_curto' ? 'Escreva o motivo (pelo menos 5 letras).'
+      : c === 'sem_permissao' ? 'Seu acesso não carrega medições (só Administrador, engenheiro e auxiliar).'
+      : errText(e);
+  }
   function abrirCargaMed(file) {
     var reader = new FileReader();
     reader.onload = function () {
-      var x, c;
+      var x, c, arq;
       try {
         x = JSON.parse(reader.result);
-        if (!x || x.tipo !== 'carga-medicoes' || typeof x.contrato !== 'string' || !x.dados || typeof x.dados !== 'object' ||
-          !Array.isArray(x.dados.medicoes) || !x.dados.medicoes.length || (x.ocorr != null && !Array.isArray(x.ocorr))) throw new Error('formato');
-        (x.ocorr || []).forEach(function (o) { if (!Array.isArray(o) || o.length !== 8) throw new Error('formato'); });
+        if (!x || typeof x.contrato !== 'string') throw new Error('formato');
+        if (x.tipo === 'carga-medicoes') {
+          if (!x.dados || typeof x.dados !== 'object' || !Array.isArray(x.dados.medicoes) || !x.dados.medicoes.length || (x.ocorr != null && !Array.isArray(x.ocorr))) throw new Error('formato');
+        } else if (x.tipo === 'carga-mp') {
+          if (!x.mps || typeof x.mps !== 'object' || !Object.keys(x.mps).length) throw new Error('formato');
+          Object.keys(x.mps).forEach(function (n) { var m = x.mps[n]; if (!m || !m.dados || !m.dados.med || String(m.dados.med.n) !== String(n) || (m.ocorr != null && !Array.isArray(m.ocorr))) throw new Error('formato'); });
+        } else throw new Error('formato');
       } catch (e) { toast('Esse arquivo não é uma carga de medições deste site.'); return; }
       c = state.contracts.filter(function (k) { return k.id === x.contrato; })[0];
       if (!c) { toast('O contrato do arquivo (' + x.contrato + ') não está no site.'); return; }
-      var ms = x.dados.medicoes, r = x.dados.resumo || {}, oc = x.ocorr || [];
-      confirmar({
-        titulo: 'Carregar as medições do ' + (c.numero ? 'CT ' + c.numero : c.id) + '?',
-        html: '<p>Arquivo <b>' + esc(file.name) + '</b>: ' + ms.length + ' medições (' + esc((ms[0].mes || '') + ' a ' + (ms[ms.length - 1].mes || '')) + ')' +
-          (r.total != null ? ', ' + fmtBRL(r.total) + ' a preços iniciais' : '') + (oc.length ? ', ' + oc.length + ' ocorrências km a km' : '') + '.</p>' +
-          (x.fonte ? '<p><small>' + esc(x.fonte) + '</small></p>' : '') +
-          '<p>Substitui a análise que o banco tiver para este contrato. Grava como ' + esc(banco.login.nome || 'Administrador') + '.</p>',
-        botao: 'Carregar medições'
-      }).then(function (ok) {
-        if (!ok) return;
-        var cred = banco.login.codigo, cid = c.id, feito = 0;
-        toast('Gravando as medições…', 60000);
-        var p = window.Banco.analiseGravar(cred, cid, x.dados, x.fonte || '');
-        for (var i = 0; i < oc.length; i += CARGA_PARTE) (function (i) {
-          p = p.then(function () { return window.Banco.analiseOcorrGravar(cred, cid, oc.slice(i, i + CARGA_PARTE), i); }).then(function (n) { feito += n; });
-        })(i);
-        p.then(function () {
-          if (oc.length && feito !== oc.length) throw new Error('ocorrências gravadas: ' + feito + ' de ' + oc.length);
-          delete analise.estado[cid];
-          Object.keys(anOcorr).forEach(function (k) { if (k.indexOf(cid + '|') === 0) delete anOcorr[k]; });
-          carregarAnalise(c);
-          toast('Medições do ' + (c.numero ? 'CT ' + c.numero : cid) + ' carregadas: ' + ms.length + ' medições' + (oc.length ? ' e ' + feito + ' ocorrências' : '') + '.', 6000);
-        }).catch(function (err) {
-          console.error(err);
-          toast('Não foi possível gravar tudo (' + ((err && (err.msg || err.message)) || 'erro') + '). Carregue o mesmo arquivo de novo: a carga recomeça do zero.', 9000);
-        });
-      });
+      if (!banco.login || !isEng()) { toast('Só Administrador, engenheiro e auxiliar carregam medições.'); return; }
+      if (!window.Banco.medicoes || !window.MedMP) { toast('Atualize o app para carregar medições.', 6000); return; }
+      try {
+        if (x.tipo === 'carga-medicoes') arq = window.MedMP.separar(x.dados, x.ocorr || []);
+        else { arq = { base: x.base || null, mps: {} }; Object.keys(x.mps).forEach(function (n) { arq.mps[n] = { dados: x.mps[n].dados, ocorr: x.mps[n].ocorr || [] }; }); }
+        Object.keys(arq.mps).forEach(function (n) { (arq.mps[n].ocorr || []).forEach(function (o) { if (!Array.isArray(o) || o.length !== 8 || String(o[0]) !== String(n)) throw new Error('ocorrência fora do formato na ' + n + 'ª'); }); });
+      } catch (e) { toast('O arquivo não fecha: ' + e.message + '.', 8000); return; }
+      var cred = banco.login.codigo;
+      toast('Comparando com o que o banco tem…', 60000);
+      Promise.all([window.Banco.medicoes(cred, c.id), window.Banco.medicoesVersoes(cred, c.id, null)]).then(function (r) {
+        return compararCarga(c, arq, r[0], r[1], cred).then(function (cmp) { toast('Comparação pronta.', 1200); mostrarCarga(c, file.name, x.fonte || '', cmp); });
+      }).catch(function (e) { console.error(e); toast(errCarga(e), 9000); });
     };
     reader.readAsText(file);
+  }
+  // cada MP do arquivo: igual | nova | retificada | volta (igual a uma versão guardada)
+  function compararCarga(c, arq, cur, vers, cred) {
+    var atual = {}, lista = [], pedidos = [];
+    ((cur && cur.mps) || []).forEach(function (m) { atual[m.n] = m; });
+    Object.keys(arq.mps).map(Number).sort(function (a, b) { return a - b; }).forEach(function (n) {
+      var m = arq.mps[n], d = m.dados, oc = m.ocorr || [], as = ocAssin(oc), a = atual[n];
+      var e = { n: n, dados: d, ocorr: oc, as: as, mes: d.med.mes || '', total: Number(d.med.total) || 0, antes: a ? { total: Number(a.dados.med.total) || 0, ocorr: Number(a.ocorr) || 0, v: a.v, em: a.em, por: a.por } : null };
+      if (a && igualJson(a.dados, d) && ocIgual(as, a)) e.tipo = 'igual';
+      else {
+        e.tipo = a ? 'retificada' : 'nova';
+        var cand = vers.filter(function (v) { return v.n === n && v.estado === 'anterior' && !v.retirada && mesmoNum(v.total, e.total) && ocIgual(as, v); });
+        if (cand.length) pedidos.push(Promise.all(cand.map(function (v) { return window.Banco.medicaoVersao(cred, c.id, n, v.v); })).then(function (rs) {
+          var hit = rs.filter(function (r) { return r && igualJson(r.dados, d); })[0];
+          if (hit) { e.tipo = 'volta'; e.volta = vers.filter(function (v) { return v.n === n && v.v === hit.v; })[0]; }
+        }));
+      }
+      lista.push(e);
+    });
+    var base = arq.base;
+    if (!base && cur) { base = cur.base; lista.forEach(function (e) { base = window.MedMP.juntarBase(base, e.dados, null); }); }
+    return Promise.all(pedidos).then(function () {
+      return {
+        lista: lista, base: base, semBase: !cur, baseMuda: !cur || !igualJson(cur.base, base),
+        fora: Object.keys(atual).map(Number).filter(function (n) { return !arq.mps[n]; }).sort(function (a, b) { return a - b; }),
+        antigo: !!(cur && cur.base && base && cur.base.gerado_em && base.gerado_em && String(base.gerado_em) < String(cur.base.gerado_em)) ? { arq: base.gerado_em, banco: cur.base.gerado_em } : null
+      };
+    });
+  }
+  function mostrarCarga(c, nome, fonte, cmp) {
+    var nomeCt = c.numero ? 'CT ' + c.numero : c.id, L = cmp.lista;
+    if (cmp.semBase && !cmp.base) { toast('A primeira carga deste contrato precisa do arquivo do contrato inteiro.', 7000); return; }
+    var novas = L.filter(function (e) { return e.tipo === 'nova'; }), rets = L.filter(function (e) { return e.tipo === 'retificada'; }),
+      voltas = L.filter(function (e) { return e.tipo === 'volta'; }), iguais = L.filter(function (e) { return e.tipo === 'igual'; }),
+      apaga = rets.concat(voltas).filter(function (e) { return e.antes && e.antes.ocorr > 0 && !e.as.n; });
+    var envio = novas.concat(rets, voltas).sort(function (a, b) { return a.n - b.n; });
+    if (!envio.length && !cmp.baseMuda) { toast('O arquivo é igual ao que o banco tem: nada a carregar.', 6000); return; }
+    var pedeMotivo = voltas.length || cmp.antigo || apaga.length;
+    function dif(a, b) { var d = b - a; return (d >= 0 ? '+' : '−') + brl2(Math.abs(d)); }
+    function linha(e) {
+      var t = '<b>' + e.n + 'ª</b>' + (e.mes ? ' · ' + esc(e.mes) : '') + ' · ';
+      if (e.tipo === 'nova') return '<li>' + t + brl2(e.total) + (e.as.n ? ' · ' + e.as.n + ' ocorrências' : '') + '</li>';
+      var oc = e.antes.ocorr !== e.as.n ? ' · ocorrências ' + e.antes.ocorr + ' → ' + e.as.n : '';
+      if (e.tipo === 'volta') return '<li>' + t + 'volta à versão ' + e.volta.v + ' (carregada em ' + esc(fmtIsoDate(e.volta.gravado)) + (e.volta.por ? ' por ' + esc(e.volta.por) : '') + ') · ' + brl2(e.antes.total) + ' → ' + brl2(e.total) + oc + '</li>';
+      return '<li>' + t + brl2(e.antes.total) + ' → ' + brl2(e.total) + (mesmoNum(e.antes.total, e.total) ? ' (mesmo valor; mudou o detalhe)' : ' (' + dif(e.antes.total, e.total) + ')') + oc + '</li>';
+    }
+    function bloco(t, l) { return l.length ? '<h3 class="cg-h">' + t + ' · ' + l.length + '</h3><ul class="cg-l">' + l.map(linha).join('') + '</ul>' : ''; }
+    var h = '<h2 id="modalTitle">Carregar as medições do ' + esc(nomeCt) + '?</h2>' +
+      '<p>Arquivo <b>' + esc(nome) + '</b>: ' + L.length + (L.length === 1 ? ' medição' : ' medições') + '. Só vai para o banco o que é novo ou mudou; a medição que não está no arquivo fica como está.</p>' +
+      (fonte ? '<p><small>' + esc(fonte) + '</small></p>' : '') +
+      bloco('Novas', novas) + bloco('Retificadas', rets) + bloco('Voltam a uma versão guardada', voltas) +
+      (iguais.length ? '<p class="hint">' + iguais.length + (iguais.length === 1 ? ' medição igual' : ' medições iguais') + ' ao banco (não são enviadas).</p>' : '') +
+      (cmp.fora.length ? '<p class="hint">Fora do arquivo, continuam como estão: ' + cmp.fora.map(function (n) { return n + 'ª'; }).join(', ') + '.</p>' : '') +
+      '<p class="hint">Catálogo de serviços, notas e ficha do SIAC: ' + (cmp.semBase ? 'primeira carga do contrato' : cmp.baseMuda ? 'mudam com este arquivo' : 'sem mudança') + '.</p>' +
+      (cmp.antigo ? '<div class="cg-alerta"><b>Arquivo mais antigo que o do banco.</b> Gerado em ' + esc(fmtIsoDate(cmp.antigo.arq)) + '; o que está no banco é de ' + esc(fmtIsoDate(cmp.antigo.banco)) + '.' +
+        '<label><input type="checkbox" data-cg-ok> Sei que é mais antigo e quero carregar assim mesmo</label></div>' : '') +
+      apaga.map(function (e) {
+        return '<div class="cg-alerta"><b>A ' + e.n + 'ª chega sem ocorrências km a km</b> e hoje tem ' + e.antes.ocorr + '. Se seguir, as ' + e.antes.ocorr + ' saem dos segmentos (a versão de agora fica guardada).' +
+          '<label><input type="checkbox" data-cg-ok> Apagar as ocorrências da ' + e.n + 'ª</label></div>';
+      }).join('') +
+      (voltas.length ? '<div class="cg-alerta"><b>' + (voltas.length === 1 ? 'Uma medição volta' : voltas.length + ' medições voltam') + ' a uma versão guardada</b> (o arquivo é igual a uma carga anterior).' +
+        '<label><input type="checkbox" data-cg-ok> Voltar mesmo assim</label></div>' : '') +
+      '<div class="field"><label for="cgMot">Motivo' + (pedeMotivo ? '' : ' (opcional)') + ' · fica no histórico das versões</label><input id="cgMot" maxlength="300" autocomplete="off" placeholder="Ex.: MP 59 recebida no SEI; 12ª retificada"></div>' +
+      '<p class="hint">Grava como ' + esc(banco.login.nome || 'Administrador') + '. Os outros veem as medições novas só quando tudo terminar; se cair no meio, nada muda.</p>' +
+      '<p class="cg-prog" hidden></p>' + MFOOT + '<button type="submit" class="btn primary">Carregar ' + (envio.length ? envio.length + (envio.length === 1 ? ' medição' : ' medições') : 'o catálogo') + '</button></div>';
+    modal(h, function (f) {
+      var mot = f.querySelector('#cgMot').value.trim();
+      if ([].some.call(f.querySelectorAll('[data-cg-ok]'), function (i) { return !i.checked; })) { modalErr(f, 'Marque as confirmações em destaque para seguir.'); return; }
+      if (pedeMotivo && mot.length < 5) { modalErr(f, 'Escreva o motivo (pelo menos 5 letras).'); return; }
+      modalErr(f, '');
+      busyBtn(f, true, 'Gravando…');
+      var pg = f.querySelector('.cg-prog');
+      pg.hidden = false;
+      executarCarga(banco.login.codigo, c.id, cmp.baseMuda ? cmp.base : null, fonte, mot || (novas.length && !rets.length && !voltas.length ? 'medição nova' : ''), envio, function (k, t) { pg.textContent = 'Enviando ' + k + ' de ' + t + '…'; }).then(function (r) {
+        closeModal();
+        recarregarMedicoes(c);
+        toast('Medições do ' + nomeCt + ' carregadas: ' + (r && r.mps != null ? r.mps : envio.length) + (envio.length === 1 ? ' medição' : ' medições') + '.', 6000);
+      }, function (err) {
+        console.error(err);
+        busyBtn(f, false); pg.hidden = true;
+        modalErr(f, errCarga(err));
+      });
+    }, 'cg-box');
+  }
+  // envio = [{ n, dados (null = retirar), ocorr }]; prog(k, total) a cada parte
+  function executarCarga(cred, cid, base, fonte, motivo, envio, prog) {
+    var carga = null, esperado = {}, feito = 0, total = envio.reduce(function (t, e) { return t + 1 + Math.ceil((e.ocorr || []).length / CARGA_PARTE); }, 0);
+    var p = window.Banco.cargaIniciar(cred, cid, base, fonte, motivo).then(function (id) { carga = id; });
+    envio.forEach(function (e) {
+      var oc = e.ocorr || [];
+      p = p.then(function () { return window.Banco.cargaMp(cred, carga, e.n, e.dados); }).then(function () { if (prog) prog(++feito, total); });
+      for (var i = 0; i < oc.length; i += CARGA_PARTE) (function (i) {
+        p = p.then(function () { return window.Banco.cargaOcorr(cred, carga, e.n, oc.slice(i, i + CARGA_PARTE), i); }).then(function () { if (prog) prog(++feito, total); });
+      })(i);
+      esperado[e.n] = oc.length;
+    });
+    return p.then(function () { return window.Banco.cargaConcluir(cred, carga, esperado); }).catch(function (err) {
+      if (carga) window.Banco.cargaCancelar(cred, carga).catch(function () { });
+      throw err;
+    });
+  }
+  function recarregarMedicoes(c) {
+    delete analise.estado[c.id];
+    Object.keys(anOcorr).forEach(function (k) { if (k.indexOf(c.id + '|') === 0) delete anOcorr[k]; });
+    carregarAnalise(c, true);
+  }
+
+  // ---- medições carregadas e as versões de cada MP (D-13, D-15): voltar a uma versão guardada ou retirar uma MP, com motivo
+  function openVersoesMed(cid) {
+    if (!banco.login || !isEng()) return;
+    if (!window.Banco.medicoesVersoes) { toast('Atualize o app para ver as versões.'); return; }
+    var c = cid ? contractById(cid) : null;
+    if (!c || !parte(c, 'med')) {
+      // fora de um contrato com medições (visão geral, aba Medições): escolhe o contrato
+      var cs = state.contracts.filter(function (k) { return parte(k, 'med'); });
+      var f0 = modal('<h2 id="modalTitle">Medições carregadas</h2><p class="hint">Escolha o contrato.</p><div class="lx">' + cs.map(function (k) {
+        return '<div class="lx-row"><div class="lx-txt"><b>' + esc(ctNumeroCT(k) || ctNome(k)) + '</b></div><button type="button" class="btn small" data-mpct="' + esc(k.id) + '">Abrir</button></div>';
+      }).join('') + '</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'mpv-box');
+      f0.addEventListener('click', function (e) { var b = e.target.closest('[data-mpct]'); if (b) openVersoesMed(b.dataset.mpct); });
+      return;
+    }
+    var cred = banco.login.codigo, an = analise.dados[c.id], aberto = {};
+    function mesDe(n) { var m = an && (an.medicoes || []).filter(function (x) { return x.n === n; })[0]; return m && m.mes ? ' · ' + m.mes : ''; }
+    function desenha(vs) {
+      var por = {};
+      vs.forEach(function (v) { (por[v.n] || (por[v.n] = [])).push(v); });
+      var ns = Object.keys(por).map(Number).sort(function (a, b) { return b - a; });
+      var h = '<h2 id="modalTitle">Medições carregadas · ' + esc(c.numero ? 'CT ' + c.numero : c.id) + '</h2>' +
+        (ns.length ? '<p class="hint">Cada medição guarda as versões anteriores. Voltar ou retirar pede motivo e fica no histórico.</p>' : '<p>Este contrato ainda não tem medições carregadas.</p>') +
+        '<div class="mpv">' + ns.map(function (n) {
+          var l = por[n], at = l.filter(function (v) { return v.estado === 'atual'; })[0];
+          var cab = '<div class="mpv-row"><div class="mpv-txt"><b>' + n + 'ª' + esc(mesDe(n)) + '</b> · ' + (at ? (at.retirada ? 'retirada' : brl2(at.total) + (at.ocorr ? ' · ' + at.ocorr + ' ocorrências' : '')) : 'sem versão atual') +
+            '<small>' + (at ? 'versão ' + at.v + ' de ' + l.length + ' · ' + esc(fmtIsoDate(at.ativada || at.gravado)) + (at.ativada_por || at.por ? ' por ' + esc(at.ativada_por || at.por) : '') : '') + '</small></div>' +
+            '<button type="button" class="btn small" data-mpv="' + n + '">' + (aberto[n] ? 'Fechar' : 'Versões') + '</button></div>';
+          if (!aberto[n]) return cab;
+          return cab + '<div class="mpv-vers">' + l.map(function (v) {
+            return '<div class="mpv-v"><div class="mpv-txt">Versão ' + v.v + (v.estado === 'atual' ? ' <b>(atual)</b>' : '') + ' · ' + (v.retirada ? 'retirada' : brl2(v.total) + ' · ' + (v.ocorr || 0) + ' ocorrências') +
+              '<small>carregada em ' + esc(fmtIsoDate(v.gravado)) + (v.por ? ' por ' + esc(v.por) : '') + (v.motivo ? ' · ' + esc(v.motivo) : '') + (v.fonte ? ' · ' + esc(v.fonte) : '') + '</small></div>' +
+              (v.estado === 'anterior' && !v.retirada ? '<button type="button" class="btn small" data-mpvolta="' + n + ':' + v.v + '">Voltar a esta</button>' : '') +
+              (v.estado === 'atual' && !v.retirada ? '<button type="button" class="btn small danger" data-mptira="' + n + '">Retirar</button>' : '') + '</div>';
+          }).join('') + '</div>';
+        }).join('') + '</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>';
+      var f = modal(h, null, 'mpv-box');
+      f.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-mpv],[data-mpvolta],[data-mptira]');
+        if (!b) return;
+        if (b.dataset.mpv) { aberto[b.dataset.mpv] = !aberto[b.dataset.mpv]; desenha(vs); return; }
+        if (b.dataset.mpvolta) {
+          var nv = b.dataset.mpvolta.split(':').map(Number);
+          confirmar({ titulo: 'Voltar a ' + nv[0] + 'ª à versão ' + nv[1] + '?', texto: 'A versão de agora fica guardada e pode voltar depois.', campo: 'Motivo (obrigatório)', botao: 'Voltar à versão ' + nv[1] }).then(function (r) {
+            if (!r) { abrir(); return; }
+            if (r.valor.length < 5) { toast('Escreva o motivo (pelo menos 5 letras).'); abrir(); return; }
+            window.Banco.medicaoVoltar(cred, c.id, nv[0], nv[1], r.valor).then(function () { recarregarMedicoes(c); toast('A ' + nv[0] + 'ª voltou à versão ' + nv[1] + '.'); abrir(); }, function (err) { toast(errCarga(err), 8000); abrir(); });
+          });
+          return;
+        }
+        var n = Number(b.dataset.mptira);
+        confirmar({ titulo: 'Retirar a ' + n + 'ª das medições?', texto: 'Ela sai dos totais e dos segmentos. Fica guardada: dá para voltar em "Versões".', campo: 'Motivo (obrigatório)', botao: 'Retirar a ' + n + 'ª', perigo: true }).then(function (r) {
+          if (!r) { abrir(); return; }
+          if (r.valor.length < 5) { toast('Escreva o motivo (pelo menos 5 letras).'); abrir(); return; }
+          executarCarga(cred, c.id, null, '', r.valor, [{ n: n, dados: null, ocorr: [] }]).then(function () { recarregarMedicoes(c); toast('A ' + n + 'ª foi retirada.'); abrir(); }, function (err) { toast(errCarga(err), 8000); abrir(); });
+        });
+      });
+    }
+    function abrir() {
+      window.Banco.medicoesVersoes(cred, c.id, null).then(desenha, function (err) { toast(errCarga(err), 8000); });
+    }
+    abrir();
+  }
+
+  // ---- medição nova carregada em outro aparelho (D-23): atualiza sozinha; com a aba Medições aberta, avisa e espera o toque
+  var medQuandoEm = 0;
+  function conferirMedNovas() {
+    if (!banco.login || !(isEng() || isAnalista()) || !window.Banco.medicoesQuando || Date.now() - medQuandoEm < 60000) return;
+    medQuandoEm = Date.now();
+    var cred = banco.login.codigo;
+    window.Banco.medicoesQuando(cred).then(function (q) {
+      if (!banco.login || banco.login.codigo !== cred) return;
+      var mud = Object.keys(q).filter(function (cid) { return analise.estado[cid] === 'ok' && anQuando[cid] && q[cid] !== anQuando[cid]; });
+      if (!mud.length) return;
+      if (!medicoesOn) { mud.forEach(function (cid) { var c = contractById(cid); if (c) recarregarMedicoes(c); }); return; }
+      var b = $('medNova');
+      if (!b) { b = document.createElement('div'); b.id = 'medNova'; b.className = 'med-nova'; b.setAttribute('role', 'status'); document.body.appendChild(b); }
+      b.innerHTML = 'Há medição nova · ' + esc(mud.map(function (cid) { var c = contractById(cid); return c && c.numero ? 'CT ' + c.numero : cid; }).join(', ')) + ' <button type="button" class="btn small primary">Atualizar</button>';
+      b.hidden = false;
+      b.querySelector('button').onclick = function () { b.hidden = true; mud.forEach(function (cid) { var c = contractById(cid); if (c) recarregarMedicoes(c); }); };
+    }, function () { });
   }
 
   // ------------------------------------------------------------------ menu
@@ -5619,7 +5845,8 @@
     else if (act === 'arquivados') openArquivados();
     else if (act === 'recusadas') openRecusadas();
     else if (act === 'usuarios') openUsuarios();
-    else if (act === 'cargamed') { if (!banco.login || !isResp()) { toast('Só o Administrador carrega medições.'); return; } $('fileMed').click(); }
+    else if (act === 'cargamed') { if (!banco.login || !isEng()) { toast('Só Administrador, engenheiro e auxiliar carregam medições.'); return; } $('fileMed').click(); }
+    else if (act === 'mpversoes') openVersoesMed(medicoesOn || visaoOn ? null : active() && active().id);
     else if (act === 'aprovar') openAprov();
   }
 
@@ -6430,6 +6657,7 @@
   function poll() {
     if (!banco.on || document.visibilityState === 'hidden') return;
     if (banco.pend.length && banco.login && !banco.busy) flush();
+    conferirMedNovas();
     window.Banco.versao().then(function (v) {
       banco.online = true;
       if (v !== banco.versao && !banco.busy) refresh(); else syncStatus();
@@ -6492,7 +6720,7 @@
     // itens do menu Dados conforme o papel
     // fiscal e analista: sem backup (o menu fica com a conta, o PDF e a impressão do que veem)
     var equipe = !banco.on || isEng();
-    var show = { arquivados: isAdmin(), lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isResp(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
+    var show = { arquivados: isAdmin(), lixeira: isEng(), usuarios: isResp(), cargamed: banco.on && isEng(), mpversoes: banco.on && isEng(), aprovar: isEng(), restore: !banco.on || isResp(), relfoto: isEng() && galeriaOn(), backup: equipe };
     Object.keys(show).forEach(function (k) {
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
