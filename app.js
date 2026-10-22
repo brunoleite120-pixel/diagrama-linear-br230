@@ -3364,11 +3364,21 @@
           t.q += Number(pm[k][0]) || 0; t.v += Number(pm[k][1]) || 0;
         });
       });
+      // o serviço do segmento acha a sua linha pelo id, pelo código exato e, quando o código vem sem o sufixo do período
+      // (731: 240000 no segmento × 240000-4 "2023–24" e 240000-15 "2025–26"), pelo grupo e pelo nome; cada segmento conta uma vez
       var porCod = {};
       Object.keys(ag).forEach(function (k) { var b = String(k).replace(/-\d+$/, ''); (porCod[b] = porCod[b] || []).push(k); });
+      var linhasDe = function (s) {
+        if (s.id && ag[s.id]) return [s.id];
+        if (s.cod && ag[s.cod]) return [s.cod];
+        var cs = porCod[String(s.cod || '').replace(/-\d+$/, '')] || [];
+        [function (k) { return ag[k].g === s.g && ag[k].nome === s.nome; }, function (k) { return ag[k].nome === s.nome; }, function (k) { return ag[k].g === s.g; }]
+          .some(function (f) { var x = cs.filter(f); if (x.length) { cs = x; return true; } return false; });
+        return cs;
+      };
       sortedPoints(c).forEach(function (p) {
         var a = an.pontes && an.pontes[p.id], vis = {};
-        ((a && a.servicos) || []).forEach(function (s) { if (!noEscopo([s], ns, true).length) return; (porCod[s.cod] || []).forEach(function (k) { if (!vis[k]) { vis[k] = 1; ag[k].pontes++; } }); });
+        ((a && a.servicos) || []).forEach(function (s) { if (!noEscopo([s], ns, true).length) return; linhasDe(s).forEach(function (k) { if (!vis[k]) { vis[k] = 1; ag[k].pontes++; } }); });
       });
       estL = ord.filter(function (t) { return t.v < 0; });
       ord = ord.filter(function (t) { return t.v > 0; });
@@ -3387,7 +3397,7 @@
         t.q += Number(x.q) || 0; t.v += Number(x.v) || 0; t.pontes++;
       });
     });
-    if (!ord.length) return '';
+    if (!ord.length && !estL.length) return '';
     ord.sort(function (x, y) { return y.v - x.v; });
     var tot = ord.reduce(function (t, x) { return t + x.v; }, 0), acum = 0, pc = { A: 0, B: 0, C: 0 }, nk = { A: 0, B: 0, C: 0 };
     ord.forEach(function (t) { t.k = acum / tot < 0.8 ? 'A' : acum / tot < 0.95 ? 'B' : 'C'; acum += t.v; pc[t.k] += t.v / tot * 100; nk[t.k]++; });
@@ -3430,8 +3440,8 @@
           '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + it.map(linha).join('') + '</div></div>';
       }).join('') + '</div>';
     }
-    if (estL.length) h += '<div class="mg-lista f5-est"><div class="mg acesso"><button type="button" class="mg-h" aria-expanded="true"><span class="mg-n"><b>Estornos</b><span class="mg-s"><span class="mg-e nv">' + estL.length + (estL.length === 1 ? ' serviço' : ' serviços') + ' · descontado' + (estL.length === 1 ? '' : 's') + ' do total</span></span></span>' +
-      '<span class="mg-t"><b style="color:#B3261E">− ' + fmtBRL(-sEst) + '</b><small>fora da curva ABC</small></span>' + ICON_CHEV + '</button><div class="mg-b">' + estL.map(function (t) {
+    if (estL.length) h += '<div class="mg-lista f5-est"><div class="mg acesso"><div class="mg-h" style="cursor:default"><span class="mg-n"><b>Estornos</b><span class="mg-s"><span class="mg-e nv">' + estL.length + (estL.length === 1 ? ' serviço' : ' serviços') + ' · descontado' + (estL.length === 1 ? '' : 's') + ' do total</span></span></span>' +
+      '<span class="mg-t"><b style="color:#B3261E">− ' + fmtBRL(-sEst) + '</b><small>fora da curva ABC</small></span><span></span></div><div class="mg-b">' + estL.map(function (t) {
         return '<div class="mg-svc"><div class="mg-l"><span class="mg-nm">' + esc(t.nome) + '<small class="sc-p">' + (t.pontes ? t.pontes + (t.pontes === 1 ? ' segmento' : ' segmentos') : 'sem local') + '</small></span><span class="mg-q"><b>' + fmtN(Math.round(t.q * 100) / 100) + ' <small>' + esc(unTxt(t.un)) + '</small></b><small style="color:#B3261E">− ' + fmtBRL(-t.v) + '</small></span></div></div>';
       }).join('') + '</div></div></div>';
     if (cons) return h + '<div class="an-rod">Todos os serviços da medição consolidada, inclusive os sem local (transportes, administração, canteiro). "Segmentos": em quantos a memória de cálculo localizou o serviço.</div></div>';
