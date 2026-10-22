@@ -425,6 +425,17 @@
     '.ft-item.err{border-color:var(--danger,#B42318)}',
     '.ft-thumb{background:#000;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:150px;color:#C9CFCB;font-size:12.5px}',
     '.ft-thumb img{display:block;max-width:100%;max-height:320px;width:auto;height:auto}',
+    '.ft-batch .ft-thumb img{cursor:zoom-in}',
+    // foto do lote aberta em tela cheia (tocar na prévia): passar o dedo troca de foto, puxar para baixo fecha (gestos.js)
+    '.ft-ver{position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;background:#0E1311;color:#fff}',
+    '.ft-ver-top{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) 10px calc(12px + env(safe-area-inset-left,0px))}',
+    '.ft-ver-top .ft-verc{flex:1;text-align:center;font-size:13px;color:#C9D0CC;font-variant-numeric:tabular-nums}',
+    '.ft-ver-top button{min-height:38px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font:inherit;font-size:14px;cursor:pointer}',
+    '.ft-ver-top button[disabled]{opacity:.35}',
+    '.ft-ver-img{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 8px;touch-action:none;overflow:hidden}',
+    '.ft-ver-img img{max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none;user-select:none;-webkit-user-select:none}',
+    '.ft-ver-info{padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px));font-size:13px;line-height:1.5;color:#E4E8E5}',
+    '.ft-ver-info b{color:#fff}',
     '.ft-ifields{display:flex;flex-direction:column;gap:8px;min-width:0}',
     '.ft-ihead{display:flex;align-items:center;justify-content:space-between;gap:8px}',
     '.ft-iname{font-weight:650;font-size:13px;overflow-wrap:anywhere;min-width:0}',
@@ -760,6 +771,10 @@
       root.addEventListener('input', onInput);
       root.addEventListener('change', onChange);
       root.addEventListener('keydown', function (e) {
+        if (q('.ft-ver')) {
+          if (e.key === 'Escape') fechaLoteVer(); else if (e.key === 'ArrowLeft') passaLoteVer(-1); else if (e.key === 'ArrowRight') passaLoteVer(1);
+          return;
+        }
         if (folha) { teclaFolha(e); return; }
         if (e.key === 'Escape') close();
       });
@@ -1703,7 +1718,7 @@
         return;
       }
       var d = ' data-i="' + i + '"';
-      el.innerHTML = '<div class="ft-thumb"><span>Gerando prévia…</span><img alt="Foto ' + (i + 1) + ' com o carimbo" hidden></div>' +
+      el.innerHTML = '<div class="ft-thumb"><span>Gerando prévia…</span><img alt="Foto ' + (i + 1) + ' com o carimbo" data-ft="lv-abre" data-lv="' + i + '" hidden></div>' +
         '<div class="ft-ifields">' + head + '<div class="ft-src"></div>' +
           '<div class="ft-opts ft-here" hidden><button type="button" class="ft-opt" data-ft="b-here"' + d + '>Usar o GPS do aparelho agora</button></div>' +
           '<div class="ft-lot" role="status" hidden></div>' +
@@ -1846,6 +1861,46 @@
       else queueDraw(i);
     }
     // prévias com carimbo, uma de cada vez, num canvas só
+    // ---------------- foto do lote em tela cheia: a prévia com o carimbo, uma de cada vez, passando com o dedo (22/10/2026)
+    var lvI = -1;
+    function loteVis() {
+      if (!batch) return [];
+      return batch.items.map(function (it, k) { return k; }).filter(function (k) { var it = batch.items[k]; return !it.gone && !it.err && !it.wait && (it.prevUrl || it.url); });
+    }
+    function abreLoteVer(i) {
+      if (!batch) return;
+      var el = q('.ft-ver');
+      if (!el) {
+        el = document.createElement('div'); el.className = 'ft-ver'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Foto do lote');
+        root.appendChild(el);
+        if (window.GestosFoto) window.GestosFoto(el, {
+          area: function () { return q('.ft-ver-img'); }, img: function () { return q('.ft-ver-img img'); }, fundo: function () { return el; },
+          temAnt: function () { return loteVis().indexOf(lvI) > 0; }, temProx: function () { var v = loteVis(); return v.indexOf(lvI) >= 0 && v.indexOf(lvI) < v.length - 1; },
+          ant: function () { passaLoteVer(-1); }, prox: function () { passaLoteVer(1); }, fechar: fechaLoteVer
+        });
+      }
+      lvI = i;
+      renderLoteVer();
+    }
+    function passaLoteVer(d) { var v = loteVis(), p = v.indexOf(lvI); if (p >= 0 && v[p + d] != null) { lvI = v[p + d]; renderLoteVer(); } }
+    function fechaLoteVer() {
+      var el = q('.ft-ver'), i = lvI;
+      lvI = -1;
+      if (el) el.remove();
+      var it = itemEl(i); if (it) it.scrollIntoView({ block: 'center' });   // volta para a foto que estava aberta na lista
+    }
+    function renderLoteVer() {
+      var el = q('.ft-ver'), v = loteVis(), p = v.indexOf(lvI), it = batch && batch.items[lvI];
+      if (!el || p < 0 || !it) { fechaLoteVer(); return; }
+      var c = byId(it.cid), pt = null;
+      if (c && it.pid) pontosDe(c).forEach(function (x) { if (x.id === it.pid) pt = x; });
+      var onde = [c ? lotName(c) : 'Sem contrato', pt ? 'Ponto ' + (pt.nome || '') : '', it.km != null ? 'km ' + nf(it.km, 2) : 'sem km'].filter(Boolean).join(' · ');
+      el.innerHTML = '<div class="ft-ver-top"><button type="button" data-ft="lv-fecha">← Voltar</button><span class="ft-verc">' + (p + 1) + ' de ' + v.length + '</span>' +
+        '<button type="button" data-ft="lv-ant" aria-label="Anterior"' + (p ? '' : ' disabled') + '>‹</button>' +
+        '<button type="button" data-ft="lv-prox" aria-label="Próxima"' + (p < v.length - 1 ? '' : ' disabled') + '>›</button></div>' +
+        '<div class="ft-ver-img"><img alt="Foto ' + (lvI + 1) + ' com o carimbo" src="' + esc(it.prevUrl || it.url) + '"></div>' +
+        '<div class="ft-ver-info"><b>' + (lvI + 1) + '. ' + esc(it.name) + '</b><br>' + esc(onde) + (it.prevUrl ? '' : ' · <span style="color:#FEC84B">prévia do carimbo ainda sendo gerada</span>') + '</div>';
+    }
     function queueDraw(i) {
       if (!batch) return;
       batch.ver++;
@@ -2305,6 +2360,9 @@
       if (b.dataset.ft === 'folha-fecha') { fechaFolha(); return; }
       if (b.dataset.ft === 'folha-padrao') { padraoFolha(); return; }
       if (b.dataset.ft === 'folha-desfaz') { desfazFolha(); return; }
+      if (b.dataset.ft === 'lv-abre') { abreLoteVer(+b.dataset.lv); return; }
+      if (b.dataset.ft === 'lv-fecha') { fechaLoteVer(); return; }
+      if (b.dataset.ft === 'lv-ant' || b.dataset.ft === 'lv-prox') { passaLoteVer(b.dataset.ft === 'lv-prox' ? 1 : -1); return; }
       if (batch && b.dataset.i != null) { batchClick(b, +b.dataset.i); return; }
       if (b.dataset.ft === 'cam-open') { openCam(); return; }
       if (b.dataset.ft === 'cam-shot') { camPop(''); shoot(); return; }

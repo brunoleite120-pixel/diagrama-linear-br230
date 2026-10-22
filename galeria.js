@@ -155,7 +155,9 @@
     '.gl-ver .btn.danger{color:#FDA29B;border-color:rgba(253,162,155,.4)}',
     '.gl-ver .btn.primary{background:var(--accent,#1D4F91);border-color:var(--accent,#1D4F91)}',
     '.gl-ver-img{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 8px}',
-    '.gl-ver-img img{max-width:100%;max-height:100%;object-fit:contain}',
+    '.gl-ver-img img{max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none;user-select:none;-webkit-user-select:none}',
+    // gestos na foto (gestos.js): o navegador não rola nem amplia a página por cima deles
+    '.gl-ver-img{touch-action:none;overflow:hidden}',
     '.gl-ver-img .gl-leve{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.6);font-size:12px;white-space:nowrap}',
     '.gl-ver-info{padding:10px 16px 4px;font-size:13px;line-height:1.5;color:#E4E8E5;max-height:30vh;overflow:auto}',
     '.gl-ver-info b{color:#fff}',
@@ -1721,9 +1723,19 @@
       var it = lista[ver];
       if (!it) { fecharVer(); return; }
       var v = q('.gl-ver');
-      if (!v) { v = document.createElement('div'); v.className = 'gl-ver'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-label', 'Foto'); root.appendChild(v); }
+      if (!v) {
+        v = document.createElement('div'); v.className = 'gl-ver'; v.setAttribute('role', 'dialog'); v.setAttribute('aria-label', 'Foto'); root.appendChild(v);
+        // passar o dedo: próxima e anterior; puxar para baixo fecha; dois dedos ou toque duplo ampliam (22/10/2026)
+        if (window.GestosFoto) window.GestosFoto(v, {
+          area: function () { return q('.gl-ver-img'); }, img: function () { return q('.gl-ver-img img'); }, fundo: function () { return v; },
+          temAnt: function () { return ver > 0; }, temProx: function () { return ver >= 0 && ver < lista.length - 1; },
+          ant: function () { if (ver > 0) abrir(ver - 1); }, prox: function () { if (ver < lista.length - 1) abrir(ver + 1); }, fechar: fecharVer
+        });
+      }
       var src = grande && grande.id === it.id ? grande.url : miniDe(it);
       if (!src) pedirMini(it.id);
+      // a anterior e a próxima já pedem a miniatura: ao passar o dedo, não entra uma foto em branco
+      [lista[ver - 1], lista[ver + 1]].forEach(function (x) { if (x && !miniDe(x)) pedirMini(x.id); });
       var linhas = [];
       var oae = ehOae(contratos().find(function (x) { return x.id === it.cid; })), cons = ehCons(it.cid);
       linhas.push('<b>' + esc([it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome && !cons ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : cons ? '' : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ')) + '</b>' +
