@@ -3346,7 +3346,7 @@
   // contrato (pelo valor). A quantidade só se soma por serviço; por grupo, o valor e o % do total. Os itens do Anexo VI sem
   // descrição (cod_*) nunca foram medidos: ficam fora das listas, citados no rodapé
   function servContratoHtml(c, an, E) {
-    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {}, cons = an.tipo === 'conserva', caps = {}, capL = [];
+    var ei = E ? etapaInfo(an, E) : null, ag = {}, ord = [], cods = {}, cons = an.tipo === 'conserva', caps = {}, capL = [], estL = [];
     // conservação: o contrato inteiro, da medição consolidada (inclui o que não tem local); "segmentos" conta onde há local
     if (cons) {
       var svI = {}, ns = E ? ei.ns : (an.medicoes || []).map(function (m) { return m.n; });
@@ -3364,10 +3364,13 @@
           t.q += Number(pm[k][0]) || 0; t.v += Number(pm[k][1]) || 0;
         });
       });
+      var porCod = {};
+      Object.keys(ag).forEach(function (k) { var b = String(k).replace(/-\d+$/, ''); (porCod[b] = porCod[b] || []).push(k); });
       sortedPoints(c).forEach(function (p) {
-        var a = an.pontes && an.pontes[p.id];
-        ((a && a.servicos) || []).forEach(function (s) { if (ag[s.cod] && noEscopo([s], ns, true).length) ag[s.cod].pontes++; });
+        var a = an.pontes && an.pontes[p.id], vis = {};
+        ((a && a.servicos) || []).forEach(function (s) { if (!noEscopo([s], ns, true).length) return; (porCod[s.cod] || []).forEach(function (k) { if (!vis[k]) { vis[k] = 1; ag[k].pontes++; } }); });
       });
+      estL = ord.filter(function (t) { return t.v < 0; });
       ord = ord.filter(function (t) { return t.v > 0; });
     }
     if (!cons) sortedPoints(c).forEach(function (p) {
@@ -3396,7 +3399,8 @@
         '<span class="mg-q"><b>' + fmtN(Math.round(t.q * 100) / 100) + ' <small>' + esc(unTxt(t.un)) + '</small></b><small>' + fmtBRL(t.v) + ' · ' + pct(t.v / tot * 100) + '</small></span></div></div>';
     }
     var h = '<div class="an-sec an-serv"><h4>Serviços medidos (' + ord.length + ')' + (E ? ' · ' + E + 'ª etapa' : '') + '</h4>';
-    h += '<div class="an-line">' + fmtBRL(tot) + (cons ? ' no contrato' : ' nas pontes') + ' · quantidade somada por serviço; por grupo, só o valor</div>';
+    var sEst = estL.reduce(function (t, x) { return t + x.v; }, 0);
+    h += '<div class="an-line">' + (estL.length ? '<b>' + fmtBRL(tot + sEst) + ' no contrato</b> · líquido, já descontado' + (estL.length === 1 ? ' o estorno' : 's os estornos') + ' de ' + fmtBRL(-sEst) + ' (no fim da lista)' : fmtBRL(tot) + (cons ? ' no contrato' : ' nas pontes') + ' · quantidade somada por serviço; por grupo, só o valor') + '</div>';
     h += '<div class="sc-abc" aria-hidden="true">' + ['A', 'B', 'C'].filter(function (k) { return nk[k]; }).map(function (k) {
       return '<i class="' + k.toLowerCase() + '" style="flex:' + pc[k].toFixed(2) + ' 0 0"></i>';
     }).join('') + '</div>';
@@ -3426,6 +3430,10 @@
           '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + it.map(linha).join('') + '</div></div>';
       }).join('') + '</div>';
     }
+    if (estL.length) h += '<div class="mg-lista f5-est"><div class="mg acesso"><button type="button" class="mg-h" aria-expanded="true"><span class="mg-n"><b>Estornos</b><span class="mg-s"><span class="mg-e nv">' + estL.length + (estL.length === 1 ? ' serviço' : ' serviços') + ' · descontado' + (estL.length === 1 ? '' : 's') + ' do total</span></span></span>' +
+      '<span class="mg-t"><b style="color:#B3261E">− ' + fmtBRL(-sEst) + '</b><small>fora da curva ABC</small></span>' + ICON_CHEV + '</button><div class="mg-b">' + estL.map(function (t) {
+        return '<div class="mg-svc"><div class="mg-l"><span class="mg-nm">' + esc(t.nome) + '<small class="sc-p">' + (t.pontes ? t.pontes + (t.pontes === 1 ? ' segmento' : ' segmentos') : 'sem local') + '</small></span><span class="mg-q"><b>' + fmtN(Math.round(t.q * 100) / 100) + ' <small>' + esc(unTxt(t.un)) + '</small></b><small style="color:#B3261E">− ' + fmtBRL(-t.v) + '</small></span></div></div>';
+      }).join('') + '</div></div></div>';
     if (cons) return h + '<div class="an-rod">Todos os serviços da medição consolidada, inclusive os sem local (transportes, administração, canteiro). "Segmentos": em quantos a memória de cálculo localizou o serviço.</div></div>';
     var ks = Object.keys(cods).sort();
     h += '<div class="an-rod">Remoção de asfalto conta em Juntas (é medida junto com os berços); pintura epóxi, em Pintura.' +
