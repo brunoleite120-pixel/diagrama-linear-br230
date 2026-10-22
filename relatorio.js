@@ -430,6 +430,9 @@
       }
       function rodape() {
         var n = G && G.pts.length ? folhasDoPdf().length : 0;
+        // fotos que não vieram do Drive: pergunta antes de salvar (e não depois, com o PDF já entregue)
+        if (S.pergunta) return '<span class="rf-falta" role="alert" style="flex:1 1 100%;color:#B42318;font-weight:600">' + esc(S.pergunta.txt) + '</span>' +
+          '<button type="button" class="btn" data-rf-p="nao">Não gerar</button><button type="button" class="btn primary" data-rf-p="sim">Gerar assim mesmo</button>';
         return '<button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary"' + (n && !S.gerando ? '' : ' disabled') + '>' +
           (S.gerando ? esc(S.gerando) : 'Gerar PDF' + (n ? ' (' + plural(n, 'folha', 'folhas') + ')' : '')) + '</button>';
       }
@@ -451,6 +454,8 @@
       desenhar();
 
       f.addEventListener('click', function (e) {
+        var bp = e.target.closest('[data-rf-p]');
+        if (bp && S.pergunta) { var r = S.pergunta.r; S.pergunta = null; r(bp.getAttribute('data-rf-p') === 'sim'); return; }
         var b = e.target.closest('[data-rf]');
         if (!b || S.gerando) return;
         var k = b.getAttribute('data-rf');
@@ -531,6 +536,12 @@
             });
           });
           return cadeia.then(function () {
+            if (!falhas) return;
+            return new Promise(function (r) {
+              S.pergunta = { r: r, txt: plural(falhas, 'foto não veio', 'fotos não vieram') + ' do Drive (sem conexão?) e ' + (falhas === 1 ? 'ficaria' : 'ficariam') + ' em branco no PDF. Gerar assim mesmo?' };
+              foot();
+            }).then(function (sim) { if (!sim) { S.gerando = false; foot(); throw { parou: true }; } });
+          }).then(function () {
             // "Relatório fotográfico - Pontos Críticos 314 - Lote 01 - CT 02 00314-2026 - <período>.pdf"; o título do PDF fica com o Lote
             var nome = ('Relatório fotográfico - ' + nomes.partesArquivo(c).join(' - ') + ' - ' + per.de + (per.ate !== per.de ? ' a ' + per.ate : '') + '.pdf').replace(/[\\/:*?"<>|]/g, '-');
             S.gerando = 'Salvando…';

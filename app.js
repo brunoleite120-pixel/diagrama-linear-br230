@@ -2250,7 +2250,25 @@
   var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, ocAb: {}, medModo: 'grupo', servModo: 'grupo', voltar: null };
 
   function validState(s) {
-    return s && Array.isArray(s.contracts) && s.contracts.every(function (c) { return c && Array.isArray(c.pontos); });
+    return s && Array.isArray(s.contracts) && s.contracts.every(function (c) {
+      return c && typeof c === 'object' && Array.isArray(c.pontos) && c.pontos.every(function (p) {
+        return p && typeof p === 'object' && (p.serv == null || (typeof p.serv === 'object' && !Array.isArray(p.serv)));
+      });
+    });
+  }
+  // backup: situações que esta versão não conhece (nos pontos críticos, fora de OK/Ativo/Parado/N/A). Devolve exemplos
+  function situacoesEstranhas(s) {
+    var ruins = [];
+    s.contracts.forEach(function (c) {
+      if (isContinuo(c)) return;   // pontes e conservação já tratam o desconhecido como "sem vistoria"
+      c.pontos.forEach(function (p) {
+        Object.keys(p.serv || {}).forEach(function (k) {
+          var sv = p.serv[k];
+          if (!sv || typeof sv !== 'object' || !STATUS[sv.st]) ruins.push((c.nome || c.id || 'contrato') + ' · ' + (p.nome || p.id || 'ponto') + ' · ' + k + ': ' + String(sv && sv.st));
+        });
+      });
+    });
+    return ruins;
   }
   function normalize(s) {
     s.contracts.forEach(function (c) {
@@ -2360,9 +2378,9 @@
     // no celular a Visão geral fica só com o ícone (aria-label mantém o nome). O botão dos contratos abre uma lista de botões
     // comuns (aria-expanded/aria-controls), sem a semântica de menu (aria-haspopup), que pediria setas e outro anúncio
     nav.innerHTML = (window.VisaoGeral && $('visaoHost') ? '<button type="button" class="tab tab-visao" data-act="visao" aria-label="Visão geral" aria-current="' + visaoOn + '">' + ICON_VISAO + '<span class="tv-txt">Visão geral</span></button>' : '') +
-      (temMedicoes() ? '<button type="button" class="tab tab-medicoes" data-act="medicoes" aria-current="' + medicoesOn + '" aria-pressed="' + medicoesOn + '">Medições</button>' : '') +
+      (temMedicoes() ? '<button type="button" class="tab tab-medicoes" data-act="medicoes" aria-label="Medições" aria-current="' + medicoesOn + '" aria-pressed="' + medicoesOn + '">' + ICON_MED + '<span class="tm-txt">Medições</span></button>' : '') +
       (isPublico() ? '' : '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
-      '<span class="ctm-nome"><span class="ctm-n">' + (at ? esc(ctNome(at)) + '</span><small>' + esc(abaSub(at)) + '</small>' : 'Contratos</span>') +
+      '<span class="ctm-nome"><span class="ctm-n">' + (at ? '<span class="ctm-longo">' + esc(ctNome(at)) + '</span><span class="ctm-cur">' + esc(ctNumeroCurto(at) || ctCurto(at)) + '</span></span><small>' + esc(abaSub(at)) + '</small>' : 'Contratos</span>') +
       (window.AMBIENTE && window.AMBIENTE.previa ? '<span class="ctm-prev">Prévia</span>' : '') + '</span>' + ICON_DESCE + '</button>' +
       '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
       '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>');
@@ -2477,6 +2495,7 @@
     topoMini(false);
     if (ui.wide) toggleWide(false);
     if ((pg === 'diagrama' || pg === 'mapa') && (pg === 'mapa') !== (view === 'mapa')) setView(pg);
+    if ((pg === 'diagrama' || pg === 'mapa') && previewSujo) renderPreview();
     if (pg === 'galeria') abreGaleriaPg(); else fechaGaleriaPg();
     ferramentasNaBarra();
     folhasNav();
@@ -2568,6 +2587,7 @@
     try { localStorage.setItem(PG_KEY, pg); } catch (e) { /* sem armazenamento */ }
     aplicaPg();
     if (pg === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); }   // o mapa estava escondido: mede de novo
+    else pausaMapa();
     window.scrollTo(0, pg === 'mapa' || pg === 'galeria' ? 0 : pgRolY[pg] || 0);
     if (!semHist) try { history.pushState({ pg: pg }, ''); } catch (e) { /* segue sem histórico */ }
   }
@@ -2957,7 +2977,8 @@
     if (isOae(c)) return ponteHead(p, c);
     if (isConserva(c)) return segHead(p, c);
     var dots = servicesOf(c).map(function (s) {
-      var st = (p.serv[s.key] || {}).st || 'NA';
+      var st = (p.serv[s.key] || {}).st;
+      if (!STATUS[st]) st = 'NA';   // situação desconhecida (backup editado à mão): não derruba a tela
       return '<span class="dot ' + st + '" title="' + esc(s.short + ': ' + STATUS[st].name) + '"></span>';
     }).join('');
     var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
@@ -4254,8 +4275,11 @@
 
   // ------------------------------------------------------------------ interface: pré-visualização
   var previewTimer = null, viewer = null;
+  // digitando em Pontos (com o Diagrama e o Mapa escondidos): só marca; o desenho é refeito ao abrir o Diagrama ou o Mapa
+  var previewSujo = false;
   function schedulePreview() {
     clearTimeout(previewTimer);
+    if (pgAtivo() && pg !== 'diagrama' && pg !== 'mapa') { previewSujo = true; return; }
     previewTimer = setTimeout(renderPreview, 120);
   }
   // lista do seletor "Páginas": automático (padrão do contrato) ou de 1 folha até 1 ponto por folha
@@ -4463,7 +4487,7 @@
           if (state.activeId === id || !state.contracts.some(function (c) { return c.id === id; })) return;
           state.activeId = id; ui.open = {}; save(); renderAll();
         },
-        gps: true, share: !!navigator.canShare, saveBlob: saveBlob, notify: function (m) { toast(m); },
+        gps: true, share: !!navigator.canShare, saveBlob: saveBlob, notify: function (m, ms) { toast(m, ms); },
         drive: driveQ && {
           ready: driveReady,
           add: function (items) { return driveQ.add(items); },
@@ -4484,11 +4508,12 @@
     if (mapa || !window.MapaSNV) return mapa;
     mapa = window.MapaSNV({
       host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo, nomes: NOMES,
-      saveText: saveText, tiles: true, gps: true, notify: function (m) { toast(m); }, onPhoto: openFoto,
+      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, onPhoto: openFoto,
       onOpen: abrirDoMapa, openLabel: function () { var c = active(); return 'Abrir em ' + (isConserva(c) ? 'Segmentos' : isOae(c) ? 'Pontes' : 'Pontos'); }
     });
     return mapa;
   }
+  function pausaMapa() { if (mapa && mapa.pausa && mapa.pausa()) toast('Localização ao vivo desligada: você saiu do Mapa.'); }
   function setView(v) {
     var temM = !!(window.MapaSNV && window.L && window.SNV_BR230), cV = state && state.contracts.length ? active() : null;
     // fiscal: só o mapa (sem o diagrama)
@@ -4504,6 +4529,7 @@
     $('folhaSw').classList.toggle('so-diagrama', isMap);
     $('btnWide').textContent = ui.wide ? 'Mostrar editor' : (isMap ? 'Ampliar mapa' : 'Ampliar diagrama');
     if (isMap && !$('layout').hidden && ensureMap()) { mapa.render(); mapa.show(); }
+    if (!isMap && !pgAtivo()) pausaMapa();
     renderPreview();
   }
   function metaSituacao(c, tot) {
@@ -4522,6 +4548,7 @@
     return tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
   }
   function renderPreview() {
+    previewSujo = false;
     if (medicoesOn) { desenhaMedicoes(); return; }
     if (visaoOn && visao && !$('visaoHost').hidden) { if (!desenhaVisao()) renderAll(); return; }
     var c = active(), tot = totals(c);
@@ -4571,6 +4598,8 @@
   // Todos os contratos numa rodovia só, em escala de km; só na tela. É a tela inicial: o app abre nela e, depois de
   // escolher um contrato, fica nele até fechar o app ou tocar em "Visão geral" (sessionStorage).
   var INICIO_KEY = 'diagrama-linear.no-contrato', visao = null;
+  // Medições: no celular só o ícone (cifrão sobre a régua), para o nome do contrato aberto caber no botão ao lado
+  var ICON_MED = '<svg class="tm-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="M6 20v-3M10 20v-3M14 20v-3M18 20v-3"/><path d="M15 5.5c-.6-.9-1.7-1.5-3-1.5-1.7 0-3 1-3 2.3s1.3 1.9 3 2.2c1.7.3 3 1 3 2.3S13.7 13 12 13c-1.3 0-2.4-.6-3-1.5"/><path d="M12 2.5v1.5M12 13v1.5"/></svg>';
   var ICON_VISAO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 12h20"/><path d="M6 8v8"/><path d="M13 8v8"/><path d="M18 9.5v5"/></svg>';
   var visaoOn = (function () { try { return sessionStorage.getItem(INICIO_KEY) !== '1'; } catch (e) { return true; } })();
   function setVisao(on) {
@@ -5040,7 +5069,21 @@
           if (oaeSt(sv) === st) st = 'NV';   // tocar de novo no status marcado desmarca (volta para sem vistoria)
           // serviço contínuo: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
           delete sv.pct;
-          if (!comQtd(st)) { delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens; }
+          if (!comQtd(st)) {
+            // tinha o que perder: "Desfazer" por alguns segundos (um toque sem querer no celular apagava a anotação)
+            var temDet = sv.q != null || (sv.n && String(sv.n).trim()) || sv.pri || sv.ci || (sv.itens && Object.keys(sv.itens).length);
+            if (temDet) {
+              var antes = JSON.parse(JSON.stringify(sv)), svK = b.dataset.svc, pId = p.id;
+              offerUndo('A estimativa, a nota e os itens deste serviço saíram junto com a situação.', function () {
+                var p2 = findPoint(pId);
+                if (!p2 || !p2.serv) return;
+                p2.serv[svK] = antes;
+                rerenderPoint(p2);
+                afterEdit('set-st', active());
+              });
+            }
+            delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens;
+          }
         } else if (st === 'OK') sv.pct = 100;
         else if (st === 'NA') sv.pct = 0;
         else if (sv.st === 'OK' || sv.st === 'NA') sv.pct = st === 'A' ? 50 : 0;
@@ -5551,6 +5594,9 @@
       }
       // um backup sem contratos apagaria tudo de todos: recusa
       if (!s.contracts.length) { toast('Esse backup não tem nenhum contrato. Nada foi trocado.'); return; }
+      var estranhas = situacoesEstranhas(s);
+      if (estranhas.length) { toast('Esse backup tem ' + estranhas.length + ' situação(ões) que o site não conhece (ex.: ' + estranhas[0] + '). Nada foi trocado.', 9000); return; }
+      try { normalize(clone(s)); } catch (e) { toast('Esse arquivo não é um backup válido deste site.'); return; }
       var np =s.contracts.reduce(function (n, c) { return n + c.pontos.length; }, 0);
       confirmar({
         titulo: 'Trocar os dados pelos do backup?',
@@ -5705,14 +5751,20 @@
       if (pedeMotivo && mot.length < 5) { modalErr(f, 'Escreva o motivo (pelo menos 5 letras).'); return; }
       modalErr(f, '');
       busyBtn(f, true, 'Gravando…');
+      // enquanto grava, a janela não fecha (Cancelar, Esc, toque fora): a carga seguiria sozinha e o erro sumiria com ela
+      var mEl = f.parentNode, fx = f.querySelectorAll('[data-close]');
+      mEl.dataset.ocupado = '1'; fx.forEach(function (x) { x.disabled = true; });
+      var livre = function () { delete mEl.dataset.ocupado; fx.forEach(function (x) { x.disabled = false; }); };
       var pg = f.querySelector('.cg-prog');
       pg.hidden = false;
       executarCarga(banco.login.codigo, c.id, cmp.baseMuda ? cmp.base : null, fonte, mot || (novas.length && !rets.length && !voltas.length ? 'medição nova' : ''), envio, function (k, t) { pg.textContent = 'Enviando ' + k + ' de ' + t + '…'; }).then(function (r) {
-        closeModal();
+        livre();
+        if ($('modal') === mEl) closeModal();
         recarregarMedicoes(c);
         toast('Medições do ' + nomeCt + ' carregadas: ' + (r && r.mps != null ? r.mps : envio.length) + (envio.length === 1 ? ' medição' : ' medições') + '.', 6000);
       }, function (err) {
         console.error(err);
+        livre();
         busyBtn(f, false); pg.hidden = true;
         modalErr(f, errCarga(err));
       });
@@ -6830,7 +6882,8 @@
     }, function () { /* sem sinal: confere depois */ });
   }
 
-  function modal(html, onSubmit, cls) {
+  // aoCancelar: chamado quando a pessoa fecha sem confirmar (Cancelar, ×, Esc ou toque fora)
+  function modal(html, onSubmit, cls, aoCancelar) {
     closeModal();
     var m = document.createElement('div');
     m.className = 'modal';
@@ -6839,8 +6892,9 @@
     (document.fullscreenElement || document.body).appendChild(m);
     var f = m.querySelector('form');
     f.addEventListener('submit', function (e) { e.preventDefault(); if (onSubmit) onSubmit(f); });
-    m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('[data-close]')) closeModal(); });
-    m.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+    function cancela() { if (m.dataset.ocupado) return; closeModal(); if (aoCancelar) aoCancelar(); }
+    m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('[data-close]')) cancela(); });
+    m.addEventListener('keydown', function (e) { if (e.key === 'Escape') cancela(); });
     f.addEventListener('change', function (e) {
       if (e.target.hasAttribute('data-showpw')) f.querySelectorAll('input[data-pw]').forEach(function (i) { i.type = e.target.checked ? 'text' : 'password'; });
     });
@@ -6900,7 +6954,7 @@
         var v = { valor: c ? c.value.trim() : '' };
         closeModal();
         resolve(v);
-      });
+      }, null, function () { resolve(null); });   // cancelou: quem chamou reabre a lista de onde veio
       if (o.digitar) {
         var inp = f.querySelector('#cfDig'), btn = f.querySelector('button[type=submit]');
         inp.addEventListener('input', function () { btn.disabled = semAcento(inp.value) !== semAcento(o.digitar); });
@@ -7702,6 +7756,12 @@
       if (rec) { rec.hidden = !nr; rec.textContent = 'Alterações guardadas (' + nr + ')'; }
       pop.hidden = !pop.hidden;
       $('btnMenu').setAttribute('aria-expanded', String(!pop.hidden));
+      // acesso sem nenhuma opção aqui (fiscal no computador): explica, em vez de abrir um menu vazio
+      if (!pop.hidden) {
+        var algum = [].some.call(pop.querySelectorAll('button[data-act]'), function (x) { return !x.hidden && x.offsetParent; }), vz = $('menuVazio');
+        if (!algum && !vz) { vz = document.createElement('p'); vz.id = 'menuVazio'; vz.className = 'menu-vazio'; vz.textContent = 'Seu acesso não tem opções neste menu. Os pontos, o mapa, as fotos e a galeria ficam nas abas da barra de cima.'; pop.insertBefore(vz, pop.firstChild); }
+        if (vz) vz.hidden = algum;
+      }
     });
     $('menuPop').addEventListener('click', onMenu);
     $('fileInput').addEventListener('change', function (e) {

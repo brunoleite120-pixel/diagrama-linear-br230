@@ -1375,6 +1375,8 @@
     return {
       render: render,
       show: function () { setTimeout(function () { map.invalidateSize(); if (!bounds || fitPend) fit(); }, 30); },
+      // saiu do Mapa: desliga o GPS ao vivo e a tela sempre acesa (gastavam bateria sem ninguém ver). true = estava ligado
+      pausa: function () { if (live.watch == null && !nav) return false; stopGps(); return true; },
       invalidate: function () { map.invalidateSize(); },
       openFull: openFull,
       closeFull: closeFull,

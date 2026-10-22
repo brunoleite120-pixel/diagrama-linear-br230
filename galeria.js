@@ -371,7 +371,13 @@
     });
   }
   // ao sair (ou entrar outra pessoa) no aparelho: as fotos inteiras guardadas eram do acesso anterior (app.js, limparDadosAparelho)
-  window.GaleriaLimparCache = function () { try { if (window.indexedDB) indexedDB.deleteDatabase(CDB); } catch (e) { /* sem IndexedDB */ } };
+  // ao sair da conta: apaga o cache e para os downloads; respostas que ainda chegarem (pedidas antes) não gravam mais nada
+  var cacheGer = 0, aoLimpar = [];
+  window.GaleriaLimparCache = function () {
+    cacheGer++;
+    aoLimpar.forEach(function (f) { try { f(); } catch (e) { /* segue */ } });
+    try { if (window.indexedDB) indexedDB.deleteDatabase(CDB); } catch (e) { /* sem IndexedDB */ }
+  };
   function cacheLer(id) {
     return cacheTx('readonly', function (i, a) { return a.get(id); }).then(function (r) {
       if (!r || !r.buf) return null;
@@ -719,6 +725,7 @@
     // fLocal: filtro de No aparelho ('aparelho' só aqui, 'fila', 'enviada' no Drive); lote: as fotos que entraram na fila nesta
     // leva (id -> tamanho), para a barra contar "3 de 7" e os MB até a fila esvaziar; semRede: a aba do banco mostra as guardadas
     var fLocal = '', lote = {}, semRede = 0, bx = null, bs = null, cfg = false;
+    aoLimpar.push(function () { if (bx) { bx.parar = true; bx = null; avisaBaixa(); } });   // saiu da conta: o download para
     // aba Drive: dpath = a pasta aberta (nomes, a partir da raiz; em "por pessoa" o 1º é a pessoa); dlista = a última leitura do Drive
     var dpath = [], dmodo = lsLer(DMODO_KEY) === 'pessoa' ? 'pessoa' : 'contrato', dbusca = '', dlista = null, semMini = {}, dvistos = {};
     try { dvistos = JSON.parse(lsLer(DVISTO_KEY) || '{}') || {}; } catch (e) { dvistos = {}; }
@@ -756,6 +763,21 @@
         em: m.em || (r.criada ? new Date(r.criada).toISOString() : null), desc: m.desc || '', autor: r.autor && r.autor.nome || '',
         situacao: r.situacao, etapa: r.etapa, erro: r.erro, enviada: r.enviada, driveId: r.drive && r.drive.id || null, tamanho: r.tamanho, temArquivo: r.temArquivo, mini: u };
     }
+    // o banco devolve no máximo 1000 de cada vez (as mais recentes): pede as anteriores à última até acabar. Fotos com a mesma
+    // hora na emenda vêm de novo (pede "antes de 1 ms depois") e saem repetidas pelo id
+    function listarTodas(cod, escopo) {
+      var tudo = [], vistos = {};
+      function pag(antes, n) {
+        return o.Banco.fotosListar(cod, escopo, 1000, antes).then(function (arr) {
+          var novos = 0;
+          arr.forEach(function (f) { if (!vistos[f.id]) { vistos[f.id] = 1; tudo.push(f); novos++; } });
+          var ult = arr[arr.length - 1], t = ult ? Date.parse(ult.tirada_em || ult.enviada_em) : NaN;
+          if (arr.length < 1000 || !novos || n >= 50 || !isFinite(t)) return tudo;
+          return pag(new Date(t + 1).toISOString(), n + 1);
+        });
+      }
+      return pag(null, 1);
+    }
     function deBanco(f) {
       return { id: f.id, nome: f.nome_arquivo || 'foto.jpg', origem: 'banco', cid: f.contrato_id || '', pid: f.ponto_id || '', pnome: f.ponto_nome || '', lote: f.lote || '',
         km: f.km, lat: f.lat, lng: f.lng, em: f.tirada_em || f.enviada_em, desc: f.descricao || '', autor: f.autor_nome || '', situacao: f.situacao,
@@ -778,7 +800,7 @@
         if (!l) { var e = new Error('sem_login'); e.code = 'sem_login'; throw e; }
         semRede = 0;
         if (aba === 'drive') return listarDrive(l);
-        return o.Banco.fotosListar(l.codigo, aba, 1000).then(function (arr) { return arr.map(deBanco); }, function (e) {
+        return listarTodas(l.codigo, aba).then(function (arr) { return arr.map(deBanco); }, function (e) {
           if (!e || (e.code || e.erro || e.message) !== 'sem_rede') throw e;
           // sem sinal: as fotos baixadas para o app (dados e miniatura guardados), na regra da aba
           return itensLer().then(function (gs) {
@@ -1004,19 +1026,20 @@
     // a que vem do Drive fica guardada para a próxima vez
     // fixar: "Baixar para o app": espera a gravação e falha se o aparelho não guardou (a contagem do fim não promete o que não ficou)
     function arquivo(it, fixar) {
-      var l = locais[it.id];
+      var l = locais[it.id], g0 = cacheGer;
       var aqui = l && l.temArquivo && o.drive ? o.drive.arquivo(it.id) : Promise.resolve(null);
       return aqui.then(function (b) {
         if (b) return b;
         if (!it.driveId) throw { code: 'sem_drive' };
         return cacheLer(it.driveId).then(function (c) {
-          if (c) return fixar ? cacheGravar(it.driveId, c, true).then(function () { return c; }) : c;
+          if (c) return fixar && g0 === cacheGer ? cacheGravar(it.driveId, c, true).then(function () { return c; }) : c;
           var url = o.driveUrl ? o.driveUrl() : null, lg = login();
           if (!url) throw { code: 'sem_url' };
           if (!lg) throw { code: 'sem_login' };
           return o.drive.post(url, { acao: it.origem === 'drive' ? 'ver_baixar' : 'baixar', ambiente: o.ambiente || 'oficial', codigo: lg.codigo, driveId: it.driveId }).then(function (r) {
             if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
             var bl = b64Blob(r.dados, r.mime);
+            if (g0 !== cacheGer) throw { code: 'parado' };   // saiu da conta enquanto baixava
             var g = cacheGravar(it.driveId, bl, fixar).then(function (ok) { if (ok) { guardadas[it.driveId] = 1; retile(it.id); } return ok; });
             if (!fixar) return bl;
             return g.then(function (ok) { if (!ok) throw { code: 'sem_espaco' }; return bl; });
@@ -1581,10 +1604,11 @@
       avisaBaixa();
     }
     function umaFoto(b) {
-      var k = b.i, it = b.ls[k];
+      var k = b.i, it = b.ls[k], g0 = cacheGer;
+      var gravar = function (m) { return g0 === cacheGer ? itemGravar(it, m) : null; };
       b.i++; b.ativos++; b.vindo[it.id] = 1;
       retile(it.id);
-      var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return itemGravar(it, m); })
+      var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return gravar(m); })
         : arquivo(it, b.alvo === 'app').then(function (bl) {
           if (b.alvo === 'galeria') {
             b.arquivos.push({ name: b.nomes[k], blob: bl, date: data(it.em) || new Date() });
@@ -1594,7 +1618,7 @@
               b.entCadeia = b.entCadeia.then(function () { return entregar(b, parte); });
               return b.entCadeia.then(function () { return bl; });
             }
-          } else if (it.origem === 'banco' || it.origem === 'drive') return miniPara(it).then(function (m) { return itemGravar(it, m); }).then(function () { return bl; });
+          } else if (it.origem === 'banco' || it.origem === 'drive') return miniPara(it).then(function (m) { return gravar(m); }).then(function () { return bl; });
           return bl;
         });
       passo.then(function (bl) { b.ok++; b.feitos += (bl && bl.size) || it.tamanho || 0; if (b.alvo === 'app' && it.driveId) guardadas[it.driveId] = 1; }, function () { b.falhas++; }).then(function () {
@@ -2151,8 +2175,8 @@
         ocupado = 'Procurando no Drive as fotos que faltam na galeria…'; renderBar();
         return Promise.all([
           postDrive(url, { acao: 'drive_listar', ambiente: amb, codigo: l.codigo }),
-          o.Banco.fotosListar(l.codigo, 'todas', 1000),
-          o.Banco.fotosListar(l.codigo, 'deletadas', 1000).catch(function () { return []; })
+          listarTodas(l.codigo, 'todas'),
+          listarTodas(l.codigo, 'deletadas').catch(function () { return []; })
         ]);
       }).then(function (r) {
         var res = r[0], ja = {};

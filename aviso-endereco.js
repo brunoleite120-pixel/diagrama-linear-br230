@@ -35,13 +35,17 @@
     try { i = d && d.info ? d.info() : null; } catch (e) { i = null; }
     var rec = 0;
     try { rec = U && U.recusadas ? U.recusadas() : 0; } catch (e) { rec = 0; }
-    return { pronto: !!(U && U.pronto), login: !!(b && b.login), alt: b && b.pend ? b.pend.length : 0, fotos: i ? i.n || 0 : 0,
+    // as fotos do aparelho: 'sim' (contadas; sem a fila do Drive não há fotos guardadas), 'nao' (ainda contando) ou 'erro' (não leu)
+    var cont = !d ? 'sim' : !i ? 'nao' : i.contado === true ? 'sim' : i.contado === 'erro' ? 'erro' : 'nao';
+    return { cont: cont, pronto: !!(U && U.pronto), login: !!(b && b.login), alt: b && b.pend ? b.pend.length : 0, fotos: i ? i.n || 0 : 0,
       aparelho: i ? i.aparelho || 0 : 0, outras: i ? i.outras || 0 : 0, recusadas: rec, enviando: !!(b && b.sending) || !!(i && i.busy) };
   }
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
   function status() {
     var p = pendentes();
-    if (!p.pronto) return { ok: false, t: 'Conferindo o que falta enviar deste aparelho…' };
+    if (!p.pronto || p.cont === 'nao') return { ok: false, t: 'Conferindo o que falta enviar deste aparelho…' };
+    // sem ler as fotos guardadas no aparelho, não dá para dizer que está tudo enviado
+    if (p.cont === 'erro') return { ok: false, t: 'Não consegui conferir as fotos guardadas neste aparelho. Feche e abra o app de novo; se continuar, abra Galeria › No aparelho e confira antes de trocar de endereço.' };
     // só libera com tudo zerado: o que fica só neste endereço some quando o atalho antigo for apagado
     var linhas = [];
     if (p.alt || p.fotos) {

@@ -113,6 +113,8 @@
 
   window.DriveFotos = function (opts) {
     var n = 0, soAparelho = 0, outras = 0, total = 0, bytes = 0, erro = null, enviadas = 0, timer = null;
+    // `contado`: as contagens acima já vieram do aparelho (false até a primeira leitura; 'erro' se ela falhou)
+    var contado = false;
     // até POR_VEZ fotos sobem juntas (22/10/2026); depois de qualquer falha (sinal fraco, tempo, recusa) volta a uma por vez,
     // até uma subir de novo. `ativos`: as que estão subindo agora; `escolhendo`: a fila confere o acesso e escolhe a próxima
     // `marco` sobe a cada falha que para a fila: o envio que já subia antes dela e chega bem não desfaz a parada
@@ -170,8 +172,9 @@
         n = all.filter(function (r) { return r.situacao === 'fila'; }).length;
         soAparelho = all.filter(function (r) { return r.situacao === 'aparelho'; }).length;
         bytes = all.reduce(function (a, r) { return a + (r.temArquivo ? r.tamanho || 0 : 0); }, 0);
+        contado = true;
         change();
-      }, function () { n = 0; });
+      }, function () { n = 0; if (contado !== true) contado = 'erro'; });
     }
     function later(ms) { clearTimeout(timer); timer = setTimeout(function () { pump(); }, ms); }
     // a pasta antiga do contrato (o Lote) que o script renomeia: só texto não vazio; sem ela, o registro fica sem o campo
@@ -509,7 +512,7 @@
         var agora = Date.now(), prox = erro === 'codigo' ? null : parada(agora) ? espera : proxFila > agora && proxFila - agora <= 2 * PAUSA_MAX ? proxFila : null;
         // `emEnvio`: uma das que estão subindo (a primeira); `enviando`: todas elas
         var sobem = Object.keys(ativos);
-        return { n: n, aparelho: soAparelho, outras: outras, busy: escolhendo || nAtivos > 0, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox,
+        return { contado: contado, n: n, aparelho: soAparelho, outras: outras, busy: escolhendo || nAtivos > 0, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox,
           emEnvio: sobem[0] || null, enviando: sobem,
           pausado: !!lsLer(PAUSA_KEY), esperaWifi: esperaWifi() };
       }

@@ -343,8 +343,10 @@
             mk += '<button type="button" class="vg-mk grupo" data-vg="ir" data-fid="ga:' + esc(g.xs[0].key) + '" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
             return;
           }
-          var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || '?'), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
-          if (cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
+          var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || (x.oae ? 'Ponte' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
+          // sem nome (visão pública, que não recebe os nomes): sem rótulo, em vez de um "?" em cima de cada marca
+          var temNome = !!(x.p.nome || x.p.codigo);
+          if (temNome && cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
           var tip = (x.oae ? nome + (x.p.codigo ? ' · ' + x.p.codigo : '') : nome) + ' · ' + kmTxt(x, g.t === 'barra') + ' · ' + x.st;
           mk += '<button type="button" class="vg-mk ' + g.t + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" style="left:' + pc(X(g.t === 'barra' ? x.km : mid)) +
             (g.t === 'barra' ? ';width:' + pc((x.kf - x.km) / R * 100) : '') + ';background:' + x.cor + '"></button>';

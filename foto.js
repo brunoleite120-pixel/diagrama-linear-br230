@@ -426,6 +426,7 @@
     '.ft-thumb{background:#000;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:150px;color:#C9CFCB;font-size:12.5px}',
     '.ft-thumb img{display:block;max-width:100%;max-height:320px;width:auto;height:auto}',
     '.ft-batch .ft-thumb img{cursor:zoom-in}',
+    '.ft-batch.ft-gerando .ft-blist .ft-item input,.ft-batch.ft-gerando .ft-blist .ft-item select,.ft-batch.ft-gerando .ft-blist .ft-item textarea{pointer-events:none;opacity:.6}',
     // foto do lote aberta em tela cheia (tocar na prévia): passar o dedo troca de foto, puxar para baixo fecha (gestos.js)
     '.ft-ver{position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;background:#0E1311;color:#fff}',
     '.ft-ver-top{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) 10px calc(12px + env(safe-area-inset-left,0px))}',
@@ -776,7 +777,7 @@
           return;
         }
         if (folha) { teclaFolha(e); return; }
-        if (e.key === 'Escape') close();
+        if (e.key === 'Escape') { if (st && !batch) sair(); close(); }
       });
     }
 
@@ -1101,7 +1102,8 @@
     }
     function setupPhoto(img, url, file, ex, from) {
       if (st && st.url) URL.revokeObjectURL(st.url);
-      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: newUid(), drive: padraoDrive() };
+      // foto da Câmera com GPS: o mesmo id do rascunho guardado no clique, para a versão com carimbo entrar no lugar dele
+      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: (ex && ex.uid) || newUid(), drive: padraoDrive() };
       place(st, ex, file, from);
       showWork();
     }
@@ -1516,7 +1518,11 @@
       startView();
     }
     function sair(depois) {
-      guardarFoto(true).then(function () { if (depois) depois(); });
+      var a = st;
+      guardarFoto(true).then(function () {
+        if (a && a.erroG && !a.descartada) notify('Não consegui guardar a última mudança da foto no app (sem espaço?). Em Galeria › No aparelho ficou a versão anterior.', 8000);
+        if (depois) depois();
+      });
     }
 
     // ---------------- salvar
@@ -1932,6 +1938,8 @@
     function travaOpcoes(on) {
       if (on) fechaFolha(true);
       root.querySelectorAll('[data-folha]').forEach(function (b) { b.disabled = on; });
+      var bt = q('.ft-batch'); if (bt) bt.classList.toggle('ft-gerando', !!on);
+      root.querySelectorAll('.ft-batch .ft-blist input, .ft-batch .ft-blist select, .ft-batch .ft-blist textarea, #ftBDesc, .ft-batch .ft-blist button[data-i]').forEach(function (x) { x.disabled = on; });
     }
     // gera as fotos finais (no tamanho escolhido em "Tamanho do arquivo", lido uma vez) e guarda enquanto nada mudar
     function outputs() {
@@ -2411,7 +2419,7 @@
     // botões de uma foto do lote de fotos
     function batchClick(b, i) {
       var it = batch.items[i];
-      if (!it || it.gone) return;
+      if (!it || it.gone || batch.busy) return;
       if (b.dataset.ft === 'b-del') {
         if (it.from === 'camapp' && !it.salva && opts.drive) { it.salva = true; notify('Foto ' + (i + 1) + ' tirada da seleção. Ela continua em Galeria › No aparelho (sem carimbo).'); }
         it.gone = true;
@@ -2444,6 +2452,7 @@
       }
     }
     function batchInput(t) {
+      if (batch.busy && (t.id === 'ftBDesc' || (t.dataset && t.dataset.b))) return true;
       if (t.id === 'ftBDesc') {
         batch.common = t.value;
         batch.ver++;

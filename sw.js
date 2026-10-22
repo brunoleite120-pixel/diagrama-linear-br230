@@ -6,7 +6,7 @@
 // A prévia (/previa/) tem o próprio service worker e o próprio cache; o do site oficial não mexe nela.
 var PREVIA = /\/previa\/$/.test(self.registration.scope);
 var FAMILIA = (PREVIA ? 'previa-' : '') + 'diagrama-linear-';
-var CACHE = FAMILIA + 'v106';
+var CACHE = FAMILIA + 'v107';
 var PASTA_PREVIA = PREVIA ? null : self.registration.scope + 'previa/';
 // endereço antigo (GitHub Pages), que sai do ar quando o repositório ficar privado: com a página fora do ar (404), o app
 // instalado por ele abre a cópia guardada, que mostra o aviso do endereço novo (aviso-endereco.js) e ainda envia o que ficou
@@ -53,6 +53,8 @@ function networkFirst(req) {
       fetch(req).then(function (res) {
         if (res && res.ok) c.put(req, res.clone());
         if (ANTIGO && res && res.status === 404) { cached(c, req).then(function (r) { finish(r || res); }); return; }
+        // servidor com erro (5xx): a cópia guardada abre o app; sem cópia, segue a resposta de erro
+        if (res && res.status >= 500) { cached(c, req).then(function (r) { finish(r || res); }); return; }
         finish(res);
       }, function () {
         cached(c, req).then(function (r) { if (!done) { done = true; resolve(r || Response.error()); } });

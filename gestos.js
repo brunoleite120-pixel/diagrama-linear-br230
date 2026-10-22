@@ -50,6 +50,7 @@
       aplica(el, dir > 0 ? -w : w, 0, 1, true);
       el.style.opacity = '0';
       setTimeout(function () {
+        if (!caixa.isConnected) { animando = false; return; }   // fechou no meio da passada: não troca (nem reabre)
         if (dir > 0) o.prox(); else o.ant();
         var nv = img();
         z = { s: 1, x: 0, y: 0 };
@@ -139,18 +140,27 @@
         else { aplica(el, 0, 0, 1, true); fundo(null, true); }
       }
     }
+    // o sistema interrompeu o toque (gesto de voltar, ligação, girar): não troca nem fecha; a foto volta ao lugar
+    function onCancel(e) {
+      if (!pts[e.pointerId]) return;
+      delete pts[e.pointerId];
+      n = Object.keys(pts).length;
+      if (n) return;
+      var g = gesto; gesto = null;
+      if (g && (g.tipo === 'lado' || g.tipo === 'baixo')) { aplica(img(), z.x, z.y, z.s, true); fundo(null, true); }
+    }
     if (!o.area) caixa.style.touchAction = 'none';   // com área, quem chama põe touch-action:none nela
     caixa.addEventListener('pointerdown', onDown);
     caixa.addEventListener('pointermove', onMove);
     caixa.addEventListener('pointerup', onUp);
-    caixa.addEventListener('pointercancel', onUp);
+    caixa.addEventListener('pointercancel', onCancel);
     // o navegador não arrasta a imagem como arquivo
     caixa.addEventListener('dragstart', function (e) { e.preventDefault(); });
     return {
       zerar: function () { zerar(false); },
       solta: function () {
         caixa.removeEventListener('pointerdown', onDown); caixa.removeEventListener('pointermove', onMove);
-        caixa.removeEventListener('pointerup', onUp); caixa.removeEventListener('pointercancel', onUp);
+        caixa.removeEventListener('pointerup', onUp); caixa.removeEventListener('pointercancel', onCancel);
       }
     };
   };
