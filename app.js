@@ -6183,7 +6183,7 @@
       var code = err && err.code;
       if (code === 'sem_rede') { banco.online = false; syncStatus(); return; }
       if (code === 'codigo_invalido') { logout(true); toast('Seu acesso mudou ou foi desativado. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
-      if (code === 'muitas_tentativas') { toast('O banco bloqueou por muitas tentativas com código errado. Tente de novo em 10 minutos.', 7000); syncStatus(); return; }
+      if (code === 'muitas_tentativas') { toast('O banco bloqueou esta rede por muitas tentativas com código errado. Tente de novo em 15 minutos.', 7000); syncStatus(); return; }
       if (!recusaDefinitiva(err)) {
         // falha do servidor (5xx, tempo esgotado, banco reiniciando, função ainda sendo trocada...): nada sai da fila;
         // tenta de novo sozinho, esperando cada vez mais (10 s, 20 s, 40 s... até 5 min)
@@ -6630,8 +6630,9 @@
     var c = err && err.code;
     return c === 'sem_rede' ? 'Sem conexão com o banco. Tente quando tiver sinal.'
       : c === 'codigo_invalido' ? 'Código errado ou acesso desativado.'
-      : c === 'muitas_tentativas' ? 'Muitas tentativas erradas. Espere 10 minutos e tente de novo.'
+      : c === 'muitas_tentativas' ? 'Muitas tentativas erradas nesta rede (Wi-Fi ou dados do celular). Espere 15 minutos e tente de novo.'
       : c === 'codigo_curto' ? 'O código precisa de pelo menos 6 caracteres (o do Administrador, 8).'
+      : c === 'codigo_admin' ? 'Para dar acesso de Administrador, defina um código novo com pelo menos 8 caracteres.'
       : c === 'codigo_em_uso' ? 'Esse código já é de outra pessoa (ou é um código geral). Escolha outro.'
       : c === 'nome_em_uso' ? 'Já existe um usuário com esse nome.'
       : c === 'ultimo_criador' ? 'Precisa ficar pelo menos um Administrador ativo.'
@@ -6830,8 +6831,14 @@
             (podeEd ? '<button type="button" class="btn small" data-us="edit" data-id="' + esc(u.id) + '">Editar</button>' : '') + '</div>';
         }).join('') : '<p class="empty">Ninguém cadastrado ainda. Use “+ Nova pessoa”.</p>';
         if (r.codigo_equipe || r.codigo_responsavel) {
+          var gs = r.gerais || [];
           h += '<div class="section-title">Códigos gerais (do sistema antigo)</div>' +
-            '<p class="hint">Ainda entram, pedindo o nome. Quando todos tiverem código próprio, desative.</p>' +
+            '<p class="hint">Ainda entram, pedindo o nome. Cadastre cada pessoa abaixo com o código próprio (com o mesmo nome, as alterações ' +
+            'guardadas no aparelho dela sobem sozinhas quando ela entrar com o código novo). Quando a lista ficar vazia, desative.</p>' +
+            (gs.length ? '<div class="us-gerais"><b>Ainda entram com código geral:</b>' + gs.map(function (g) {
+              return '<div class="us-row"><div class="us-txt">' + esc(g.nome || 'Sem nome') + '<small>' + (g.origem === 'responsavel' ? 'código do responsável' : 'código da equipe') +
+                ' · último uso: ' + esc(fmtWhen(g.usado_em)) + ' · ' + g.aparelhos + (g.aparelhos === 1 ? ' aparelho' : ' aparelhos') + '</small></div></div>';
+            }).join('') + '</div>' : '<p class="hint">Ninguém entrou com código geral nos últimos 180 dias.</p>') +
             (r.codigo_equipe ? '<div class="us-row"><div class="us-txt"><b>Código geral da equipe</b><small>Entra como auxiliar de engenharia</small></div><button type="button" class="btn small danger" data-us="geral" data-papel="equipe">Desativar</button></div>' : '') +
             (r.codigo_responsavel ? '<div class="us-row"><div class="us-txt"><b>Código geral do responsável</b><small>Entra como Administrador</small></div>' +
               (r.pode_admin ? '<button type="button" class="btn small danger" data-us="geral" data-papel="responsavel">Desativar</button>' : '') + '</div>' : '');
@@ -6900,12 +6907,14 @@
           if (papel === 'analista' && k !== 'f') { acesso[cid] = acesso[cid] || { med: false, acomp: false }; acesso[cid][k] = true; }
         });
       }
-      if (novo && cod.length < 6) { modalErr(form, 'O código precisa de pelo menos 6 caracteres.'); return; }
-      if (!novo && cod && cod.length < 6) { modalErr(form, 'O código precisa de pelo menos 6 caracteres.'); return; }
+      var minC = papel === 'criador' ? 8 : 6;
+      if (papel === 'criador' && !cod && (novo || u.papel !== 'criador')) { modalErr(form, errText({ code: 'codigo_admin' })); return; }
+      if ((novo || cod) && cod.length < minC) { modalErr(form, 'O código precisa de pelo menos ' + minC + ' caracteres' + (papel === 'criador' ? ' (Administrador).' : '.')); return; }
       modalErr(form, '');
       busyBtn(form, true, 'Salvando…');
       var semCt = acesso && !Object.keys(acesso).length;
-      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo, acesso: acesso }).then(function () {
+      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo, acesso: acesso }).then(function (id) {
+        if (!id && cod) { busyBtn(form, false); modalErr(form, errText({ code: 'codigo_em_uso' })); return; }
         if (semCt) toast(nome + ' ficou sem nenhum contrato liberado: só vai ver a visão geral até você marcar algum.', 7000);
         busyBtn(form, false);
         if (u && u.id === (banco.login && banco.login.uid) && papel !== banco.login.papel) conferirAcesso();
