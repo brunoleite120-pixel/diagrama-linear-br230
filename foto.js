@@ -18,7 +18,11 @@
   var KEY = 'diagrama-linear.foto';
   var LOGOS_KEY = 'diagrama-linear.foto-logos';           // logos adicionadas neste aparelho
   var LOGO_SEL_KEY = 'diagrama-linear.foto-logo-escolhida';
-  var DNIT_KEY = 'diagrama-linear.foto-logo-dnit';         // '1': a logo do DNIT já foi posta como padrão neste aparelho
+  var GIRO_KEY = 'diagrama-linear.foto-cam-giro';          // como a foto da câmera sai: 'deitada' (padrão), 'auto' ou 'empe'
+  var CAM_GIROS = [['deitada', 'Deitada (padrão)', 'A foto sai sempre deitada. Com o celular em pé, entra o quadro deitado do meio.'],
+    ['auto', 'Automático', 'Em pé ou deitada, como o celular estiver (pelo sensor, mesmo com a rotação da tela travada).'],
+    ['empe', 'Sempre em pé', 'A foto sai sempre em pé. Com o celular deitado, entra o quadro em pé do meio.']];
+  var DNIT_KEY = 'diagrama-linear.foto-logo-dnit-2';       // '1': a logo do DNIT já foi posta como padrão neste aparelho (de novo em 22/10/2026)
   var OLD_LOGO_KEY = 'diagrama-linear.foto-logo';           // versão 9: uma logo só
   var NUVEM = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 19a5 5 0 0 1-.7-9.95A6.5 6.5 0 0 1 18.6 9 4.5 4.5 0 0 1 17.5 19z"/></svg>';
   function celular() { return /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
@@ -30,9 +34,9 @@
     { k: 'coord', label: 'Coordenadas', on: true },
     { k: 'data', label: 'Data e hora', on: true },
     { k: 'ponto', label: 'Ponto crítico', on: true },
-    { k: 'contrato', label: 'Lote e contrato', curto: 'lote', on: false },
-    { k: 'executora', label: 'Executora', on: false },
-    { k: 'supervisora', label: 'Supervisora', on: false },
+    { k: 'contrato', label: 'Lote e contrato', curto: 'lote', on: true },
+    { k: 'executora', label: 'Executora', on: true },
+    { k: 'supervisora', label: 'Supervisora', on: true },
     { k: 'desc', label: 'Descrição', on: true },
     { k: 'snv', label: 'Versão do SNV', on: true }
   ];
@@ -43,11 +47,13 @@
   var TAMS_OP = [['P', 'Pequeno'], ['M', 'Médio'], ['G', 'Grande']];
   var FUNDOS_OP = [['sombra', 'Sombra'], ['faixa', 'Faixa escura'], ['nenhum', 'Sem fundo']];
   // tamanho do arquivo final (salvar, compartilhar, Drive): [lado maior em px, qualidade do JPEG].
-  // Full HD (o padrão) fica com cerca de 0,5 MB e nítida no relatório (1400 px); HD fica com cerca de metade.
-  var ARQS = { hd: [1280, 0.85], fhd: [1920, 0.85] };
-  var ARQS_OP = [['fhd', 'Full HD', '1920 px · cerca de 0,5 MB · nítida no relatório (padrão)'], ['hd', 'HD', '1280 px · cerca de metade do tamanho da Full HD']];
-  // tamanhos guardados até a versão anterior (Leve 1600 px, Normal 2400 px, Alta 3200 px)
-  var ARQ_ANTIGO = { leve: 'hd', normal: 'fhd', alta: 'fhd' };
+  // Normal (1280 px a 80%, o padrão desde 22/10/2026) fica com cerca de 0,4 MB e serve para tudo: ver no app, relatório (o PDF
+  // usa até 1400 px) e galeria do celular. Full HD (1920 px a 85%) fica com cerca de 1 MB, para quem precisa ampliar muito.
+  var ARQS = { tela: [1280, 0.8], fhd: [1920, 0.85] };
+  var ARQS_OP = [['tela', 'Normal', '1280 px · cerca de 0,4 MB · nítida no relatório (padrão)'], ['fhd', 'Full HD', '1920 px · cerca de 1 MB · para ampliar muito']];
+  // padrão do carimbo de 22/10/2026 (todos os itens, legenda no canto inferior direito, logo sem fundo, 1280 px): o que foi
+  // guardado antes (sem setV) volta uma vez ao padrão novo; depois vale o que a pessoa escolher
+  var SET_V = 3;
   // os 4 grupos de opções (cada um abre a sua folha) e as chaves de `set` de cada um; a logo escolhida fica em LOGO_SEL_KEY
   var GRUPOS = { leg: ['campos'], apa: ['leg', 'cor', 'tam', 'fundo'], logo: ['logoOn', 'logo', 'logoFundo'], arq: ['arq'] };
   var GRUPO_NOME = { leg: 'Legenda', apa: 'Aparência', logo: 'Logo', arq: 'Arquivo' };
@@ -73,17 +79,17 @@
   function defaults() {
     var campos = {};
     FIELDS.forEach(function (f) { campos[f.k] = f.on; });
-    return { logo: 'tl', leg: 'bl', cor: 'amarelo', tam: 'M', fundo: 'sombra', logoFundo: true, logoOn: true, arq: 'fhd', campos: campos };
+    return { logo: 'tl', leg: 'br', cor: 'amarelo', tam: 'M', fundo: 'sombra', logoFundo: false, logoOn: true, arq: 'tela', setV: SET_V, campos: campos };
   }
   // `txt`: o texto guardado (para os testes); sem ele, lê o deste aparelho. Valor desconhecido volta ao padrão.
   function loadSet(txt) {
     var d = defaults(), VALE = { logo: CORNERS, leg: CORNERS, cor: CORES_OP, tam: TAMS_OP, fundo: FUNDOS_OP };
     try {
       var s = JSON.parse((txt !== undefined ? txt : localStorage.getItem(KEY)) || 'null');
-      if (s && typeof s === 'object') {
+      if (s && typeof s === 'object' && s.setV === SET_V) {
         Object.keys(VALE).forEach(function (k) { if (typeof s[k] === 'string' && opcao(VALE[k], s[k])) d[k] = s[k]; });
         ['logoFundo', 'logoOn'].forEach(function (k) { if (typeof s[k] === 'boolean') d[k] = s[k]; });
-        if (typeof s.arq === 'string') d.arq = own(ARQS, s.arq) ? s.arq : own(ARQ_ANTIGO, s.arq) ? ARQ_ANTIGO[s.arq] : d.arq;
+        if (typeof s.arq === 'string' && own(ARQS, s.arq)) d.arq = s.arq;
         if (s.campos && typeof s.campos === 'object') FIELDS.forEach(function (f) { if (typeof s.campos[f.k] === 'boolean') d.campos[f.k] = s.campos[f.k]; });
       }
     } catch (e) { /* sem armazenamento: usa o padrão */ }
@@ -347,7 +353,7 @@
     '.ft-add{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;border:1px dashed #9AA39E;border-radius:8px;background:var(--ft-panel);color:var(--ft-accent);font-size:13px;font-weight:600;cursor:pointer}',
     '.ft-add:focus-within{outline:2px solid var(--ft-accent);outline-offset:1px}',
     '.ft-amostra{flex:none;width:12px;height:12px;border-radius:50%;border:1px solid var(--ft-off)}',
-    // tamanho do arquivo: duas opções grandes (HD e Full HD)
+    // tamanho do arquivo: duas opções grandes (Normal e Full HD)
     '.ft-arqs{display:flex;flex-direction:column;gap:8px}',
     '.ft-arq{display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px;border:1px solid var(--ft-line-2);border-radius:10px;background:var(--ft-panel);color:var(--ft-ink);font:inherit;text-align:left;cursor:pointer}',
     '.ft-arq[aria-pressed="true"]{background:var(--ft-soft);border:2px solid var(--ft-accent);padding:7px 11px}',
@@ -434,7 +440,22 @@
     '.ft-cam{height:100%;display:flex;flex-direction:column;background:#000;color:#fff}',
     '.ft-camview{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}',
     '.ft-camview video{display:block;width:100%;height:100%;object-fit:contain;background:#000}',
-    '.ft-camgps{position:absolute;left:10px;right:10px;top:10px;padding:7px 11px;border-radius:8px;background:rgba(0,0,0,.62);font-size:13px;line-height:1.45;font-variant-numeric:tabular-nums}',
+    '.ft-camgps{position:absolute;left:10px;right:10px;top:10px;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;line-height:1.35;font-variant-numeric:tabular-nums}',
+    '.ft-camgl{padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.6)}',
+    '.ft-camgl i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3BD16F;margin-right:6px}',
+    '.ft-camlot{border:0;border-radius:999px;padding:6px 10px;background:rgba(154,91,0,.9);color:#fff;font:inherit;font-size:12.5px}',
+    '.ft-camlotx{flex:1 1 100%;padding:7px 10px;border-radius:8px;background:rgba(0,0,0,.7);color:#FFB4A8}',
+    // prévia: o recorte da foto e o carimbo como vão sair, por cima da imagem
+    '.ft-camov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}',
+    '.ft-camfoot{display:flex;flex-direction:column}',
+    '.ft-camopt{display:flex;justify-content:center;gap:8px;padding:10px 12px 0}',
+    '.ft-campill{border:0;border-radius:999px;padding:8px 14px;background:rgba(255,255,255,.16);color:#fff;font:inherit;font-size:13px;font-weight:650;white-space:nowrap}',
+    '.ft-campill.on{background:#FFE81A;color:#17201C}',
+    '.ft-campop{position:absolute;left:12px;right:12px;bottom:110px;z-index:5;display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;background:#fff;color:#17201C;box-shadow:0 8px 30px rgba(0,0,0,.45);max-width:420px;margin:0 auto}',
+    '.ft-campop[hidden]{display:none}',
+    '.ft-camop{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid #D5DAD6;background:#fff;color:#17201C;font:inherit;text-align:left}',
+    '.ft-camop[aria-pressed="true"]{border-color:#1D4F91;background:#E7EEF7}',
+    '.ft-camop small,.ft-camnota{color:#5C6661;font-size:12px;line-height:1.35}',
     '.ft-camgps b{color:#FFE81A}',
     '.ft-camgps .ft-warn{color:#FFB4A8}',
     // aviso do limite de fotos da câmera (MAX_FOTOS), embaixo da imagem
@@ -457,8 +478,12 @@
       '.ft-cam{flex-direction:row}' +
       '.ft-cam.ft-cw{flex-direction:row-reverse}' +
       '.ft-camview{flex:0 1 auto;height:100%;aspect-ratio:var(--ar,4/3);min-width:0;margin:0 auto}' +
-      '.ft-camgps{left:6px;right:auto;top:6px;max-width:min(46%,290px);padding:4px 7px;border-radius:6px;font-size:11px;line-height:1.35;background:rgba(0,0,0,.5)}' +
-      '.ft-camctl{grid-template-columns:none;grid-template-rows:1fr auto 1fr;justify-items:center;gap:8px;padding:8px 10px}' +
+      '.ft-camgps{left:50%;right:auto;top:6px;transform:translateX(-50%);justify-content:center;width:max-content;max-width:min(56%,360px);font-size:11px}' +
+      '.ft-camctl{flex:1;grid-template-columns:none;grid-template-rows:1fr auto 1fr;justify-items:center;gap:8px;padding:8px 10px}' +
+      '.ft-camfoot{height:100%}' +
+      '.ft-camopt{flex-direction:column;align-items:center;padding:8px 8px 0}' +
+      '.ft-campill{padding:6px 10px;font-size:12px}' +
+      '.ft-campop{bottom:auto;top:10px}' +
       '.ft-camb{align-self:start;justify-self:center;flex-direction:column;gap:4px;max-width:96px;padding:6px 8px;font-size:13px;text-align:center}' +
       '.ft-camdone{align-self:end}' +
       '.ft-camlast{width:34px;height:34px}' +
@@ -661,11 +686,19 @@
             '<div class="ft-side ft-bside"></div>' +
           '</div>' +
           '<div class="ft-cam" hidden>' +
-            '<div class="ft-camview"><video playsinline muted autoplay aria-label="Prévia da câmera"></video><div class="ft-camgps" role="status"></div><div class="ft-camlim" role="alert" hidden></div><div class="ft-flash"></div></div>' +
+            '<div class="ft-camview"><video playsinline muted autoplay aria-label="Prévia da câmera"></video><canvas class="ft-camov" aria-hidden="true"></canvas><div class="ft-camgps" role="status"></div><div class="ft-camlim" role="alert" hidden></div><div class="ft-flash"></div></div>' +
+            '<div class="ft-camfoot">' +
+            '<div class="ft-camopt"><button type="button" class="ft-campill on" data-ft="cam-giro" aria-haspopup="true"></button><button type="button" class="ft-campill" data-ft="cam-car" aria-haspopup="true">Carimbo \u25be</button></div>' +
+            '<div class="ft-campop" data-pop="giro" hidden><b>Como a foto sai</b>' +
+              CAM_GIROS.map(function (x) { return '<button type="button" class="ft-camop" data-ft="cam-giro-v" data-v="' + x[0] + '"><b>' + x[1] + '</b><small>' + x[2] + '</small></button>'; }).join('') +
+              '<small class="ft-camnota">No iPhone, o app pede uma vez para usar o movimento do celular: é assim que ele sabe se o celular está deitado, mesmo com a rotação da tela travada.</small></div>' +
+            '<div class="ft-campop" data-pop="car" hidden><b>Carimbo</b>' +
+              ['leg', 'apa', 'logo', 'arq'].map(function (g) { return '<button type="button" class="ft-camop" data-ft="cam-car-g" data-v="' + g + '"><b>' + GRUPO_NOME[g] + '</b></button>'; }).join('') + '</div>' +
             '<div class="ft-camctl">' +
               '<button type="button" class="ft-camb" data-ft="cam-cancel">Fechar</button>' +
               '<button type="button" class="ft-shot" data-ft="cam-shot" aria-label="Fotografar"></button>' +
               '<button type="button" class="ft-camb ft-camdone" data-ft="cam-done" disabled><span class="ft-camlast" hidden></span><span class="ft-camn">Concluir</span></button>' +
+            '</div>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -1297,6 +1330,10 @@
       canvas.width = W; canvas.height = H;
       var g = canvas.getContext('2d');
       g.drawImage(st.img, 0, 0, W, H);
+      carimbo(g, W, H);
+    }
+    // o carimbo (logo e legenda) de `st` num quadro W x H: na foto pronta e na prévia da câmera
+    function carimbo(g, W, H) {
       var short = Math.min(W, H), fs = short * (SIZES[set.tam] || SIZES.M), lh = fs * 1.28, m = Math.round(short * 0.03);
       // logo
       var logoBox = null, li = curImg;
@@ -1449,7 +1486,7 @@
     }
 
     // ---------------- salvar
-    function arq() { return own(ARQS, set.arq) ? ARQS[set.arq] : ARQS.fhd; }
+    function arq() { return own(ARQS, set.arq) ? ARQS[set.arq] : ARQS.tela; }
     function fileName() {
       var p = findPoint(st.pid), d = st.date || new Date();
       var parts = ['Foto', rodovia().replace(/[\/\s]+/g, '-')];
@@ -1463,7 +1500,7 @@
         var cv = document.createElement('canvas');
         var a = arq();
         try { draw(cv, a[0]); } catch (e) { cv.width = cv.height = 0; resolve(null); return; }
-        // a imagem de 1.920 px sai da memória logo depois (no iPhone o navegador demora a liberar sozinho)
+        // a imagem grande sai da memória logo depois (no iPhone o navegador demora a liberar sozinho)
         cv.toBlob(function (b) { cv.width = cv.height = 0; resolve(b); }, 'image/jpeg', a[1]);
       });
     }
@@ -1946,6 +1983,7 @@
     function camSupported() { return !!(opts.gps && navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
     function openCam() {
       startMsg('');
+      ligaGiro();   // antes de qualquer espera: no iPhone, a permissão do movimento só pode ser pedida no toque
       startGps();
       navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 4032 }, height: { ideal: 3024 } } }).then(function (stream) {
         if (!root || !root.parentNode || cam) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
@@ -1963,6 +2001,7 @@
         window.addEventListener('resize', camVirou);
         window.addEventListener('orientationchange', camVirou);
         if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', camVirou);
+        cam.ov = setInterval(camOv, 1000);   // a hora e o km do carimbo mudam sozinhos
         renderCam();
       }, function (e) {
         startMsg(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
@@ -1974,8 +2013,11 @@
       if (cam) {
         cam.stream.getTracks().forEach(function (t) { t.stop(); });
         if (cam.lastUrl) URL.revokeObjectURL(cam.lastUrl);
+        clearInterval(cam.ov);
       }
       cam = null;
+      desligaGiro();
+      camPop('');
       window.removeEventListener('resize', camVirou);
       window.removeEventListener('orientationchange', camVirou);
       if (screen.orientation && screen.orientation.removeEventListener) screen.orientation.removeEventListener('change', camVirou);
@@ -1990,25 +2032,116 @@
       var o = screen.orientation, a = o && typeof o.angle === 'number' ? o.angle : window.orientation;
       q('.ft-cam').classList.toggle('ft-cw', ((+a || 0) % 360 + 360) % 360 === 270);
     }
-    function camVirou() { camLado(); setTimeout(camLado, 400); }   // o iPhone às vezes só atualiza o ângulo depois de girar a tela
+    function camVirou() { camLado(); camOv(); setTimeout(function () { camLado(); camOv(); }, 400); }   // o iPhone às vezes só atualiza o ângulo depois de girar a tela
     // a câmera muda de proporção ao girar o celular (em pé / deitado)
     function camAr() {
       var v = root && q('.ft-cam video');
       if (v && v.videoWidth && v.videoHeight) q('.ft-camview').style.setProperty('--ar', v.videoWidth + '/' + v.videoHeight);
+      camOv();
+    }
+
+    // ---------------- giro: em pé ou deitada, pelo sensor do celular (vale com a rotação da tela travada)
+    // giro.a: para onde o celular está virado, em graus: 0 em pé, 90 com o topo para a esquerda, -90 com o topo para a
+    // direita, 180 de cabeça para baixo (a mesma conta do ângulo da tela). Sem sensor (ou sem permissão), fica null e a foto
+    // sai como a tela. camModo: 'deitada' (o padrão: a foto sai sempre deitada; com o celular em pé, o quadro deitado do meio),
+    // 'auto' (como o celular estiver) ou 'empe' (sempre em pé).
+    var giro = { a: null }, camModo = CAM_GIROS.some(function (x) { return x[0] === lsGet(GIRO_KEY); }) ? lsGet(GIRO_KEY) : 'deitada', camLotsAberto = false;
+    function aoGirar(e) {
+      if (e.beta == null || e.gamma == null) return;
+      var b = e.beta * Math.PI / 180, gm = e.gamma * Math.PI / 180, ux = -Math.sin(gm) * Math.cos(b), uy = Math.sin(b);
+      if (ux * ux + uy * uy < 0.3) return;   // deitado na mesa: fica o último
+      var a = Math.atan2(ux, uy) * 180 / Math.PI, alvo = Math.round(a / 90) * 90;
+      if (alvo === -180) alvo = 180;
+      // folga de 55°: perto da diagonal não fica trocando
+      if (giro.a === null || Math.abs(((a - giro.a) % 360 + 540) % 360 - 180) > 55) {
+        if (giro.a !== alvo) { giro.a = alvo; camOv(); }
+      }
+    }
+    function ligaGiro() {
+      var D = window.DeviceOrientationEvent;
+      if (!D || giro.on) return;
+      giro.on = true;
+      var liga = function () { window.addEventListener('deviceorientation', aoGirar); };
+      if (typeof D.requestPermission === 'function') {
+        try { D.requestPermission().then(function (r) { if (r === 'granted' && giro.on) liga(); }, function () { /* sem permissão: segue a tela */ }); } catch (e) { /* idem */ }
+      } else liga();
+    }
+    function desligaGiro() { giro.on = false; giro.a = null; window.removeEventListener('deviceorientation', aoGirar); }
+    // quanto a imagem da tela está girada em relação à cena (0, 90, -90 ou 180)
+    function telaAng() { var o = screen.orientation, a = o && typeof o.angle === 'number' ? o.angle : window.orientation; a = ((+a || 0) % 360 + 360) % 360; return a > 180 ? a - 360 : a; }
+    function giroRel() { if (giro.a === null) return 0; var r = ((giro.a - telaAng()) % 360 + 540) % 360 - 180; return r === -180 ? 180 : r; }
+    // tamanho da foto pronta a partir da imagem iw x ih da tela: girada e, se for o caso, o recorte 4:3 do meio
+    function camQuadro(iw, ih, rel, modo) {
+      var ow = rel % 180 ? ih : iw, oh = rel % 180 ? iw : ih, pw = ow, ph = oh;
+      if (modo === 'deitada' && oh > ow) ph = ow * 3 / 4;
+      if (modo === 'empe' && ow > oh) pw = oh * 3 / 4;
+      return { w: pw, h: ph };
+    }
+    // a foto da câmera (como a tela mostra) girada para a cena ficar em pé, e o recorte do modo
+    function orientar(blob, rel, modo) {
+      return decode(blob).then(function (d) {
+        if (!d) return blob;
+        var img = d.img, iw = img.naturalWidth, ih = img.naturalHeight, qd = camQuadro(iw, ih, rel, modo), W = Math.round(qd.w), H = Math.round(qd.h);
+        if (!rel && W === iw && H === ih) { URL.revokeObjectURL(d.url); return blob; }
+        var cv = document.createElement('canvas'), g = cv.getContext('2d');
+        cv.width = W; cv.height = H;
+        g.translate(W / 2, H / 2); g.rotate(-rel * Math.PI / 180); g.drawImage(img, -iw / 2, -ih / 2);
+        URL.revokeObjectURL(d.url);
+        return toBlobP(cv).then(function (b) { cv.width = cv.height = 0; return b || blob; });
+      });
+    }
+    // os dados que a foto teria agora (GPS, hora, contrato e ponto), para a prévia do carimbo
+    function camPrev() {
+      var f = camFix(), o = { desc: '' };
+      place(o, { live: true, date: new Date(), ll: f ? f.ll : null, acc: f ? f.acc : null }, { lastModified: Date.now(), size: 0, type: 'image/jpeg' }, 'camapp');
+      return o;
+    }
+    // por cima da imagem: escurece o que fica fora da foto e desenha o carimbo como vai sair (girado junto com a cena)
+    function camOv() {
+      if (!cam || !root) return;
+      var cv = q('.ft-camov'), box = q('.ft-camview'), v = q('.ft-cam video');
+      var BW = box.clientWidth, BH = box.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (cv.width !== Math.round(BW * dpr) || cv.height !== Math.round(BH * dpr)) { cv.width = Math.round(BW * dpr); cv.height = Math.round(BH * dpr); }
+      var g = cv.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, BW, BH);
+      var gb = q('[data-ft="cam-giro"]'), rel = giroRel();
+      if (gb) gb.textContent = '\u27f3 ' + (camModo === 'auto' ? 'Automático · ' + (rel % 180 ? 'deitada' : 'em pé') : camModo === 'empe' ? 'Em pé' : 'Deitada');
+      if (!v.videoWidth || !BW || !BH) return;
+      var s = Math.min(BW / v.videoWidth, BH / v.videoHeight), qd = camQuadro(v.videoWidth * s, v.videoHeight * s, rel, camModo);
+      var rw = rel % 180 ? qd.h : qd.w, rh = rel % 180 ? qd.w : qd.h, cx = BW / 2, cy = BH / 2;
+      g.fillStyle = 'rgba(0,0,0,0.62)';
+      g.beginPath(); g.rect(0, 0, BW, BH); g.rect(cx - rw / 2, cy - rh / 2, rw, rh); g.fill('evenodd');
+      g.save();
+      g.translate(cx, cy); g.rotate(rel * Math.PI / 180); g.translate(-qd.w / 2, -qd.h / 2);
+      try { withItem(camPrev(), function () { carimbo(g, qd.w, qd.h); }); } catch (e) { /* a prévia não pode travar a câmera */ }
+      g.restore();
+    }
+    function camPop(qual, btn) {
+      if (!root) return;
+      root.querySelectorAll('.ft-campop').forEach(function (p) { p.hidden = p.dataset.pop !== qual; });
+      if (qual === 'giro') root.querySelectorAll('[data-ft="cam-giro-v"]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.v === camModo); });
+      var f = qual && q('.ft-campop[data-pop="' + qual + '"] button');
+      if (f) f.focus();
     }
     function camFix() { return lastFix && Date.now() - lastFix.t < 30000 ? lastFix : null; }
     function renderCamGps() {
       var el = q('.ft-camgps'), f = camFix();
-      if (!f) { el.innerHTML = '<span class="ft-warn">' + esc(lastFixErr || 'Procurando o GPS…') + '</span> As fotos tiradas agora ficam sem local.'; return; }
-      var loc = ref.locate(f.ll[0], f.ll[1]), h;
-      if (loc.dist > 2000) h = 'GPS ativo · fora da ' + esc(rodovia()) + ' (' + nf(loc.dist / 1000, 1) + ' km do eixo)';
+      if (!f) { el.innerHTML = '<span class="ft-camgl"><span class="ft-warn">' + esc(lastFixErr || 'Procurando o GPS…') + '</span> As fotos tiradas agora ficam sem local.</span>'; return; }
+      // uma linha só: GPS, km e ponto; "N contratos neste km" vira um botão que abre o aviso inteiro
+      var loc = ref.locate(f.ll[0], f.ll[1]), h, lot = '';
+      if (loc.dist > 2000) h = 'GPS ' + Math.round(f.acc || 0) + ' m · fora da ' + esc(rodovia()) + ' (' + nf(loc.dist / 1000, 1) + ' km do eixo)';
       else {
         var a = identify(loc.km);
         if (a && a.c.tipo === 'oae' && !pertoPonto(a)) a = null;   // Proarte: só sugere a ponte a até 150 m dela
-        h = 'GPS ativo · <b>' + esc(kmLine(loc.km, loc.dist >= 10 ? loc.side : '', loc.dist, true)) + '</b>' +
-          (a ? ' · ' + esc(a.p.nome) + (a.d === 0 ? ' (aqui)' : ' a ' + (a.d < 1 ? Math.round(a.d * 1000) + ' m' : nf(a.d, 1) + ' km')) : '') + gpsLot(loc.km);
+        h = 'GPS ' + Math.round(f.acc || 0) + ' m · <b>' + esc(kmLine(loc.km, loc.dist >= 10 ? loc.side : '', loc.dist, true)) + '</b>' +
+          (a ? ' · ' + esc(a.p.nome) + (a.d === 0 ? ' (aqui)' : ' a ' + (a.d < 1 ? Math.round(a.d * 1000) + ' m' : nf(a.d, 1) + ' km')) : '');
+        lot = gpsLot(loc.km);
       }
-      el.innerHTML = h + ' · precisão ' + Math.round(f.acc || 0) + ' m';
+      var nLot = lot ? lotsAt(loc.km).length : 0;
+      el.innerHTML = '<span class="ft-camgl"><i aria-hidden="true"></i>' + h + '</span>' +
+        (lot ? '<button type="button" class="ft-camlot" data-ft="cam-lots" aria-expanded="' + camLotsAberto + '">' + (nLot === 1 ? 'km de outro contrato' : nLot + ' contratos neste km') + ' \u25be</button>' +
+          (camLotsAberto ? '<span class="ft-camlotx">' + lot.replace(/^ · /, '') + '</span>' : '') : '');
     }
     function renderCam() {
       if (!cam) return;
@@ -2070,12 +2203,12 @@
     function shoot() {
       var c = cam, v = q('.ft-cam video');
       if (!c || c.busy || !v.videoWidth || c.shots.length >= MAX_FOTOS) return;
-      var fix = camFix(), when = new Date(), btn = q('[data-ft="cam-shot"]'), fl = q('.ft-flash');
+      var fix = camFix(), when = new Date(), btn = q('[data-ft="cam-shot"]'), fl = q('.ft-flash'), rel = giroRel(), modo = camModo;
       c.busy = true;
       btn.disabled = true;
       fl.classList.add('on');
       setTimeout(function () { fl.classList.remove('on'); }, 60);
-      grab(v, c).then(null, function () { return null; }).then(function (blob) {
+      grab(v, c).then(function (b0) { return b0 ? orientar(b0, rel, modo).then(null, function () { return b0; }) : b0; }).then(null, function () { return null; }).then(function (blob) {
         if (cam !== c) return;
         c.busy = false;
         btn.disabled = false;
@@ -2155,7 +2288,11 @@
       if (b.dataset.ft === 'folha-desfaz') { desfazFolha(); return; }
       if (batch && b.dataset.i != null) { batchClick(b, +b.dataset.i); return; }
       if (b.dataset.ft === 'cam-open') { openCam(); return; }
-      if (b.dataset.ft === 'cam-shot') { shoot(); return; }
+      if (b.dataset.ft === 'cam-shot') { camPop(''); shoot(); return; }
+      if (b.dataset.ft === 'cam-giro' || b.dataset.ft === 'cam-car') { var qual = b.dataset.ft === 'cam-giro' ? 'giro' : 'car', ab = q('.ft-campop[data-pop="' + qual + '"]'); camPop(ab.hidden ? qual : ''); return; }
+      if (b.dataset.ft === 'cam-giro-v') { camModo = b.dataset.v; lsSet(GIRO_KEY, camModo); camPop(''); camOv(); return; }
+      if (b.dataset.ft === 'cam-car-g') { camPop(''); abreFolha(b.dataset.v, q('[data-ft="cam-car"]')); return; }
+      if (b.dataset.ft === 'cam-lots') { camLotsAberto = !camLotsAberto; renderCamGps(); return; }
       if (b.dataset.ft === 'cam-done') { camDone(); return; }
       if (b.dataset.ft === 'cam-cancel') { camCancel(b); return; }
       if (b.dataset.ft === 'here') {

@@ -3920,7 +3920,7 @@
   // do contrato)
   var CMP_MESES = 6;
   function vistIdx(c, p, key) {
-    var x = banco.on && banco.meta[metaKey(c.id, p.id)], f = x && x.m && x.m['serv.' + key], d = f ? new Date(f.em) : null;
+    var x = banco.on && banco.meta[metaKey(c.id, p.id)], f = x && x.m && x.m['serv.' + key], d = f ? new Date(f.vist || f.em) : null;
     if (!d || !isFinite(d)) d = c.dataVistoria ? new Date(c.dataVistoria + 'T12:00:00') : null;
     return d && isFinite(d) ? d.getFullYear() * 12 + d.getMonth() + 1 : null;
   }
@@ -6250,9 +6250,10 @@
     var x = banco.on && banco.meta[metaKey(c.id, p.id)], best = null;
     if (!x) return null;
     servicesOf(c).concat(isConserva(c) ? [TRAFEG] : [], isPavimentada(c) ? DESEMP_IND : []).forEach(function (s) {
-      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.em);
+      // vist/vpor (migração 24, D-25): a última mudança de situação, quantidade ou percentual; sem eles, a última alteração
+      var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.vist || f.em);
       var marcado = s === TRAFEG ? trafSt(p.serv[s.key]) !== 'NV' : s.peso ? !!DESEMP_ST[p.serv[s.key]] : oaeSt(p.serv[s.key]) !== 'NV';
-      if (isFinite(t) && marcado && (!best || t > best.t)) best = { t: t, por: f.por, em: f.em };
+      if (isFinite(t) && marcado && (!best || t > best.t)) best = { t: t, por: f.vpor || f.por, em: f.vist || f.em };
     });
     return best;
   }

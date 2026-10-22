@@ -497,18 +497,19 @@
           plano.forEach(function (pg, ip) {
             cadeia = cadeia.then(function () {
               if (S.parar || !document.body.contains(f)) throw { parou: true };
-              var imgs = [], seq = Promise.resolve();
-              pg.fotos.forEach(function (it) {
-                seq = seq.then(function () {
-                  if (S.parar || !document.body.contains(f)) throw { parou: true };   // fechou a janela: para
-                  feitas++;
-                  S.gerando = 'Foto ' + feitas + ' de ' + nFotos + '…';
-                  foot();
-                  // o Drive às vezes falha numa chamada solta: tenta mais uma vez antes de deixar a foto em branco
-                  return a.arquivo(it).catch(function () { return a.arquivo(it); }).then(paraJpeg).then(function (im) { im.alias = 'ft-' + it.id; imgs.push(im); }, function () { falhas++; imgs.push(null); });
-                });
-              });
-              return seq.then(function () {
+              // as fotos da folha vêm 3 de cada vez (cada pedido ao Drive demora a responder), cada uma no seu lugar
+              var imgs = pg.fotos.map(function () { return null; }), prox = 0;
+              var vez = function () {
+                if (S.parar || !document.body.contains(f)) throw { parou: true };   // fechou a janela: para
+                if (prox >= pg.fotos.length) return null;
+                var j = prox++, it = pg.fotos[j];
+                feitas++;
+                S.gerando = 'Foto ' + feitas + ' de ' + nFotos + '…';
+                foot();
+                // o Drive às vezes falha numa chamada solta: tenta mais uma vez antes de deixar a foto em branco
+                return a.arquivo(it).catch(function () { return a.arquivo(it); }).then(paraJpeg).then(function (im) { im.alias = 'ft-' + it.id; imgs[j] = im; }, function () { falhas++; }).then(vez);
+              };
+              return Promise.all([0, 1, 2].map(function () { return Promise.resolve().then(vez); })).then(function () {
                 if (ip > 0) doc.addPage('a4', 'portrait');
                 var um = pg.itens[0], varios = pg.itens.length > 1, legendas = null;
                 if (G.cons) legendas = pg.fotos.map(function (it, j) { var km = kmFoto(it); return 'FOTO ' + pad2(um.numIni + j) + (km ? ' – ' + km : ''); });

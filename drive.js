@@ -1,7 +1,7 @@
 /*
  * Fotos do aparelho e envio ao Google Drive da equipe.
  * Cada foto com carimbo fica guardada no aparelho (IndexedDB "diagrama-linear-fotos": loja "fotos" com os dados e a
- * miniatura, loja "arquivos" com a foto inteira) e sobe em duas etapas, uma foto de cada vez:
+ * miniatura, loja "arquivos" com a foto inteira) e sobe em duas etapas, até duas fotos juntas (uma só depois de uma falha):
  *   1) o arquivo vai para o script do Google (drive-fotos/Codigo.gs), que guarda em "Fotos por pessoa / <nome> / CT nº / Ponto"
  *      (a pasta do contrato pelo número, "CT 02 00314-2026"; `pastaAntiga`, o nome usado até a versão 51 do app, vai junto para o
  *      script renomear a pasta antiga da pessoa no primeiro envio; o script antigo ignora o campo);
@@ -30,8 +30,8 @@
  *   d.corrigir(ids, meta, pastas, pastaAntiga) -> Promise<{ quantas, enviadas: [ids] }>   troca contrato e ponto (meta: cid, pid,
  *     pnome, lote); as que ainda não subiram vão para a pasta nova do Drive (com a pastaAntiga do contrato novo; sem ela, nenhuma);
  *     `enviadas`: as que já estavam registradas no banco na hora da gravação (o app corrige essas também no banco)
- *   d.info() -> { n, aparelho, busy, erro, enviadas, total, bytes, prox, emEnvio }   prox: hora (ms) da próxima tentativa, ou null;
- *     emEnvio: id da foto que está subindo agora, ou null
+ *   d.info() -> { n, aparelho, busy, erro, enviadas, total, bytes, prox, emEnvio, enviando }   prox: hora (ms) da próxima tentativa, ou null;
+ *     enviando: ids das fotos que estão subindo agora (até 2 juntas); emEnvio: a primeira delas, ou null
  *     erro: 'rede' (sem sinal), 'tempo' (o envio demorou demais), 'recusado' (o script recusou e o banco não respondeu),
  *     'script' (o script recusou, mas o banco confirmou que o acesso vale), 'codigo' (o banco confirmou que o acesso não vale
  *     mais: a fila para até entrar de novo, d.resetCode()), 'banco' (o banco não aceitou o registro), ou o motivo da recusa de uma foto
@@ -112,12 +112,17 @@
   function rede() { var c = navigator.connection; return c && c.type ? c.type : ''; }
 
   window.DriveFotos = function (opts) {
-    var n = 0, soAparelho = 0, outras = 0, total = 0, bytes = 0, busy = false, erro = null, enviadas = 0, timer = null;
+    var n = 0, soAparelho = 0, outras = 0, total = 0, bytes = 0, erro = null, enviadas = 0, timer = null;
+    // até POR_VEZ fotos sobem juntas (22/10/2026); depois de qualquer falha (sinal fraco, tempo, recusa) volta a uma por vez,
+    // até uma subir de novo. `ativos`: as que estão subindo agora; `escolhendo`: a fila confere o acesso e escolhe a próxima
+    // `marco` sobe a cada falha que para a fila: o envio que já subia antes dela e chega bem não desfaz a parada
+    // `forcado`: a pessoa pediu "Enviar agora"; vale até a fila esvaziar ou a primeira falha (as duas vagas seguem forçadas)
+    var POR_VEZ = 2, ativos = {}, nAtivos = 0, escolhendo = false, marco = 0, forcado = false;
     // a fila fica parada até `espera` (sem sinal ou acesso recusado); `recusas`: do acesso, seguidas; `proxFila`: a foto que volta primeiro
     var espera = 0, recusas = 0, proxFila = 0;
     // `geracao` muda a cada entrada nova (resetCode com outro acesso; `marcaFila` diz de qual acesso é a recusa guardada);
-    // `emEnvio`: a foto que está subindo agora; `voltou`: hora em que o sinal voltou (solta as fotos paradas por falta dele)
-    var geracao = 0, marcaFila = null, emEnvio = null, voltou = 0;
+    // `voltou`: hora em que o sinal voltou (solta as fotos paradas por falta dele)
+    var geracao = 0, marcaFila = null, voltou = 0;
     var PAUSA_MAX = 15 * 60000, CHAVE = 'diagrama-linear-fotos-acesso-' + (opts.ambiente || 'oficial');
     function acesso(e) { return e === 'codigo' || e === 'recusado' || e === 'script'; }
     function semRede(e) { return e === 'rede' || e === 'tempo'; }
@@ -229,7 +234,7 @@
               if (!(r.etapa === 'registro' && r.drive && r.drive.id)) r.etapa = 'drive';
             }
             // a que está subindo agora não fica para trás: o arquivo já vai a caminho do Drive
-            else if (!sim && r.situacao === 'fila' && r.etapa !== 'registro' && !(busy && id === emEnvio)) { r.situacao = 'aparelho'; r.erro = null; }
+            else if (!sim && r.situacao === 'fila' && r.etapa !== 'registro' && !ativos[id]) { r.situacao = 'aparelho'; r.erro = null; }
             else return;
             r.versao = (r.versao || 0) + 1;
             m++;
@@ -269,7 +274,7 @@
     // mais antiga (a foto grande que estoura o tempo no sinal fraco não segura as outras); `forcar`: sem esperar a pausa de cada foto
     function next(forcar) {
       return tx([FOTOS], 'readonly', function (s) { return s[FOTOS].getAll(); }).then(function (all) {
-        var now = Date.now(), pend = (all || []).filter(function (r) { return r.situacao === 'fila' && daPessoa(r); });
+        var now = Date.now(), pend = (all || []).filter(function (r) { return r.situacao === 'fila' && daPessoa(r) && !ativos[r.id]; });
         var ok = pend.filter(function (r) { return forcar || devida(r, now); })
           .sort(function (a, b) { return Math.min(a.prox || 0, now) - Math.min(b.prox || 0, now) || (a.criada || 0) - (b.criada || 0); });
         proxFila = !ok.length && pend.length ? Math.min.apply(null, pend.map(function (r) { return r.prox || 0; })) : 0;
@@ -340,28 +345,30 @@
     }
     // o resultado é de um acesso anterior (a pessoa entrou de novo, ou saiu, no meio do envio ou da conferência)
     function outro(g, login) { var l = opts.getLogin ? opts.getLogin() : null; return g !== geracao || !l || l.codigo !== login.codigo; }
-    // a recusa era do acesso anterior: não para nem espera, tenta já com o de agora
-    function deNovo() { busy = false; change(); pump(); }
-    // o acesso valeu (o script ou o banco aceitou): a fila esquece as recusas
-    function valeu() {
+    // a recusa era do acesso anterior: não para nem espera, tenta já com o de agora (a vaga, ao ficar livre, chama a fila)
+    function deNovo() { forcado = false; change(); }
+    // o acesso valeu (o script ou o banco aceitou): a fila esquece as recusas (só um envio que começou depois da última falha)
+    function valeu(mk) {
+      if (mk !== marco) return;
       espera = 0;
       if (recusas || acesso(erro)) { recusas = 0; if (acesso(erro)) erro = null; guardar(); }
     }
     // o banco confirmou que o acesso não vale mais: a fila para até a pessoa entrar de novo (resetCode)
-    function parar() { erro = 'codigo'; busy = false; guardar(); change(); }
+    function parar() { marco++; forcado = false; erro = 'codigo'; guardar(); change(); }
     // acesso recusado pelo script: a fila inteira espera, cada vez mais, sem mandar a foto de novo. motivo: 'recusado' (o banco
     // não respondeu: não dá para dizer que o código mudou) ou 'script' (o banco confirmou que o acesso vale; o script recusou assim mesmo)
     function segurar(motivo) {
+      marco++; forcado = false;
       recusas++;
       espera = Date.now() + pausa(recusas);
       erro = motivo;
-      busy = false;
       guardar();
       change();
       later(espera - Date.now());
     }
     // banco: a recusa veio do registro no banco (o arquivo já está no Drive), não do Google
     function falhou(r, res, login, g, banco) {
+      forcado = false;
       if (res && res.erro === 'codigo_invalido') {
         if (outro(g, login)) return deNovo();
         return checar(login).then(function (ac) {
@@ -377,11 +384,12 @@
         a.erro = e;
         a.tent = (a.tent || 0) + 1;
         a.prox = Date.now() + Math.min(30 * 60000, 30000 * Math.pow(2, a.tent));
-      }).then(function () { busy = false; change(); later(5000); });
+      }).then(function () { change(); later(5000); });
     }
     // sem sinal ou demorou demais (tempo): esta foto espera 1, 2, 4, 8… até 15 min (guardado com ela) e a fila espera junto
     function semSinal(r, tempo) {
       var e = tempo ? 'tempo' : 'rede';
+      marco++; forcado = false;
       erro = e;
       return concluir(r, function (a, igual) {
         if (!igual) return;
@@ -391,20 +399,20 @@
         a.prox = Date.now() + pausa(a.tent);
       }).then(function (a) {
         espera = a && a.prox > Date.now() ? a.prox : Date.now() + 60000;
-        busy = false;
         change();
         later(espera - Date.now());
       });
     }
     function esperaWifi() { return !!lsLer(WIFI_KEY) && rede() === 'cellular'; }
-    function seguir(forcar) { busy = false; return recount().then(function () { pump(forcar); }); }
+    // fora da cadeia do envio: chama a fila depois que a vaga desta foto fica livre
+    function seguir(forcar) { recount().then(function () { pump(forcar); }); }
     // as duas etapas de uma foto; cada uma termina gravando sobre o registro lido de novo (concluir). g: a geração do acesso
-    function enviarFoto(url, login, r, forcar, g) {
+    function enviarFoto(url, login, r, forcar, g, mk) {
       var etapa1 = r.etapa === 'registro' ? Promise.resolve({ ok: true, ja: true }) : paraDrive(url, login, r);
       return etapa1.then(function (res) {
         if (!res || !res.ok) return falhou(r, res, login, g);
-        if (res.ja) return registrar(login, r, forcar, g);
-        valeu();
+        if (res.ja) return registrar(login, r, forcar, g, mk);
+        valeu(mk);
         return concluir(r, function (a, igual) {
           a.drive = { id: res.id || null, url: res.url || null };
           // corrigida no meio (mesmo arquivo): o arquivo fica onde subiu, como na correção depois de enviada, e o banco leva
@@ -412,50 +420,57 @@
           if (igual || (a.criada === r.criada && a.tamanho === r.tamanho)) a.etapa = 'registro';
         }).then(function (a) {
           if (!a || a.situacao !== 'fila' || a.etapa !== 'registro') return seguir(forcar);   // apagada (não volta), segurada ou para subir de novo
-          return registrar(login, a, forcar, g);
+          return registrar(login, a, forcar, g, mk);
         });
       }).then(null, function (e) { return semSinal(r, !!(e && e.code === 'tempo')); });
     }
-    function registrar(login, a, forcar, g) {
+    function registrar(login, a, forcar, g, mk) {
       return paraBanco(login, a).then(function (res2) {
         if (!res2.ok) return falhou(a, res2, login, g, true);
-        valeu();
+        valeu(mk);
         return concluir(a, function (b, igual) {
           // corrigida enquanto ia ao banco: continua na fila, para registrar os dados novos
           if (igual) { b.situacao = 'enviada'; b.erro = null; b.enviada = Date.now(); }
         }).then(function (b) {
           var foi = !!(b && b.situacao === 'enviada');
-          if (foi) { enviadas++; erro = null; }
-          busy = false;
+          if (foi) { enviadas++; if (mk === marco) erro = null; }
           // fora da cadeia do envio: um erro aqui não conta como falta de sinal desta foto
           recount().then(function () { if (foi && opts.onSent) opts.onSent(b); pump(forcar); });
         });
       });
     }
     function pump(forcar) {
-      forcar = forcar === true;
+      forcar = forcar === true || forcado;
+      if (forcar) forcado = true;
       var url = opts.getUrl(), login = opts.getLogin(), g = geracao;
-      if (busy) return;
+      if (escolhendo || nAtivos >= (erro || recusas ? 1 : POR_VEZ)) return;
       if (opts.podeEnviar && !opts.podeEnviar()) { change(); return; }   // outra aba do app é que envia
       if (!url || !login || navigator.onLine === false) { change(); return; }
       if (!forcar && (lsLer(PAUSA_KEY) || esperaWifi())) { change(); return; }   // pausado, ou só no Wi-Fi e está no 4G
       if (!forcar && erro === 'codigo') { change(); return; }   // acesso que não vale mais: espera entrar de novo
       if (!forcar && parada(Date.now())) { later(espera - Date.now()); change(); return; }
-      busy = true;
-      emEnvio = null;
+      escolhendo = true;
       change();
       // depois de uma recusa do acesso, o app confere no banco antes de mandar a foto inteira de novo
       (recusas || erro === 'codigo' ? checar(login) : Promise.resolve('ok')).then(function (ac) {
-        if (outro(g, login)) return deNovo();   // entrou de novo durante a conferência: confere o acesso novo
-        if (ac === 'invalido') return parar();
-        if (ac === 'sem_resposta' && !forcar) return segurar('recusado');
+        if (outro(g, login)) return 'deNovo';   // entrou de novo durante a conferência: confere o acesso novo
+        if (ac === 'invalido') { parar(); return null; }
+        if (ac === 'sem_resposta' && !forcar) { segurar('recusado'); return null; }
         if (ac === 'ok' && erro === 'codigo') erro = null;
-        return next(forcar).then(function (r) {
-          if (!r) { busy = false; change(); return; }
-          emEnvio = r.id;
-          return enviarFoto(url, login, r, forcar, g);
+        return next(forcar);
+      }).then(function (r) {
+        escolhendo = false;
+        if (r === 'deNovo') { change(); pump(); return; }
+        if (!r) { if (!nAtivos) forcado = false; change(); return; }
+        ativos[r.id] = true; nAtivos++;
+        change();
+        pump(forcar);   // a outra vaga, se a fila estiver andando bem
+        return enviarFoto(url, login, r, forcar, g, marco).then(null, function () { /* segue */ }).then(function () {
+          delete ativos[r.id]; nAtivos--;
+          change();
+          pump();
         });
-      }).then(null, function () { busy = false; change(); });
+      }, function () { escolhendo = false; change(); });
     }
     // entrou de novo (outro acesso): a fila volta na hora, e o que estava em curso com o acesso anterior não vale mais.
     // O mesmo acesso de novo (ao abrir o app, papel trocado): a recusa guardada continua; a parada pelo acesso confere já
@@ -492,7 +507,10 @@
       info: function () {
         // próxima tentativa: o fim da pausa da fila ou a foto que volta primeiro (parada pelo acesso: só ao entrar de novo)
         var agora = Date.now(), prox = erro === 'codigo' ? null : parada(agora) ? espera : proxFila > agora && proxFila - agora <= 2 * PAUSA_MAX ? proxFila : null;
-        return { n: n, aparelho: soAparelho, outras: outras, busy: busy, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox, emEnvio: busy ? emEnvio : null,
+        // `emEnvio`: uma das que estão subindo (a primeira); `enviando`: todas elas
+        var sobem = Object.keys(ativos);
+        return { n: n, aparelho: soAparelho, outras: outras, busy: escolhendo || nAtivos > 0, erro: erro, enviadas: enviadas, total: total, bytes: bytes, prox: prox,
+          emEnvio: sobem[0] || null, enviando: sobem,
           pausado: !!lsLer(PAUSA_KEY), esperaWifi: esperaWifi() };
       }
     };
