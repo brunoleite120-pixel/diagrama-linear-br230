@@ -597,8 +597,22 @@
       function k(s) { return String(s || '').toUpperCase().replace(/\s+/g, '').replace(/^BR(\d)/, 'BR-$1').split('/')[0]; }
       return !c.rodovia || k(c.rodovia) === k(snv.rodovia || 'BR-230');
     }
+    // pontos críticos: a foto só é do contrato até 1 km de algum ponto (o 267 vai do km 613,50 ao 744,98 com 3 pontos; no meio
+    // ficam a Proarte e a conservação). Sem ponto com km, vale o trecho do contrato (decidido em 22/10/2026)
+    var PC_RAIO = 1;
+    function pcMaisPerto(c, km) {
+      var best = null;
+      (c.pontos || []).forEach(function (p) {
+        if (p.kmIni == null) return;
+        var a = Math.min(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni), b = Math.max(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni);
+        var d = km < a ? a - km : km > b ? km - b : 0;
+        if (!best || d < best.d) best = { p: p, d: d };
+      });
+      return best;
+    }
+    function pcLonge(c, km) { if (!c || c.tipo === 'oae' || c.tipo === 'conserva' || km == null) return null; var m = pcMaisPerto(c, km); return m && m.d > PC_RAIO ? m : null; }
     function lotsAt(km) {
-      return contratosNoKm(contracts(), km, function (c) { return sameRoad(c) ? lotRange(c) : null; });
+      return contratosNoKm(contracts(), km, function (c) { return sameRoad(c) ? lotRange(c) : null; }).filter(function (c) { return !pcLonge(c, km); });
     }
     // "A, B e C"
     function lotNames(list) {
@@ -1265,7 +1279,8 @@
           // um km no trecho de mais de um contrato: todos aparecem, cada um com o seu botão (quem corrige escolhe o serviço)
           h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica ' + (here.length === 1 ? 'no contrato <b>' + esc(lotName(here[0])) + '</b> (' + esc(rangeTxt(here[0])) + ')'
               : 'no trecho de ' + here.length + ' contratos (' + here.map(function (c) { return '<b>' + esc(lotName(c)) + '</b>' + (rangeTxt(c) ? ': ' + esc(rangeTxt(c)) : ''); }).join('; ') + ')') +
-            ', não no ' + esc(lotName(cur)) + (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '') + '. A legenda e o ponto estão usando o contrato errado.' +
+            (pcLonge(cur, st.km) ? ', longe dos pontos do ' + esc(lotName(cur)) + ' (o mais perto é o ' + esc(pcLonge(cur, st.km).p.nome || 'ponto') + ', a ' + nf(pcLonge(cur, st.km).d, 1) + ' km)'
+              : ', não no ' + esc(lotName(cur)) + (rangeTxt(cur) ? ' (' + esc(rangeTxt(cur)) + ')' : '')) + '. A legenda e o ponto estão usando o contrato errado.' +
             (here.length > 1 ? ' Escolha o do serviço fotografado.' : '') + '</div><div class="ft-opts">' +
             here.map(function (c) {
               var a = pointNear(c, st.km);
@@ -1273,6 +1288,10 @@
             }).join('') +
             '<button type="button" class="ft-opt" data-ft="keep-lot"' + di + '>Manter ' + esc(lotName(cur)) + '</button></div>';
           if (st.keepLot === cur.id + '@' + nf(st.km, 2)) h = '';
+        } else if (pcLonge(cur, st.km)) {
+          var lg = pcLonge(cur, st.km);
+          h = '<div>O km <b>' + nf(st.km, 2) + '</b> fica longe dos pontos do ' + esc(lotName(cur)) + ' (o mais perto é o ' + esc(lg.p.nome || 'ponto') + ', a ' +
+            (lg.d < 10 ? nf(lg.d, 1) : nf(lg.d, 0)) + ' km) e de nenhum outro contrato cadastrado. Confira o km.</div>';
         } else if (lotRange(cur)) {
           h = '<div>O km <b>' + nf(st.km, 2) + '</b> está fora do trecho de todos os contratos cadastrados (' +
             list.filter(function (c) { return lotRange(c); }).map(function (c) { return esc(lotName(c)) + ': ' + esc(rangeTxt(c)); }).join('; ') +

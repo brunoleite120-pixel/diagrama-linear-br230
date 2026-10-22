@@ -7751,5 +7751,39 @@
     applyOps: applyOps
   };
 
+  // algo mais largo que a tela (no iPhone, depois de girar o celular a página rolava para o lado ou encolhia): anota qual
+  // elemento passou e quanto, e mostra no fim do menu Dados, para achar a causa no aparelho (22/10/2026)
+  var LARG_KEY = 'diagrama-linear.largura';
+  function confereLargura() {
+    var W = document.documentElement.clientWidth, pior = null;
+    if (!W) return;
+    Array.prototype.forEach.call(document.querySelectorAll('body *'), function (e) {
+      var r = e.getBoundingClientRect();
+      if (!r.width || r.right <= W + 2 || getComputedStyle(e).position === 'fixed') return;
+      var p = e.parentElement, pr = p && p.getBoundingClientRect();
+      if (pr && pr.right > W + 2) return;   // o pai já passou: fica o de fora
+      if (!pior || r.right > pior.r) {
+        var cl = typeof e.className === 'string' ? e.className : (e.className && e.className.baseVal) || '';
+        pior = { r: Math.round(r.right), el: e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (cl ? '.' + cl.trim().split(/\s+/).slice(0, 3).join('.') : '') };
+      }
+    });
+    if (!pior) return;
+    var reg = { em: new Date().toISOString(), tela: W, ate: pior.r, el: pior.el, pg: document.body.getAttribute('data-pg') || '', alt: window.innerHeight };
+    lsPut(LARG_KEY, reg);
+    mostraLargura();
+  }
+  function mostraLargura() {
+    var menu = $('menuPop'), reg = lsGet(LARG_KEY);
+    if (!menu || !reg || !reg.el) return;
+    var d = $('larguraDiag');
+    if (!d) { d = document.createElement('div'); d.id = 'larguraDiag'; d.className = 'menu-versao'; menu.appendChild(d); }
+    d.textContent = 'Largura: ' + reg.el + ' até ' + reg.ate + ' px (tela ' + reg.tela + ' × ' + reg.alt + ', ' + (reg.pg || 'início') + ', ' + fmtWhen(reg.em) + ')';
+  }
+  var largT = null;
+  function agendaLargura() { clearTimeout(largT); largT = setTimeout(confereLargura, 1200); }
+  window.addEventListener('resize', agendaLargura);
+  window.addEventListener('orientationchange', agendaLargura);
+  setTimeout(function () { confereLargura(); mostraLargura(); }, 4000);
+
   if (init() !== false) window.Unifilar.pronto = true;   // atualizar.js confere isto antes de confirmar ao app que uma versão baixada abriu bem
 })();

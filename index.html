@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover">
 <title>Diagrama Linear · Pontos Críticos</title>
 <meta name="description" content="Pontos críticos da BR-230/PA: diagrama linear, mapa SNV com GPS e foto com carimbo.">
 <meta name="theme-color" content="#FFFFFF">
@@ -26,6 +26,9 @@ html{scroll-padding-top:calc(var(--topbar-h,0px) + 8px)}
 *{box-sizing:border-box}
 [hidden]{display:none !important}
 html,body{margin:0;background:var(--ground);color:var(--ink);font-size:14px;line-height:1.45}
+/* nada passa da largura da tela: no iPhone, uma sobra lateral (depois de girar o celular) fazia a página rolar para o lado ou
+   encolher; minimum-scale=1 no viewport impede o encolhimento e o zoom de ampliar continua (22/10/2026) */
+html,body{overflow-x:clip}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
