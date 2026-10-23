@@ -1944,7 +1944,12 @@
     // ---------------------------------------------------------------- foto aberta
     function soltarGrande() { if (grande) { URL.revokeObjectURL(grande.url); grande = null; } }
     function abrir(i) { soltarGrande(); ver = i; var it = lista[i]; if (it && ((locais[it.id] && locais[it.id].temArquivo) || it.driveId)) carregando = it.id; renderVer(); if (carregando === (it && it.id)) carregarGrande(); }
-    function fecharVer() { soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove(); }
+    function fecharVer() {
+      var it = lista[ver];
+      soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove();
+      // o foco volta para a miniatura da última foto vista (a grade pode ter sido desenhada de novo)
+      if (it && v) setTimeout(function () { var t = root && q('.gl-t[data-id="' + cssId(it.id) + '"]'); if (t && (!document.activeElement || document.activeElement === document.body || !root.contains(document.activeElement))) t.focus(); }, 0);
+    }
     var CAMADA = '.gl-ver,.gl-sh,.gl-mv,.gl-pf';
     function camadasMudaram(muts) {
       if (!root) return;
