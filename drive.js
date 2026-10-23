@@ -231,7 +231,8 @@
           g.onsuccess = function () {
             var r = g.result;
             if (!r) return;
-            if (sim && r.situacao === 'aparelho') {
+            // foto da câmera guardada sem carimbo (rascunho do clique) não sobe: o carimbo entra antes, no lugar dela
+            if (sim && r.situacao === 'aparelho' && !(r.meta && r.meta.rascunho && r.meta.camera)) {
               r.situacao = 'fila'; r.tent = 0; r.prox = 0; r.erro = null;
               // o arquivo que já tinha chegado ao Drive não sobe de novo: falta só o registro no banco
               if (!(r.etapa === 'registro' && r.drive && r.drive.id)) r.etapa = 'drive';

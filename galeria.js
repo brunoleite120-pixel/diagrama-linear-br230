@@ -51,8 +51,35 @@
     '.gl-cts{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;scrollbar-width:none}',
     '.gl-cts::-webkit-scrollbar{display:none}',
     '.gl-cts:empty{display:none}',
-    '.gl-ct{flex:none;display:flex;align-items:baseline;gap:6px;border:1px solid var(--line,#D5DAD6);background:var(--panel,#fff);color:var(--ink-2,#3B4540);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap}',
-    '.gl-ct small{font-weight:400;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
+    '.gl-ct{flex:none;display:flex;align-items:center;justify-content:center;min-height:44px;box-sizing:border-box;border:1px solid var(--line,#D5DAD6);background:var(--panel,#fff);color:var(--ink,#17201C);border-radius:10px;padding:0 12px;font-size:14px;font-weight:700;white-space:nowrap}',
+    '.gl-ct small{font-size:inherit;font-weight:inherit;color:inherit;font-variant-numeric:tabular-nums;white-space:pre}',
+    '.gl-ct[aria-pressed="true"]{background:var(--accent,#1D4F91);border:1.5px solid var(--accent,#1D4F91);color:#fff}',
+    '.gl-ct-l{flex:1 0 auto}',
+    '.gl-cl-busca{min-height:44px;width:100%;box-sizing:border-box;border:1px solid var(--line,#C9D0CB);border-radius:10px;padding:0 12px;font-size:15px;background:#F1F3F1;color:var(--ink,#17201C)}',
+    '.gl-cl-ls{display:grid;gap:2px}',
+    '.gl-cl-g{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3,#5C6661);padding:10px 12px 2px}',
+    '.gl-cl-l{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 12px;border:1px solid transparent;border-radius:12px;background:none;color:var(--ink,#17201C);text-align:left;font:inherit}',
+    '.gl-cl-l>span{flex:1;min-width:0;line-height:1.25}',
+    '.gl-cl-l b{font-size:15px}',
+    '.gl-cl-l em{font-style:normal;font-size:11px;font-weight:700;color:var(--accent,#1D4F91);background:var(--accent-soft,#E7EEF7);border-radius:999px;padding:1px 7px;vertical-align:2px}',
+    '.gl-cl-l small{display:block;font-size:12px;color:var(--ink-3,#5C6661)}',
+    '.gl-cl-l i{font-style:normal;font-size:13.5px;color:var(--ink-2,#3B4540);font-variant-numeric:tabular-nums}',
+    '.gl-cl-l[aria-pressed="true"]{background:var(--accent-soft,#E7EEF7);border:1.5px solid var(--accent,#1D4F91)}',
+    '.gl-cl-l[aria-pressed="true"] i::after{content:" \\2713";color:var(--accent,#1D4F91);font-weight:800}',
+    '.gl-cl-v{padding:16px 12px;color:var(--ink-3,#5C6661);font-size:14px}',
+    '.gl-chip.warn{border:1.5px solid #D9A43A;background:#FFF4DC;color:#7A5200;font-weight:700}',
+    '.gl-chip.warn[aria-pressed="true"]{background:#7A5200;border-color:#7A5200;color:#fff}',
+    '.gl-b.sc{background:#FFF4DC;color:#7A5200;border:1px solid #D9A43A}',
+    '.gl-sc{flex:1 1 100%;box-sizing:border-box;display:flex;flex-direction:column;gap:3px;margin-bottom:8px;padding:11px 12px;border-radius:12px;background:#FFF4DC;border:1.5px solid #D9A43A}',
+    '.gl-sc>b{font-size:15px;color:#7A5200}',
+    '.gl-sc>span{font-size:12.5px;line-height:1.35;color:var(--ink-2,#3B4540)}',
+    '.gl-sc-b{display:flex;gap:8px;margin-top:6px}',
+    '.gl-sc-b .btn{min-height:44px;justify-content:center}',
+    '.gl-sc-b .btn.primary{flex:1}',
+    '.gl-ec-t{margin:4px 0 0;font-size:19px;font-weight:700}',
+    '.gl-ec-p{margin:0 0 6px;font-size:14.5px;line-height:1.4;color:var(--ink-2,#3B4540)}',
+    '.gl-sh.ec .btn{min-height:48px;justify-content:center;font-size:15px}',
+    '.gl-ec-x{border:0;background:none;min-height:44px;color:var(--accent,#1D4F91);font:inherit;font-size:14.5px;font-weight:650}',
     '.gl-ct[aria-pressed="true"]{background:var(--accent,#1D4F91);border-color:var(--accent,#1D4F91);color:#fff}',
     '.gl-ct[aria-pressed="true"] small{color:#D6E2F3}',
     '.gl-ct.sem{border-style:dashed}',
@@ -144,7 +171,16 @@
     '.gl-vazio .btn{margin-top:12px}',
     '.gl-bar{position:absolute;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:760px;margin:0 auto;',
     '  padding:10px 12px;background:var(--panel,#fff);border:1px solid var(--line,#D5DAD6);border-radius:10px;box-shadow:0 6px 24px rgba(23,32,28,.16)}',
-    '.gl-bar .gl-n{flex:1 1 120px;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}',
+    '.gl-bar{flex-direction:column;align-items:stretch;flex-wrap:nowrap}',
+    '.gl-bar-top{display:flex;align-items:center;gap:8px}',
+    '.gl-bar .gl-n{flex:1;min-width:0;line-height:1.2;font-variant-numeric:tabular-nums}',
+    '.gl-bar .gl-n b{display:block;font-size:15px}',
+    '.gl-bar .gl-n small{display:block;font-size:12px;color:var(--ink-3,#5C6661)}',
+    '.gl-bar-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
+    '.gl-selon .gl-body,.gl-pag.gl-selon .gl-body{padding-bottom:250px}',
+    '.gl-selon .gl-toast{bottom:calc(250px + env(safe-area-inset-bottom,0px))}',
+    '@media (max-width:639px){.gl-bar{left:0;right:0;bottom:0;max-width:none;border-radius:14px 14px 0 0;border-width:1px 0 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 16px rgba(23,32,28,.12)}.gl-pag .gl-bar{padding-bottom:10px}}',
+    '@media (min-width:640px){.gl-bar-acts{display:flex;flex-wrap:wrap}.gl-bar-acts .btn{flex:1 1 180px}}',
     '.gl-prog{flex:1 1 200px;font-size:13px;font-variant-numeric:tabular-nums}',
     '.gl-ver{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;background:#0E1311;color:#fff}',
     // a foto aberta cobre a tela toda (por cima da margem da .gl): a barra de cima desce abaixo do relógio do iPhone, onde o toque não chega
@@ -154,15 +190,35 @@
     '.gl-ver .btn:hover{background:rgba(255,255,255,.16)}',
     '.gl-ver .btn.danger{color:#FDA29B;border-color:rgba(253,162,155,.4)}',
     '.gl-ver .btn.primary{background:var(--accent,#1D4F91);border-color:var(--accent,#1D4F91)}',
+    '.gl-ver-meio{position:relative;flex:1;min-height:0;display:flex}',
     '.gl-ver-img{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:0 8px}',
+    '.gl-ver-selo{position:absolute;left:14px;top:8px;padding:4px 10px;border-radius:999px;background:rgba(15,20,18,.78);color:#F5B83D;font-size:13px;font-weight:700;pointer-events:none}',
+    '.gl-ver-det{display:none;position:absolute;left:12px;right:12px;bottom:8px;max-height:calc(100% - 16px);overflow:auto;padding:12px 14px;border-radius:12px;background:rgba(20,27,24,.95);color:#D5DBD8;font-size:13.5px;line-height:1.55;box-shadow:0 -4px 20px rgba(0,0,0,.5);z-index:2}',
+    '.gl-ver.det .gl-ver-det{display:block}',
+    '.gl-ver-det b{color:#fff}',
+    '.gl-ver-det .gl-arq{color:#9AA6A0}',
+    '.gl-ver-det .gl-desc{white-space:pre-wrap;color:#C9D0CC}',
+    '.gl-ver-det .gl-warn{color:#FEC84B}',
+    '.gl-ver-det .gl-lk{color:#9FB4D6;font-weight:650}',
+    '.gl-ver-tit{display:flex;align-items:flex-start;gap:10px}',
+    '.gl-ver-tit b{flex:1;min-width:0;font-size:15.5px;line-height:1.3}',
+    '.gl-ver .gl-det-bt{flex:none;min-height:44px;font-size:14px}',
+    '.gl-ver-marca{margin-top:6px;font-size:13px;font-weight:650}',
+    '.gl-ver-marca .gl-est{color:#F5B83D}',
+    '.gl-corr{border:0;background:none;padding:6px 2px;color:#9FC2FF;font:inherit;font-weight:700;text-decoration:underline}',
     '.gl-ver-img img{max-width:100%;max-height:100%;object-fit:contain;-webkit-user-drag:none;user-select:none;-webkit-user-select:none}',
     // gestos na foto (gestos.js): o navegador não rola nem amplia a página por cima deles
     '.gl-ver-img{touch-action:none;overflow:hidden}',
     '.gl-ver-img .gl-leve{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.6);font-size:12px;white-space:nowrap}',
-    '.gl-ver-info{padding:10px 16px 4px;font-size:13px;line-height:1.5;color:#E4E8E5;max-height:30vh;overflow:auto}',
+    '.gl-ver-info{padding:10px 16px 4px;font-size:13px;line-height:1.5;color:#E4E8E5}',
     '.gl-ver-info b{color:#fff}',
     '.gl-ver-info .gl-desc{white-space:pre-wrap;color:#C9D0CC}',
-    '.gl-ver-acts{display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px))}',
+    '.gl-ver-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px))}',
+    '.gl-ver-acts .btn,.gl-bar-acts .btn{min-height:46px;justify-content:center;font-size:14.5px;font-weight:650}',
+    '.gl .btn.est1,.gl-ver .btn.est1{background:#F5B83D;border-color:#E0A52C;color:#3D2A00;font-weight:750}',
+    '@media (min-width:640px){.gl-ver-acts{display:flex;flex-wrap:wrap;justify-content:center}.gl-ver-acts .btn{min-width:180px}}',
+    '.gl-toast{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;align-items:center;gap:14px;max-width:calc(100% - 32px);box-sizing:border-box;padding:6px 8px 6px 14px;border-radius:10px;background:#17201C;color:#fff;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.3)}',
+    '.gl-toast button{border:0;background:none;min-height:40px;padding:0 8px;color:#9FC2FF;font-size:14px;font-weight:700}',
     '.gl-nav{min-width:40px;justify-content:center}',
     '.gl-ver-info .gl-warn{color:#FEC84B}',
     '.gl-mv{position:absolute;inset:0;z-index:3;display:flex;align-items:flex-end;justify-content:center;background:rgba(14,19,17,.5)}',
@@ -183,7 +239,7 @@
     // como página do celular: entre as barras do app (--topbar-h e --pgnav-h vêm do app.js e do index.html), por baixo das listas
     // que descem da barra do topo; a foto aberta e o painel de contrato e ponto voltam a cobrir a tela toda
     '.gl.gl-pag{top:var(--topbar-h,61px);bottom:var(--pgnav-h,0px);z-index:10;padding-top:0;padding-bottom:0}',
-    '.gl-pag .gl-top,.gl-pag .gl-cts{display:none}',
+    '.gl-pag .gl-top{display:none}',
     '.gl-pag .gl-body{padding-bottom:84px}',
     '.gl.gl-pag:has(.gl-ver),.gl.gl-pag:has(.gl-mv){top:0;bottom:0;z-index:3000;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}',
     // situação de cada foto, no canto de cima à direita: ☁ no Drive, ▯ só aqui, fila, subindo, ⤓ só no Drive (não baixada)
@@ -259,8 +315,10 @@
     '.gl-rec .gl-tabs,.gl-rec .gl-cts,.gl-rec .gl-fil,.gl-rec .gl-info{display:none}',
     '.gl-mini-t{flex:1;min-width:0;display:flex;align-items:center;gap:8px;border:0;background:none;padding:0;font:inherit;font-size:12.5px;color:var(--ink,#17201C);text-align:left}',
     '.gl-mini-t i{flex:none;font-style:normal;border-radius:999px;padding:4px 10px;background:var(--ink,#17201C);color:#fff}',
-    '.gl-mini-t span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.gl-mini-f{flex:none;min-height:32px;padding:0 10px;border:1px solid var(--accent,#1D4F91);border-radius:8px;background:var(--accent-soft,#E7EEF7);color:var(--accent,#1D4F91);font-size:12.5px;font-weight:650}',
+    '.gl-mini-t>span{flex:1;min-width:0;line-height:1.25}',
+    '.gl-mini-t>span>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}',
+    '.gl-mini-t>span>b{display:block;font-size:13px}',
+    '.gl-mini-f{flex:none;min-height:44px;padding:0 12px;border:1.5px solid var(--accent,#1D4F91);border-radius:10px;background:var(--accent-soft,#E7EEF7);color:var(--accent,#1D4F91);font-size:14px;font-weight:700}',
     '.gl-recolher{flex:1 1 100%;display:flex;justify-content:center}',
     '.gl-recolher button{border:1px solid var(--line,#D5DAD6);border-radius:999px;background:var(--panel,#fff);padding:4px 14px;font-size:12.5px;font-weight:650;color:var(--ink-2,#3B4540)}',
     // download e envio andando: uma linha só (parado, com o motivo, continua inteira)
@@ -470,6 +528,7 @@
   var DRIVE_KEY = 'diagrama-linear.foto-drive', MANTER_KEY = 'diagrama-linear.manter-enviadas';
   // aba Drive: por contrato ou por pessoa, e quando cada pasta foi aberta (para contar as novas)
   var DMODO_KEY = 'diagrama-linear.drive-ver-modo', DVISTO_KEY = 'diagrama-linear.drive-ver-vistos';
+  var DET_KEY = 'diagrama-linear.foto-detalhes';   // a foto aberta com os detalhes abertos (a pessoa deixou assim)
   var IC_PASTA = '<svg viewBox="0 0 24 24" fill="#E9B949" stroke="#B8860B" stroke-width="1" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.3l2 2h8.7A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';   // DRIVE_KEY: a mesma da tela Foto (foto.js)
   function lsLer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsPor(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* sem armazenamento */ } }
@@ -491,7 +550,7 @@
     }).catch(function () { return 0; });
   }
   // agrupar: por mês ou por pessoa (escolha só para engenheiro e Administrador; o fiscal só vê as fotos dele, por mês)
-  var AGRUPAR = { mes: 'Por data', pessoa: 'Por pessoa' };   // por data: por dia até 16 dias; período maior, por semana
+  var AGRUPAR = { contrato: 'Por contrato', mes: 'Por data', pessoa: 'Por pessoa' };   // por data: por dia até 16 dias; período maior, por semana
   var MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   function mesLongo(k) { var p = k.split('-'); return MESES_NOME[+p[1] - 1] + ' de ' + p[0]; }
   function agruparPadrao(aba) { return aba === 'todas' ? 'pessoa' : 'mes'; }
@@ -721,10 +780,13 @@
     var per = lerPer(), pf = null;   // período escolhido; pf: rascunho da janela do período (null = fechada)
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
-    var ver = -1, grande = null, ocupado = null, cancelar = false, cidAuto = false, mv = null, guardadas = {}, carregando = null;
+    var ver = -1, grande = null, ocupado = null, cancelar = false, mv = null, guardadas = {}, carregando = null;
     // fLocal: filtro de No aparelho ('aparelho' só aqui, 'fila', 'enviada' no Drive); lote: as fotos que entraram na fila nesta
     // leva (id -> tamanho), para a barra contar "3 de 7" e os MB até a fila esvaziar; semRede: a aba do banco mostra as guardadas
-    var fLocal = '', lote = {}, semRede = 0, bx = null, bs = null, cfg = false;
+    var fLocal = '', lote = {}, semRede = 0, bx = null, bs = null, cfg = false, detAberto = lsLer(DET_KEY) === '1';
+    // ctApp: o contrato aberto no app quando a galeria é a página do celular; cl: a lista "Contratos ▾" aberta ({ busca });
+    // multiCt: as fotos da aba são de mais de um contrato (aí dá para separar por contrato)
+    var ctApp = '', cl = null, multiCt = false, ec = null;
     aoLimpar.push(function () { if (bx) { bx.parar = true; bx = null; avisaBaixa(); } });   // saiu da conta: o download para
     // aba Drive: dpath = a pasta aberta (nomes, a partir da raiz; em "por pessoa" o 1º é a pessoa); dlista = a última leitura do Drive
     var dpath = [], dmodo = lsLer(DMODO_KEY) === 'pessoa' ? 'pessoa' : 'contrato', dbusca = '', dlista = null, semMini = {}, dvistos = {};
@@ -732,13 +794,21 @@
     cacheIds().then(function (m) { guardadas = m; });
 
     function login() { return o.getLogin ? o.getLogin() : null; }
+    // foto da câmera guardada no clique e ainda sem carimbo (a marca vem do rascunho: a carimbada entra no lugar, sem ela)
+    function semCar(x) { var lo = x && locais[x.id]; return !!(lo && lo.semCar && lo.situacao === 'aparelho'); }
     // as fotos que estão subindo agora (até 2 juntas; o drive.js antigo diz só uma)
     function sobemAgora() {
       var i = o.drive && o.drive.info ? o.drive.info() : null;
       return !i ? [] : i.enviando ? i.enviando : i.emEnvio ? [i.emEnvio] : [];
     }
     function nv() { return o.nivel ? o.nivel() : 0; }
-    function modo() { return nv() >= 2 ? agrupar || agruparPadrao(aba) : 'mes'; }
+    // em Todos, com fotos de mais de um contrato, o padrão é separar por contrato
+    function modo() {
+      if (agrupar === 'contrato' || (!agrupar && multiCt)) return multiCt ? 'contrato' : nv() >= 2 ? agruparPadrao(aba) : 'mes';
+      return nv() >= 2 ? agrupar || agruparPadrao(aba) : 'mes';
+    }
+    // o contrato do app: o da página do celular, ou o aberto na tela (na visão geral, nenhum)
+    function ctAppId() { return ctApp || (o.ativo ? o.ativo() : '') || ''; }
     function abasVisiveis() {
       return ABAS.filter(function (a) { return ((a.nivel === 0 && !a.login) || (login() && nv() >= a.nivel)) && (!a.drive || !!(o.driveUrl && o.driveUrl() && o.drive && o.drive.post)); });
     }
@@ -761,7 +831,8 @@
       if (u) urlsLocais.push(u);
       return { id: r.id, nome: r.nome, origem: 'local', cid: m.cid || '', pid: m.pid || '', pnome: m.pnome || '', lote: m.lote || '', km: m.km, lat: m.lat, lng: m.lng,
         em: m.em || (r.criada ? new Date(r.criada).toISOString() : null), desc: m.desc || '', autor: r.autor && r.autor.nome || '',
-        situacao: r.situacao, etapa: r.etapa, erro: r.erro, enviada: r.enviada, driveId: r.drive && r.drive.id || null, tamanho: r.tamanho, temArquivo: r.temArquivo, mini: u };
+        situacao: r.situacao, etapa: r.etapa, erro: r.erro, enviada: r.enviada, driveId: r.drive && r.drive.id || null, tamanho: r.tamanho, temArquivo: r.temArquivo, mini: u,
+        semCar: !!(m.rascunho && m.camera) };
     }
     // o banco devolve no máximo 1000 de cada vez (as mais recentes): pede as anteriores à última até acabar. Fotos com a mesma
     // hora na emenda vêm de novo (pede "antes de 1 ms depois") e saem repetidas pelo id
@@ -820,10 +891,15 @@
         if (oc.length) arr = arr.filter(function (x) { return oc.indexOf(x.cid) < 0; });
         arr.sort(function (a, b) { return String(b.em || '').localeCompare(String(a.em || '')); });
         itens = arr; carregando = false;
-        if (cidAuto) {
-          cidAuto = false;
-          var at = o.ativo ? o.ativo() : '';
-          if (!filtro.cid && at && itens.some(function (x) { return x.cid === at; })) filtro.cid = at;
+        // a aba Relatório é sempre de um contrato só: o do app, se tiver foto marcada; senão o primeiro que tiver
+        if (aba === 'relatorio' && !filtro.cid && itens.length) {
+          var at = ctAppId(), ord = contratos().map(function (c) { return c.id; });
+          if (at && itens.some(function (x) { return x.cid === at; })) filtro.cid = at;
+          else {
+            var cs = itens.map(function (x) { return x.cid || SEM; });
+            cs.sort(function (a, b) { var ia = ord.indexOf(a), ib = ord.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+            filtro.cid = cs[0];
+          }
         }
         render();
       }, function (e) {
@@ -1082,12 +1158,14 @@
       return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
         (!filtro.km || (it.km != null && isFinite(it.km) && Number(it.km) >= filtro.km[0] - FOLGA_KM && Number(it.km) <= filtro.km[1] + FOLGA_KM)) &&
         (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
-        (aba !== 'local' || !fLocal || (!!locais[it.id] && locais[it.id].situacao === fLocal));
+        (aba !== 'local' || !fLocal || (fLocal === 'semcar' ? semCar(it) : !!locais[it.id] && locais[it.id].situacao === fLocal));
     }
     function noPeriodo(it, iv) { if (!iv) return true; var k = diaDaFoto(it.em); return !!k && k >= iv[0] && k <= iv[1]; }
     function filtrar() {
       var iv = intervaloPer(per);
       lista = itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); });
+      var c0 = null;
+      multiCt = !filtro.cid && aba !== 'drive' && itens.some(function (it) { var k = it.cid || SEM; if (c0 === null) c0 = k; return k !== c0; });
     }
     // fotos que os outros filtros mostrariam, mas ficam fora do período (para não sumirem sem aviso)
     function foraDoPeriodo() {
@@ -1101,18 +1179,79 @@
         return '<option value="' + esc(p[0]) + '"' + (p[0] === sel0 ? ' selected' : '') + '>' + esc(p[1]) + '</option>';
       }).join('');
     }
-    // fila de contratos: Todos, cada contrato com fotos e as sem contrato (cada uma com a quantidade)
+    // o nº do contrato, para as fichas e as miniaturas ("314"); sem número, o nome de tela
+    function numCt(cid) { return cid === SEM ? 'Sem contrato' : (/(\d+)\s*$/.exec(curto(cid)) || [])[1] || curto(cid); }
+    function contagem() {
+      var n = {}, sem = 0;
+      itens.forEach(function (it) { if (it.cid) n[it.cid] = (n[it.cid] || 0) + 1; else sem++; });
+      return { n: n, sem: sem };
+    }
+    // fila de contratos: "Todos · 142", o contrato do app ("314 · 28", a um toque), o escolhido na lista (se for outro) e
+    // "Contratos (13) ▾", que abre a lista com busca. Na aba Relatório não há "Todos": o relatório é de um contrato só
     function contratosHtml() {
       if (!itens.length && !filtro.cid) return '';
-      var n = {}, sem = 0, ordem = contratos().map(function (c) { return c.id; });
-      itens.forEach(function (it) { if (it.cid) n[it.cid] = (n[it.cid] || 0) + 1; else sem++; });
-      if (filtro.cid && filtro.cid !== SEM && !n[filtro.cid]) n[filtro.cid] = 0;
-      var ids = Object.keys(n).sort(function (a, b) { var ia = ordem.indexOf(a), ib = ordem.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
-      function chip(v, t, k, cls) {
-        return '<button type="button" class="gl-ct' + (cls ? ' ' + cls : '') + '" data-ct="' + esc(v) + '" aria-pressed="' + (filtro.cid === v) + '">' + esc(t) + '<small>' + k + '</small></button>';
+      var c = contagem(), at = ctAppId(), ids = Object.keys(c.n), vistos = {};
+      function chip(v, k) {
+        vistos[v] = 1;
+        return '<button type="button" class="gl-ct' + (v === SEM ? ' sem' : '') + '" data-ct="' + esc(v) + '" aria-pressed="' + (filtro.cid === v) + '">' +
+          esc(v ? numCt(v) : 'Todos') + '<small> · ' + k + '</small></button>';
       }
-      return chip('', 'Todos', itens.length) + ids.map(function (id) { return chip(id, curto(id), n[id]); }).join('') +
-        (sem || filtro.cid === SEM ? chip(SEM, 'Sem contrato', sem, 'sem') : '');
+      var h = aba === 'relatorio' ? '' : chip('', itens.length);
+      if (at && (c.n[at] || filtro.cid === at || aba !== 'relatorio')) h += chip(at, c.n[at] || 0);
+      if (filtro.cid && !vistos[filtro.cid]) h += chip(filtro.cid, filtro.cid === SEM ? c.sem : c.n[filtro.cid] || 0);
+      var resto = ids.filter(function (id) { return !vistos[id]; }).length + (c.sem && !vistos[SEM] ? 1 : 0);
+      if (resto) h += '<button type="button" class="gl-ct gl-ct-l" data-g="cts" aria-haspopup="dialog">Contratos (' + (ids.length + (c.sem ? 1 : 0)) + ') ▾</button>';
+      return h;
+    }
+    // ---------------------------------------------------------------- lista de contratos ("Contratos ▾")
+    // busca; "Todos os contratos"; o do app em destaque; os outros por tipo, com quantas fotos e a data da última
+    function semAcento(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    function abrirCts() {
+      cl = { busca: '' };
+      renderCts();
+      var i = q('.gl-cl-busca');
+      if (i && !(window.matchMedia && matchMedia('(pointer:coarse)').matches)) i.focus();
+    }
+    function fecharCts() { var aberta = !!cl; cl = null; var el = root && q('.gl-sh.cl'); if (el) el.remove(); var b = aberta && q('.gl-ct-l'); if (b) b.focus(); }
+    function ctsLinhas() {
+      var c = contagem(), at = ctAppId(), cts = contratos(), ult = {}, bu = semAcento(cl.busca.trim());
+      itens.forEach(function (it) { var k = it.cid || SEM, e = String(it.em || ''); if (!ult[k] || e > ult[k]) ult[k] = e; });
+      function sub(cid) {
+        var co = cts.find(function (x) { return x.id === cid; }), l = co && /^lote\b/i.test(String(co.lote || '').trim()) ? String(co.lote).trim() : '';
+        var d = data(ult[cid]);
+        return [l, d ? 'última foto ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) : ''].filter(Boolean).join(' · ');
+      }
+      function linha(v, t, s, k, tag) {
+        if (bu && semAcento(t + ' ' + s + ' ' + (v ? numCt(v) : '')).indexOf(bu) < 0) return '';
+        return '<button type="button" class="gl-cl-l" data-ct="' + esc(v) + '" aria-pressed="' + (filtro.cid === v) + '"><span><b>' + esc(t) + '</b>' +
+          (tag ? ' <em>' + esc(tag) + '</em>' : '') + (s ? '<small>' + esc(s) + '</small>' : '') + '</span><i>' + k + '</i></button>';
+      }
+      var h = aba === 'relatorio' ? '' : linha('', 'Todos os contratos', 'as fotos de todos, cada uma com o nº do contrato', itens.length);
+      if (at && c.n[at]) h += linha(at, curto(at), sub(at), c.n[at], 'aberto no app');
+      var GR = [['pc', 'Pontos críticos'], ['conserva', 'Conservação'], ['sinal', 'Sinalização'], ['oae', 'Pontes (OAEs)'], ['', 'Outros']];
+      var tipo = function (cid) {
+        var co = cts.find(function (x) { return x.id === cid; });
+        return !co ? '' : co.tipo === 'oae' ? 'oae' : co.tipo === 'conserva' ? (co.rotuloTipo === 'sinal' ? 'sinal' : 'conserva') : 'pc';
+      };
+      var ordem = cts.map(function (x) { return x.id; }), ids = Object.keys(c.n).filter(function (id) { return id !== at; });
+      ids.sort(function (a, b) { var ia = ordem.indexOf(a), ib = ordem.indexOf(b); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); });
+      GR.forEach(function (g) {
+        var ls = ids.filter(function (id) { return tipo(id) === g[0]; }).map(function (id) { return linha(id, curto(id), sub(id), c.n[id]); }).join('');
+        if (ls) h += '<div class="gl-cl-g">' + esc(g[1]) + '</div>' + ls;
+      });
+      if (c.sem) h += linha(SEM, 'Sem contrato', 'fotos sem contrato escolhido', c.sem);
+      return h || '<div class="gl-cl-v">Nenhum contrato com “' + esc(cl.busca.trim()) + '”.</div>';
+    }
+    function renderCts() {
+      if (!root || !cl) return;
+      var el = q('.gl-sh.cl');
+      if (el) { el.querySelector('.gl-cl-ls').innerHTML = ctsLinhas(); return; }
+      el = document.createElement('div'); el.className = 'gl-sh cl';
+      el.innerHTML = '<div class="gl-sh-box" role="dialog" aria-modal="true" aria-labelledby="glClT"><div class="gl-sh-top"><h3 id="glClT">Escolher contrato</h3>' +
+        '<button type="button" class="btn small" data-g="cts-fechar">Fechar</button></div>' +
+        '<input type="search" class="gl-cl-busca" data-f="cl-busca" placeholder="Buscar contrato ou lote" aria-label="Buscar contrato ou lote" autocomplete="off">' +
+        '<div class="gl-cl-ls">' + ctsLinhas() + '</div></div>';
+      root.appendChild(el);
     }
     function filtrosHtml() {
       if (aba === 'drive') return driveFil();
@@ -1133,10 +1272,11 @@
       var h = '';
       // No aparelho: Todas · Só aqui · Na fila · No Drive (cada uma com a quantidade; só as que têm foto)
       if (aba === 'local' && itens.length) {
-        var cs = { aparelho: 0, fila: 0, enviada: 0 };
-        itens.forEach(function (it) { var lo = locais[it.id]; if (lo && cs[lo.situacao] != null) cs[lo.situacao]++; });
-        var chipL = function (v, t, k) { return '<button type="button" class="gl-chip" data-g="fl" data-v="' + v + '" aria-pressed="' + (fLocal === v) + '">' + t + ' · ' + k + '</button>'; };
+        var cs = { aparelho: 0, fila: 0, enviada: 0, semcar: 0 };
+        itens.forEach(function (it) { var lo = locais[it.id]; if (lo && cs[lo.situacao] != null) cs[lo.situacao]++; if (semCar(it)) cs.semcar++; });
+        var chipL = function (v, t, k, cls) { return '<button type="button" class="gl-chip' + (cls ? ' ' + cls : '') + '" data-g="fl" data-v="' + v + '" aria-pressed="' + (fLocal === v) + '">' + t + ' · ' + k + '</button>'; };
         h += '<div class="gl-chips" role="group" aria-label="Situação das fotos">' + chipL('', 'Todas', itens.length) +
+          (cs.semcar || fLocal === 'semcar' ? chipL('semcar', 'Sem carimbo', cs.semcar, 'warn') : '') +
           [['aparelho', 'Só aqui'], ['fila', 'Na fila'], ['enviada', 'No Drive']].filter(function (x) { return cs[x[0]] || fLocal === x[0]; })
             .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>';
       }
@@ -1146,9 +1286,11 @@
       }
       if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
       var iv = intervaloPer(per);
-      if (itens.length && nv() >= 2) {
+      if (itens.length && (nv() >= 2 || multiCt)) {
         var g = modo();
-        h += '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).map(function (k) {
+        h += '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).filter(function (k) {
+          return k === 'contrato' ? multiCt : k === 'pessoa' ? nv() >= 2 : true;
+        }).map(function (k) {
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>';
       }
@@ -1183,10 +1325,15 @@
     function grupos() {
       var g = modo(), mapa = {}, ordem = [], diario = porDia();
       lista.forEach(function (it, i) {
-        var k = g === 'pessoa' ? it.autor || 'Sem nome' : grupoData(it, diario);
+        var k = g === 'pessoa' ? it.autor || 'Sem nome' : g === 'contrato' ? it.cid || SEM : grupoData(it, diario);
         if (!mapa[k]) { mapa[k] = []; ordem.push(k); }
         mapa[k].push(i);
       });
+      if (g === 'contrato') {
+        var oc = contratos().map(function (c) { return c.id; });
+        ordem.sort(function (a, b) { var ia = oc.indexOf(a), ib = oc.indexOf(b); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); });
+        return ordem.map(function (k) { return { nome: k === SEM ? 'Sem contrato' : curto(k), idx: mapa[k], ct: k }; });
+      }
       if (g !== 'mes') ordem.sort(function (a, b) { return a.localeCompare(b, 'pt-BR', { numeric: true }); });
       return ordem.map(function (k) { return { nome: k, idx: mapa[k] }; });
     }
@@ -1217,6 +1364,7 @@
     function badge(it) {
       if (selecionando) return '';
       if (aba === 'deletadas') return '<span class="gl-b erro">Apagada</span>';
+      if (semCar(it)) return '<span class="gl-b sc">Sem carimbo</span>';
       if (it.origem === 'banco' && !it.pid && !ehCons(it.cid)) return '<span class="gl-b sp">Sem ponto</span>';
       return '';
     }
@@ -1268,12 +1416,23 @@
           else if (inf.erro === 'banco') t += ' (o banco não aceitou o registro agora' + (quando || '; tenta de novo sozinho') + ')';
           else if (!(o.driveUrl && o.driveUrl())) t += ' (envio ao Drive não configurado)';
         } else if (!soAp) t += ' · todas já foram enviadas';
-        if (soAp) t += ' · ' + plural(soAp, 'só no aparelho (não vai para o Drive)', 'só no aparelho (não vão para o Drive)');
+        var sc = all.filter(function (x) { return x.semCar && x.situacao === 'aparelho'; }), soApC = soAp - sc.length, aviso = '';
+        if (soApC) t += ' · ' + plural(soApC, 'só no aparelho (não vai para o Drive)', 'só no aparelho (não vão para o Drive)');
         var b = '';
-        if (soAp) b += '<button type="button" class="btn small primary" data-g="enviar-ap">Enviar ' + (soAp === 1 ? 'esta' : 'as ' + soAp) + ' ao Drive</button>';
+        if (soApC) b += '<button type="button" class="btn small primary" data-g="enviar-ap">Enviar ' + (soApC === 1 ? 'esta' : 'as ' + soApC) + ' ao Drive</button>';
+        // as da câmera ainda sem carimbo: o aviso com o caminho (a Foto com carimbo, com o GPS de cada uma)
+        if (sc.length) {
+          var cts = [], kms = sc.map(function (x) { return x.km; }).filter(function (k) { return k != null && isFinite(k); }).map(Number);
+          sc.forEach(function (x) { var n0 = x.cid ? 'Contrato ' + numCt(x.cid) : ''; if (n0 && cts.indexOf(n0) < 0) cts.push(n0); });
+          var kmT = kms.length ? (Math.min.apply(null, kms) === Math.max.apply(null, kms) ? kmCurto(kms[0]) : kmCurto(Math.min.apply(null, kms)) + ' a ' + kmCurto(Math.max.apply(null, kms)).replace('km ', '')) : '';
+          aviso = '<div class="gl-sc"><b>⚠ ' + (sc.length === 1 ? '1 foto da câmera está sem carimbo' : sc.length + ' fotos da câmera estão sem carimbo') + '</b>' +
+            '<span>' + esc([cts.slice(0, 2).join(', '), kmT, 'guardadas só neste aparelho'].filter(Boolean).join(' · ')) + '. <b>Não vão ao Drive sem carimbo.</b></span>' +
+            '<span class="gl-sc-b"><button type="button" class="btn primary" data-g="carimbar-todas">✎ Colocar carimbo ' + (sc.length === 1 ? 'nela' : 'nas ' + sc.length) + '</button>' +
+            '<button type="button" class="btn" data-g="sel-semcar">Selecionar</button></span></div>';
+        }
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         b += '<button type="button" class="gl-cfg" data-g="cfg">' + IC_CFG + 'Espaço e envio</button>';
-        return '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
+        return aviso + '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
       }
       if (aba === 'drive') {
         var cartoes = emCartoes(), base = cartoes ? itens.filter(noCaminho) : lista;
@@ -1336,11 +1495,12 @@
         }
         return '<div class="gl-vazio">' + (aba === 'drive' && dbusca.trim() ? 'Nada no Drive com “' + esc(dbusca.trim()) + '” aqui.' : 'Nenhuma foto com esses filtros.') + '</div>';
       }
-      var rotG = modo() === 'pessoa' ? 'Selecionar as da pessoa' : porDia() ? 'Selecionar o dia' : 'Selecionar a semana';
+      var rotG = modo() === 'pessoa' ? 'Selecionar as da pessoa' : modo() === 'contrato' ? 'Selecionar as do contrato' : porDia() ? 'Selecionar o dia' : 'Selecionar a semana';
       return grupos().map(function (g) {
         var bg = g.idx.reduce(function (a, i) { return a + (lista[i].tamanho || 0); }, 0);
         return '<h3 class="gl-g">' + esc(g.nome) + ' <small>' + plural(g.idx.length, 'foto', 'fotos') + (bg && !selecionando ? ' · ' + tam(bg) : '') + '</small>' +
-          (selecionando ? '<button type="button" data-g="sel-grupo" data-idx="' + g.idx.join(',') + '">' + rotG + '</button>' : '') + '</h3>' +
+          (selecionando ? '<button type="button" data-g="sel-grupo" data-idx="' + g.idx.join(',') + '">' + rotG + '</button>' :
+            g.ct ? '<button type="button" data-ct="' + esc(g.ct) + '" aria-label="Ver só ' + esc(g.nome) + '">Só este ›</button>' : '') + '</h3>' +
           '<div class="gl-grid">' + g.idx.map(function (i) { return tile(lista[i], i); }).join('') + '</div>';
       }).join('') + legendaHtml();
     }
@@ -1386,36 +1546,57 @@
       el.innerHTML = html;
     }
     function selecionadas() { return lista.filter(function (it) { return sel[it.id]; }); }
-    // ações possíveis para um conjunto de fotos, conforme a aba e o acesso
-    function acoes(ls) {
-      var n = nv(), a = [];
+    // ações possíveis para um conjunto de fotos, conforme a aba e o acesso. A estrela mostra a situação e o texto diz o que o
+    // toque faz: "☆ Pôr no relatório" (fora), "★ No relatório" amarelo (dentro; tocar tira); seleção mista nos dois sentidos.
+    // Na seleção o 1º botão é o que mais se faz ali (enviar ao Drive, pôr no relatório); na foto aberta, Baixar
+    function acoes(ls, umaSo) {
+      var n = nv(), a = [], est = [];
       if (!ls.length) return a;
-      a.push({ k: 'baixar', t: ls.length === 1 ? 'Baixar' : 'Baixar (' + ls.length + ')', c: 'primary' });
+      var cnt = function (k) { return ls.length > 1 ? ' (' + k + ')' : ''; };
       if (n >= 2 && aba !== 'local' && aba !== 'deletadas' && aba !== 'drive') {
-        var todas = ls.every(function (x) { return x.relatorio; });
-        a.push({ k: todas ? 'tirar-rel' : 'por-rel', t: todas ? '☆ Tirar do relatório' : '★ Relatório' });
+        var dentro = ls.filter(function (x) { return x.relatorio; }).length, fora = ls.length - dentro;
+        if (!fora) est.push({ k: 'tirar-rel', t: '★ No relatório' + cnt(dentro), c: 'est1', p: true });
+        else if (!dentro) est.push({ k: 'por-rel', t: '☆ Pôr no relatório' + cnt(fora), c: 'est0', p: false });
+        else est.push({ k: 'por-rel', t: fora === 1 ? '☆ Pôr a que falta' : '☆ Pôr as ' + fora + ' que faltam', c: 'primary' }, { k: 'tirar-rel', t: dentro === 1 ? '★ Tirar a marcada' : '★ Tirar as ' + dentro });
       }
       var ap = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'aparelho'; }).length;
       // a que está subindo agora não dá para segurar: o arquivo já vai a caminho do Drive
       var sobe = sobemAgora();
       var fi = ls.filter(function (x) { return locais[x.id] && locais[x.id].situacao === 'fila' && locais[x.id].etapa !== 'registro' && sobe.indexOf(x.id) < 0; }).length;
       var mov = aba !== 'deletadas' ? ls.filter(podeMover).length : 0;
-      if (mov) a.push({ k: 'mover', t: 'Contrato e ponto' + (ls.length > 1 ? ' (' + mov + ')' : '') });
-      if (ap) a.push({ k: 'enviar-drive', t: 'Enviar ao Drive' + (ls.length > 1 ? ' (' + ap + ')' : ''), c: 'primary' });
+      var bx = { k: 'baixar', t: '⤓ Baixar' + cnt(ls.length) }, nsc = ls.filter(semCar).length;
+      var env = ap > nsc ? { k: 'enviar-drive', t: '☁ Enviar ao Drive' + cnt(ap) } : null;
+      var car = nsc ? { k: 'carimbar', t: '✎ Pôr o carimbo' + cnt(nsc), c: 'primary' } : null;
+      if (umaSo) { if (car) a.push(car); else bx.c = 'primary'; a.push(bx); a = a.concat(est); if (env) a.push(env); }
+      else {
+        if (car) a.push(car);
+        else if (env) env.c = 'primary';
+        if (env) a.push(env);
+        a = a.concat(est);
+        if (!a.length) bx.c = 'primary';
+        a.push(bx);
+      }
+      if (mov) a.push({ k: 'mover', t: '⌖ Contrato e ponto' + (ls.length > 1 ? ' (' + mov + ')' : '') });
       if (fi) a.push({ k: 'segurar', t: 'Não enviar' + (ls.length > 1 ? ' (' + fi + ')' : '') });
-      if (ls.some(function (x) { return locais[x.id]; })) a.push({ k: 'apagar-local', t: 'Apagar do celular', c: 'danger' });
-      if (n >= 2 && aba !== 'deletadas' && ls.some(function (x) { return x.driveId && (x.origem === 'banco' || x.situacao === 'enviada'); })) a.push({ k: 'apagar-drive', t: 'Apagar do Drive', c: 'danger' });
+      if (ls.some(function (x) { return locais[x.id]; })) a.push({ k: 'apagar-local', t: '🗑 Apagar do celular', c: 'danger' });
+      if (n >= 2 && aba !== 'deletadas' && ls.some(function (x) { return x.driveId && (x.origem === 'banco' || x.situacao === 'enviada'); })) a.push({ k: 'apagar-drive', t: '🗑 Apagar do Drive', c: 'danger' });
       if (n >= 3 && aba === 'deletadas') a.push({ k: 'restaurar', t: 'Restaurar', c: 'primary' });
       return a;
+    }
+    function botaoAcao(a, um) {
+      return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '"' + (um ? ' data-um="1"' : '') + (a.p != null ? ' aria-pressed="' + a.p + '"' : '') + '>' + esc(a.t) + '</button>';
     }
     function barHtml() {
       if (ocupado) return '<div class="gl-bar"><span class="gl-prog">' + esc(ocupado) + '</span><button type="button" class="btn small" data-g="cancelar">Parar</button></div>';
       if (!selecionando) return '';
       var ls = selecionadas();
       var bs0 = ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
-      return '<div class="gl-bar"><span class="gl-n">' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') + (bs0 ? ' · ' + tam(bs0) : '') : 'Toque nas fotos') + '</span>' +
-        acoes(ls).map(function (a) { return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '">' + esc(a.t) + '</button>'; }).join('') +
-        '<button type="button" class="btn small" data-g="sair-sel">Cancelar</button></div>';
+      var dentro = ls.filter(function (x) { return x.relatorio; }).length, noDrive = ls.filter(function (x) { return x.origem === 'banco' || (locais[x.id] && locais[x.id].situacao === 'enviada'); }).length;
+      var sub = !ls.length ? '' : [bs0 ? tam(bs0) : '', aba === 'local' ? (noDrive ? noDrive + ' no Drive' : 'nenhuma no Drive') : dentro ? (dentro === ls.length ? (ls.length === 1 ? 'já está' : 'todas já estão') : dentro + (dentro === 1 ? ' já está' : ' já estão')) + ' no relatório' : ''].filter(Boolean).join(' · ');
+      var todasN = lista.length && ls.length < lista.length ? '<button type="button" class="btn small" data-g="todas">Todas (' + lista.length + ')</button>' : '';
+      return '<div class="gl-bar"><div class="gl-bar-top"><span class="gl-n"><b>' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') : 'Toque nas fotos') + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+        todasN + '<button type="button" class="btn small" data-g="sair-sel">Cancelar</button></div>' +
+        (ls.length ? '<div class="gl-bar-acts">' + acoes(ls).map(function (a) { return botaoAcao(a); }).join('') + '</div>' : '') + '</div>';
     }
     function render() {
       if (!root) return;
@@ -1438,40 +1619,46 @@
       q('.gl-info').innerHTML = carregando && !itens.length ? '' : infoHtml();
       corpo.innerHTML = corpoHtml();
       corpo.scrollTop = top;
-      q('.gl-barhost').innerHTML = barHtml();
+      renderBar();
       observar();
       if (ver >= 0) renderVer();
-      // pouca foto, sem rolagem: os filtros voltam
-      if (rec && corpo.scrollHeight <= corpo.clientHeight + 8) recolher(false); else renderMini();
+      renderMini();   // recolhidos continuam recolhidos, mesmo com poucas fotos: só "Filtros ▾" abre
     }
     // ---------------------------------------------------------------- filtros recolhidos ao rolar
-    // Rolou as fotos para baixo: abas, contratos, filtros e informações somem e fica uma linha com o resumo. Rolou para cima,
-    // chegou ao topo ou tocou na linha: voltam. Só quando os filtros tomam mais de 30% da altura (celular; no computador sobra espaço).
-    var rec = false, recY = 0, recSobe = 0;
+    // Rolou as fotos para baixo (uns 90 px seguidos): abas, contratos, filtros e informações somem e fica uma linha com o resumo.
+    // Rolar não abre de volta (nem subir, nem chegar ao topo): só "Filtros ▾". Só quando os filtros tomam mais de 30% da altura
+    // (celular; no computador sobra espaço).
+    var rec = false, recY = 0, recDesce = 0;
     function filtrosAltos() {
       var b = q('.gl-body');
       return !!b && b.getBoundingClientRect().top - root.getBoundingClientRect().top > root.clientHeight * 0.3;
     }
+    // quanto as fotos sobem quando os filtros somem (o que some menos a linha do resumo, uns 60 px)
+    function someAoRecolher() { var b = q('.gl-body'); return Math.max(0, b.getBoundingClientRect().top - root.getBoundingClientRect().top - 60); }
     function recolher(on) {
       if (!root) return;
-      rec = !!on; recSobe = 0;
+      rec = !!on; recDesce = 0;
       root.classList.toggle('gl-rec', rec);
       renderMini();
     }
     function aoRolar() {
       var b = q('.gl-body'), t = b.scrollTop, d = t - recY;
       recY = t;
-      if (t < 8) { if (rec) recolher(false); return; }
-      if (!rec) { if (d > 4 && t > 60 && filtrosAltos()) recolher(true); return; }
-      recSobe = d < 0 ? recSobe + d : 0;
-      if (recSobe < -60) recolher(false);
+      if (rec) return;
+      if (d < 0) recDesce = 0; else recDesce += d;   // subir zera; evento sem movimento não conta
+      if (recDesce >= 90 && filtrosAltos() && t >= someAoRecolher()) {
+        // as fotos não pulam: a altura que some em cima sai da rolagem
+        var y0 = b.getBoundingClientRect().top;
+        recolher(true);
+        b.scrollTop = Math.max(0, b.scrollTop - (y0 - b.getBoundingClientRect().top));
+        recY = b.scrollTop;
+      }
     }
     // o resumo sai do que está escolhido nas abas e filtros (escondidos, mas desenhados)
     function resumoFiltros() {
-      var txt = function (el) { return el ? (el.firstChild && el.firstChild.nodeType === 3 ? el.firstChild.textContent : el.textContent).trim() : ''; };
       var ps = [], tr = q('.gl-trilha [aria-current]'), ct = q('.gl-ct[aria-pressed="true"]');
       if (tr) ps.push(tr.textContent.trim());
-      else if (ct) ps.push(txt(ct));
+      else if (ct) { var cv = ct.getAttribute('data-ct'); ps.push(!cv ? 'Todos os contratos' : cv === SEM ? 'Sem contrato' : curto(cv)); }
       Array.prototype.forEach.call(root.querySelectorAll('.gl-fil select'), function (s) {
         if (s.getAttribute('data-f') !== 'agrupar' && s.value) ps.push(s.options[s.selectedIndex].textContent.trim());
       });
@@ -1479,18 +1666,21 @@
         if (c.getAttribute('data-g') === 'dr-modo') return;
         var s = c.querySelector('span'); ps.push((s ? s.textContent : c.textContent).replace(/\s*·\s*\d+$/, '').trim());
       });
-      ps.push(plural(lista.length, 'foto', 'fotos'));
+      if (!tr && !ct && aba !== 'drive') ps.unshift('Todos os contratos');
+      if (!q('.gl-per[aria-pressed="true"]') && !q('.gl-pers .gl-chip[aria-pressed="true"]')) ps.push(rotuloPer(per));
       return ps.filter(Boolean).join(' · ');
     }
     function renderMini() {
       if (!root) return;
       var m = q('.gl-mini'), tab = q('.gl-tab[aria-selected="true"]');
+      // uma linha: a aba, o resumo (cortado com "…" se não couber) e o número de fotos inteiro; "Filtros ▾" de 44 px
       if (m) m.innerHTML = rec ? '<button type="button" class="gl-mini-t" data-g="rec-abrir" aria-label="Mostrar os filtros">' + (tab ? '<i>' + esc(tab.firstChild.textContent) + '</i>' : '') +
-        '<span>' + esc(resumoFiltros()) + '</span></button><button type="button" class="gl-mini-f" data-g="rec-abrir" aria-expanded="false">Filtros \u25be</button>' : '';
+        '<span><span>' + esc(resumoFiltros()) + '</span><b>' + esc(plural(lista.length, 'foto', 'fotos')) + '</b></span></button>' +
+        '<button type="button" class="gl-mini-f" data-g="rec-abrir" aria-expanded="false">Filtros \u25be</button>' : '';
       var info = q('.gl-info'), bt = info && info.querySelector('.gl-recolher');
       if (!rec && info && !bt && lista.length > 6 && filtrosAltos()) info.insertAdjacentHTML('beforeend', '<div class="gl-recolher"><button type="button" data-g="rec-fechar">\u25b4 Recolher filtros</button></div>');
     }
-    function renderBar() { if (root) q('.gl-barhost').innerHTML = barHtml(); }
+    function renderBar() { if (!root) return; q('.gl-barhost').innerHTML = barHtml(); root.classList.toggle('gl-selon', selecionando && !ocupado); }
     function renderEnv() { if (root) { var e = q('.gl-env'); if (e) e.innerHTML = envioHtml() + baixaHtml() + (semRede && aba !== 'local' ? '<div class="gl-off">Sem conexão: mostrando ' + (semRede === 1 ? 'a foto baixada' : 'as ' + semRede + ' fotos baixadas') + ' neste aparelho.</div>' : ''); } }
 
     // ---------------------------------------------------------------- barra de envio ao Drive
@@ -1760,40 +1950,51 @@
       if (!src) pedirMini(it.id);
       // a anterior e a próxima já pedem a miniatura: ao passar o dedo, não entra uma foto em branco
       [lista[ver - 1], lista[ver + 1]].forEach(function (x) { if (x && !miniDe(x)) pedirMini(x.id); });
-      var linhas = [];
+      // embaixo: o título e "Detalhes ▾"; a marca do relatório e os avisos que pedem ação (com "Corrigir") sempre à vista;
+      // os detalhes abrem por cima da foto, sem ela pular, e o app lembra se a pessoa os deixou abertos
       var oae = ehOae(contratos().find(function (x) { return x.id === it.cid; })), cons = ehCons(it.cid);
-      linhas.push('<b>' + esc([it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome && !cons ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : cons ? '' : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ')) + '</b>' +
-        (!it.pid && !cons && podeMover(it) ? ' <span class="gl-warn">· não entra no relatório</span>' : '') +
-        (cons && it.relatorio && it.km == null ? ' <span class="gl-warn">· sem km: vai ao relatório sem o km</span>' : ''));
-      linhas.push(esc([kmTxt(it.km), it.lat != null ? Number(it.lat).toFixed(5) + ', ' + Number(it.lng).toFixed(5) : '', hora(it.em)].filter(Boolean).join(' · ')));
-      if (it.autor) linhas.push('Tirada por ' + esc(it.autor));
+      var tit = [it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome && !cons ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : cons ? '' : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ');
+      var semPto = !it.pid && !cons && podeMover(it), corrigir = ' · <button type="button" class="gl-corr" data-g="mover" data-um="1">Corrigir</button>';
+      var marca = [];
+      if (semCar(it)) marca.push('<span class="gl-warn">⚠ Sem carimbo: não vai ao Drive</span> · <button type="button" class="gl-corr" data-g="carimbar" data-um="1">Colocar carimbo</button>');
+      if (it.relatorio && semPto) marca.push('<span class="gl-warn">★ Marcada' + (it.relPor ? ' por ' + esc(it.relPor) : '') + ' · falta ' + (oae ? 'a ponte' : 'o ponto') + ' para sair no PDF</span>' + corrigir);
+      else if (it.relatorio) marca.push('<span class="gl-est">★ No relatório' + (it.relPor ? ' · marcada por ' + esc(it.relPor) : '') + '</span>');
+      else if (semPto) marca.push('<span class="gl-warn">⚠ ' + (oae ? 'Sem ponte' : 'Sem ponto') + ': não entra no relatório</span>' + corrigir);
+      if (cons && it.relatorio && it.km == null) marca.push('<span class="gl-warn">⚠ Sem km: vai ao relatório sem o km</span>');
+      if (it.situacao === 'deletada') marca.push('<span class="gl-warn">Apagada do Drive' + (it.delPor ? ' por ' + esc(it.delPor) : '') + (it.delEm ? ' em ' + esc(hora(it.delEm)) : '') + '</span>');
+      var linhas = [];
+      linhas.push(esc([kmTxt(it.km), it.lat != null ? Number(it.lat).toFixed(5) + ', ' + Number(it.lng).toFixed(5) : ''].filter(Boolean).join(' · ') || 'Sem km e sem coordenadas'));
+      linhas.push(esc([hora(it.em), it.autor ? 'tirada por ' + it.autor : ''].filter(Boolean).join(' · ')));
       if (it.origem === 'local') {
-        linhas.push(it.situacao === 'enviada' ? 'Enviada ao Drive' + (it.enviada ? ' em ' + esc(hora(new Date(it.enviada).toISOString())) : '') + ' · também guardada neste aparelho'
+        linhas.push(it.situacao === 'enviada' ? 'No Drive' + (it.enviada ? ' desde ' + esc(hora(new Date(it.enviada).toISOString())) : '') + ' · também guardada neste aparelho'
           : it.situacao === 'aparelho' ? 'Guardada só neste aparelho · não vai para o Drive (toque em Enviar ao Drive se quiser)'
-          : 'Guardada neste aparelho · <span class="gl-warn">ainda não enviada</span>');
+          : 'Guardada neste aparelho · <span class="gl-warn">na fila do Drive</span>');
       } else {
-        if (it.relatorio) linhas.push('★ No relatório fotográfico' + (it.relPor ? ' (marcada por ' + esc(it.relPor) + ')' : ''));
-        if (it.situacao === 'deletada') linhas.push('Apagada do Drive' + (it.delPor ? ' por ' + esc(it.delPor) : '') + (it.delEm ? ' em ' + esc(hora(it.delEm)) : ''));
         if (it.origem === 'drive' && (it.pastas || []).length) linhas.push('No Drive: ' + esc(it.pastas.join(' › ')));
-        if (locais[it.id]) linhas.push('Também guardada neste aparelho');
-        else if (it.driveId && guardadas[it.driveId]) linhas.push(it.origem === 'drive' ? 'Já guardada neste aparelho (abre sem sinal)' : 'Foto inteira já baixada neste aparelho');
+        else if (it.origem === 'banco') linhas.push('No Drive da equipe' + (locais[it.id] ? ' · também guardada neste aparelho' : it.driveId && guardadas[it.driveId] ? ' · foto inteira já baixada' : ''));
+        if (it.origem === 'drive' && it.driveId && guardadas[it.driveId]) linhas.push('Já guardada neste aparelho (abre sem sinal)');
       }
-      if (it.tamanho) linhas.push(esc(it.nome) + ' · ' + tam(it.tamanho));
+      if (it.tamanho) linhas.push('<span class="gl-arq">' + esc(it.nome) + ' · ' + tam(it.tamanho) + '</span>');
       if (it.desc) linhas.push('<span class="gl-desc">' + esc(it.desc) + '</span>');
+      var lk = nv() >= 3 ? linkDrive(it.driveId) : '';
+      if (lk) linhas.push('<a class="gl-lk" href="' + esc(lk) + '" target="_blank" rel="noopener noreferrer">Abrir no Drive ↗</a>');
       var temGrande = grande && grande.id === it.id;
       var local = locais[it.id] && locais[it.id].temArquivo;
       var leve = temGrande ? ''
         : carregando === it.id ? '<div class="gl-leve">Carregando a foto inteira' + (it.tamanho && !local && !guardadas[it.driveId] ? ' (' + tam(it.tamanho) + ')' : '') + '…</div>'
         : !local && it.driveId ? '<div class="gl-leve">Prévia leve <button type="button" class="btn small" data-g="grande">Ver a foto inteira' + (it.tamanho ? ' (' + tam(it.tamanho) + ')' : '') + '</button></div>' : '';
-      var acts = acoes([it]).map(function (a) { return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '" data-um="1">' + esc(a.t) + '</button>'; }).join('');
-      var lk = nv() >= 3 ? linkDrive(it.driveId) : '';
-      if (lk) acts += '<a class="btn small" href="' + esc(lk) + '" target="_blank" rel="noopener noreferrer">Abrir no Drive</a>';
+      var acts = acoes([it], true).map(function (a) { return botaoAcao(a, true); }).join('');
+      v.classList.toggle('det', detAberto);
       v.innerHTML = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← Voltar</button>' +
         '<span class="gl-c">' + (ver + 1) + ' de ' + lista.length + '</span>' +
         '<button type="button" class="btn small gl-nav" data-g="ant" aria-label="Anterior"' + (ver ? '' : ' disabled') + '>‹</button>' +
         '<button type="button" class="btn small gl-nav" data-g="prox" aria-label="Próxima"' + (ver < lista.length - 1 ? '' : ' disabled') + '>›</button></div>' +
-        '<div class="gl-ver-img">' + (src ? '<img alt="" src="' + esc(src) + '">' : '<img alt="">') + leve + '</div>' +
-        '<div class="gl-ver-info">' + linhas.join('<br>') + '</div><div class="gl-ver-acts">' + acts + '</div>';
+        '<div class="gl-ver-meio"><div class="gl-ver-img">' + (src ? '<img alt="" src="' + esc(src) + '">' : '<img alt="">') + leve +
+        (it.relatorio ? '<span class="gl-ver-selo">★ No relatório</span>' : '') + '</div>' +
+        '<div class="gl-ver-det" role="region" aria-label="Detalhes da foto"><b>Detalhes</b><br>' + linhas.join('<br>') + '</div></div>' +
+        '<div class="gl-ver-info"><div class="gl-ver-tit"><b>' + esc(tit) + '</b><button type="button" class="btn small gl-det-bt" data-g="detalhes" aria-expanded="' + detAberto + '">Detalhes ' + (detAberto ? '▴' : '▾') + '</button></div>' +
+        (marca.length ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') + '</div>' +
+        '<div class="gl-ver-acts">' + acts + '</div>';
     }
 
     // ---------------------------------------------------------------- ações
@@ -1818,17 +2019,31 @@
       }
       abrirBaixar(ls);
     }
-    function relatorio(ls, marcar) {
-      var l = login(), ids = ls.filter(function (x) { return x.origem === 'banco' && x.situacao === 'ativa'; }).map(function (x) { return x.id; });
+    // marca ou tira do relatório só as que mudam; ao tirar, o aviso embaixo tem "Desfazer" por alguns segundos
+    function relatorio(ls, marcar, desfazendo) {
+      var l = login(), muda = ls.filter(function (x) { return x.origem === 'banco' && x.situacao === 'ativa' && !!x.relatorio !== marcar; });
+      var ids = muda.map(function (x) { return x.id; }), antes = {};
+      muda.forEach(function (x) { antes[x.id] = x.relPor || ''; });
       if (!l || !ids.length) return;
       o.Banco.fotoRelatorio(l.codigo, ids, marcar).then(function () {
-        itens.forEach(function (x) { if (ids.indexOf(x.id) >= 0) { x.relatorio = marcar; x.relPor = marcar ? l.nome || '' : ''; } });
+        muda.forEach(function (x) { x.relatorio = marcar; x.relPor = marcar ? (desfazendo ? antes[x.id] || l.nome || '' : l.nome || '') : ''; });
         if (aba === 'relatorio' && !marcar) itens = itens.filter(function (x) { return ids.indexOf(x.id) < 0; });
-        o.toast(marcar ? plural(ids.length, 'foto marcada', 'fotos marcadas') + ' para o relatório.' : plural(ids.length, 'foto tirada', 'fotos tiradas') + ' do relatório.');
+        if (aba === 'relatorio' && marcar && desfazendo) { carregar(); return; }
+        if (marcar) { fecharAviso(); o.toast(desfazendo ? 'Voltou para o relatório.' : plural(ids.length, 'foto marcada', 'fotos marcadas') + ' para o relatório.'); }
+        else avisoDesfazer(ids.length === 1 ? 'Tirada do relatório' : ids.length + ' tiradas do relatório', function () { relatorio(muda, true, true); });
         if (ver >= 0 && aba === 'relatorio' && !marcar) fecharVer();
         render();
       }, function (e) { o.toast(msgErro(e), 6000); });
     }
+    var desfazerFn = null, avisoT = null;
+    function avisoDesfazer(txt, fn) {
+      if (!root) return;
+      var el = q('.gl-toast');
+      if (!el) { el = document.createElement('div'); el.className = 'gl-toast'; el.setAttribute('role', 'status'); root.appendChild(el); }
+      el.innerHTML = '<span>' + esc(txt) + '</span><button type="button" data-g="desfazer">Desfazer</button>';
+      desfazerFn = fn; clearTimeout(avisoT); avisoT = setTimeout(fecharAviso, 7000);
+    }
+    function fecharAviso() { desfazerFn = null; clearTimeout(avisoT); var el = root && q('.gl-toast'); if (el) el.remove(); }
     function apagarLocal(ls) {
       var loc = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return locais[x.id]; });
       var nao = loc.filter(function (x) { return x.situacao !== 'enviada'; });
@@ -1862,8 +2077,12 @@
       });
     }
     // as que ficaram só no aparelho vão para a fila do Drive (sim), ou as da fila que ainda não subiram ficam só aqui (não)
-    function enviarDrive(ls, sim) {
-      var ids = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return x.id; });
+    function enviarDrive(ls, sim, conferido) {
+      if (sim && !conferido) {
+        var sc = ls.filter(semCar);
+        if (sc.length) { perguntaCarimbo(sc, ls.filter(function (x) { return !semCar(x) && locais[x.id] && locais[x.id].situacao === 'aparelho'; })); return; }
+      }
+      var ids = ls.filter(function (x) { return locais[x.id] && !(sim && semCar(x)); }).map(function (x) { return x.id; });
       if (!ids.length || !o.drive || !o.drive.enviar) return;
       var sobe = !sim ? sobemAgora().filter(function (id) { return ids.indexOf(id) >= 0; }).length : 0;
       o.drive.enviar(ids, sim).then(function (m) {
@@ -2383,15 +2602,55 @@
       else if (k === 'apagar-drive') moverDrive(ls, true);
       else if (k === 'restaurar') moverDrive(ls, false);
       else if (k === 'mover') abrirMover(ls.filter(podeMover));
+      else if (k === 'carimbar') carimbar(ls);
     }
+    // ---------------------------------------------------------------- fotos sem carimbo
+    // abre a Foto com carimbo com elas (o arquivo do aparelho, o GPS e a hora do clique; o mesmo id, para a carimbada entrar
+    // no lugar)
+    function carimbar(ls, enviar) {
+      var sc = ls.filter(semCar);
+      if (!sc.length || !o.carimbar || !o.drive || !o.drive.arquivo) return;
+      var r0 = root;
+      Promise.all(sc.map(function (x) { return o.drive.arquivo(x.id).then(null, function () { return null; }); })).then(function (bs) {
+        if (!root || root !== r0) return;
+        var fotos = [];
+        bs.forEach(function (b, i) {
+          var x = sc[i], dt = data(x.em) || new Date();
+          if (b) fotos.push({ file: new File([b], x.nome || 'foto.jpg', { type: 'image/jpeg', lastModified: dt.getTime() }),
+            meta: { live: true, date: dt, ll: x.lat != null && x.lng != null ? [Number(x.lat), Number(x.lng)] : null, acc: null, uid: x.id, enviar: !!enviar,
+              cid: x.cid || null, pid: x.pid || null } });
+        });
+        if (!fotos.length) { o.toast('Não foi possível abrir ' + (sc.length === 1 ? 'esta foto' : 'estas fotos') + ' neste aparelho.', 5000); return; }
+        if (fotos.length < sc.length) o.toast(plural(sc.length - fotos.length, 'foto não abriu', 'fotos não abriram') + ' (o arquivo não está mais neste aparelho).', 6000);
+        if (ver >= 0) fecharVer();
+        sel = {}; selecionando = false; render();
+        o.carimbar(fotos);
+      });
+    }
+    // "Enviar ao Drive" com foto sem carimbo: pôr o carimbo e enviar, ou mandar só as que já têm (nunca "enviar sem carimbo")
+    function perguntaCarimbo(sc, ok) {
+      ec = { sc: sc, ok: ok };
+      var n = sc.length + ok.length, el = document.createElement('div');
+      el.className = 'gl-sh ec';
+      el.innerHTML = '<div class="gl-sh-box" role="dialog" aria-modal="true" aria-labelledby="glEcT"><h3 id="glEcT" class="gl-ec-t">' +
+        (ok.length ? sc.length + ' das ' + n + ' fotos estão sem carimbo' : sc.length === 1 ? 'A foto está sem carimbo' : 'As ' + sc.length + ' fotos estão sem carimbo') + '</h3>' +
+        '<p class="gl-ec-p">Foto sem carimbo não vai ao Drive. Ponha o carimbo ' + (sc.length === 1 ? 'nela' : 'nelas') + ' antes' + (ok.length ? ', ou mande agora só as que já têm.' : '.') + '</p>' +
+        '<button type="button" class="btn primary" data-g="ec-carimbo">✎ Pôr o carimbo e enviar ' + (n === 1 ? 'a foto' : 'as ' + n) + '</button>' +
+        (ok.length ? '<button type="button" class="btn" data-g="ec-so">☁ Enviar só ' + (ok.length === 1 ? 'a que tem carimbo' : 'as ' + ok.length + ' com carimbo') + '</button>' : '') +
+        '<button type="button" class="gl-ec-x" data-g="ec-fechar">Cancelar</button></div>';
+      root.appendChild(el);
+      el.querySelector('[data-g="ec-carimbo"]').focus();
+    }
+    function fecharEc() { ec = null; var el = root && q('.gl-sh.ec'); if (el) el.remove(); }
 
     function onClick(e) {
       if (pf && e.target.classList && e.target.classList.contains('gl-pf')) { pfFechar(); return; }   // toque no fundo escuro
-      if (e.target.classList && e.target.classList.contains('gl-sh')) { if (bs) fecharBaixar(); else fecharCfg(); return; }
+      if (e.target.classList && e.target.classList.contains('gl-sh')) { if (ec) fecharEc(); else if (cl) fecharCts(); else if (bs) fecharBaixar(); else fecharCfg(); return; }
       var t = e.target.closest('[data-g],[data-aba],[data-ct],.gl-t');
       if (!t || !root.contains(t)) return;
       if (t.hasAttribute('data-ct')) {
         var v = t.getAttribute('data-ct');
+        if (cl) fecharCts();
         if (v === filtro.cid) return;
         filtro.cid = v; filtro.pid = '';
         render();
@@ -2400,7 +2659,7 @@
       if (t.hasAttribute('data-aba')) {
         var a = t.getAttribute('data-aba');
         if (a === aba) return;
-        aba = a; agrupar = ''; filtro.autor = ''; sel = {}; selecionando = false; itens = []; fLocal = ''; semRede = 0;
+        aba = a; agrupar = ''; filtro.autor = ''; sel = {}; selecionando = false; itens = []; fLocal = ''; semRede = 0; fecharAviso();
         carregar();
         return;
       }
@@ -2413,6 +2672,14 @@
       }
       var g = t.getAttribute('data-g');
       if (g === 'per') { pfAbrir(); return; }
+      if (g === 'cts') { abrirCts(); return; }
+      if (g === 'desfazer') { var df = desfazerFn; fecharAviso(); if (df) df(); return; }
+      if (g === 'detalhes') { detAberto = !detAberto; lsPor(DET_KEY, detAberto ? '1' : null); var vv = q('.gl-ver'); if (vv) { vv.classList.toggle('det', detAberto); var bd = vv.querySelector('[data-g="detalhes"]'); if (bd) { bd.setAttribute('aria-expanded', detAberto); bd.textContent = 'Detalhes ' + (detAberto ? '▴' : '▾'); } } return; }
+      if (g === 'cts-fechar') { fecharCts(); return; }
+      // a pergunta "sem carimbo" ao enviar (dentro da folha: antes do filtro das folhas, logo abaixo)
+      if (g === 'ec-carimbo') { var e1 = ec; fecharEc(); if (e1) { if (e1.ok.length) enviarDrive(e1.ok, true, true); carimbar(e1.sc, true); } return; }
+      if (g === 'ec-so') { var e2 = ec; fecharEc(); if (e2 && e2.ok.length) enviarDrive(e2.ok, true, true); return; }
+      if (g === 'ec-fechar') { fecharEc(); return; }
       if (g === 'rec-abrir' || g === 'rec-fechar') { recolher(g === 'rec-fechar'); return; }
       if (g === 'per-chip') { var kc = t.getAttribute('data-k'); mudarPer(kc === 'semana0' ? { modo: 'semana', off: 0, de: '', ate: '' } : { modo: kc, off: 0, de: '', ate: '' }); return; }
       if (g === 'fl') { fLocal = t.getAttribute('data-v') || ''; sel = {}; render(); return; }
@@ -2455,7 +2722,9 @@
       else if (g === 'baixar-tudo') baixar(lista.slice());
       else if (g === 'rel-pdf') o.relatorioPdf({ itens: itens.slice(), arquivo: arquivo, cid: filtro.cid });
       else if (g === 'enviar') { if (o.drive) o.drive.pump(true); setTimeout(render, 300); }   // a pessoa pediu: não espera as pausas da fila
-      else if (g === 'enviar-ap') enviarDrive(Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'aparelho'; }), true);
+      else if (g === 'enviar-ap') enviarDrive(Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'aparelho' && !x.semCar; }), true);
+      else if (g === 'carimbar-todas') carimbar(Object.keys(locais).map(function (k) { return locais[k]; }).filter(semCar));
+      else if (g === 'sel-semcar') { selecionando = true; sel = {}; lista.forEach(function (x) { if (semCar(x)) sel[x.id] = 1; }); render(); }
       else if (g === 'limpar') {
         var env = Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'enviada'; });
         fecharCfg();
@@ -2493,6 +2762,7 @@
       render();
     }
     function onInput(e) {
+      if (e.target.getAttribute && e.target.getAttribute('data-f') === 'cl-busca') { if (cl) { cl.busca = e.target.value; renderCts(); } return; }
       if (!e.target.getAttribute || e.target.getAttribute('data-f') !== 'dbusca') return;
       dbusca = e.target.value; sel = {};
       render();
@@ -2501,6 +2771,8 @@
       if (!root || document.querySelector('.modal')) return;
       if (mv && (e.key !== 'Escape' || mv.salvando)) return;   // no painel de contrato e ponto as setas são das listas (e salvando, nada)
       if (pf) { if (e.key === 'Escape') pfFechar(); return; }
+      if (cl) { if (e.key === 'Escape') fecharCts(); return; }
+      if (ec) { if (e.key === 'Escape') fecharEc(); return; }
       if (bs || cfg) { if (e.key === 'Escape') { fecharBaixar(); fecharCfg(); } return; }
       if (e.key === 'Escape') { if (mv) fecharMover(); else if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
       else if (ver >= 0 && e.key === 'ArrowLeft' && ver > 0) abrir(ver - 1);
@@ -2531,13 +2803,17 @@
       root.setAttribute('role', pagina ? 'region' : 'dialog');
       if (pagina) root.removeAttribute('aria-modal'); else root.setAttribute('aria-modal', 'true');
       document.body.style.overflow = pagina ? '' : 'hidden';
-      filtro = { cid: f.cid || '', pid: f.pid || '', autor: '', mes: '' };
+      // página do celular: o contrato do app vira a ficha "314 · 28"; a galeria abre em Todos (menos "Fotos deste ponto",
+      // do segmento e a aba Relatório, que ficam no contrato)
+      ctApp = pagina && f.cid ? f.cid : '';
+      var noCt = f.cid && (!pagina || f.pid || f.km || f.aba === 'relatorio');
+      filtro = { cid: noCt ? f.cid : '', pid: f.pid || '', autor: '', mes: '' };
       // "Fotos do segmento" (Medições, conservação): as fotos do contrato no km do segmento
       filtro.km = f.km && isFinite(f.km[0]) && isFinite(f.km[1]) ? [Math.min(f.km[0], f.km[1]), Math.max(f.km[0], f.km[1]), String(f.kmNome || '')] : null;
       // "Fotos deste ponto": todas as datas do ponto (sem trocar a escolha guardada); senão, o período guardado neste aparelho
       per = f.pid || filtro.km ? { modo: 'tudo', off: 0, de: '', ate: '' } : lerPer();
       pf = null;
-      cidAuto = !f.cid;
+      cl = null; ec = null;
       recolher(false); recY = 0;
       fecharMover();
       var vis = abasVisiveis().map(function (a) { return a.k; });

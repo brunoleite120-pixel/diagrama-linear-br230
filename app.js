@@ -4495,7 +4495,7 @@
   }
   function saveText(name, text, mime) { return saveBlob(name, new Blob([text], { type: mime || 'text/plain' })); }
   var foto = null;
-  function openFoto(pid) {
+  function openFoto(pid, fotos) {
     if (!podeFotos()) { toast(banco.login ? 'Seu acesso não inclui fotos.' : 'Entre com o seu código para tirar fotos.'); return; }
     if (!foto && window.FotoCarimbo) {
       foto = window.FotoCarimbo({
@@ -4511,7 +4511,9 @@
           ready: driveReady,
           add: function (items) { return driveQ.add(items); },
           apagar: function (ids) { return driveQ.apagar(ids); },
-          status: driveStatus
+          status: driveStatus,
+          // a faixa da barra de baixo (várias fotos): a situação de cada foto mandada e o motivo da espera
+          info: function () { return driveQ.info(); }, lista: function () { return driveQ.list(); }, logado: function () { return !!banco.login; }
         },
         // "Ver na galeria" da foto tirada: abre em No aparelho
         abrirGaleria: function () { if (galeriaOn()) abrirGaleria({ aba: 'local' }); },
@@ -4521,7 +4523,7 @@
         clearTeamLogo: function () { return saveTeamLogo({ t: 'apagar_config', chave: 'fotoLogo' }); }
       });
     }
-    if (foto) foto.open({ pointId: pid || '' });
+    if (foto) foto.open({ pointId: pid || '', fotos: fotos || null });
   }
   function ensureMap() {
     if (mapa || !window.MapaSNV) return mapa;
@@ -7550,7 +7552,7 @@
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
         contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
-        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin,
+        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin, carimbar: function (fotos) { openFoto('', fotos); },
         podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, nativo: isNativeApp, onBaixa: renderGaleriaBtn,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
       });
