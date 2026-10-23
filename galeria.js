@@ -177,6 +177,13 @@
     '.gl-bar .gl-n b{display:block;font-size:15px}',
     '.gl-bar .gl-n small{display:block;font-size:12px;color:var(--ink-3,#5C6661)}',
     '.gl-bar-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
+    // trabalhando (apagar, restaurar, trazer do Drive): uma linha só, com a barrinha e o Parar à direita
+    '.gl-bar.gl-ocup{flex-direction:row;align-items:center;flex-wrap:nowrap;gap:12px}',
+    '.gl-ocup .gl-prog{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600}',
+    '.gl-pbar{display:block;height:4px;border-radius:2px;background:var(--line,#D5DAD6);overflow:hidden}',
+    '.gl-pbar>i{display:block;height:100%;min-width:6px;background:var(--accent,#1D4F91);transition:width .3s}',
+    '.gl-ocup .btn{flex:none;min-height:44px;padding:0 18px;justify-content:center}',
+    '.gl-ocupon .gl-body,.gl-pag.gl-ocupon .gl-body{padding-bottom:110px}',
     '.gl-selon .gl-body,.gl-pag.gl-selon .gl-body{padding-bottom:250px}',
     '.gl-selon .gl-toast{bottom:calc(250px + env(safe-area-inset-bottom,0px))}',
     '@media (max-width:639px){.gl-bar{left:0;right:0;bottom:0;max-width:none;border-radius:14px 14px 0 0;border-width:1px 0 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 16px rgba(23,32,28,.12)}.gl-pag .gl-bar{padding-bottom:10px}}',
@@ -1587,7 +1594,13 @@
       return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '"' + (um ? ' data-um="1"' : '') + (a.p != null ? ' aria-pressed="' + a.p + '"' : '') + '>' + esc(a.t) + '</button>';
     }
     function barHtml() {
-      if (ocupado) return '<div class="gl-bar"><span class="gl-prog">' + esc(ocupado) + '</span><button type="button" class="btn small" data-g="cancelar">Parar</button></div>';
+      if (ocupado) {
+        // "Apagando 2 de 5…": a barrinha mostra quantas já foram
+        var m = /(\d+) de (\d+)/.exec(ocupado), pct = m && Number(m[2]) ? Math.round((Number(m[1]) - 1) / Number(m[2]) * 100) : null;
+        return '<div class="gl-bar gl-ocup" role="status"><div class="gl-prog"><span>' + esc(ocupado) + '</span>' +
+          (pct != null ? '<i class="gl-pbar" aria-hidden="true"><i style="width:' + pct + '%"></i></i>' : '') + '</div>' +
+          '<button type="button" class="btn small" data-g="cancelar">Parar</button></div>';
+      }
       if (!selecionando) return '';
       var ls = selecionadas();
       var bs0 = ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
@@ -1680,7 +1693,7 @@
       var info = q('.gl-info'), bt = info && info.querySelector('.gl-recolher');
       if (!rec && info && !bt && lista.length > 6 && filtrosAltos()) info.insertAdjacentHTML('beforeend', '<div class="gl-recolher"><button type="button" data-g="rec-fechar">\u25b4 Recolher filtros</button></div>');
     }
-    function renderBar() { if (!root) return; q('.gl-barhost').innerHTML = barHtml(); root.classList.toggle('gl-selon', selecionando && !ocupado); }
+    function renderBar() { if (!root) return; q('.gl-barhost').innerHTML = barHtml(); root.classList.toggle('gl-selon', selecionando && !ocupado); root.classList.toggle('gl-ocupon', !!ocupado); }
     function renderEnv() { if (root) { var e = q('.gl-env'); if (e) e.innerHTML = envioHtml() + baixaHtml() + (semRede && aba !== 'local' ? '<div class="gl-off">Sem conexão: mostrando ' + (semRede === 1 ? 'a foto baixada' : 'as ' + semRede + ' fotos baixadas') + ' neste aparelho.</div>' : ''); } }
 
     // ---------------------------------------------------------------- barra de envio ao Drive

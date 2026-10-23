@@ -6,7 +6,7 @@
 // A prévia (/previa/) tem o próprio service worker e o próprio cache; o do site oficial não mexe nela.
 var PREVIA = /\/previa\/$/.test(self.registration.scope);
 var FAMILIA = (PREVIA ? 'previa-' : '') + 'diagrama-linear-';
-var CACHE = FAMILIA + 'v113';
+var CACHE = FAMILIA + 'v114';
 var PASTA_PREVIA = PREVIA ? null : self.registration.scope + 'previa/';
 // endereço antigo (GitHub Pages), que sai do ar quando o repositório ficar privado: com a página fora do ar (404), o app
 // instalado por ele abre a cópia guardada, que mostra o aviso do endereço novo (aviso-endereco.js) e ainda envia o que ficou
