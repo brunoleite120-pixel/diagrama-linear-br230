@@ -480,10 +480,29 @@
   }
   function itemGravar(it, mini) {
     var d = {}; Object.keys(it).forEach(function (k) { if (k !== 'mini') d[k] = it[k]; });
-    return cacheTx('readwrite', function (i, a, s) { s.put({ id: it.id, dados: d, mini: mini || null, em: Date.now() }); }).catch(function () { /* sem espaço: só não guarda */ });
+    return cacheTx('readwrite', function (i, a, s) { s.put({ id: it.id, dados: d, mini: mini || null, em: Date.now() }); }).then(function () { return true; }, function () { return false; });   // sem espaço: não guarda
+  }
+  // estrela, contrato e ponto, apagar ou restaurar confirmados: a cópia guardada para abrir sem sinal acompanha
+  // (campos null: a foto saiu; tira a cópia e deixa o arquivo sair quando faltar espaço)
+  function itemAtualizar(id, campos) {
+    return cacheTx('readwrite', function (i, a, s) {
+      var g = s.get(id);
+      g.onsuccess = function () {
+        var r = g.result;
+        if (!r) return;
+        if (!campos) {
+          s.delete(id);
+          var did = r.dados && r.dados.driveId;
+          if (did) { var gi = i.get(did); gi.onsuccess = function () { if (gi.result) { gi.result.fixa = false; i.put(gi.result); } }; }
+          return;
+        }
+        Object.keys(campos).forEach(function (k) { r.dados[k] = campos[k]; });
+        s.put(r);
+      };
+    }).catch(function () { /* sem cópia: nada a fazer */ });
   }
   function itensLer() { return cacheTx('readonly', function (i, a, s) { return s.getAll(); }).then(function (l) { return l || []; }, function () { return []; }); }
-  function cacheIds() { return cacheTx('readonly', function (i) { return i.getAllKeys(); }).then(function (l) { var m = {}; (l || []).forEach(function (k) { m[k] = 1; }); return m; }, function () { return {}; }); }
+  function cacheIds() { return cacheTx('readonly', function (i) { return i.getAll(); }).then(function (l) { var m = {}; (l || []).forEach(function (x) { if (x.fixa) m[x.id] = 1; }); return m; }, function () { return {}; }); }
 
   var CRC_T = null;
   function crc32(u8) {
@@ -883,7 +902,7 @@
           // sem sinal: as fotos baixadas para o app (dados e miniatura guardados), na regra da aba
           return itensLer().then(function (gs) {
             var uid = l.uid || null;
-            var arr = gs.map(function (x) { if (x.mini) minis[x.id] = x.mini; return x.dados; }).filter(function (it) {
+            var arr = gs.filter(function (x) { return x.dados && x.dados.origem === 'banco' && x.dados.situacao !== 'deletada'; }).map(function (x) { if (x.mini) minis[x.id] = x.mini; return x.dados; }).filter(function (it) {
               return aba === 'todas' ? true : aba === 'relatorio' ? !!it.relatorio : aba === 'minhas' ? (uid ? it.autorUid === uid : it.autor === l.nome) : false;
             });
             if (!arr.length) throw e;
@@ -936,7 +955,7 @@
         return arr.slice();
       }, function () {
         return itensLer().then(function (gs) {
-          var arr = gs.filter(function (x) { return x.dados && x.dados.origem === 'drive'; }).map(function (x) { if (x.mini) minis[x.id] = x.mini; return x.dados; });
+          var arr = gs.filter(function (x) { return x.dados && x.dados.origem === 'drive' && x.dados.situacao !== 'deletada'; }).map(function (x) { if (x.mini) minis[x.id] = x.mini; return x.dados; });
           if (!arr.length) { var e = new Error('sem_rede'); e.code = 'sem_rede'; throw e; }
           semRede = arr.length;
           return arr;
@@ -1123,7 +1142,7 @@
             if (!r || !r.ok) throw { code: (r && r.erro) || 'erro' };
             var bl = b64Blob(r.dados, r.mime);
             if (g0 !== cacheGer) throw { code: 'parado' };   // saiu da conta enquanto baixava
-            var g = cacheGravar(it.driveId, bl, fixar).then(function (ok) { if (ok) { guardadas[it.driveId] = 1; retile(it.id); } return ok; });
+            var g = cacheGravar(it.driveId, bl, fixar).then(function (ok) { if (ok && fixar) { guardadas[it.driveId] = 1; retile(it.id); } return ok; });
             if (!fixar) return bl;
             return g.then(function (ok) { if (!ok) throw { code: 'sem_espaco' }; return bl; });
           }, function () { throw { code: 'sem_rede' }; });
@@ -1808,7 +1827,7 @@
     }
     function umaFoto(b) {
       var k = b.i, it = b.ls[k], g0 = cacheGer;
-      var gravar = function (m) { return g0 === cacheGer ? itemGravar(it, m) : null; };
+      var gravar = function (m) { return g0 === cacheGer ? itemGravar(it, m).then(function (ok) { if (!ok) throw { code: 'sem_espaco' }; }) : null; };
       b.i++; b.ativos++; b.vindo[it.id] = 1;
       retile(it.id);
       var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return gravar(m); })
@@ -1926,6 +1945,31 @@
     function soltarGrande() { if (grande) { URL.revokeObjectURL(grande.url); grande = null; } }
     function abrir(i) { soltarGrande(); ver = i; var it = lista[i]; if (it && ((locais[it.id] && locais[it.id].temArquivo) || it.driveId)) carregando = it.id; renderVer(); if (carregando === (it && it.id)) carregarGrande(); }
     function fecharVer() { soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove(); }
+    var CAMADA = '.gl-ver,.gl-sh,.gl-mv,.gl-pf';
+    function camadasMudaram(muts) {
+      if (!root) return;
+      muts.forEach(function (m) {
+        [].forEach.call(m.addedNodes, function (n) {
+          if (!n.matches || !n.matches(CAMADA)) return;
+          n.focoAntes = document.activeElement;
+          setTimeout(function () {
+            if (!n.parentNode || n.contains(document.activeElement)) return;   // a folha já pôs o foco onde queria
+            var f = n.querySelector('[data-g="fechar-ver"]') || n.querySelector('button:not([disabled]), input, select, textarea, [href]');
+            if (f && f.focus) f.focus();
+          }, 0);
+        });
+        [].forEach.call(m.removedNodes, function (n) {
+          if (!n.matches || !n.matches(CAMADA)) return;
+          var a = n.focoAntes;
+          setTimeout(function () { if (a && a.focus && document.contains(a) && !a.closest('[inert]') && (!document.activeElement || document.activeElement === document.body)) a.focus(); }, 0);
+        });
+      });
+      var cs = [].filter.call(root.children, function (x) { return x.matches && x.matches(CAMADA); }), topo = cs[cs.length - 1];
+      [].forEach.call(root.children, function (x) {
+        if (!topo || x === topo || x.classList.contains('gl-barhost') || x.classList.contains('gl-toast')) x.removeAttribute('inert');
+        else x.setAttribute('inert', '');
+      });
+    }
     function carregarGrande() {
       var it = lista[ver];
       if (!it) return;
@@ -2039,7 +2083,7 @@
       muda.forEach(function (x) { antes[x.id] = x.relPor || ''; });
       if (!l || !ids.length) return;
       o.Banco.fotoRelatorio(l.codigo, ids, marcar).then(function () {
-        muda.forEach(function (x) { x.relatorio = marcar; x.relPor = marcar ? (desfazendo ? antes[x.id] || l.nome || '' : l.nome || '') : ''; });
+        muda.forEach(function (x) { x.relatorio = marcar; x.relPor = marcar ? (desfazendo ? antes[x.id] || l.nome || '' : l.nome || '') : ''; itemAtualizar(x.id, { relatorio: x.relatorio, relPor: x.relPor }); });
         if (aba === 'relatorio' && !marcar) itens = itens.filter(function (x) { return ids.indexOf(x.id) < 0; });
         if (aba === 'relatorio' && marcar && desfazendo) { carregar(); return; }
         if (marcar) { fecharAviso(); o.toast(desfazendo ? 'Voltou para o relatório.' : plural(ids.length, 'foto marcada', 'fotos marcadas') + ' para o relatório.'); }
@@ -2136,7 +2180,7 @@
             if (pr) corpo.pastas = pr;
             return o.drive.post(url, corpo).then(function (r) {
               // o banco não marcou e o script não conseguiu devolver o arquivo (versão 6): Drive e galeria ficaram diferentes
-              if (r && r.ok) feitos++; else falhas.push(r && r.erro === 'banco_nao_marcou' && r.desfeito === false ? 'nao_desfeito' : (r && r.erro) || 'erro');
+              if (r && r.ok) { feitos++; itemAtualizar(it.id, apagar ? null : { situacao: 'ativa' }); } else falhas.push(r && r.erro === 'banco_nao_marcou' && r.desfeito === false ? 'nao_desfeito' : (r && r.erro) || 'erro');
             }, function () { falhas.push('sem_rede'); });
           });
         });
@@ -2334,6 +2378,7 @@
           if (!feitos[x.id]) return;
           var it = itens.find(function (y) { return y.id === x.id; });
           [it, locais[x.id]].forEach(function (y) { if (y) { y.cid = cid; y.pid = pid || ''; y.pnome = meta.pnome || ''; y.lote = lote; } });
+          itemAtualizar(x.id, { cid: cid, pid: pid || '', pnome: meta.pnome || '', lote: lote });
         });
         // as que mudaram aqui e o banco recusou depois (extras) não contam como corrigidas; as que não mudaram aqui já não contam
         var nao = r.nao + tarde.nao, feitas = Math.max(0, Object.keys(feitos).length + r.semId - (tarde.motivo === 'aparelho' ? 0 : tarde.nao));
@@ -2803,6 +2848,9 @@
         root.innerHTML = '<div class="gl-top"><button type="button" class="btn small" data-g="fechar">← Voltar</button><h2>Fotos</h2></div>' +
           '<div class="gl-mini"></div><div class="gl-tabs" role="tablist"></div><div class="gl-env"></div><div class="gl-cts" role="group" aria-label="Contrato"></div><div class="gl-fil"></div><div class="gl-info"></div><div class="gl-body"></div><div class="gl-barhost"></div>';
         root.addEventListener('click', onClick);
+        // teclado e leitor de tela: a foto aberta ou a folha por cima recebe o foco, o que fica atrás não (inert), e ao
+        // fechar o foco volta para onde estava
+        if (window.MutationObserver) new MutationObserver(camadasMudaram).observe(root, { childList: true });
         q('.gl-body').addEventListener('scroll', aoRolar, { passive: true });
         root.addEventListener('change', onChange);
         root.addEventListener('input', onInput);
@@ -2862,7 +2910,7 @@
           loc.forEach(function (r) {
             var m = locais[r.id];
             if (!m) return;
-            if (m.situacao !== r.situacao || (r.drive && r.drive.id && m.driveId !== r.drive.id)) mudou[r.id] = true;
+            if (m.situacao !== r.situacao || (r.drive && r.drive.id && m.driveId !== r.drive.id)) { mudou[r.id] = true; if (r.situacao === 'enviada') dlista = null; }
             m.situacao = r.situacao; m.erro = r.erro; m.enviada = r.enviada; m.etapa = r.etapa;
             if (r.drive && r.drive.id) m.driveId = r.drive.id;
           });
