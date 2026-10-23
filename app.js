@@ -7882,5 +7882,8 @@
   window.addEventListener('orientationchange', agendaLargura);
   setTimeout(function () { confereLargura(); mostraLargura(); }, 4000);
 
-  if (init() !== false) window.Unifilar.pronto = true;   // atualizar.js confere isto antes de confirmar ao app que uma versão baixada abriu bem
+  if (init() !== false) {
+    window.Unifilar.pronto = true;   // atualizar.js confere isto antes de confirmar ao app que uma versão baixada abriu bem
+    if (window.AtualizarApp && window.AtualizarApp.pronto) window.AtualizarApp.pronto();   // já, sem esperar o "load"
+  }
 })();

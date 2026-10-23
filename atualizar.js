@@ -132,9 +132,23 @@
   }
 
   // ---------------------------------------------------------------- início
+  // confirma ao plugin que esta versão abriu bem. O app.js chama isto assim que o init chega ao fim; antes era só no
+  // "load" da página, que com sinal fraco ou o iPhone abrindo o app em segundo plano podia passar dos 15 s, e o plugin
+  // desfazia a atualização (o app voltava para o pacote de fábrica, sem as Medições)
+  var confirmado = false;
+  function pronto() {
+    if (confirmado) return;
+    confirmado = true;
+    U.notifyAppReady().catch(function () { confirmado = false; });
+  }
+  // no fim do menu Dados: a versão baixada que não abriu (para saber no aparelho por que ficou na anterior)
+  document.addEventListener('DOMContentLoaded', function () {
+    var f = ler(K_FALHOU), v = document.getElementById('versaoSite');
+    if (f && v) v.textContent += ' · a ' + f + ' não abriu';
+  });
   window.addEventListener('load', function () {
-    // só confirma ao plugin que esta versão abriu bem quando o app.js chegou ao fim (senão ele volta para a anterior)
-    if (window.Unifilar && window.Unifilar.pronto) U.notifyAppReady().catch(function () { /* segue */ });
+    // só confirma quando o app.js chegou ao fim (senão o plugin volta para a anterior)
+    if (window.Unifilar && window.Unifilar.pronto) pronto();
     trocarSePronta().then(function (trocou) {
       if (trocou) return;
       setTimeout(function () { conferir(true); }, 3000);
@@ -143,5 +157,5 @@
     });
   });
 
-  window.AtualizarApp = { conferir: function () { conferir(true); }, base: BASE, bases: BASES };
+  window.AtualizarApp = { conferir: function () { conferir(true); }, pronto: pronto, base: BASE, bases: BASES };
 })();
