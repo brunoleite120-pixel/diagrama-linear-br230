@@ -189,7 +189,7 @@
           return {
             arq: { id: it.id, buf: r[0] },
             foto: comAntiga({ id: it.id, nome: it.nome, tipo: it.blob.type || 'image/jpeg', pastas: it.pastas, descricao: it.descricao || '', meta: it.meta || {},
-              mini: r[1], criada: Date.now(), autor: login ? { uid: login.uid || null, nome: login.nome || null } : null,
+              mini: r[1], criada: Date.now(), autor: it.autor || (login ? { uid: login.uid || null, nome: login.nome || null } : null),
               situacao: it.enviar === false ? 'aparelho' : 'fila', etapa: 'drive', tent: 0, prox: 0, tamanho: r[0].byteLength, temArquivo: true }, it.pastaAntiga)
           };
         });
@@ -199,7 +199,13 @@
           rows.forEach(function (r) {
             s[ARQ].put(r.arq);
             var g = s[FOTOS].get(r.foto.id);
-            g.onsuccess = function () { r.foto.versao = ((g.result && g.result.versao) || 0) + 1; s[FOTOS].put(r.foto); };
+            g.onsuccess = function () {
+              r.foto.versao = ((g.result && g.result.versao) || 0) + 1;
+              // a mesma foto gravada de novo continua de quem a tirou (não de quem estiver com o app agora)
+              var a0 = g.result && g.result.autor;
+              if (a0 && (a0.uid || a0.nome)) r.foto.autor = a0;
+              s[FOTOS].put(r.foto);
+            };
           });
         });
       }).then(function () {

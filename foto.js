@@ -1203,6 +1203,12 @@
     // até onde o km da foto escolhe o ponto sozinho: 150 m para cada lado da ponte (Proarte), 50 m nos outros
     function raioPonto(c) { return c && c.tipo === 'oae' ? 0.15 : 0.05; }
     function pertoPonto(a) { return !!a && a.d <= raioPonto(a.c); }
+    function pontoLonge(pid, km) {
+      var p = findPoint(pid);
+      if (!p || p.kmIni == null || km == null) return false;
+      var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni;
+      return (km < a ? a - km : km > b ? km - b : 0) > 1;
+    }
 
     function showWork() {
       root.classList.remove('many');
@@ -1518,6 +1524,7 @@
       var a = st;
       clearTimeout(guardaT); guardaT = null;
       if (!a || !opts.drive || a.descartada) return guardaP;
+      if (!a.autor && opts.drive.quem) a.autor = opts.drive.quem();
       var como = final && a.drive !== false ? 'fila' : 'aparelho';
       if (a.como === 'fila' || (a.feita === a.ver && (a.como === como || !final))) return guardaP;
       var ver = a.ver;
@@ -1529,6 +1536,7 @@
           if (!r.b) throw new Error('blob');
           var item = driveItem(a, r.b, r.nome);
           item.enviar = como === 'fila';
+          if (a.autor) item.autor = a.autor;
           // guardada no meio da edição: se o app fechar antes de sair da foto, ela vai para a fila ao abrir de novo (app.js)
           if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1, querEnviar: a.drive !== false });
           return opts.drive.add([item]).then(function () {
@@ -1920,6 +1928,20 @@
       return 'Na fila do Drive';
     }
     // a situação de cada foto do lote na fila do aparelho (fila, enviada)
+    // desmarcada depois de ir para a fila: volta a ficar só no aparelho (a que já está subindo continua: o arquivo vai a caminho)
+    function segurarFila() {
+      if (!batch || !opts.drive || !opts.drive.segurar) return;
+      var b = batch, ls = b.items.filter(function (it) { return it.drive === false && it.filaDrive; });
+      if (!ls.length) return;
+      opts.drive.segurar(ls.map(function (it) { return it.uid; })).then(function () { return opts.drive.lista ? opts.drive.lista() : null; }).then(function (l) {
+        if (batch !== b || !l) return;
+        var m = {};
+        l.forEach(function (r) { m[r.id] = r.situacao; });
+        ls.forEach(function (it) { if (m[it.uid] === 'aparelho') it.filaDrive = false; });
+        b.sit = m;
+        renderFaixa();
+      }, function () { /* segue */ });
+    }
     function lerSituacoes() {
       if (!batch || !opts.drive || !opts.drive.lista || !batch.items.some(function (it) { return it.filaDrive; })) return;
       var b = batch;
@@ -2086,7 +2108,10 @@
         });
       }, Promise.resolve()).then(function () {
         cv.width = cv.height = 0;
-        if (b.ver === ver) b.out = { ver: ver, files: out };
+        var fora = list.filter(function (it) { return !out.some(function (f) { return f.it === it; }); });
+        if (fora.length && out.length) notify((fora.length === 1 ? '1 foto não pôde ser gerada e ficou de fora: ' : fora.length + ' fotos não puderam ser geradas e ficaram de fora: ') +
+          fora.slice(0, 3).map(function (it) { return it.name; }).join(', ') + (fora.length > 3 ? '…' : '') + '. Tente de novo.', 9000);
+        if (b.ver === ver && !fora.length) b.out = { ver: ver, files: out };
         return out;
       });
     }
@@ -2443,7 +2468,7 @@
     function guardarCaptura(sh, blob, name) {
       if (!opts.drive) return Promise.resolve(false);
       var m = sh.meta, ll = m.ll, loc = ll ? ref.locate(ll[0], ll[1]) : null, km = loc && loc.dist <= 2000 ? loc.km : null;
-      var a = km != null ? identify(km) : null, c = a ? a.c : null, p = a && pertoPonto(a) ? a.p : null;
+      var a = km != null ? identify(km) : null, c = (a && a.c) || activeContract(), p = a && a.c && pertoPonto(a) ? a.p : null;
       var info = ['Câmera com GPS (sem carimbo)', km != null ? kmLine(km, '', null, true) : '', ll ? coordTxt(ll) : '', dateTxt(m.date)].filter(Boolean).join('\n');
       return opts.drive.add([{ id: sh.uid, nome: name, blob: blob, pastas: [(c && nomes.pasta(c)) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'], pastaAntiga: nomes.pastaAntiga(c),
         descricao: info, enviar: false,
@@ -2484,7 +2509,9 @@
       d.innerHTML = '<div class="ft-camask-box"><b id="ftCamAskT">' + (n === 1 ? '1 foto ainda sem carimbo' : n + ' fotos ainda sem carimbo') + '</b>' +
         (nFalha ? '<p class="ft-warn">' + (nFalha === 1 ? '1 foto não ficou guardada' : nFalha + ' fotos não ficaram guardadas') + ' no aparelho (sem espaço?). ' +
           'Ponha o carimbo e salve agora, senão ' + (nFalha === 1 ? 'ela se perde' : 'elas se perdem') + '.</p>'
-          : '<p>' + (n === 1 ? 'Ela já está guardada' : 'Elas já estão guardadas') + ' no aparelho, com o GPS. Se sair agora, ' + (n === 1 ? 'fica' : 'ficam') +
+          : '<p>' + (n === 1 ? 'Ela já está guardada' : 'Elas já estão guardadas') + ' no aparelho' +
+          (cam.shots.every(function (s) { return s.meta && s.meta.ll; }) ? ', com o GPS' : cam.shots.some(function (s) { return s.meta && s.meta.ll; }) ? ' (algumas sem GPS)' : ' (sem GPS)') +
+          '. Se sair agora, ' + (n === 1 ? 'fica' : 'ficam') +
           ' em Galeria › No aparelho, marcada' + (n === 1 ? '' : 's') + ' “sem carimbo”.</p>') +
         '<button type="button" class="ft-btn primary" data-ft="ask-carimbo">✎ Pôr o carimbo agora</button>' +
         (nFalha ? '' : '<button type="button" class="ft-btn" data-ft="ask-depois">Deixar para depois</button>') +
@@ -2571,6 +2598,7 @@
         padraoDrive(vai);
         batch.items.forEach(function (it, i) { it.drive = vai; var cx = itemEl(i) && itemEl(i).querySelector('[data-b="drive"]'); if (cx) cx.checked = vai; });
         renderBatchSum();
+        if (!vai) segurarFila();
         return;
       }
       if (b.dataset.ft === 'close') { if (st && !batch) sair(); close(); }
@@ -2680,6 +2708,15 @@
     }
     function onChange(e) {
       var t = e.target;
+      if (t.id === 'ftKm' && st && st.pid && pontoLonge(st.pid, st.km)) { st.pid = ''; renderPontos(); scheduleDraw(); notify('O km digitado fica a mais de 1 km do ponto: escolha o ponto de novo.'); }
+      if (batch && t.dataset && t.dataset.b === 'km') {
+        var ik = batch.items[+t.dataset.i];
+        if (ik && ik.pid && withItem(ik, function () { return pontoLonge(ik.pid, ik.km); })) {
+          withItem(ik, function () { ik.pid = ''; });
+          refreshItem(+t.dataset.i); renderBatchSum(); itemChanged(+t.dataset.i, true);
+          notify('O km digitado fica a mais de 1 km do ponto: escolha o ponto de novo.');
+        }
+      }
       if (t.id === 'ftCam' || t.id === 'ftGal') { origin = t.id === 'ftCam' ? 'camera' : 'galeria'; onFile(t.files && t.files[0], origin); t.value = ''; return; }
       if (t.id === 'ftArq') { origin = 'arquivos'; onFiles(t.files, origin); t.value = ''; return; }
       if (t.id === 'ftLogoFile') {
@@ -2690,7 +2727,7 @@
       }
       if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; guarda(); renderOpts(); scheduleDraw(0); return; }
       if (t.id === 'ftDrive') { if (st) st.drive = t.checked; padraoDrive(t.checked); renderGuarda(); return; }
-      if (batch && t.dataset && t.dataset.b === 'drive') { var bi = batch.items[+t.dataset.i]; if (bi) { bi.drive = t.checked; renderBatchSum(); } return; }
+      if (batch && t.dataset && t.dataset.b === 'drive') { var bi = batch.items[+t.dataset.i]; if (bi) { bi.drive = t.checked; renderBatchSum(); if (!t.checked) segurarFila(); } return; }
       if (batch && t.tagName === 'SELECT' && batchInput(t)) return;
       if (!st) return;
       if (t.id === 'ftPonto') {
@@ -2844,7 +2881,12 @@
     // o padrão da equipe mudou no banco
     function refreshTeam() { if (root && root.parentNode) { renderOpts(); } refreshLogo(); }
 
-    return { open: open, close: close, refreshTeam: refreshTeam, refreshDrive: refreshDrive, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; } };
+    function fechar() {
+      if (!root || !root.parentNode) return;
+      if (st && !batch) sair();
+      close();
+    }
+    return { open: open, close: close, fechar: fechar, refreshTeam: refreshTeam, refreshDrive: refreshDrive, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; } };
   }
 
   FotoCarimbo.readExif = readExif;

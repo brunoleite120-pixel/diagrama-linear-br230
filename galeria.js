@@ -178,7 +178,7 @@
     '.gl-bar .gl-n small{display:block;font-size:12px;color:var(--ink-3,#5C6661)}',
     '.gl-bar-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
     // trabalhando (apagar, restaurar, trazer do Drive): uma linha só, com a barrinha e o Parar à direita
-    '.gl-bar.gl-ocup{flex-direction:row;align-items:center;flex-wrap:nowrap;gap:12px}',
+    '.gl-bar.gl-ocup{flex-direction:row;align-items:center;flex-wrap:nowrap;gap:12px;z-index:4}',
     '.gl-ocup .gl-prog{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600}',
     '.gl-pbar{display:block;height:4px;border-radius:2px;background:var(--line,#D5DAD6);overflow:hidden}',
     '.gl-pbar>i{display:block;height:100%;min-width:6px;background:var(--accent,#1D4F91);transition:width .3s}',
@@ -1706,7 +1706,7 @@
       ids.forEach(function (k) { tot += lote[k]; if (locais[k].situacao === 'enviada') { feito += lote[k]; nf0++; } });
       var inf = o.drive.info(), n = ids.length, agora = Math.min(n, nf0 + Math.max(inf.busy ? 1 : 0, (inf.enviando || []).length)) || 1;
       var pd = inf.prox ? new Date(inf.prox) : null, quando = pd ? ' (tenta às ' + pad(pd.getHours()) + ':' + pad(pd.getMinutes()) + ')' : '';
-      var parado = !login() || inf.pausado || inf.esperaWifi || inf.erro === 'codigo';
+      var parado = !login() || inf.pausado || inf.esperaWifi || inf.erro === 'codigo' || (!inf.busy && (inf.erro === 'rede' || navigator.onLine === false));
       var motivo = !login() ? 'Entre com o seu código para enviar.' : inf.erro === 'codigo' ? 'Seu acesso mudou: entre de novo para enviar.'
         : inf.pausado ? 'Pausado por você. As fotos esperam neste aparelho.' : inf.esperaWifi ? 'Esperando o Wi-Fi ("só no Wi-Fi" está ligado).'
         : inf.erro === 'rede' || navigator.onLine === false ? 'Sem sinal: envia sozinho quando voltar' + quando + '.'
@@ -2858,8 +2858,18 @@
         if (aba === 'local' && ver < 0 && !selecionando && !bs && !cfg) { carregar(); return; }
         (o.drive ? o.drive.list().catch(function () { return null; }) : Promise.resolve(null)).then(function (loc) {
           if (!root || !loc) return;
-          loc.forEach(function (r) { var m = locais[r.id]; if (m) { m.situacao = r.situacao; m.erro = r.erro; m.enviada = r.enviada; m.etapa = r.etapa; } });
+          var mudou = {};
+          loc.forEach(function (r) {
+            var m = locais[r.id];
+            if (!m) return;
+            if (m.situacao !== r.situacao || (r.drive && r.drive.id && m.driveId !== r.drive.id)) mudou[r.id] = true;
+            m.situacao = r.situacao; m.erro = r.erro; m.enviada = r.enviada; m.etapa = r.etapa;
+            if (r.drive && r.drive.id) m.driveId = r.drive.id;
+          });
           renderEnv();
+          // a foto aberta ou a seleção com uma que acabou de subir: os avisos e as ações seguem o estado novo
+          if (ver >= 0 && lista[ver] && mudou[lista[ver].id]) renderVer();
+          if (selecionando && Object.keys(sel).some(function (k) { return mudou[k]; })) renderBar();
           if (aba === 'local') { var i = q('.gl-info'); if (i) i.innerHTML = infoHtml(); }
         });
       }, 400);

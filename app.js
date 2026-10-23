@@ -4513,7 +4513,9 @@
           apagar: function (ids) { return driveQ.apagar(ids); },
           status: driveStatus,
           // a faixa da barra de baixo (várias fotos): a situação de cada foto mandada e o motivo da espera
-          info: function () { return driveQ.info(); }, lista: function () { return driveQ.list(); }, logado: function () { return !!banco.login; }
+          info: function () { return driveQ.info(); }, lista: function () { return driveQ.list(); }, logado: function () { return !!banco.login; },
+          segurar: function (ids) { return driveQ.enviar(ids, false); },
+          quem: function () { return banco.login ? { uid: banco.login.uid || null, nome: banco.login.nome || null } : null; }
         },
         // "Ver na galeria" da foto tirada: abre em No aparelho
         abrirGaleria: function () { if (galeriaOn()) abrirGaleria({ aba: 'local' }); },
@@ -6854,6 +6856,8 @@
     if (window.GaleriaLimparCache) window.GaleriaLimparCache();
     // a galeria aberta por quem saiu (listas do Drive e do banco guardadas por alguns minutos) não serve para quem entra (A8)
     if (galeria) { try { galeria.close(true); } catch (e) { /* já fechada */ } galeria = null; }
+    // a Foto com carimbo aberta por quem saiu: grava a última mudança como dela e fecha (não fica para quem entra)
+    if (foto && foto.fechar) { try { foto.fechar(); } catch (e) { /* já fechada */ } }
     setVisao(true);
     keepSync();
   }
