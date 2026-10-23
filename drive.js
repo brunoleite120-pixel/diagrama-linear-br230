@@ -204,6 +204,9 @@
               // a mesma foto gravada de novo continua de quem a tirou (não de quem estiver com o app agora)
               var a0 = g.result && g.result.autor;
               if (a0 && (a0.uid || a0.nome)) r.foto.autor = a0;
+              // já tinha subido: o novo envio leva o id do arquivo anterior, que o script apaga mesmo noutra pasta
+              var dv = g.result && ((g.result.drive && g.result.drive.id) || g.result.substitui);
+              if (dv) r.foto.substitui = dv;
               s[FOTOS].put(r.foto);
             };
           });
@@ -331,6 +334,7 @@
             pastas: r.pastas, descricao: r.descricao, mime: r.tipo, dados: b64(buf) };
           // só quando existe (foto tirada pelo app novo): o script de antes ignora o campo; a foto antiga da fila vai sem ele
           if (typeof r.pastaAntiga === 'string' && r.pastaAntiga) corpo.pastaAntiga = r.pastaAntiga;
+          if (r.substitui) corpo.substitui = r.substitui;   // o script de antes (versão 7) ignora; o de agora apaga o arquivo anterior
           return post(url, corpo, ms);
         });
       });
@@ -425,6 +429,7 @@
         valeu(mk);
         return concluir(r, function (a, igual) {
           a.drive = { id: res.id || null, url: res.url || null };
+          delete a.substitui;
           // corrigida no meio (mesmo arquivo): o arquivo fica onde subiu, como na correção depois de enviada, e o banco leva
           // os dados novos. Salva de novo no meio (arquivo novo, `criada` nova): continua na etapa do Drive e sobe de novo
           if (igual || (a.criada === r.criada && a.tamanho === r.tamanho)) a.etapa = 'registro';

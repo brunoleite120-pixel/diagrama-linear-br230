@@ -143,8 +143,14 @@
     restaurarCopia: function (cred, id) { return rpc('restaurar_copia', { p_cred: cred, p_id: id }).then(Number); },
 
     fotoRegistrar: function (cred, foto, mini) { return rpc('foto_registrar', { p_cred: cred, p_foto: foto, p_mini: mini || null }); },
-    fotosListar: function (cred, escopo, limite, antes) {
-      return rpc('fotos_listar', { p_cred: cred, p_escopo: escopo, p_limite: limite || 300, p_antes: antes || null }).then(function (r) { return r || []; });
+    fotosListar: function (cred, escopo, limite, antes, antesId) {
+      var p = { p_cred: cred, p_escopo: escopo, p_limite: limite || 300, p_antes: antes || null };
+      if (antes && antesId) p.p_antes_id = antesId;
+      return rpc('fotos_listar', p).then(function (r) { return r || []; }, function (e) {
+        // banco sem a migração 25: pede como antes (antes de 1 ms depois da última; as repetidas saem pelo id)
+        if (!p.p_antes_id || !e || (e.pg !== 'PGRST202' && e.status !== 404)) throw e;
+        return rpc('fotos_listar', { p_cred: cred, p_escopo: escopo, p_limite: limite || 300, p_antes: new Date(Date.parse(antes) + 1).toISOString() }).then(function (r) { return r || []; });
+      });
     },
     fotosMini: function (cred, ids) { return rpc('fotos_mini', { p_cred: cred, p_ids: ids }).then(function (r) { return r || []; }); },
     fotoRelatorio: function (cred, ids, marcar) { return rpc('foto_relatorio', { p_cred: cred, p_ids: ids, p_marcar: !!marcar }).then(Number); },

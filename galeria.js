@@ -861,19 +861,20 @@
         semCar: !!(m.rascunho && m.camera) };
     }
     // o banco devolve no máximo 1000 de cada vez (as mais recentes): pede as anteriores à última até acabar. Fotos com a mesma
-    // hora na emenda vêm de novo (pede "antes de 1 ms depois") e saem repetidas pelo id
+    // hora na emenda: a seguinte começa depois do par (hora, id). Se alguma vier de novo, sai repetida pelo id
     function listarTodas(cod, escopo) {
       var tudo = [], vistos = {};
-      function pag(antes, n) {
-        return o.Banco.fotosListar(cod, escopo, 1000, antes).then(function (arr) {
+      function pag(antes, antesId, n) {
+        return o.Banco.fotosListar(cod, escopo, 1000, antes, antesId).then(function (arr) {
           var novos = 0;
           arr.forEach(function (f) { if (!vistos[f.id]) { vistos[f.id] = 1; tudo.push(f); novos++; } });
-          var ult = arr[arr.length - 1], t = ult ? Date.parse(ult.tirada_em || ult.enviada_em) : NaN;
-          if (arr.length < 1000 || !novos || n >= 50 || !isFinite(t)) return tudo;
-          return pag(new Date(t + 1).toISOString(), n + 1);
+          // a seguinte começa depois da última (hora e id, migração 25): fotos com a mesma hora na emenda não ficam de fora
+          var ult = arr[arr.length - 1], t = ult ? ult.tirada_em || ult.enviada_em : null;
+          if (arr.length < 1000 || !novos || n >= 50 || !t || !isFinite(Date.parse(t))) return tudo;
+          return pag(t, ult.id, n + 1);
         });
       }
-      return pag(null, 1);
+      return pag(null, null, 1);
     }
     function deBanco(f) {
       return { id: f.id, nome: f.nome_arquivo || 'foto.jpg', origem: 'banco', cid: f.contrato_id || '', pid: f.ponto_id || '', pnome: f.ponto_nome || '', lote: f.lote || '',

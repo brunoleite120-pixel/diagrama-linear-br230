@@ -1687,7 +1687,9 @@
       if (!st) return;
       busy(true);
       makeBlob().then(function (blob) {
+        if (!blob) { notify('Não foi possível gerar a foto. Tente com uma imagem menor.'); return; }
         if (!opts.drive) toDrive([driveItem(st, blob, fileName())], true);
+        if (opts.compartilhar) return opts.compartilhar([{ name: fileName(), blob: blob }], fileName());
         var f = new File([blob], fileName(), { type: 'image/jpeg' });
         if (navigator.canShare && navigator.canShare({ files: [f] })) return navigator.share({ files: [f], title: fileName() });
         notify('Este navegador não compartilha arquivos. Use "' + (celular() ? 'Salvar na galeria do celular' : 'Baixar a foto') + '".');
@@ -2226,6 +2228,11 @@
       });
     }
     function shareFiles(files, late) {
+      if (opts.compartilhar) {
+        if (!files.length) return;
+        opts.compartilhar(files.map(function (f) { return { name: f.name, blob: f.blob }; }), files.length + ' fotos com carimbo').then(function () { prog(''); }, function () { notify('Não foi possível compartilhar. Use "Salvar (.zip)".'); });
+        return;
+      }
       var list = files.map(function (f) { return new File([f.blob], f.name, { type: 'image/jpeg' }); });
       var can = false;
       try { can = !!(navigator.canShare && navigator.canShare({ files: list })); } catch (e) { can = false; }

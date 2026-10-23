@@ -4506,7 +4506,9 @@
           if (state.activeId === id || !state.contracts.some(function (c) { return c.id === id; })) return;
           state.activeId = id; ui.open = {}; save(); renderAll();
         },
-        gps: true, share: !!navigator.canShare, saveBlob: saveBlob, notify: function (m, ms) { toast(m, ms); },
+        // no app instalado o compartilhar é o do próprio app (o WebView do Android não tem o da web), como na galeria
+        gps: true, share: !!navigator.canShare || (isNativeApp() && podeCompartilharFotos()), saveBlob: saveBlob, notify: function (m, ms) { toast(m, ms); },
+        compartilhar: isNativeApp() && podeCompartilharFotos() ? function (files, rotulo) { return salvarFotos(files, rotulo); } : null,
         drive: driveQ && {
           ready: driveReady,
           add: function (items) { return driveQ.add(items); },
