@@ -474,6 +474,8 @@
     '.ft-camlim{position:absolute;left:10px;right:10px;bottom:10px;padding:8px 11px;border-radius:8px;background:rgba(150,24,16,.9);font-size:14px;font-weight:650;line-height:1.4}',
     '.ft-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}',
     '.ft-flash.on{opacity:.7;transition:none}',
+    '.ft-flash.segura{opacity:1;background:transparent;transition:none;display:flex;align-items:center;justify-content:center}',
+    '.ft-flash.segura::after{content:"Segure firme\\2026";padding:9px 16px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-size:16px;font-weight:700}',
     '.ft-camctl{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 16px}',
     '.ft-camb{justify-self:start;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:6px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;font:inherit;font-size:14px;font-weight:650;cursor:pointer}',
     '.ft-camdone{justify-self:end}',
@@ -2277,8 +2279,14 @@
         return toBlobP(cv).then(function (b) { cv.width = cv.height = 0; return b || blob; });
       });
     }
-    function grab(v, c) {
-      if (!c.ic || typeof c.ic.takePhoto !== 'function') return frameBlob(v);
+    // a captura cheia (ImageCapture) só quando a prévia é menor que o tamanho escolhido para o arquivo: no Android ela refaz foco
+    // e exposição e leva de 0,5 a 2 s, e quem mexe o celular depois do toque via a foto sair com o chão e girada (23/10/2026).
+    // O quadro da prévia sai no instante do toque, como no iPhone
+    function cheia(v, c) {
+      return !!(c.ic && typeof c.ic.takePhoto === 'function') && Math.max(v.videoWidth, v.videoHeight) < arq()[0];
+    }
+    function grab(v, c, full) {
+      if (!full) return frameBlob(v);
       var W = 32, H = Math.max(8, Math.round(32 * v.videoHeight / v.videoWidth)), ref0 = { W: W, H: H, g: gray(v, 0, W, H) };
       return c.ic.takePhoto().then(function (blob) { return upright(blob, ref0); }).catch(function () { return frameBlob(v); });
     }
@@ -2286,11 +2294,13 @@
       var c = cam, v = q('.ft-cam video');
       if (!c || c.busy || !v.videoWidth || c.shots.length >= MAX_FOTOS) return;
       var fix = camFix(), when = new Date(), btn = q('[data-ft="cam-shot"]'), fl = q('.ft-flash'), rel = giroRel(), modo = camModo;
+      var full = cheia(v, c), pisca = function () { fl.classList.add('on'); setTimeout(function () { fl.classList.remove('on'); }, 60); };
       c.busy = true;
       btn.disabled = true;
-      fl.classList.add('on');
-      setTimeout(function () { fl.classList.remove('on'); }, 60);
-      grab(v, c).then(function (b0) { return b0 ? orientar(b0, rel, modo).then(null, function () { return b0; }) : b0; }).then(null, function () { return null; }).then(function (blob) {
+      // captura cheia: "Segure firme…" até a foto sair, e o clarão só no fim
+      if (full) fl.classList.add('segura'); else pisca();
+      grab(v, c, full).then(function (b0) { return b0 ? orientar(b0, rel, modo).then(null, function () { return b0; }) : b0; }).then(null, function () { return null; }).then(function (blob) {
+        if (full) { fl.classList.remove('segura'); pisca(); }
         if (cam !== c) return;
         c.busy = false;
         btn.disabled = false;
