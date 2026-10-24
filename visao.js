@@ -14,12 +14,13 @@
   var SIT_C = [['Concluído', '#1E9E55', 'concluído', 'concluídos'], ['Ativo', '#2B5797', 'ativo', 'ativos'],
     ['Parado', '#D93025', 'parado', 'parados'], ['Sem atividade', '#7A8580', 'sem atividade', 'sem atividade']];
   var SIT_O = [['Sem dano aparente', '#1E9E55', 'sem dano aparente', 'sem dano aparente'], ['Dano observado', '#F2A93B', 'com dano', 'com dano'],
-    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem vistoria', '#7A8580', 'sem vistoria', 'sem vistoria']];
-  // segmentos da conservação (passo 2.4): a situação da vistoria, como nas pontes, com "defeito"
+    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem apontamento', '#7A8580', 'sem apontamento', 'sem apontamento']];
+  // segmentos da conservação (passo 2.4): a situação da vistoria, como nas pontes, com "defeito". Verde = conferido pela
+  // vistoria (algum grupo sem defeito) ou pela medição (serviço medido ali); cinza "Sem apontamento" = nem uma coisa nem outra
   var SIT_S = [['Sem defeito', '#1E9E55', 'sem defeito', 'sem defeito'], ['Defeito observado', '#F2A93B', 'com defeito', 'com defeito'],
-    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem vistoria', '#7A8580', 'sem vistoria', 'sem vistoria']];
+    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem apontamento', '#7A8580', 'sem apontamento', 'sem apontamento']];
   // a pior situação de um grupo pinta a borda do círculo
-  var PESO = { 'Parado': 4, 'Dano observado': 4, 'Defeito observado': 4, 'Ativo': 2, 'Em execução': 2, 'Sem atividade': 1, 'Sem vistoria': 1 };
+  var PESO = { 'Parado': 4, 'Dano observado': 4, 'Defeito observado': 4, 'Ativo': 2, 'Em execução': 2, 'Sem atividade': 1, 'Sem apontamento': 1 };
   var COR = {};
   SIT_C.concat(SIT_O, SIT_S).forEach(function (s) { COR[s[0]] = s[1]; });
   var MIN_KM = 1.5;   // menor trecho na tela, em km
@@ -370,7 +371,12 @@
         '<span><i style="width:9px;height:9px;transform:rotate(45deg);border-radius:1px;background:#3B4540"></i>Ponto curto demais para esta escala</span>' : '') +
         (tem.oae ?'<span><i style="width:11px;height:11px;border-radius:50%;background:#7A8580"></i>Ponte</span>' : '') +
         '<span><i style="width:16px;height:16px;border-radius:50%;border:2px solid #D93025;box-sizing:border-box"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
-        '<span>“~” km a conferir</span>' + (mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div></section>';
+        '<span>“~” km a conferir</span>' + (mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div>' +
+        // conservação e pontes: o que cada cor quer dizer (verde = conferido pela vistoria ou pela medição)
+        (tem.conserva || tem.oae ? '<div class="vg-leg vg-leg-c"><span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Sem defeito · conferido (vistoria ou medição)</span>' +
+          '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Defeito ou dano observado</span>' +
+          '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>Em execução</span>' +
+          '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem apontamento (nem vistoria nem medição ali)</span></div>' : '') + '</section>';
 
       // cartão do ponto escolhido (no celular, sobe da parte de baixo)
       if (sel) {
@@ -393,6 +399,14 @@
       }
       h += '</div>';
 
+      // conservação e pontes: até quando a supervisão conferiu (a última medição carregada); 3 meses ou mais sem medição, em alerta
+      function medLinha(c, tp) {
+        if (tp !== 'conserva' && tp !== 'oae') return '';
+        var m = o.medContrato ? o.medContrato(c) : null;
+        if (!m) return '';
+        return m.atraso >= 3 ? '<div class="vg-ct-m al">Última med.: ' + esc(m.n + 'ª · ' + m.txt) + ' · há ' + m.atraso + ' meses</div>'
+          : '<div class="vg-ct-m">✓ Conferido até a ' + esc(m.n + 'ª med.' + (m.txt ? ' · ' + m.txt : '')) + '</div>';
+      }
       // resumo por contrato (só os mostrados); embaixo, quantos ficaram fora do filtro
       h += '<section class="vg-cards" aria-label="Resumo dos contratos mostrados">' + cs.map(function (c) {
         var tp = N.tipo(c), oae = tp === 'oae', xs = d.por[c.id] || [], sits = oae ? SIT_O : tp === 'conserva' ? SIT_S : SIT_C, n = {}, f = d.fx[c.id];
@@ -404,7 +418,7 @@
         return '<article class="vg-box vg-ct ' + tp + '"><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
           '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' ponte' : ' pontes') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de pontes' : ' km de atuação') + '</span></div>' +
-          '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' +
+          '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) +
           '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';
       }).join('') + '</section>';

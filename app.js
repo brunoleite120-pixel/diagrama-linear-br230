@@ -3327,6 +3327,7 @@
       lsPut(AN_KEY, { dados: analise.dados });
       // digitando no cartão: só a folha agora; o cartão é refeito quando a pessoa sair do campo
       if (medicoesOn) desenhaMedicoes();
+      else if (visaoOn && visao) desenhaVisao();
       else if (!visaoOn && active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; renderPreview(); }
     }, function (err) {
       if (!banco.login || banco.login.codigo !== cred || !parte(contractById(cid), 'med')) return;
@@ -4332,15 +4333,40 @@
   var view = (function () { try { return localStorage.getItem(VIEW_KEY) === 'mapa' ? 'mapa' : 'diagrama'; } catch (e) { return 'diagrama'; } })();
   var mapa = null;
   var NO_STATUS = { name: 'Sem atividade', fill: '#7A8580' };
+  // conferido pela medição (medido = vistoriado até a data da medição): a última medição com serviço no segmento ou ponte
+  // (an.pontes[pid].meses, o mesmo dado da aba Medições) e a última do contrato. Só para quem vê as medições.
+  var MES_C = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  function mesIdx(ref) { var m = /^(\d{4})-(\d{2})(?:-|$)/.exec(String(ref || '')); return m && +m[2] >= 1 && +m[2] <= 12 ? +m[1] * 12 + +m[2] - 1 : null; }
+  function mesCurto(i) { return i == null ? '' : MES_C[i % 12] + '/' + String(Math.floor(i / 12)).slice(-2); }
+  function numMed(v) { if (typeof v === 'number') return v; var s = String(v == null ? '' : v).trim(); if (!s) return 0; if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.'); return Number(s) || 0; }
+  function anConf(c) { return c && banco.on && banco.login && parte(c, 'med') && analise.dados[c.id] && analise.estado[c.id] !== 'vazia' ? analise.dados[c.id] : null; }
+  function refMed(an, n) { var m = (an.medicoes || []).filter(function (x) { return x.n === n; })[0]; return m ? mesIdx(m.ref) : null; }
+  function medDoPonto(c, p) {
+    var an = anConf(c), x = an && an.pontes && an.pontes[p.id], ms = x && x.meses, ult = null;
+    if (!ms) return null;
+    Object.keys(ms).forEach(function (k) { var n = Number(k); if (numMed(ms[k]) > 0 && (ult == null || n > ult)) ult = n; });
+    return ult == null ? null : { n: ult, mes: refMed(an, ult) };
+  }
+  function medDoContrato(c) {
+    var an = anConf(c), ult = null;
+    if (!an) return null;
+    (an.medicoes || []).forEach(function (m) { if (ult == null || m.n > ult.n) ult = m; });
+    if (!ult) return null;
+    var i = mesIdx(ult.ref), d = new Date(), agora = d.getFullYear() * 12 + d.getMonth();
+    return { n: ult.n, mes: i, txt: mesCurto(i), atraso: i == null ? 0 : Math.max(0, agora - 1 - i) };
+  }
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
     var dono = ownerOf(p);
     // pontes e segmentos da conservação: a situação pela vistoria (na conservação, "defeito" no lugar de "dano")
     if (isOae(dono) || isConserva(dono)) {
-      var n = oaeNec(p, dono), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.aval && !n.nv) ? 'OK' : null, nt = oaeNecTxt(n, dono);
-      var nomeK = !k ? 'Sem vistoria' : isConserva(dono) && k === 'OK' ? 'Sem defeito' : isConserva(dono) && k === 'DN' ? 'Defeito observado' : OAE_STATUS[k].name;
+      // conferido: algum grupo marcado sem defeito na vistoria ou serviço medido ali (a marcação de campo, dano ou execução, vem antes)
+      var n = oaeNec(p, dono), med = medDoPonto(dono, p), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.ok || med) ? 'OK' : null, nt = oaeNecTxt(n, dono);
+      var nomeK = !k ? 'Sem apontamento' : isConserva(dono) && k === 'OK' ? 'Sem defeito' : isConserva(dono) && k === 'DN' ? 'Defeito observado' : OAE_STATUS[k].name;
+      var conf = k === 'OK' && med ? 'conferido na ' + med.n + 'ª med.' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : k === 'OK' && n.nv ? 'vistoria marcada' : '';
       return {
-        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: nomeK, pctText: nt === 'sem vistoria' || nt === palavrasDe(dono).semDano ? '' : nt,
+        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: nomeK, conf: conf,
+        pctText: k === 'OK' ? conf : !k ? '' : nt === 'sem vistoria' || nt === palavrasDe(dono).semDano ? '' : nt,
         servs: servicesOf(dono).filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
           var sv = p.serv[s.key], x = oaeSt(sv), qt = comQtd(x) ? fmtQtd(s, sv.q) : '';
           return { label: s.label, color: OAE_STATUS[x].fill, text: oaeStOf(s, x).name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.pri ? ' · prioridade' : '') +
@@ -4638,6 +4664,8 @@
       host: $('visaoHost'), contratos: function () { return state.contracts; }, nomes: NOMES, publico: isPublico,
       // sem código, o ponto vem só com o km: sem situação (cinza)
       info: function (p) { return isPublico() ? { status: '', color: '#5C6661', servs: [], pctText: '' } : pointInfo(p); }, isOae: isOae,
+      // a última medição do contrato (cartão: "Conferido até a 48ª med. · ago/26"); quem não vê as medições: null
+      medContrato: function (c) { return isPublico() ? null : medDoContrato(c); },
       temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
@@ -4651,6 +4679,8 @@
   }
   // um dado estranho não pode impedir a abertura nem travar a tela: se a visão falha, mostra o contrato
   function desenhaVisao() {
+    // na tela inicial, as medições das conservações e pontes vêm junto (pintam o que a supervisão já conferiu); uma vez cada
+    if (banco.login) state.contracts.forEach(function (c) { if ((isOae(c) || isConserva(c)) && !analise.estado[c.id]) carregarAnalise(c); });
     try { visao.render(); return true; } catch (e) {
       console.error(e);
       visaoOn = false; mostraVisao(); renderTabs();
