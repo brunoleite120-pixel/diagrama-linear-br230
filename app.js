@@ -6966,19 +6966,22 @@
 
   // confirmação dentro da página (o confirm() do sistema some no app e é fácil de tocar sem ler).
   // o.digitar: texto que a pessoa precisa digitar para liberar o botão. o.campo: caixa de texto opcional (ex.: motivo).
-  // Devolve null (cancelou) ou {valor}.
+  // o.marcar: {texto, padrao} caixa de marcar opcional (ex.: "Apagar também deste celular").
+  // Devolve null (cancelou) ou {valor, marcado}.
   function semAcento(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase(); }
   function confirmar(o) {
     return new Promise(function (resolve) {
       var f = modal('<h2 id="modalTitle">' + esc(o.titulo) + '</h2>' + (o.html || (o.texto ? '<p>' + esc(o.texto) + '</p>' : '')) +
         (o.campo ? '<div class="field"><label for="cfCampo">' + esc(o.campo) + '</label><input id="cfCampo" maxlength="300" autocomplete="off"></div>' : '') +
+        (o.marcar ? '<label class="cf-marca"><input type="checkbox" id="cfMarca"' + (o.marcar.padrao ? ' checked' : '') + '> <span>' + esc(o.marcar.texto) + '</span></label>' : '') +
         (o.digitar ? '<div class="field cf-dig"><label for="cfDig">Para confirmar, digite <b>' + esc(o.digitar) + '</b></label><input id="cfDig" autocomplete="off" autocorrect="off" spellcheck="false"></div>' : '') +
         '<div class="modal-foot"><button type="button" class="btn" data-close>' + esc(o.cancelar || 'Cancelar') + '</button>' +
         '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button></div>',
       function (form) {
         if (o.digitar && semAcento(form.querySelector('#cfDig').value) !== semAcento(o.digitar)) return;
         var c = form.querySelector('#cfCampo');
-        var v = { valor: c ? c.value.trim() : '' };
+        var m = form.querySelector('#cfMarca');
+        var v = { valor: c ? c.value.trim() : '', marcado: !!(m && m.checked) };
         closeModal();
         resolve(v);
       }, null, function () { resolve(null); });   // cancelou: quem chamou reabre a lista de onde veio

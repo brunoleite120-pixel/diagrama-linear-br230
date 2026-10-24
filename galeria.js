@@ -2164,10 +2164,14 @@
       ls = ls.filter(function (x) { return x.driveId && (apagar ? x.situacao !== 'deletada' && (x.origem === 'banco' || x.situacao === 'enviada') : x.situacao === 'deletada'); });
       if (!l || !url || !ls.length || ocupado) return;
       var n = ls.length;
+      // as que também estão guardadas neste celular: a pessoa escolhe se saem daqui junto (já vem marcado). Sem isso, a cópia
+      // continuava em "No aparelho" com a nuvem de "no Drive" depois de apagada do Drive
+      var nLoc = apagar ? ls.filter(function (x) { return locais[x.id]; }).length : 0;
       o.confirmar(apagar ? {
         titulo: 'Apagar do Drive ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar do Drive',
         html: '<p>' + (n === 1 ? 'A foto sai' : 'As fotos saem') + ' da galeria da equipe e ' + (n === 1 ? 'vai' : 'vão') + ' para a pasta <b>Deletados</b> do Drive. ' +
-          'Só o Administrador vê essa pasta e pode restaurar.</p>', digitar: n > 1 ? 'APAGAR' : null
+          'Só o Administrador vê essa pasta e pode restaurar.</p>', digitar: n > 1 ? 'APAGAR' : null,
+        marcar: nLoc ? { texto: 'Apagar também deste celular' + (nLoc < n ? ' (' + plural(nLoc, 'está guardada aqui', 'estão guardadas aqui') + ')' : ''), padrao: true } : null
       } : {
         titulo: 'Restaurar ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', botao: 'Restaurar',
         html: '<p>' + (n === 1 ? 'Ela volta' : 'Elas voltam') + ' para a pasta original no Drive (se ela não existir mais, para a pasta do contrato e do ponto) ' +
@@ -2175,7 +2179,7 @@
       }).then(function (ok) {
         if (!ok) return;
         cancelar = false;
-        var feitos = 0, falhas = [], cadeia = Promise.resolve();
+        var feitos = 0, falhas = [], cadeia = Promise.resolve(), tirar = [], doCel = !!(nLoc && ok.marcado);
         ls.forEach(function (it, i) {
           cadeia = cadeia.then(function () {
             if (cancelar) return;
@@ -2186,15 +2190,17 @@
             if (pr) corpo.pastas = pr;
             return o.drive.post(url, corpo).then(function (r) {
               // o banco não marcou e o script não conseguiu devolver o arquivo (versão 6): Drive e galeria ficaram diferentes
-              if (r && r.ok) { feitos++; itemAtualizar(it.id, apagar ? null : { situacao: 'ativa' }); } else falhas.push(r && r.erro === 'banco_nao_marcou' && r.desfeito === false ? 'nao_desfeito' : (r && r.erro) || 'erro');
+              if (r && r.ok) { feitos++; itemAtualizar(it.id, apagar ? null : { situacao: 'ativa' }); if (doCel && locais[it.id]) tirar.push(it.id); } else falhas.push(r && r.erro === 'banco_nao_marcou' && r.desfeito === false ? 'nao_desfeito' : (r && r.erro) || 'erro');
             }, function () { falhas.push('sem_rede'); });
           });
         });
-        cadeia.then(function () {
+        // só sai do celular a que saiu do Drive (a que falhou continua aqui)
+        cadeia.then(function () { return tirar.length && o.drive.apagar ? o.drive.apagar(tirar).then(null, function () { tirar = []; }) : null; }).then(function () {
           ocupado = null;
           if (ver >= 0) fecharVer();
           sel = {}; selecionando = false;
-          var t = feitos ? plural(feitos, apagar ? 'foto foi para a Lixeira' : 'foto restaurada', apagar ? 'fotos foram para a Lixeira' : 'fotos restauradas') + '.' : '';
+          var t = feitos ? plural(feitos, apagar ? 'foto foi para a Lixeira' : 'foto restaurada', apagar ? 'fotos foram para a Lixeira' : 'fotos restauradas') +
+            (tirar.length ? (tirar.length === feitos ? ' e ' + (feitos === 1 ? 'saiu' : 'saíram') + ' deste celular' : ' (' + tirar.length + ' também deste celular)') : '') + '.' : '';
           var f0 = falhas.indexOf('nao_desfeito') >= 0 ? 'nao_desfeito' : falhas.indexOf('sem_rede') >= 0 ? 'sem_rede' : falhas[0];
           if (falhas.length) t += ' ' + plural(falhas.length, 'não foi', 'não foram') + ' (' + motivoDrive(f0) + ').';
           o.toast(t.trim(), 6000);
