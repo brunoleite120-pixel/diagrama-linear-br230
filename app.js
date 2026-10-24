@@ -6975,8 +6975,12 @@
         (o.campo ? '<div class="field"><label for="cfCampo">' + esc(o.campo) + '</label><input id="cfCampo" maxlength="300" autocomplete="off"></div>' : '') +
         (o.marcar ? '<label class="cf-marca"><input type="checkbox" id="cfMarca"' + (o.marcar.padrao ? ' checked' : '') + '> <span>' + esc(o.marcar.texto) + '</span></label>' : '') +
         (o.digitar ? '<div class="field cf-dig"><label for="cfDig">Para confirmar, digite <b>' + esc(o.digitar) + '</b></label><input id="cfDig" autocomplete="off" autocorrect="off" spellcheck="false"></div>' : '') +
+        // v119: escolhas ({ k, t, d, perigo }): um botão grande para cada saída; responde { escolha: k }
+        (o.escolhas ? '<div class="cf-escs">' + o.escolhas.map(function (e) {
+          return '<button type="button" class="cf-esc' + (e.perigo ? ' perigo' : '') + '" data-esc="' + esc(e.k) + '"><b>' + esc(e.t) + '</b>' + (e.d ? '<span>' + esc(e.d) + '</span>' : '') + '</button>';
+        }).join('') + '</div>' : '') +
         '<div class="modal-foot"><button type="button" class="btn" data-close>' + esc(o.cancelar || 'Cancelar') + '</button>' +
-        '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button></div>',
+        (o.escolhas ? '' : '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button>') + '</div>',
       function (form) {
         if (o.digitar && semAcento(form.querySelector('#cfDig').value) !== semAcento(o.digitar)) return;
         var c = form.querySelector('#cfCampo');
@@ -6985,6 +6989,14 @@
         closeModal();
         resolve(v);
       }, null, function () { resolve(null); });   // cancelou: quem chamou reabre a lista de onde veio
+      if (o.escolhas) {
+        f.addEventListener('click', function (ev) {
+          var b = ev.target.closest && ev.target.closest('[data-esc]');
+          if (!b) return;
+          closeModal();
+          resolve({ escolha: b.getAttribute('data-esc') });
+        });
+      }
       if (o.digitar) {
         var inp = f.querySelector('#cfDig'), btn = f.querySelector('button[type=submit]');
         inp.addEventListener('input', function () { btn.disabled = semAcento(inp.value) !== semAcento(o.digitar); });

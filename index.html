@@ -1078,6 +1078,13 @@ span.an-chip{cursor:default}
 .cf-dig input{font-family:ui-monospace,Consolas,monospace}
 .cf-marca{display:flex;align-items:center;gap:10px;margin:12px 0 4px;font-weight:600;cursor:pointer;min-height:44px}
 .cf-marca input{width:22px;height:22px;flex:none;margin:0;accent-color:var(--danger,#b42318)}
+.cf-escs{display:flex;flex-direction:column;gap:10px;margin:14px 0 6px}
+.cf-esc{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;padding:12px 14px;border:1px solid var(--line,#D5DAD6);border-radius:12px;background:var(--panel,#fff);color:var(--ink,#17201C);font:inherit;min-height:44px;cursor:pointer}
+.cf-esc b{font-size:15px}
+.cf-esc span{font-size:13px;line-height:1.4;color:var(--ink-2,#3B4540)}
+.cf-esc:hover,.cf-esc:focus-visible{border-color:var(--accent,#1D4F91)}
+.cf-esc.perigo{border-color:#E3B2AE}
+.cf-esc.perigo b{color:var(--danger,#b42318)}
 .field input:disabled,.field select:disabled,.field textarea:disabled{background:var(--ground);color:var(--ink-2);opacity:1}
 #btnLogin{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;line-height:22px}
 .modal{position:fixed;inset:0;z-index:3500;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) calc(16px + env(safe-area-inset-left,0px));background:rgba(23,32,28,.42)}
