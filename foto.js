@@ -2354,10 +2354,8 @@
     // sai como a tela. camModo: 'deitada' (o padrão: a foto sai sempre deitada; com o celular em pé, o quadro deitado do meio),
     // 'auto' (como o celular estiver) ou 'empe' (sempre em pé).
     var giro = { a: null }, camModo = CAM_GIROS.some(function (x) { return x[0] === lsGet(GIRO_KEY); }) ? lsGet(GIRO_KEY) : 'deitada', camLotsAberto = false;
-    function aoGirar(e) {
-      if (e.beta == null || e.gamma == null) return;
-      var b = e.beta * Math.PI / 180, gm = e.gamma * Math.PI / 180, ux = -Math.sin(gm) * Math.cos(b), uy = Math.sin(b);
-      if (ux * ux + uy * uy < 0.3) return;   // deitado na mesa: fica o último
+    // ux, uy: para onde aponta o "para cima" do mundo, no plano da tela (x para a direita, y para o topo do celular)
+    function giroPasso(ux, uy) {
       var a = Math.atan2(ux, uy) * 180 / Math.PI, alvo = Math.round(a / 90) * 90;
       if (alvo === -180) alvo = 180;
       // folga de 55°: perto da diagonal não fica trocando
@@ -2365,16 +2363,42 @@
         if (giro.a !== alvo) { giro.a = alvo; camOv(); }
       }
     }
+    function aoGirar(e) {
+      if (giro.mov || e.beta == null || e.gamma == null) return;   // com o acelerômetro respondendo, vale ele
+      var b = e.beta * Math.PI / 180, gm = e.gamma * Math.PI / 180, ux = -Math.sin(gm) * Math.cos(b), uy = Math.sin(b);
+      if (ux * ux + uy * uy < 0.3) return;   // deitado na mesa: fica o último
+      giroPasso(ux, uy);
+    }
+    // Android: a gravidade lida direto do acelerômetro (devicemotion). O ângulo do deviceorientation vem trocado em alguns
+    // aparelhos (OPPO, 26/10/2026: o carimbo girava ao contrário e trocava sozinho, com a rotação da tela travada)
+    function aoMover(e) {
+      var g = e.accelerationIncludingGravity;
+      if (!g || g.x == null || g.y == null || !isFinite(g.x) || !isFinite(g.y)) return;
+      var z = isFinite(g.z) ? g.z : 0, m = giro.m;
+      if (!m) m = giro.m = { x: g.x, y: g.y, z: z };
+      else { m.x += (g.x - m.x) * 0.3; m.y += (g.y - m.y) * 0.3; m.z += (z - m.z) * 0.3; }   // tira o tremor da mão
+      giro.mov = true;
+      var n = m.x * m.x + m.y * m.y + m.z * m.z;
+      if (!n || (m.x * m.x + m.y * m.y) / n < 0.3) return;   // deitado na mesa: fica o último
+      giroPasso(m.x, m.y);
+    }
+    var IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     function ligaGiro() {
       var D = window.DeviceOrientationEvent;
-      if (!D || giro.on) return;
+      if (giro.on) return;
       giro.on = true;
+      // no iPhone o acelerômetro vem com o sinal invertido: lá continua o deviceorientation, como antes
+      if (!IOS && window.DeviceMotionEvent) window.addEventListener('devicemotion', aoMover);
+      if (!D) return;
       var liga = function () { window.addEventListener('deviceorientation', aoGirar); };
       if (typeof D.requestPermission === 'function') {
         try { D.requestPermission().then(function (r) { if (r === 'granted' && giro.on) liga(); }, function () { /* sem permissão: segue a tela */ }); } catch (e) { /* idem */ }
       } else liga();
     }
-    function desligaGiro() { giro.on = false; giro.a = null; window.removeEventListener('deviceorientation', aoGirar); }
+    function desligaGiro() {
+      giro.on = false; giro.a = null; giro.mov = false; giro.m = null;
+      window.removeEventListener('deviceorientation', aoGirar); window.removeEventListener('devicemotion', aoMover);
+    }
     // quanto a imagem da tela está girada em relação à cena (0, 90, -90 ou 180)
     function telaAng() { var o = screen.orientation, a = o && typeof o.angle === 'number' ? o.angle : window.orientation; a = ((+a || 0) % 360 + 360) % 360; return a > 180 ? a - 360 : a; }
     function giroRel() { if (giro.a === null) return 0; var r = ((giro.a - telaAng()) % 360 + 540) % 360 - 180; return r === -180 ? 180 : r; }
