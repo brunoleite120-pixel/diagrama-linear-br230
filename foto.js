@@ -67,6 +67,42 @@
     return (cs || []).filter(function (c) { var r = faixa(c); return !!r && km >= r[0] - FOLGA_KM && km <= r[1] + FOLGA_KM; });
   }
 
+  function numOr(v) { var n = typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : null; }
+  // trecho do contrato (km inicial e final); sem eles, a faixa dos pontos com 500 m de folga
+  function lotRange(c) {
+    var a = numOr(c.kmIni), b = numOr(c.kmFim);
+    if (a == null || b == null) {
+      var ks = [];
+      (c.pontos || []).forEach(function (p) { if (p.kmIni != null) ks.push(p.kmIni); if (p.kmFim != null) ks.push(p.kmFim); });
+      if (!ks.length) return null;
+      a = Math.min.apply(null, ks) - 0.5; b = Math.max.apply(null, ks) + 0.5;
+    }
+    return a <= b ? [a, b] : [b, a];
+  }
+  function mesmaRodovia(c, rod) {
+    function k(s) { return String(s || '').toUpperCase().replace(/\s+/g, '').replace(/^BR(\d)/, 'BR-$1').split('/')[0]; }
+    return !c.rodovia || k(c.rodovia) === k(rod || 'BR-230');
+  }
+  // pontos críticos: a foto só é do contrato até 1 km de algum ponto (o 267 vai do km 613,50 ao 744,98 com 3 pontos; no meio
+  // ficam a Proarte e a conservação). Sem ponto com km, vale o trecho do contrato (decidido em 22/10/2026)
+  var PC_RAIO = 1;
+  function pcMaisPerto(c, km) {
+    var best = null;
+    (c.pontos || []).forEach(function (p) {
+      if (p.kmIni == null) return;
+      var a = Math.min(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni), b = Math.max(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni);
+      var d = km < a ? a - km : km > b ? km - b : 0;
+      if (!best || d < best.d) best = { p: p, d: d };
+    });
+    return best;
+  }
+  function pcLonge(c, km) { if (!c || c.tipo === 'oae' || c.tipo === 'conserva' || km == null) return null; var m = pcMaisPerto(c, km); return m && m.d > PC_RAIO ? m : null; }
+  // os contratos (cs) que passam no km da foto: no trecho, na mesma rodovia e, nos pontos críticos, até 1 km de um ponto.
+  // A Foto pela tela inicial (app.js) usa a mesma regra para pôr os contratos do km primeiro
+  function contratosAqui(cs, km, rod) {
+    return contratosNoKm(cs, km, function (c) { return mesmaRodovia(c, rod) ? lotRange(c) : null; }).filter(function (c) { return !pcLonge(c, km); });
+  }
+
   function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   // no app (Capacitor) a permissão é do app, nos Ajustes do aparelho; no site, do navegador
   function nativo() { var C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); }
@@ -630,39 +666,8 @@
     function contract() { return (st && st.cid && byId(st.cid)) || activeContract(); }
     // nome de tela do contrato ("Pontos Críticos 314"); o Lote da licitação fica no carimbo e no texto do Drive
     function lotName(c) { return c ? nomes.nome(c) || 'Contrato' : ''; }
-    function numOr(v) { var n = typeof v === 'number' ? v : parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : null; }
-    // trecho do contrato (km inicial e final); sem eles, a faixa dos pontos com 500 m de folga
-    function lotRange(c) {
-      var a = numOr(c.kmIni), b = numOr(c.kmFim);
-      if (a == null || b == null) {
-        var ks = [];
-        (c.pontos || []).forEach(function (p) { if (p.kmIni != null) ks.push(p.kmIni); if (p.kmFim != null) ks.push(p.kmFim); });
-        if (!ks.length) return null;
-        a = Math.min.apply(null, ks) - 0.5; b = Math.max.apply(null, ks) + 0.5;
-      }
-      return a <= b ? [a, b] : [b, a];
-    }
-    function sameRoad(c) {
-      function k(s) { return String(s || '').toUpperCase().replace(/\s+/g, '').replace(/^BR(\d)/, 'BR-$1').split('/')[0]; }
-      return !c.rodovia || k(c.rodovia) === k(snv.rodovia || 'BR-230');
-    }
-    // pontos críticos: a foto só é do contrato até 1 km de algum ponto (o 267 vai do km 613,50 ao 744,98 com 3 pontos; no meio
-    // ficam a Proarte e a conservação). Sem ponto com km, vale o trecho do contrato (decidido em 22/10/2026)
-    var PC_RAIO = 1;
-    function pcMaisPerto(c, km) {
-      var best = null;
-      (c.pontos || []).forEach(function (p) {
-        if (p.kmIni == null) return;
-        var a = Math.min(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni), b = Math.max(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni);
-        var d = km < a ? a - km : km > b ? km - b : 0;
-        if (!best || d < best.d) best = { p: p, d: d };
-      });
-      return best;
-    }
-    function pcLonge(c, km) { if (!c || c.tipo === 'oae' || c.tipo === 'conserva' || km == null) return null; var m = pcMaisPerto(c, km); return m && m.d > PC_RAIO ? m : null; }
-    function lotsAt(km) {
-      return contratosNoKm(contracts(), km, function (c) { return sameRoad(c) ? lotRange(c) : null; }).filter(function (c) { return !pcLonge(c, km); });
-    }
+    function sameRoad(c) { return mesmaRodovia(c, snv.rodovia); }
+    function lotsAt(km) { return contratosAqui(contracts(), km, snv.rodovia); }
     // "A, B e C"
     function lotNames(list) {
       var n = list.map(function (c) { return lotName(c); });
@@ -3001,6 +3006,6 @@
   FotoCarimbo.opcoes = { padrao: defaults, ler: loadSet, resumos: resumos, logoCurto: logoCurto, noPadrao: grupoNoPadrao, padraoTxt: padraoTxt,
     ARQS: ARQS, GRUPOS: GRUPOS, FIELDS: FIELDS };
   // contrato pelo km, sem tela (para os testes em node): a mesma folga da galeria
-  FotoCarimbo.km = { FOLGA_KM: FOLGA_KM, contratosNoKm: contratosNoKm };
+  FotoCarimbo.km = { FOLGA_KM: FOLGA_KM, contratosNoKm: contratosNoKm, contratosAqui: contratosAqui, faixa: lotRange };
   window.FotoCarimbo = FotoCarimbo;
 })();

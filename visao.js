@@ -670,7 +670,9 @@
       var dg = host.querySelector('.vg-diag');
       if (!dg) return;
       var tb = document.querySelector('.topbar'), card = host.querySelector('.vg-card'), mk = host.querySelector('.vg-mk.sel');
-      var topo = (tb ? tb.getBoundingClientRect().bottom : 0) + 8, base = (card ? card.getBoundingClientRect().top : window.innerHeight) - 8;
+      // sem o cartão, o fim da faixa livre é o alto da barra de baixo do app (v127), quando ela está lá
+      var nb = document.getElementById('pgNav'), fim = nb && !nb.hidden && getComputedStyle(nb).position === 'fixed' ? nb.getBoundingClientRect().top : window.innerHeight;
+      var topo = (tb ? tb.getBoundingClientRect().bottom : 0) + 8, base = (card ? card.getBoundingClientRect().top : fim) - 8;
       var rd = dg.getBoundingClientRect(), dy;
       if (mk) {
         var rm = mk.getBoundingClientRect();
@@ -888,7 +890,8 @@
     // e a caixa "Contratos" volta fechada
     if (window.MutationObserver) new window.MutationObserver(function () { if (host.hidden) { avisa(''); st.ct = false; } }).observe(host, { attributes: true, attributeFilter: ['hidden'] });
 
-    return { render: render };
+    // sel(): o item do cartão aberto ({ c, p }) ou null; a Foto da barra põe o contrato dele em primeiro (app.js escolheCt)
+    return { render: render, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; } };
   }
 
   window.VisaoGeral = VisaoGeral;
