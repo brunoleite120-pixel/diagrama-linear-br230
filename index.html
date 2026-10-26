@@ -713,6 +713,33 @@ body[data-pg="mapa"] .map-host .mp-chip{min-height:44px;padding-left:12px;paddin
 .marca.mne i{color:#2A1414}
 .marca.mne[aria-pressed="true"]{background:#2A1414;border-color:#2A1414;color:#fff}
 .marca.mne[aria-pressed="true"] i{background:#fff;border-color:#fff;color:#2A1414}
+/* v121: não conformidades (NC) no lugar do estado da vistoria. Grupo sem NC: uma linha com "+ Não conformidade" e "N/A";
+   com NC: cartão laranja (aberta) ou azul (em correção) com a estimativa, o onde, as marcas e "Em correção" / "Corrigida ✓" */
+.svc.oae.nc-sem,.svc.oae.nc-on{display:flex;flex-direction:column;align-items:stretch;gap:6px}
+.nc-l{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--ink-3)}
+.nc-l>span{flex:1 1 auto}
+.nc-l button{min-height:40px;padding:0 12px;border:1px solid #7A8580;border-radius:8px;background:#fff;font:inherit;font-size:13px;font-weight:650;color:var(--ink)}
+.nc-l .nc-na{border-color:var(--line);color:var(--ink-3);font-weight:600}
+.nc-card{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:8px;align-items:center;padding:10px 12px;border:1px solid #E3A84A;border-left:5px solid var(--danificado);border-radius:8px;background:#FFFBF2}
+.nc-card.co{border-color:#A9BEDD;border-left-color:var(--ativo);background:#F5F8FC}
+.nc-card>.nc-l1,.nc-card>.svc-nota,.nc-card>.svc-itens,.nc-card>.svc-marcas,.nc-card>.nc-acts,.nc-card>.nc-pend,.nc-card>.an-sec,.nc-card>div:not(.pct-in){grid-column:1/-1}
+.nc-card>.pct-in{grid-column:2;grid-row:2}
+.nc-card>.nc-qt{grid-column:1;grid-row:2;font-size:13px;color:var(--ink-2)}
+.nc-l1{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}
+.nc-tipo{font-size:13px;color:var(--ink-2)}
+.nc-chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;border:1px solid}
+.nc-chip.ab{background:#FFF4D6;color:#7A3F00;border-color:#E3A84A}.nc-chip.co{background:#EAF0F8;color:var(--ativo);border-color:#A9BEDD}.nc-chip.in{background:#fff;color:var(--ink-2);border-color:#7A8580}
+.nc-acts{display:flex;gap:8px;flex-wrap:wrap}
+.nc-acts button{min-height:40px;padding:0 12px;border:1px solid #7A8580;border-radius:8px;background:#fff;font:inherit;font-size:13px;font-weight:650;color:var(--ink)}
+.nc-acts button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.nc-pend{font-size:12px;font-weight:600;color:#8A5A00}
+body.ro .nc-acts,body.ro .nc-l button{display:none}
+.nc-bdg{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--danificado);color:var(--danificado-ink);border:1px solid #9A5B00;font-size:11.5px;font-weight:800;line-height:16px;white-space:nowrap}
+.nc-bdg.co{background:var(--ativo);border-color:var(--ativo);color:#fff}
+.pt-traf{display:block;margin-top:2px;font-size:10.5px;font-weight:700}
+/* lista: só o grupo com NC tem cor; sem NC fica branco com contorno; N/A, riscado */
+.pt.oae .dot.OK,.pt.oae .dot.NV{background:#fff;box-shadow:inset 0 0 0 1px #9AA19D}
+.pt.oae .dot.NA{background:repeating-linear-gradient(135deg,#fff 0 2px,#D5DAD6 2px 3px);box-shadow:inset 0 0 0 1px #C9CECB}
 /* ponte em duas abas (Vistoria | Medições), só para quem vê a análise */
 .pt-abas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .pt-abas button{min-height:44px;border:0;background:var(--panel);color:var(--ink);font:inherit;font-size:14.5px}
@@ -1484,7 +1511,7 @@ span.an-chip{cursor:default}
       <div class="meta" id="previewMeta"></div>
       <div class="preview-tools">
         <div class="view-sw" id="viewSw" role="group" aria-label="Visualização"><button type="button" id="viewDiagrama" data-view="diagrama" aria-pressed="true">Diagrama</button><button type="button" id="viewMapa" data-view="mapa" aria-pressed="false">Mapa</button></div>
-        <div class="view-sw" id="folhaSw" role="group" aria-label="O que aparece na folha" hidden><button type="button" data-folha="vistoria" aria-pressed="false">Só vistoria</button><button type="button" data-folha="analise" aria-pressed="true">Com análise</button></div>
+        <div class="view-sw" id="folhaSw" role="group" aria-label="O que aparece na folha" hidden><button type="button" data-folha="vistoria" aria-pressed="false">Não conformidades</button><button type="button" data-folha="analise" aria-pressed="true">Com análise</button></div>
         <label class="pages-ctl" for="selPages">Páginas <select id="selPages" disabled><option>Automático</option></select></label>
         <button class="btn small" id="btnFoto" type="button" title="Foto com logo e legenda (km, coordenadas, ponto)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>

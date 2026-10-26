@@ -13,13 +13,12 @@
   // situações na ordem dos filtros, com as cores do app (STATUS e OAE_STATUS em app.js)
   var SIT_C = [['Concluído', '#1E9E55', 'concluído', 'concluídos'], ['Ativo', '#2B5797', 'ativo', 'ativos'],
     ['Parado', '#D93025', 'parado', 'parados'], ['Sem atividade', '#7A8580', 'sem atividade', 'sem atividade']];
-  var SIT_O = [['Sem dano aparente', '#1E9E55', 'sem dano aparente', 'sem dano aparente'], ['Dano observado', '#F2A93B', 'com dano', 'com dano'],
-    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem vistoria', '#7A8580', 'sem vistoria', 'sem vistoria']];
-  // segmentos da conservação (passo 2.4): a situação da vistoria, como nas pontes, com "defeito"
-  var SIT_S = [['Sem defeito', '#1E9E55', 'sem defeito', 'sem defeito'], ['Defeito observado', '#F2A93B', 'com defeito', 'com defeito'],
-    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem vistoria', '#7A8580', 'sem vistoria', 'sem vistoria']];
+  // pontes e segmentos da conservação (v121): as não conformidades (NC) da supervisão, nas cores de app.js (pointInfo)
+  var SIT_O = [['Não conformidade aberta', '#F2A93B', 'com NC aberta', 'com NC aberta'], ['NC em correção', '#2B5797', 'com NC em correção', 'com NC em correção'],
+    ['Sem não conformidade', '#7A8580', 'sem NC', 'sem NC']];
+  var SIT_S = SIT_O;
   // a pior situação de um grupo pinta a borda do círculo
-  var PESO = { 'Parado': 4, 'Dano observado': 4, 'Defeito observado': 4, 'Ativo': 2, 'Em execução': 2, 'Sem atividade': 1, 'Sem vistoria': 1 };
+  var PESO = { 'Parado': 4, 'Não conformidade aberta': 4, 'Ativo': 2, 'NC em correção': 2, 'Sem atividade': 1, 'Sem não conformidade': 1 };
   var COR = {};
   SIT_C.concat(SIT_O, SIT_S).forEach(function (s) { COR[s[0]] = s[1]; });
   var MIN_KM = 1.5;   // menor trecho na tela, em km
