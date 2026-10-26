@@ -13,16 +13,15 @@
   // situações na ordem dos filtros, com as cores do app (STATUS e OAE_STATUS em app.js)
   var SIT_C = [['Concluído', '#1E9E55', 'concluído', 'concluídos'], ['Ativo', '#2B5797', 'ativo', 'ativos'],
     ['Parado', '#D93025', 'parado', 'parados'], ['Sem atividade', '#7A8580', 'sem atividade', 'sem atividade']];
-  var SIT_O = [['Sem dano aparente', '#1E9E55', 'sem dano aparente', 'sem dano aparente'], ['Dano observado', '#F2A93B', 'com dano', 'com dano'],
-    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem apontamento', '#7A8580', 'sem apontamento', 'sem apontamento']];
-  // segmentos da conservação (passo 2.4): a situação da vistoria, como nas pontes, com "defeito". Verde = conferido pela
-  // vistoria (algum grupo sem defeito) ou pela medição (serviço medido ali); cinza "Sem apontamento" = nem uma coisa nem outra
-  var SIT_S = [['Sem defeito', '#1E9E55', 'sem defeito', 'sem defeito'], ['Defeito observado', '#F2A93B', 'com defeito', 'com defeito'],
-    ['Em execução', '#2B5797', 'em execução', 'em execução'], ['Sem apontamento', '#7A8580', 'sem apontamento', 'sem apontamento']];
+  // pontes e segmentos da conservação (v121): as não conformidades (NC) da supervisão, nas cores de app.js (pointInfo)
+  var SIT_O = [['Não conformidade aberta', '#F2A93B', 'com NC aberta', 'com NC aberta'], ['NC em correção', '#2B5797', 'com NC em correção', 'com NC em correção'],
+    ['Sem não conformidade', '#7A8580', 'sem NC', 'sem NC']];
+  // tela inicial no modo Medições (o padrão): pontes e segmentos pela medição (verde = serviço medido ali)
+  var SIT_M = [['Medido', '#1E9E55', 'medido', 'medidos'], ['Sem medição', '#7A8580', 'sem medição', 'sem medição']];
   // a pior situação de um grupo pinta a borda do círculo
-  var PESO = { 'Parado': 4, 'Dano observado': 4, 'Defeito observado': 4, 'Ativo': 2, 'Em execução': 2, 'Sem atividade': 1, 'Sem apontamento': 1 };
+  var PESO = { 'Parado': 4, 'Não conformidade aberta': 4, 'Ativo': 2, 'NC em correção': 2, 'Sem atividade': 1, 'Sem não conformidade': 1, 'Medido': 1, 'Sem medição': 1 };
   var COR = {};
-  SIT_C.concat(SIT_O, SIT_S).forEach(function (s) { COR[s[0]] = s[1]; });
+  SIT_C.concat(SIT_O, SIT_M).forEach(function (s) { COR[s[0]] = s[1]; });
   var MIN_KM = 1.5;   // menor trecho na tela, em km
   // km plausível na rodovia: fora disso é erro de digitação (ex.: 84880 em vez de 848,80) e não entra no desenho
   // (a faixa do eixo SNV com 50 km de folga; sem o eixo, 0 a 5.000)
@@ -91,7 +90,7 @@
   }
   // filtro de situação por tipo de contrato: cada tipo conta à parte (antes o 'c:' juntava tudo que não era ponte)
   var PRE = { pc: 'c:', conserva: 's:', oae: 'o:' };
-  var SIT_GR = [['pc', 'Pontos críticos · situação', SIT_C], ['conserva', 'Conservação · segmentos', SIT_S], ['oae', 'Proarte · pontes', SIT_O]];
+  var SIT_GR = [['pc', 'Pontos críticos · situação'], ['conserva', 'Conservação · segmentos'], ['oae', 'Proarte · pontes']];
   // a busca não liga para acento nem maiúscula ("conservacao", "criticos")
   function semAc(s) { s = String(s == null ? '' : s).toLowerCase(); return s.normalize ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : s; }
   // "A", "A e B", "A, B e C"
@@ -131,6 +130,13 @@
     kmMpFn = typeof o.kmMp === 'function' ? o.kmMp : null;
     var FILTRO_KEY = 'diagrama-linear-visao-contratos-' + ((window.AMBIENTE && window.AMBIENTE.nome) || 'oficial');
     var filtro = lerFiltro(FILTRO_KEY), selM = mapaDe(filtro.sel), vistosM = mapaDe(filtro.vistos);
+    // modo das pontes e da conservação: 'med' (Medições, o padrão) ou 'nc' (Não conformidades: só as NC acesas). Quem não
+    // vê as medições fica no 'nc'. Os pontos críticos não mudam
+    var MODO_KEY = 'diagrama-linear-visao-modo';
+    st.modo = (function () { try { return localStorage.getItem(MODO_KEY) === 'nc' ? 'nc' : 'med'; } catch (e) { return 'med'; } })();
+    function temMed() { return !!(o.temMed && o.temMed()); }
+    function modo() { return temMed() ? st.modo : 'nc'; }
+    function sitsDe(tp) { return tp === 'pc' ? SIT_C : modo() === 'med' ? SIT_M : SIT_O; }
 
     function cel() { return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches); }
     // a lista do último desenho: achar(), a busca e os cliques usam a mesma, sem recalcular a situação de cada ponto.
@@ -140,7 +146,7 @@
     function itens() {
       if (cacheIt) return cacheIt;
       var out = [], dentro = [], semKm = 0, fora = 0, foraC = 0, fx = {}, por = {}, on = {}, novos = {};
-      var todos = N.ordem(o.contratos()), mostra = selM ? todos.filter(function (c) { return selM[c.id]; }) : todos;
+      var todos = N.ordem(o.contratos()), mostra = selM ? todos.filter(function (c) { return selM[c.id]; }) : todos, md = modo();
       // escolha: há contratos marcados aqui (todos marcados continuam marcados: mostra tudo, sem "fora do filtro");
       // ativo: a escolha deixa algum de fora. Nenhum dos escolhidos está aqui (excluído, ou ainda não chegou do banco):
       // mostra todos, com aviso, e a escolha continua guardada (uma carga parcial não a apaga). Com um contrato só não há
@@ -163,8 +169,10 @@
           if (!noKm(km)) { if (ok) fora++; return; }
           if (kf != null && !noKm(kf)) { if (ok) fora++; kf = null; }   // km final fora da rodovia: avisa e desenha só no km inicial
           if (kf == null || kf < km) kf = km;
-          var inf = o.info(p);
-          xs.push({ c: c, p: p, oae: oae, km: km, kf: kf, key: c.id + ':' + p.id, st: inf.status, cor: inf.color, inf: inf, fk: pre + inf.status, on: ok });
+          var inf = o.info(p, md);
+          // no modo NC, o que não tem NC fica apagado
+          xs.push({ c: c, p: p, oae: oae, km: km, kf: kf, key: c.id + ':' + p.id, st: inf.status, cor: inf.color, inf: inf, fk: pre + inf.status, on: ok,
+            nc: inf.nc || null, apag: md === 'nc' && pre !== 'c:' && !inf.nc });
         });
         fx[c.id] = faixaDe(c, xs);
         por[c.id] = xs;
@@ -256,7 +264,12 @@
       for (var t = Math.ceil(k0 / step) * step; t <= k1; t += step) ticks.push(t);
       // barra: [Tudo] [Contratos ▾] (com um contrato só não há o que escolher), o zoom e o trecho na tela
       if (nT < 2) st.ct = false;
-      h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') +
+      // Medições | Não conformidades (N): só com pontes ou conservação na tela e para quem vê as medições
+      var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
+      var bMod = (tem.conserva || tem.oae) && temMed() ? '<div class="vg-modo" role="group" aria-label="Pontes e segmentos">' +
+        '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
+        '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '">Não conformidades <b>' + nNC + '</b></button></div>' : '';
+      h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
         '<div class="vg-zoom" role="group" aria-label="Zoom"><button type="button" class="lado" data-vg="esq" aria-label="Para a esquerda">‹</button><button type="button" data-vg="menos" aria-label="Afastar">−</button>' +
         '<button type="button" data-vg="mais" aria-label="Aproximar">+</button><button type="button" class="lado" data-vg="dir" aria-label="Para a direita">›</button></div>' +
         '<span class="vg-faixa">km ' + nf(k0, R < 20 ? 1 : 0) + ' – ' + nf(k1, R < 20 ? 1 : 0) + ' · ' + nf(R, R < 20 ? 1 : 0) + ' km na tela</span></div>' +
@@ -327,6 +340,7 @@
           if (g.t === 'grupo') {
             var km = k0 + g.soma / g.xs.length / W * R, pior = null, n = g.xs.length, nome = oae ? ' pontes' : N.tipo(x.c) === 'conserva' ? ' segmentos' : ' pontos';
             g.xs.forEach(function (y) { if (!pior || (PESO[y.st] || 0) > (PESO[pior.st] || 0)) pior = y; });
+            var apG = g.xs.every(function (y) { return y.apag; }) ? ' apag' : '';
             var estilo = ' style="left:' + pc(X(km)) + ';border-color:' + ((PESO[pior.st] || 0) >= 2 ? pior.cor : '#3B4540') + '"';
             var fidG = (preso(g) ? 'gp:' : 'ga:') + x.key;
             g.xs.forEach(function (y) { grupoDe[y.key] = fidG; });
@@ -336,12 +350,12 @@
               xs.forEach(function (y, i) { if (y.key === st.sel) iSel = i; });
               var dentro = g.xs.some(function (y) { return y.key === st.sel; });
               var prox = g.xs.filter(function (y) { return idx(y) > iSel; })[0] || g.xs[0], tipG = n + nome + ' no km ' + nf(g.a, 2) + ': toque para ver um a um (também na lista abaixo)';
-              mk += '<button type="button" class="vg-mk grupo' + (dentro ? ' sel' : '') + '" data-vg="sel" data-fid="gp:' + esc(g.xs[0].key) + '" data-key="' + esc(prox.key) + '"' + estilo + ' title="' + esc(tipG) + '" aria-label="' + esc(tipG) + '">' + n + '</button>';
+              mk += '<button type="button" class="vg-mk grupo' + apG + (dentro ? ' sel' : '') + '" data-vg="sel" data-fid="gp:' + esc(g.xs[0].key) + '" data-key="' + esc(prox.key) + '"' + estilo + ' title="' + esc(tipG) + '" aria-label="' + esc(tipG) + '">' + n + '</button>';
               return;
             }
             // o toque aproxima pelo menos à metade da tela, centrado no grupo
             var pad = Math.max((g.b - g.a) * 0.4, 1), alvo = Math.min(g.b - g.a + 2 * pad, R / 2), meio = (g.a + g.b) / 2, tipA = n + nome + ' entre km ' + nf(g.a, 1) + ' e ' + nf(g.b, 1) + ': toque para aproximar';
-            mk += '<button type="button" class="vg-mk grupo" data-vg="ir" data-fid="ga:' + esc(g.xs[0].key) + '" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
+            mk += '<button type="button" class="vg-mk grupo' + apG + '" data-vg="ir" data-fid="ga:' + esc(g.xs[0].key) + '" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
             return;
           }
           var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || (x.oae ? 'Ponte' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
@@ -349,7 +363,7 @@
           var temNome = !!(x.p.nome || x.p.codigo);
           if (temNome && cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
           var tip = (x.oae ? nome + (x.p.codigo ? ' · ' + x.p.codigo : '') : nome) + ' · ' + kmTxt(x, g.t === 'barra') + ' · ' + x.st;
-          mk += '<button type="button" class="vg-mk ' + g.t + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" style="left:' + pc(X(g.t === 'barra' ? x.km : mid)) +
+          mk += '<button type="button" class="vg-mk ' + g.t + (x.apag ? ' apag' : '') + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" style="left:' + pc(X(g.t === 'barra' ? x.km : mid)) +
             (g.t === 'barra' ? ';width:' + pc((x.kf - x.km) / R * 100) : '') + ';background:' + x.cor + '"></button>';
         });
         var f = d.fx[c.id], a = f ? Math.max(f[0], k0) : 0, b = f ? Math.min(f[1], k1) : 0;
@@ -372,11 +386,14 @@
         (tem.oae ?'<span><i style="width:11px;height:11px;border-radius:50%;background:#7A8580"></i>Ponte</span>' : '') +
         '<span><i style="width:16px;height:16px;border-radius:50%;border:2px solid #D93025;box-sizing:border-box"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
         '<span>“~” km a conferir</span>' + (mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div>' +
-        // conservação e pontes: o que cada cor quer dizer (verde = conferido pela vistoria ou pela medição)
-        (tem.conserva || tem.oae ? '<div class="vg-leg vg-leg-c"><span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Sem defeito · conferido (vistoria ou medição)</span>' +
-          '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Defeito ou dano observado</span>' +
-          '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>Em execução</span>' +
-          '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem apontamento (nem vistoria nem medição ali)</span></div>' : '') + '</section>';
+        // conservação e pontes: o que cada cor quer dizer, no modo da tela
+        (tem.conserva || tem.oae ? '<div class="vg-leg vg-leg-c">' + (md === 'med'
+          ? '<span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Medido (serviço medido ali)</span>' +
+            '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem medição</span>' +
+            (temMed() ? '<span>Onde estão as não conformidades: botão Não conformidades, acima</span>' : '')
+          : '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
+            '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>NC em correção</span>' +
+            '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '') + '</section>';
 
       // cartão do ponto escolhido (no celular, sobe da parte de baixo)
       if (sel) {
@@ -407,9 +424,16 @@
         return m.atraso >= 3 ? '<div class="vg-ct-m al">Última med.: ' + esc(m.n + 'ª · ' + m.txt) + ' · há ' + m.atraso + ' meses</div>'
           : '<div class="vg-ct-m">✓ Conferido até a ' + esc(m.n + 'ª med.' + (m.txt ? ' · ' + m.txt : '')) + '</div>';
       }
+      // modo Medições: quantos segmentos ou pontes têm NC; o toque passa para o modo Não conformidades
+      function ncLinha(c, tp, xs) {
+        if (md !== 'med' || (tp !== 'conserva' && tp !== 'oae')) return '';
+        var k = xs.filter(function (x) { return x.nc; }).length;
+        return k ? '<button type="button" class="vg-ct-nc" data-vg="modo" data-m="nc" data-fid="nc:' + esc(c.id) + '"><span class="nc-bdg">' + k +
+          (tp === 'oae' ? (k === 1 ? ' ponte com NC' : ' pontes com NC') : (k === 1 ? ' segmento com NC' : ' segmentos com NC')) + '</span><span>ver onde</span></button>' : '';
+      }
       // resumo por contrato (só os mostrados); embaixo, quantos ficaram fora do filtro
       h += '<section class="vg-cards" aria-label="Resumo dos contratos mostrados">' + cs.map(function (c) {
-        var tp = N.tipo(c), oae = tp === 'oae', xs = d.por[c.id] || [], sits = oae ? SIT_O : tp === 'conserva' ? SIT_S : SIT_C, n = {}, f = d.fx[c.id];
+        var tp = N.tipo(c), oae = tp === 'oae', xs = d.por[c.id] || [], sits = sitsDe(tp), n = {}, f = d.fx[c.id];
         xs.forEach(function (x) { n[x.st] = (n[x.st] || 0) + 1; });
         var tot = tp === 'conserva' ? xs.length : c.pontos.length, ext = oae ? c.pontos.reduce(function (t, p) { return t + (Number(p.extensao) || 0); }, 0) / 1000 : uniao(xs);
         var segs = sits.filter(function (s) { return n[s[0]]; }).map(function (s) { return '<i style="flex:' + n[s[0]] + ' 1 0;background:' + s[1] + '"></i>'; }).join('');
@@ -418,7 +442,7 @@
         return '<article class="vg-box vg-ct ' + tp + '"><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
           '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' ponte' : ' pontes') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de pontes' : ' km de atuação') + '</span></div>' +
-          '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) +
+          '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) + ncLinha(c, tp, xs) +
           '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';
       }).join('') + '</section>';
@@ -438,7 +462,7 @@
       h += '<section class="vg-box vg-filtros" aria-label="Busca e filtros"><div class="vg-busca"><label class="vg-cap" for="vgBusca">Buscar</label>' +
         '<input id="vgBusca" type="search" autocomplete="off" placeholder="km (ex.: 794,5), ponto, ponte ou contrato" value="' + esc(st.q) + '"><div class="vg-res" id="vgRes">' + resultados() + '</div></div>' +
         SIT_GR.filter(function (g) { return tem[g[0]]; }).map(function (g) {
-          return '<div class="vg-chips"><span class="vg-cap">' + esc(g[1]) + '</span><div>' + chips(g[2], PRE[g[0]], g[0] === 'oae') + '</div></div>';
+          return '<div class="vg-chips"><span class="vg-cap">' + esc(g[1]) + '</span><div>' + chips(sitsDe(g[0]), PRE[g[0]], g[0] === 'oae') + '</div></div>';
         }).join('') + '</section>';
 
       // lista do trecho da tela
@@ -703,6 +727,8 @@
       else if (a === 'esq') ir(st.k0 - R * 0.4, st.k1 - R * 0.4);
       else if (a === 'dir') ir(st.k0 + R * 0.4, st.k1 + R * 0.4);
       else if (a === 'chip') { st.off[b.dataset.fk] = !st.off[b.dataset.fk]; render(); }
+      // Medições | Não conformidades; do cartão de um contrato, o desenho sobe para a tela
+      else if (a === 'modo') { st.modo = b.dataset.m === 'nc' ? 'nc' : 'med'; try { localStorage.setItem(MODO_KEY, st.modo); } catch (e) { /* vale só nesta visita */ } render(); if (baixo) verDesenho(); }
       // "Tudo": limpa a escolha e fecha a caixa; sem escolha (só com zoom), enquadra tudo. "Contratos" abre ou fecha a
       // caixa; "Mostrar todos" (na caixa e embaixo dos cartões) limpa a escolha. As marcações vêm pelo 'change'
       else if (a === 'ftudo') { st.ct = false; if (filtro.sel) mudaFiltro(null); else { st.k0 = null; render(); } }

@@ -150,7 +150,7 @@
   // trafegabilidade do segmento: linha própria, com estados próprios (interrompido é vermelho e nunca conta como em execução)
   var TRAFEG = { key: 'trafeg', label: 'Trafegabilidade', short: 'Trafegabilidade' };
   var TRAF_STATUS = {
-    NV: { tag: 'SEM VISTORIA', name: 'Sem vistoria', fill: 'none' },
+    NV: { tag: '—', name: 'Sem informação', fill: 'none' },
     T: { tag: 'TRAFEGÁVEL', name: 'Trafegável', btn: 'Trafegável', fill: '#1E9E55', ink: '#FFFFFF' },
     R: { tag: 'COM RESTRIÇÃO', name: 'Com restrição', btn: 'Com restrição', fill: '#F2A93B', ink: '#3D2800' },
     I: { tag: 'INTERROMPIDO', name: 'Interrompido', btn: 'Interrompido', fill: '#D93025', ink: '#FFFFFF' }
@@ -334,7 +334,7 @@
   // contratada (o estado continua o observado até a supervisão conferir e marcar)
   var OAE_MARCAS = {
     pri: { name: 'Prioridade', title: 'Prioridade da supervisão' },
-    ci: { name: 'Conclusão informada', title: 'A contratada informou que concluiu; fica como observado até a supervisão conferir' }
+    ci: { name: 'Correção informada', title: 'A contratada informou que corrigiu; a não conformidade fica aberta até a supervisão conferir' }
   };
   var ALERTA_COR = '#7B3FA0', ALERTA_TINTA = '#5B2C8F';   // roxo = análise das medições (separada do estado da ponte)
   // ✕ = medido sem execução: marca interna da supervisão sobre a medição. Não fica nos pontos (leitura pública):
@@ -347,6 +347,10 @@
     return OAE_STATUS[st] ? st : 'NV';
   }
   function comQtd(st) { return st === 'DN' || st === 'EX'; }
+  // v121: etiqueta da linha fechada (segmento, ponte): "2 NC", laranja com NC aberta, azul só com NC em correção; sem NC, nada
+  function ncBdg(n) { var t = n.dn + n.exec; return t ? '<span class="nc-bdg' + (n.dn ? '' : ' co') + '">' + t + ' NC</span>' : ''; }
+  // v121: o estado do grupo dito como não conformidade (NC), para a tela e a proposta aguardando aprovação
+  function ncNome(s, k) { return k === 'DN' ? 'NC aberta' : k === 'EX' ? 'NC em correção' : k === 'NA' ? 'não se aplica' : 'sem não conformidade'; }
   // "~" = estimativa da supervisão
   function fmtQtd(s, q) {
     if (q == null || q === '' || !s.un || !isFinite(q)) return '';
@@ -370,21 +374,21 @@
     return r;
   }
   // texto do resumo, com as palavras do tipo ("dano em 2 grupos" nas pontes, "defeito em 2 grupos" na conservação)
-  function oaeNecTxt(n, c) {
-    var w = palavrasDe(c);
-    if (n.dn) return w.dano + ' em ' + n.dn + (n.dn === 1 ? ' grupo' : ' grupos') + (n.exec ? ' · ' + n.exec + ' em execução' : '');
-    if (n.exec) return n.exec + (n.exec === 1 ? ' grupo' : ' grupos') + ' em execução';
-    if (!n.aval || n.nv === n.aval) return 'sem vistoria';
-    return n.nv ? w.semDano + ' · ' + n.nv + ' sem vistoria' : w.semDano;
+  // v121: em não conformidades (NC): "2 NC abertas · 1 em correção", "1 NC em correção" ou "sem não conformidade"
+  function oaeNecTxt(n) {
+    if (n.dn) return n.dn + (n.dn === 1 ? ' NC aberta' : ' NC abertas') + (n.exec ? ' · ' + n.exec + ' em correção' : '');
+    if (n.exec) return n.exec + ' NC em correção';
+    return 'sem não conformidade';
   }
   // contrato: pontes com dano e, por grupo, quantas pontes e quanto (soma só das estimativas informadas)
   function oaeResumo(c) {
-    var r = { dn: 0, exec: 0, nv: 0, pri: 0, grupos: {} }, lista = servicesOf(c);
+    var r = { dn: 0, exec: 0, nc: 0, nv: 0, pri: 0, grupos: {} }, lista = servicesOf(c);
     lista.forEach(function (s) { r.grupos[s.key] = { pontes: 0, q: 0, semQ: 0 }; });
     c.pontos.forEach(function (p) {
       var n = oaeNec(p, c);
       if (n.dn) r.dn++;
       if (n.exec) r.exec++;
+      if (n.dn || n.exec) r.nc++;
       if (n.pri) r.pri++;
       if (!n.aval || n.nv === n.aval) r.nv++;
       lista.forEach(function (s) {
@@ -1614,7 +1618,7 @@
   function oaeExt(c) { return c.pontos.reduce(function (s, p) { return s + (Number(p.extensao) || 0); }, 0); }
   function oaeKpis(c, tot, an) {
     var ext = oaeExt(c), r = an && an.resumo, n = oaeResumo(c);
-    var nec = { k: 'PONTES COM DANO', v: n.dn + (n.dn === 1 ? ' ponte' : ' pontes'), s: n.pri ? n.pri + (n.pri === 1 ? ' com prioridade' : ' com prioridade') : n.exec ? n.exec + ' em execução' : 'observado na vistoria' };
+    var nec = { k: 'PONTES COM NC', v: n.nc + (n.nc === 1 ? ' ponte' : ' pontes'), s: n.pri ? n.pri + ' com prioridade' : n.exec ? n.exec + ' com NC em correção' : 'aberta ou em correção' };
     if (r) return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
       nec,
@@ -1624,7 +1628,7 @@
     return [
       { k: 'PONTES', v: String(tot.n), s: fmt(ext, 0) + ' m de pontes' },
       nec,
-      { k: 'SEM VISTORIA', v: n.nv + (n.nv === 1 ? ' ponte' : ' pontes'), s: 'de ' + tot.n },
+      { k: 'SEM NC', v: (tot.n - n.nc) + (tot.n - n.nc === 1 ? ' ponte' : ' pontes'), s: 'de ' + tot.n },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
     ];
   }
@@ -1642,9 +1646,9 @@
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
     if (an) o.push(T(x, g.yServ - 5, 'ÚLTIMA RESTAURAÇÃO', { size: 6.6, bold: true, fill: '#146C3B' }));
     else {
-      o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
-      o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
-      o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
+      o.push(T(x, g.yNec + 12, 'NÃO CONFORMIDADES', { size: 7, bold: true }));
+      o.push(T(x, g.yNec + 21.5, 'abertas na ponte', { size: 6.4, fill: gray }));
+      o.push(T(x, g.yServ - 4, anOf(c) ? 'ÚLTIMA RESTAURAÇÃO E NC' : 'NÃO CONFORMIDADE', { size: 6, bold: true, fill: gray }));
     }
     servicesOf(c).forEach(function (s, i) {
       var y = g.yServ + i * g.servStep + g.servH / 2 + 3.3, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
@@ -1690,18 +1694,9 @@
     var extTxt = p.extensao != null ? fmtN(p.extensao) + ' m' + (p.largura != null ? ' × ' + fmtN(p.largura) : '') : '-';
     o.push(T(cx, g.yExt + 12.4, extTxt, { size: r2(fitSize(extTxt, bw - 4, 8, true, 4.6)), bold: true, anchor: 'middle' }));
 
-    // estado da ponte (resumo dos grupos) e a última vistoria: quando e quem marcou (só na folha da vistoria)
-    if (g.yNec != null) {
-      var nn = oaeNec(p, c), vis = c ? vistoriaPonte(c, p) : null;
-      var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
-      var ntx = oaeNecTxt(nn, c), nsz = fitSize(ntx, bw - 4, 7.6, true, 4.6);
-      o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
-      o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
-      if (vis) {
-        var vt = 'vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : '');
-        o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
-      }
-    }
+    // não conformidades da ponte (resumo dos grupos) e quando e quem mexeu por último (só na folha oficial)
+    if (g.yNec != null) necNC(o, p, c, bx, bw, g, cx);
+    var medO = an ? null : anOf(c || ownerOf(p)), aO = medO && medO.pontes ? medO.pontes[p.id] || null : null;
 
     // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições.
     // Com a análise, a célula mostra a última restauração e, por cima, o que a vistoria viu depois (celRest)
@@ -1709,7 +1704,7 @@
       var sv = p.serv[s.key], k = oaeSt(sv), st = oaeStOf(s, k), y = g.yServ + i * g.servStep;
       var gi = a && a.grupos ? a.grupos[s.key] : null;
       if (an) celRest(o, an, a, p, s, sv, k, bx, y, bw, g.servH);
-      else celEstado(o, s, sv, k, st, bx, y, bw, g.servH);
+      else celNC(o, medO, aO, s, sv || {}, k, bx, y, bw, g.servH, false);
       if (gi && gi.altos) {
         o.push(R(bx - 0.8, y - 0.8, bw + 1.6, g.servH + 1.6, { stroke: ALERTA_COR, sw: 1.6, rx: 2.6 }));
         var bt = String(gi.altos), bwid = Math.max(10, textW(bt, 6, true) + 6);
@@ -1757,10 +1752,10 @@
     servicesOf(c || ownerOf(p)).forEach(function (s) {
       var sv = p.serv[s.key] || {}, k = oaeSt(sv), its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
       if (!its.length && !(comQtd(k) && sv.n)) return;
-      var tx = s.short + (k === 'EX' ? ' (em execução)' : '') + ': ' + its.join(', ') + (sv.n ? (its.length ? ' · ' : '') + sv.n : '');
+      var tx = s.short + (k === 'EX' ? ' (NC em correção)' : '') + ': ' + its.join(', ') + (sv.n ? (its.length ? ' · ' : '') + sv.n : '');
       wrap('• ' + tx, bw - 10, fs).forEach(function (x, j) { itl.push({ t: j ? '  ' + x : x, cor: '#5C3D00' }); });
     });
-    var lines = (itl.length ? [{ t: fitText('Itens observados:', bw - 10, fs, true), b: true, cor: '#7A5200' }].concat(itl, p.obs ? [{ t: '' }] : []) : [])
+    var lines = (itl.length ? [{ t: fitText('Itens com NC:', bw - 10, fs, true), b: true, cor: '#7A5200' }].concat(itl, p.obs ? [{ t: '' }] : []) : [])
       .concat(wrap(p.obs || '', bw - 10, fs).map(function (t) { return { t: t }; }));
     var altos = a ? (a.alertas || []).slice().sort(function (x, y) { return y.valor - x.valor; }) : [];
     if (altos.length) {
@@ -1808,6 +1803,54 @@
     if (comQtd(k) && sv.ci) marcaCi(o, bx + 3.5 + 10 * mk++, y + 0.5);
   }
 
+  // v121: célula da folha oficial (não conformidades): NC aberta (laranja) ou em correção (azul) com a estimativa embaixo; sem
+  // NC, a última medição com serviço do grupo (verde, mês · nº) quando quem gera a folha vê as medições (med), senão "—".
+  // N/A tracejado. Sem as marcas internas da análise (alertas e medido sem execução)
+  function celNC(o, med, aM, s, sv, k, bx, y, bw, h, cons) {
+    var gi = aM && aM.grupos ? aM.grupos[s.key] : null, ult = gi && gi.ult ? Number(gi.ult) : 0, cx = bx + bw / 2;
+    var mm = ult ? mesMed(med, ult) : '', data = ult ? (mm ? mm + ' · ' : '') + ult + 'ª' : '';
+    if (comQtd(k)) {
+      var st = OAE_STATUS[k], qt = fmtQtd(s, sv.q), nm = k === 'EX' ? 'NC em correção' : 'NC aberta';
+      var l1 = data || nm.toUpperCase(), l2 = data ? nm + (qt ? ' · ' + qt : '') : qt;
+      if (data && qt && textW(l2, 4, true) > bw - 6) l2 = 'NC · ' + qt;
+      o.push(R(bx, y, bw, h, { fill: st.fill, rx: 2 }));
+      if (l2) {
+        var s1 = fitSize(l1, bw - 6.3, 7.6, true, 4.2), s2 = fitSize(l2, bw - 6.3, 6.2, true, 4);
+        o.push(T(cx, y + h / 2 + 0.6, fitText(l1, bw - 6, s1, true), { size: r2(s1), bold: true, fill: st.ink, anchor: 'middle' }));
+        o.push(T(cx, y + h / 2 + 8.8, fitText(l2, bw - 6, s2, true), { size: r2(s2), bold: true, fill: st.ink, anchor: 'middle' }));
+      } else {
+        var s0 = fitSize(l1, bw - 6.3, 7.4, true, 4.2);
+        o.push(T(cx, y + h / 2 + s0 * 0.36, fitText(l1, bw - 6, s0, true), { size: r2(s0), bold: true, fill: st.ink, anchor: 'middle' }));
+      }
+      var mk = 0;
+      if (sv.pri) marcaPri(o, bx + 3.5 + 10 * mk++, y + 0.5);
+      if (sv.ci) marcaCi(o, bx + 3.5 + 10 * mk++, y + 0.5);
+      return;
+    }
+    if (k !== 'NA' && ult) {
+      var sz = fitSize(data, bw - 6.3, 8.2, true, 4.2);
+      o.push(R(bx, y, bw, h, { fill: '#1E9E55', rx: 2 }));
+      o.push(T(cx, y + h / 2 + sz * 0.36, fitText(data, bw - 6, sz, true), { size: r2(sz), bold: true, fill: '#FFFFFF', anchor: 'middle' }));
+      return;
+    }
+    var tg = k === 'NA' ? 'N/A' : med ? (cons ? 'SEM MEDIÇÃO' : 'SEM RESTAURAÇÃO') : '—', vz = fitSize(tg, bw - 6.3, 6.6, true, 4.2);
+    o.push(R(bx, y, bw, h, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 2 }));
+    o.push(T(cx, y + h / 2 + vz * 0.36, fitText(tg, bw - 6, vz, true), { size: r2(vz), bold: true, fill: '#7A817D', anchor: 'middle' }));
+  }
+  // linha "Não conformidades" da coluna: "2 NC abertas" ou "—", e quando e quem mexeu por último
+  function necNC(o, p, c, bx, bw, g, cx) {
+    var nn = oaeNec(p, c), vis = c ? vistoriaPonte(c, p) : null;
+    var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : '#EEF0EF', ntx = nn.dn || nn.exec ? oaeNecTxt(nn, c) : '—';
+    if (textW(ntx, 4.6, true) > bw - 4) ntx = ntx.replace(/ em correção$/, ' em corr.');
+    var nsz = fitSize(ntx, bw - 4, 7.6, true, 4.2);
+    o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
+    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
+    if (vis) {
+      var vt = txtPdf('atualizado ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : ''));
+      o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
+    }
+  }
+
   function marcaPri(o, x, y) {
     o.push('<circle cx="' + r2(x) + '" cy="' + r2(y) + '" r="4.6" fill="#B42318" stroke="#FFFFFF" stroke-width="0.8"/>');
     o.push(T(x, y + 2.3, '!', { size: 6.6, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
@@ -1833,8 +1876,8 @@
       fill = stk.fill; ink = stk.ink;
       l1 = data || (cons ? 'sem medição' : 'sem restauração');
       // em coluna estreita, só a estimativa (o azul já diz em execução), para o número não sair cortado
-      if (k === 'EX') { l2 = 'em execução' + (qt ? ' · ' + qt : ''); if (qt && textW(l2, 4, true) > bw - 6) l2 = qt; }
-      else l2 = qt ? qt + (s.un === '%' ? ' com dano' : cons ? ' com defeito' : ' danificados') : stk.name.toLowerCase();
+      if (k === 'EX') { l2 = 'NC em correção' + (qt ? ' · ' + qt : ''); if (qt && textW(l2, 4, true) > bw - 6) l2 = qt; }
+      else l2 = qt ? 'NC · ' + qt : 'NC aberta';
     } else if (ult) { fill = '#1E9E55'; l1 = data; }
     if (fill) {
       o.push(R(bx, y, bw, h, { fill: fill, rx: 2 }));
@@ -1901,8 +1944,9 @@
       lx += 19 + textW(txt, fs) + 10;
     }
     // com a análise: a célula é a última restauração; laranja/azul = o que a vistoria marcou
-    (an ? [['REST', 'Restaurado (mês · nº)'], ['DN', 'Dano observado'], ['EX', 'Em execução'], ['SR', 'Sem restauração']]
-      : [['OK', 'Sem dano aparente'], ['DN', 'Dano observado'], ['EX', 'Em execução'], ['NA', 'Não tem (N/A)'], ['NV', 'Sem vistoria']]).forEach(function (it) {
+    var medL = an ? null : anOf(c);
+    (an ? [['REST', 'Restaurado (mês · nº)'], ['DN', 'NC aberta'], ['EX', 'NC em correção'], ['SR', 'Sem restauração']]
+      : (medL ? [['REST', 'Restaurado (mês · nº)']] : []).concat([['DN', 'NC aberta'], ['EX', 'NC em correção'], ['SR', medL ? 'Sem restauração' : 'Sem NC']])).forEach(function (it) {
       var st = it[0] === 'REST' ? { fill: '#1E9E55' } : it[0] === 'SR' ? { fill: 'none' } : OAE_STATUS[it[0]];
       item(function (xx, yy) {
         if (st.fill === 'none') o.push(R(xx, yy, 15, 10, { fill: it[0] === 'NV' ? '#F3F4F3' : '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 }));
@@ -1910,7 +1954,7 @@
       }, it[1], y + 2);
     });
     item(function (xx, yy) { marcaPri(o, xx + 7.5, yy + 5); }, 'Prioridade', y + 2);
-    item(function (xx, yy) { marcaCi(o, xx + 7.5, yy + 5); }, 'Conclusão informada', y + 2);
+    item(function (xx, yy) { marcaCi(o, xx + 7.5, yy + 5); }, 'Correção informada', y + 2);
     var yn = y + 26;
     if (an) {
       lx = x + 40;
@@ -1921,8 +1965,8 @@
       yn = y + 38;
     }
     var notas = [
-      an ? 'Cada grupo mostra a última medição com o serviço na ponte (mês · nº). Se a vistoria marcou dano ou execução, a cor é a do estado e a estimativa (~) vai embaixo.'
-        : 'Serviço contínuo: estado de cada grupo na última vistoria. ~ = estimativa do dano feita pela supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.',
+      an || medL ? 'Cada grupo mostra a última medição com o serviço na ponte (mês · nº). Com não conformidade (NC), a cor é a dela (laranja aberta, azul em correção) e a estimativa (~) vai embaixo.'
+        : 'Não conformidade (NC): o que a supervisão apontou para melhorar, refazer, consertar ou fazer. ~ = estimativa da supervisão. Correção informada = a contratada diz que corrigiu; a supervisão ainda confere.',
       'KM pelo SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ' (DNIT); contr. = km do contrato (Anexo VI); ~ antes do km = km estimado, a conferir em campo.'
     ];
     if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta = ponte atendida mais de uma vez na mesma etapa ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
@@ -1933,8 +1977,8 @@
       var rs = oaeResumo(c), falta = oaeFaltaTxt(rs);
       o.push(R(bx, y, G.x1 - bx, falta ? 46 : 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(bx + 10, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
-      if (falta) o.push(T(bx + 10, y + 39, fitText('Danos estimados: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
-      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Pontes com dano', String(rs.dn)]];
+      if (falta) o.push(T(bx + 10, y + 39, fitText('Quantidades nas NC abertas: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
+      var parts = [['Pontes', String(tot.n)], ['Extensão das pontes', fmt(oaeExt(c), 0) + ' m'], ['Pontes com NC', String(rs.nc)]];
       if (an && an.resumo) {
         parts.push(['Medido', fmtBRLc(an.resumo.total)]);
         parts.push(['Alertas', String(an.resumo.alertas)]);
@@ -2018,9 +2062,9 @@
   function colunasKpis(c, r) {
     var ev = execVig(c);
     return [
-      { k: 'SEGMENTOS', v: String(r.n), s: !r.n ? '' : r.nv ? r.nv + ' sem vistoria' : 'todos vistoriados' },
-      { k: 'COM DEFEITO', v: r.dn + (r.dn === 1 ? ' segmento' : ' segmentos'),
-        s: r.interr ? r.interr + (r.interr === 1 ? ' interrompido' : ' interrompidos') : r.pri ? r.pri + ' com prioridade' : r.exec ? r.exec + ' em execução' : 'observado na vistoria' },
+      { k: 'SEGMENTOS', v: String(r.n), s: !r.n ? '' : r.nc ? (r.n - r.nc) + ' sem NC' : 'nenhum com NC' },
+      { k: 'COM NÃO CONFORMIDADE', v: r.nc + (r.nc === 1 ? ' segmento' : ' segmentos'),
+        s: r.interr ? r.interr + (r.interr === 1 ? ' interrompido' : ' interrompidos') : r.pri ? r.pri + ' com prioridade' : r.exec ? r.exec + ' com NC em correção' : 'aberta ou em correção' },
       { k: 'EXECUÇÃO / VIGÊNCIA', v: ev.v, s: ev.s, prev: ev.prev, w: 160 },
       { k: 'ÚLTIMA VISTORIA', v: fmtDate(c.dataVistoria) || '-', s: '' }
     ];
@@ -2033,10 +2077,10 @@
     o.push(T(x, g.yBand + 24, 'SEGMENTO', { size: 7, bold: true }));
     o.push(T(x, g.yBand + 35, 'código e segmento SNV', { size: 6.4, fill: gray }));
     o.push(T(x, g.yExt + 12.5, 'EXTENSÃO', { size: 7, bold: true }));
-    o.push(T(x, g.yNec + 12, 'ESTADO', { size: 7, bold: true }));
-    o.push(T(x, g.yNec + 21.5, 'e última vistoria', { size: 6.4, fill: gray }));
+    o.push(T(x, g.yNec + 12, 'NÃO CONFORMIDADES', { size: 7, bold: true }));
+    o.push(T(x, g.yNec + 21.5, 'abertas no segmento', { size: 6.4, fill: gray }));
     o.push(T(x, g.yTraf + 12.8, 'TRAFEGABILIDADE', { size: 7.2, bold: true }));
-    o.push(T(x, g.yServ - 4, 'ESTADO NA VISTORIA', { size: 6, bold: true, fill: gray }));
+    o.push(T(x, g.yServ - 4, anOf(c) ? 'ÚLTIMA MEDIÇÃO E NC' : 'NÃO CONFORMIDADE', { size: 6, bold: true, fill: gray }));
     servicesOf(c).forEach(function (s, i) {
       var y = g.yServ + i * g.servStep + g.servH / 2 + 3.3, uw = s.un ? textW(s.un, 6.4) + 4 : 0;
       // para baixo, em décimos: arredondar para cima devolveria o "..." (7,2 quando cabe: a folha do 437/438 não muda)
@@ -2076,20 +2120,9 @@
     o.push(R(bx, g.yExt, bw, g.extH, { fill: '#FFFFFF', stroke: '#7D8581', sw: 0.6 }));
     o.push(T(cx, g.yExt + 12.4, et, { size: r2(fitSize(et, bw - 4, 8.4, true, 5)), bold: true, anchor: 'middle' }));
 
-    // estado do segmento (resumo dos 7 grupos; a trafegabilidade não entra) e a última vistoria: quando e quem marcou (com o banco)
-    var nn = oaeNec(p, c), vis = vistoriaPonte(c, p);
-    var nf = nn.dn ? '#FBE3BC' : nn.exec ? '#D5E0F0' : (nn.aval && !nn.nv) ? '#CDE8D6' : '#EEF0EF';
-    // coluna estreita (12 ou 13 por folha): "· 1 em execução" vira "· 1 em exec." quando não cabe a 4,6 pt (como a maquete), e a
-    // letra pode descer até 4,2 pt (a das células), para o resumo não sair cortado
-    var ntx = oaeNecTxt(nn, c);
-    if (textW(ntx, 4.6, true) > bw - 4) ntx = ntx.replace(/ em execução$/, ' em exec.');
-    var nsz = fitSize(ntx, bw - 4, 7.6, true, 4.2);
-    o.push(R(bx, g.yNec, bw, g.necH, { fill: nf, stroke: '#7D8581', sw: 0.6 }));
-    o.push(T(cx, g.yNec + (vis ? 11 : 16.4), fitText(ntx, bw - 4, nsz, true), { size: r2(nsz), bold: true, fill: '#17201C', anchor: 'middle' }));
-    if (vis) {
-      var vt = txtPdf('vistoria ' + fmtWhen(vis.em).slice(0, 5) + (vis.por ? ' · ' + vis.por : ''));
-      o.push(T(cx, g.yNec + 21, fitText(vt, bw - 4, 6, false), { size: 6, fill: '#3B4540', anchor: 'middle' }));
-    }
+    // não conformidades do segmento (resumo dos grupos; a trafegabilidade não entra) e quando e quem mexeu por último
+    necNC(o, p, c, bx, bw, g, cx);
+    var medO = an ? null : anOf(c), aO = medO && medO.pontes ? medO.pontes[p.id] || null : null;
 
     // trafegabilidade (linha própria: trafegável, com restrição, interrompido) e os 7 grupos, com as células das pontes
     var kt = trafSt(sv.trafeg);
@@ -2097,7 +2130,7 @@
     servicesOf(c).forEach(function (s, i) {
       var x = sv[s.key], k = oaeSt(x);
       if (an) celRest(o, an, a, p, s, x || {}, k, bx, g.yServ + i * g.servStep, bw, g.servH);
-      else celEstado(o, s, x, k, oaeStOf(s, k), bx, g.yServ + i * g.servStep, bw, g.servH);
+      else celNC(o, medO, aO, s, x || {}, k, bx, g.yServ + i * g.servStep, bw, g.servH, true);
     });
 
     // observações: as do engenheiro e as notas "onde/o quê" (F-4 b), com a letra que diminui com a coluna, como no 424
@@ -2170,7 +2203,8 @@
   // quando a régua dá o "contr." de algum segmento, com o "*" da ponta do contrato pelo cadastro (só os números: E-5 A); ou, com
   // segmentos e sem o "contr." em nenhum, o motivo (sem o km do contrato no cadastro, ou sem a tabela de conversão no aparelho)
   function notasColunas(c) {
-    var out = ['Serviço contínuo: estado de cada grupo na última vistoria da supervisão. ~ = estimativa da supervisão. Conclusão informada = a contratada diz que concluiu; a supervisão ainda confere.'];
+    var out = ['Não conformidade (NC): o que a supervisão apontou para melhorar, refazer, consertar ou fazer. ~ = estimativa da supervisão. Correção informada = a contratada diz que corrigiu; a supervisão ainda confere.' +
+      (anOf(c) ? ' Sem NC, a célula mostra a última medição com o serviço no segmento (mês · nº).' : '')];
     if (kmSoContrato(c)) { if (c.pontos.length) out.push(notaKmMp(c, c.pontos.some(function (p) { return segContrTxt(c, p); }) ? 'ok' : 'semRegua', true)); }
     else if (c.pontos.some(function (p) { return segContrTxt(c, p); })) {
       var sc = txtPdf(txtLimpo(c.snvContrato)), ast = [[c.kmIni, 'no início'], [c.kmFim, 'no fim']].map(function (k) {
@@ -2203,20 +2237,24 @@
     // com a análise: verde = a última medição com serviço do grupo; laranja e azul = o que a vistoria marcou
     if (an) {
       item(function (xx, yy) { o.push(R(xx, yy, 15, 10, { fill: '#1E9E55', rx: 1.5 })); }, 'Medido (mês · nº da última medição)', y + 2);
-      [['DN', 'Defeito observado'], ['EX', 'Em execução']].forEach(function (it) { item(caixa(OAE_STATUS[it[0]]), it[1], y + 2); });
+      [['DN', 'NC aberta'], ['EX', 'NC em correção']].forEach(function (it) { item(caixa(OAE_STATUS[it[0]]), it[1], y + 2); });
       item(function (xx, yy) { o.push(R(xx, yy, 15, 10, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 })); }, 'Sem medição', y + 2);
-    } else [['OK', 'Sem defeito'], ['DN', 'Defeito observado'], ['EX', 'Em execução'], ['NA', 'Não se aplica (N/A)'], ['NV', 'Sem vistoria']].forEach(function (it) {
-      item(caixa(OAE_STATUS[it[0]], it[0] === 'NV'), it[1], y + 2);
-    });
+    } else {
+      // folha oficial (v121): as não conformidades e, sem NC, a última medição (quando quem gera a folha vê as medições)
+      var medL = anOf(c);
+      if (medL) item(function (xx, yy) { o.push(R(xx, yy, 15, 10, { fill: '#1E9E55', rx: 1.5 })); }, 'Medido (mês · nº)', y + 2);
+      [['DN', 'NC aberta'], ['EX', 'NC em correção']].forEach(function (it) { item(caixa(OAE_STATUS[it[0]]), it[1], y + 2); });
+      item(function (xx, yy) { o.push(R(xx, yy, 15, 10, { fill: '#FFFFFF', stroke: '#B9C0BC', sw: 0.6, dash: '2 2', rx: 1.5 })); }, medL ? 'Sem medição' : 'Sem NC', y + 2);
+    }
     item(function (xx, yy) { marcaPri(o, xx + 7.5, yy + 5); }, 'Prioridade', y + 2);
-    item(function (xx, yy) { marcaCi(o, xx + 7.5, yy + 5); }, 'Conclusão informada', y + 2);
+    item(function (xx, yy) { marcaCi(o, xx + 7.5, yy + 5); }, 'Correção informada', y + 2);
     lx = x + 40;
     o.push(T(lx, y + 24, 'Trafegabilidade:', { size: fs, bold: true }));
     lx += textW('Trafegabilidade:', fs, true) + 8;
     TRAF_ORDER.forEach(function (k) { item(caixa(TRAF_STATUS[k]), TRAF_STATUS[k].name, y + 16); });
     var ns = notasColunas(c), s = 6.1, ls;
     if (an) ns = ['Com a análise das medições (uso interno): cada grupo mostra a última medição com serviço no segmento, pelo local da memória de cálculo (' +
-      (an.medicoes && an.medicoes.length ? an.medicoes[0].mes + ' a ' + an.medicoes[an.medicoes.length - 1].mes : '') + '); laranja e azul = o que a vistoria marcou. Medição registra quantidade e valor; não comprova execução.'].concat(ns);
+      (an.medicoes && an.medicoes.length ? an.medicoes[0].mes + ' a ' + an.medicoes[an.medicoes.length - 1].mes : '') + '); laranja e azul = as não conformidades. Medição registra quantidade e valor; não comprova execução.'].concat(ns);
     function linhas(z) { return ns.reduce(function (a, t) { return a.concat(wrap(t, 598, z)); }, []); }
     ls = linhas(s);
     while (ls.length > 3 && s > 5.4) { s = Math.max(5.4, r2(s - 0.1)); ls = linhas(s); }
@@ -2225,11 +2263,11 @@
 
     var bx = 640;
     if (num.ultima) {
-      var falta = oaeFaltaTxt(r, c), parts = [['Segmentos', String(r.n)], ['Extensão', r.ext != null ? fmt(r.ext, 2) + ' km' : '-'], ['Segmentos com defeito', String(r.dn)]];
+      var falta = oaeFaltaTxt(r, c), parts = [['Segmentos', String(r.n)], ['Extensão', r.ext != null ? fmt(r.ext, 2) + ' km' : '-'], ['Segmentos com NC', String(r.nc)]];
       if (r.interr) parts.push(['Interrompidos', String(r.interr)]);
       o.push(R(bx, y, G.x1 - bx, falta ? 46 : 34, { fill: '#F4F6F5', stroke: '#C7CCC9', sw: 0.7, rx: 3 }));
       o.push(T(bx + 10, y + 13, 'TOTAL GERAL', { size: 6.6, bold: true, fill: gray }));
-      if (falta) o.push(T(bx + 10, y + 39, fitText(palavrasDe(c).total + ': ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
+      if (falta) o.push(T(bx + 10, y + 39, fitText('Quantidades nas NC abertas: ' + falta, G.x1 - bx - 20, 6.8), { size: 6.8, fill: '#3B4540' }));
       var px = bx + 10;
       parts.forEach(function (pt) {
         var lbl = pt[0] + ': ';
@@ -3002,20 +3040,34 @@
         return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + (cont ? oaeStOf(s, k) : STATUS[k]).btn + '</button>';
       }).join('');
       if (cont) {
+        // v121 (decisão do dono, 26/10/2026): a vistoria vira não conformidade (NC). O estado de cada grupo continua o mesmo
+        // campo: dano/defeito observado = NC aberta, em execução = NC em correção; sem dano aparente e sem vistoria = sem NC.
+        // Uma NC por grupo, com a estimativa, o "onde", os itens e as marcas de antes
         var on = comQtd(cur), mx = mais ? mais(s, cur) : '', temItens = isOae(ownerOf(p)) && !!OAE_ITENS[s.key];
-        h += '<div class="svc oae"><div class="svc-name">' + esc(s.short) + (s.q ? ' <small class="svc-un">' + esc(s.q + ' (estimativa)') + '</small>' : '') +
-          (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + (extra ? extra(s) : '') + '</div>' +
-          '<div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
-          (s.un ? '<div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (on && sv.q != null ? esc(sv.q) : '') + '"' +
-            (on ? ' placeholder="estimativa"' : ' disabled') + ' aria-label="' + esc(s.short + ': estimativa, ' + s.q) + '"><span>' + esc(s.un) + '</span></div>' : '<div class="pct-in"></div>') +
-          (on && temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
-          (on ? '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="' + (temItens ? 'Outro item ou local (opcional)' : 'Onde / o quê (opcional)') + '" aria-label="' + esc((temItens ? 'Outro item ou local: ' : 'Onde ou o quê: ') + s.short) + '">' : '') +
-          (on || mx ? '<div class="svc-marcas">' + (on ? Object.keys(OAE_MARCAS).map(function (m) {
+        var pk = pv ? oaeSt(pv) : '', pend = pk && pk !== cur ? '<small class="nc-pend">Aguardando aprovação: ' + esc(ncNome(s, pk)) + '</small>' : '';
+        var bt = function (k, cl, t) { return '<button type="button" class="' + cl + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '">' + t + '</button>'; };
+        var cab = '<div class="svc-name">' + esc(s.short) + (on && s.q ? ' <small class="svc-un">' + esc(s.q.replace(/ com (dano|defeito)$/, ' na NC') + ' (estimativa)') + '</small>' : '') + (extra ? extra(s) : '') + '</div>';
+        if (!on) {
+          h += '<div class="svc oae nc-sem">' + cab + '<div class="nc-l">' + (cur === 'NA'
+            ? '<span>Não se aplica aqui</span>' + bt('NA', 'nc-na', 'Desfazer N/A')
+            : '<span>Sem não conformidade</span>' + bt('DN', 'nc-add', '+ Não conformidade') + bt('NA', 'nc-na', 'N/A')) + '</div>' +
+            pend + (mx ? '<div class="svc-marcas">' + mx + '</div>' : '') + '</div>';
+          return;
+        }
+        h += '<div class="svc oae nc-on">' + cab + '<div class="nc-card' + (cur === 'EX' ? ' co' : '') + '">' +
+          '<div class="nc-l1"><span class="nc-chip ' + (cur === 'EX' ? 'co">Em correção' : 'ab">Aberta') + '</span>' + (sv.ci ? '<span class="nc-chip in">Correção informada</span>' : '') +
+            '<span class="nc-tipo">' + esc(cur === 'EX' ? 'em execução pela contratada' : 'aguarda a correção') + '</span></div>' +
+          (s.un ? '<span class="nc-qt" aria-hidden="true">Quantidade estimada</span><div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (sv.q != null ? esc(sv.q) : '') + '"' +
+            ' placeholder="~" aria-label="' + esc(s.short + ': estimativa, ' + s.q.replace(/ com (dano|defeito)$/, ' na NC')) + '"><span>' + esc(s.un) + '</span></div>' : '') +
+          (temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
+          '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="' + (temItens ? 'Outro item ou local (opcional)' : 'Onde / o quê (opcional)') + '" aria-label="' + esc((temItens ? 'Outro item ou local: ' : 'Onde ou o quê: ') + s.short) + '">' +
+          '<div class="svc-marcas">' + Object.keys(OAE_MARCAS).map(function (m) {
               var pm = pv && comQtd(pv.st) && !!pv[m] !== !!sv[m] ? ' pend' : '';
               return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
                 '<i aria-hidden="true">' + (m === 'pri' ? '!' : '✓') + '</i>' + esc(OAE_MARCAS[m].name) + '</button>';
-            }).join('') : '') + mx + '</div>' : '') +
-          '</div>';
+            }).join('') + mx + '</div>' +
+          '<div class="nc-acts">' + (cur === 'EX' ? bt('DN', '', 'Voltar para aberta') : bt('EX', '', 'Em correção')) + bt('OK', 'pri', 'Corrigida ✓') + '</div>' + pend +
+          '</div></div>';
         return;
       }
       var pctDisabled = (sv.st === 'OK' || sv.st === 'NA');
@@ -3436,7 +3488,7 @@
         if (!it.length) return '';
         var v = it.reduce(function (s, t) { return s + t.v; }, 0), ch = cid + '|' + g.key, ab = !!ui.grpAb[ch], ac = g === MED_ACESSO || g === MED_SEMLOCAL || g === MED_OUTROS;
         return '<div class="mg' + (ac ? ' acesso' : '') + '"><button type="button" class="mg-h" data-act="med-grp" data-id="' + esc(cid) + '" data-g="' + esc(g.key) + '" aria-expanded="' + ab + '">' +
-          '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? (cons ? 'sem local nos segmentos · ' + it.length + (it.length === 1 ? ' serviço' : ' serviços') : 'meio de execução · fora da vistoria') : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
+          '<span class="mg-n"><b>' + esc(g.short) + '</b><span class="mg-s"><span class="mg-e nv">' + (ac ? (cons ? 'sem local nos segmentos · ' + it.length + (it.length === 1 ? ' serviço' : ' serviços') : 'meio de execução · fora dos grupos') : it.length + (it.length === 1 ? ' serviço' : ' serviços')) + '</span></span></span>' +
           '<span class="mg-t"><b>' + fmtBRL(v) + '</b><small>' + pct(v / tot * 100) + '</small></span>' + ICON_CHEV + '</button>' +
           '<div class="mg-b"' + (ab ? '' : ' hidden') + '>' + it.map(linha).join('') + '</div></div>';
       }).join('') + '</div>';
@@ -3584,10 +3636,9 @@
     var dots = servicesOf(c).map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
       var its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
-      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (its.length ? ' · ' + its.join(', ') : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
+      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + ncNome(s, k) + (qt ? ' · ' + qt : '') + (its.length ? ' · ' + its.join(', ') : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · correção informada' : '')) + '"></span>';
     }).join('');
-    var n = oaeNec(p, c), nc = n.dn ? 'dn' : n.exec ? 'exec' : (!n.aval || n.nv === n.aval) ? 'nv' : 'ok', w = palavrasDe(c);
-    var nt = n.dn ? n.dn + ' ' + (n.dn === 1 ? w.dano : w.danos) : n.exec ? 'em exec.' : nc === 'nv' ? '–' : w.semDanoCurto;
+    var n = oaeNec(p, c), nc = n.dn ? 'dn' : n.exec ? 'exec' : 'nv', nt = ncBdg(n);
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
     var badge = (n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '') +
@@ -3607,7 +3658,7 @@
       var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
       if (soMed && !a) return h + '<div class="pt-body"><div class="an-note">' + (analise.estado[c.id] === 'carregando' ? 'Carregando as medições…' : 'Sem medições desta ponte.') + '</div></div></article>';
       h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '');
-      if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes da ponte">' + [['vist', 'Vistoria'], ['med', 'Medições']].map(function (x) {
+      if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes da ponte">' + [['vist', 'Não conformidades'], ['med', 'Medições']].map(function (x) {
         return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
       }).join('') + '</div>';
       if (a) h += conferirHtml(c, p, an, a, aba);
@@ -3623,7 +3674,7 @@
       h += '</div></details>';
 
       var vis = vistoriaPonte(c, p);
-      h += '<div class="section-title">Estado da ponte' + (vis ? '<span class="sub-vis">última vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
+      h += '<div class="section-title">Não conformidades por serviço' + (vis ? '<span class="sub-vis">atualizado ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       // com a análise: a última medição de cada grupo (verde) ou "nunca medido"; o estado continua sendo o da vistoria.
       // O que pede conferência fica no "Para conferir" do alto; os alertas, na aba Medições
       h += servHtml(p, servicesOf(c), function (s) {
@@ -3668,7 +3719,7 @@
     }
     var dots = servicesOf(c).map(function (s) {
       var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
-      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + oaeStOf(s, k).name + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · conclusão informada' : '')) + '"></span>';
+      return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + ncNome(s, k) + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · correção informada' : '')) + '"></span>';
     }).join('');
     var n = oaeNec(p, c), kt = trafSt(p.serv[TRAFEG.key]), len = pointLen(p), contr = segContrTxt(c, p), snv = snvDoSegmento(p);
     var km = segKmTxt(c, p) + (contr && !kmSoContrato(c) ? ' (' + contr + ')' : '') +
@@ -3678,7 +3729,8 @@
     var badge = n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '';
     return '<span class="pt-name" title="' + esc(nome) + '">' + esc(nome) + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
       '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(km) + (aS ? ultTagHtml(c, anS, aS) : '') + '</span><span class="pt-dots">' + dots + '</span>' +
-      '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c)) + '">' + (kt === 'NV' ? '–' : TRAF_STATUS[kt].tag) + '</span>' + ICON_CHEV;
+      '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c) + (kt === 'NV' ? '' : ' · ' + TRAF_STATUS[kt].name)) + '">' + ncBdg(n) +
+        (kt === 'R' || kt === 'I' ? '<small class="pt-traf">' + esc(TRAF_STATUS[kt].name.toLowerCase()) + '</small>' : '') + '</span>' + ICON_CHEV;
   }
   // cartão aberto (classe oae só pelo leiaute dos cartões das pontes; cons para as regras próprias): nome, descrição, extensão
   // (o 1º campo só de leitura, que refreshPointHead atualiza), km Atualizado, km do contrato e SNV (só de leitura, acompanham o
@@ -3694,7 +3746,7 @@
       var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null, soMed = !parte(c, 'acomp');
       var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
       h += '<div class="pt-body">' + (banco.on && !soMed ? lastLine(metaKey(c.id, p.id)) : '');
-      if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes do segmento">' + [['vist', 'Vistoria'], ['med', 'Medições']].map(function (x) {
+      if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes do segmento">' + [['vist', 'Não conformidades'], ['med', 'Medições']].map(function (x) {
         return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
       }).join('') + '</div>';
       if (a && !soMed) h += conferirHtml(c, p, an, a, aba);
@@ -3714,7 +3766,7 @@
       h += field('Segmento do SNV', 'data-segsnv="1" type="text" readonly tabindex="-1"', snvDoSegmento(p));
       h += '</div>';
       var vis = vistoriaPonte(c, p);
-      h += '<div class="section-title">Estado do segmento' + (vis ? '<span class="sub-vis">vistoria ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
+      h += '<div class="section-title">Não conformidades por serviço' + (vis ? '<span class="sub-vis">atualizado ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       // com a análise: a última medição de cada grupo neste segmento (verde) ou "nunca medido"
       h += servHtml(p, servicesOf(c), a ? function (s) {
         var gi = a.grupos ? a.grupos[s.key] : null, u = gi && gi.ult, mm = u ? mesMed(an, u) : '';
@@ -3740,10 +3792,10 @@
         var pend = pv[d.key] === v && cur !== v ? ' pend' : '';
         return '<button type="button" class="' + (v === 'A' ? 'OK' : 'DN') + pend + '" data-act="set-desemp" data-id="' + id + '" data-ind="' + d.k + '" data-v="' + v + '" aria-pressed="' + (cur === v) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + DESEMP_ST[v] + '</button>';
       }).join('');
-      return '<div class="svc oae des"><div class="svc-name">' + esc(d.n) + ' <small class="svc-un">peso ' + d.peso + '</small>' + (cur ? '' : ' <small class="svc-nv">não vistoriado</small>') + '</div>' +
+      return '<div class="svc oae des"><div class="svc-name">' + esc(d.n) + ' <small class="svc-un">peso ' + d.peso + '</small>' + (cur ? '' : ' <small class="svc-nv">não avaliado</small>') + '</div>' +
         '<div class="seg" role="group" aria-label="' + esc(d.n) + '">' + bts + '</div></div>';
     }).join('');
-    var sub = nv === DESEMP_IND.length ? 'não vistoriado' : (nn ? nn + (nn === 1 ? ' não atende' : ' não atendem') : 'todos atendem') + (nv ? ' · ' + nv + ' sem vistoria' : '');
+    var sub = nv === DESEMP_IND.length ? 'não avaliado' : (nn ? nn + (nn === 1 ? ' não atende' : ' não atendem') : 'todos atendem') + (nv ? ' · ' + nv + ' não avaliados' : '');
     return '<details class="pt-dados pt-des" data-id="' + id + '"' + (ui.desAb[p.id] ? ' open' : '') + '><summary>Desempenho <span>· ' + esc(sub) + '</span></summary><div class="des-lista">' + linhas + '</div></details>';
   }
   // extensão atendida pela vistoria (resumo do contrato, só para quem vê as medições): por indicador, os km dos segmentos que
@@ -3763,11 +3815,11 @@
   function desempResumoHtml(c) {
     if (!banco.on || !parte(c, 'med') || !c.pontos.length) return '';
     var r = desempResumo(c);
-    var h = '<section class="card an-card des-card"><div class="an-head"><b>Desempenho pela vistoria</b><span class="sub">' +
-      (r.nvis ? r.nvis + ' de ' + r.nseg + ' segmentos vistoriados' : 'nenhum segmento vistoriado') + ' · só para quem vê as medições</span></div>';
-    if (r.fator != null) h += '<div class="des-fator"><b>' + fmt(r.fator, 2) + '</b><span>fator pela vistoria' + (r.pesos < 100 ? ' (só ' + r.pesos + ' dos 100 pontos de peso foram vistoriados)' : '') + '</span></div>';
+    var h = '<section class="card an-card des-card"><div class="an-head"><b>Desempenho avaliado pela supervisão</b><span class="sub">' +
+      (r.nvis ? r.nvis + ' de ' + r.nseg + ' segmentos avaliados' : 'nenhum segmento avaliado') + ' · só para quem vê as medições</span></div>';
+    if (r.fator != null) h += '<div class="des-fator"><b>' + fmt(r.fator, 2) + '</b><span>fator pela avaliação' + (r.pesos < 100 ? ' (só ' + r.pesos + ' dos 100 pontos de peso foram avaliados)' : '') + '</span></div>';
     h += '<ul class="des-ind">' + r.ind.map(function (o) {
-      return '<li><span>' + esc(o.d.n) + ' <small>peso ' + o.d.peso + '</small></span><span>' + (o.vis ? fmt(o.at, 1) + ' de ' + fmt(o.vis, 1) + ' km atendem' : 'sem vistoria') + '</span></li>';
+      return '<li><span>' + esc(o.d.n) + ' <small>peso ' + o.d.peso + '</small></span><span>' + (o.vis ? fmt(o.at, 1) + ' de ' + fmt(o.vis, 1) + ' km atendem' : 'não avaliado') + '</span></li>';
     }).join('') + '</ul></section>';
     return h;
   }
@@ -3779,7 +3831,7 @@
       var pend = pv && pv.st === k && cur !== k ? ' pend' : '';
       return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + TRAFEG.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + TRAF_STATUS[k].btn + '</button>';
     }).join('');
-    return '<div class="svc oae traf"><div class="svc-name">' + esc(TRAFEG.short) + (cur === 'NV' ? ' <small class="svc-nv">sem vistoria</small>' : '') + '</div>' +
+    return '<div class="svc oae traf"><div class="svc-name">' + esc(TRAFEG.short) + '</div>' +
       '<div class="seg" role="group" aria-label="' + esc(TRAFEG.short) + '">' + segs + '</div>' +
       '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + TRAFEG.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="Onde ou o quê: trafegabilidade">' +
       '</div>';
@@ -3977,14 +4029,14 @@
         var miI = medIdx(an, u), dI = viI != null && miI != null ? viI - miI : null;
         if (dI != null && dI >= 0 && dI <= CMP_MESES && (!logo || dI < logo.d)) logo = { d: dI, u: u, n: minus1(x.n) };
       });
-      if (nunca.length) return { k: 'nunca', t: 'dano observado em ' + juntaE(nunca) + ' e nenhuma medição ' + (nunca.length === 1 ? 'deste item' : 'destes itens') + ' ' + nPt(an) + '' };
-      if (logo) return { k: 'logo', t: 'dano observado em ' + logo.n + ' ' + (logo.d === 0 ? 'no mesmo mês da ' : logo.d + (logo.d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, logo.u) + ', que mediu ' + logo.n };
+      if (nunca.length) return { k: 'nunca', t: 'não conformidade aberta em ' + juntaE(nunca) + ' e nenhuma medição ' + (nunca.length === 1 ? 'deste item' : 'destes itens') + ' ' + nPt(an) + '' };
+      if (logo) return { k: 'logo', t: 'não conformidade aberta em ' + logo.n + ' ' + (logo.d === 0 ? 'no mesmo mês da ' : logo.d + (logo.d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, logo.u) + ', que mediu ' + logo.n };
       return null;
     }
-    if (!gi || !gi.ult) return { k: 'nunca', t: 'dano observado e nenhuma medição deste serviço ' + nPt(an) + '' };
+    if (!gi || !gi.ult) return { k: 'nunca', t: 'não conformidade aberta e nenhuma medição deste serviço ' + nPt(an) + '' };
     var vi = vistIdx(c, p, key), mi = medIdx(an, gi.ult), d = vi != null && mi != null ? vi - mi : null;
     if (d == null || d < 0 || d > CMP_MESES) return null;
-    return { k: 'logo', t: 'dano observado ' + (d === 0 ? 'no mesmo mês da ' : d + (d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, gi.ult) + ', que mediu este serviço' };
+    return { k: 'logo', t: 'não conformidade aberta ' + (d === 0 ? 'no mesmo mês da ' : d + (d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, gi.ult) + ', que mediu este serviço' };
   }
   // última medição (nº) do serviço que trata o item nesta ponte, só entre os serviços do mesmo grupo (g); 0 = nunca medido
   function ultItem(a, g, it) {
@@ -4013,8 +4065,8 @@
         if (cm) rows.push({ p: p, s: s, cm: cm });
       });
     });
-    var h = '<div class="an-sec"><h4>Medido × vistoriado (' + rows.length + ')</h4>';
-    if (!rows.length) return h + '<div class="empty">Nenhum grupo com dano observado sem medição ou até ' + CMP_MESES + ' meses depois de medido.</div></div>';
+    var h = '<div class="an-sec"><h4>Medido × não conformidades (' + rows.length + ')</h4>';
+    if (!rows.length) return h + '<div class="empty">Nenhuma NC aberta sem medição ou até ' + CMP_MESES + ' meses depois de medido.</div></div>';
     return h + rows.map(function (r) {
       return '<button type="button" class="an-prow" data-act="an-ir" data-id="' + esc(r.p.id) + '"><span><b>' + esc(nomePonte(r.p) + ' · ' + r.s.short) + '</b><small>' + esc(r.cm.t) + '</small></span></button>';
     }).join('') + '</div>';
@@ -4069,12 +4121,12 @@
       var cm = cmpGrupo(c, p, s.key, an, a.grupos ? a.grupos[s.key] : null);
       if (!cm) return;
       var qt = fmtQtd(s, (p.serv[s.key] || {}).q);
-      rows.push(s.short + ': ' + (qt ? cm.t.replace(/^dano observado/, 'dano observado (' + qt + ')') : cm.t) + '.');
+      rows.push(s.short + ': ' + (qt ? cm.t.replace(/^não conformidade aberta/, 'não conformidade aberta (' + qt + ')') : cm.t) + '.');
     });
     if (!rows.length) return '';
     var outra = aba === 'med' ? 'vist' : 'med';
-    return '<section class="pt-conf" aria-label="Para conferir"><b>Para conferir · ' + rows.length + '</b>' + rows.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') +
-      '<button type="button" class="pt-conf-ir" data-act="pt-aba" data-id="' + esc(p.id) + '" data-v="' + outra + '">' + (outra === 'med' ? 'Ver nas Medições ›' : 'Ver na Vistoria ›') + '</button></section>';
+    return '<section class="pt-conf" aria-label="Não conformidade × medição"><b>Não conformidade × medição · ' + rows.length + '</b>' + rows.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') +
+      '<button type="button" class="pt-conf-ir" data-act="pt-aba" data-id="' + esc(p.id) + '" data-v="' + outra + '">' + (outra === 'med' ? 'Ver nas Medições ›' : 'Ver em Não conformidades ›') + '</button></section>';
   }
   // medições com serviço nesta ponte, na etapa mostrada (as que ‹ › percorrem)
   function medsComServ(an, a) {
@@ -4174,11 +4226,11 @@
       var ab = Object.prototype.hasOwnProperty.call(ui.grpAb, ch) ? ui.grpAb[ch] : x === maior;
       if (ac && !n && !(gi && gi.ult)) return;   // acesso e limpeza só aparece se a ponte já teve
       var est;
-      if (ac) est = '<span class="mg-e nv">fora dos grupos da vistoria</span>';
+      if (ac) est = '<span class="mg-e nv">fora dos grupos</span>';
       else if (!parte(c, 'acomp')) est = '';   // analista só das medições: sem o estado da vistoria
       else {
         var sv = p.serv[g.key], st = oaeSt(sv), qt = comQtd(st) ? fmtQtd(g, sv.q) : '';
-        est = st === 'NV' ? '<span class="mg-e nv">sem vistoria</span>' : '<span class="mg-e ' + st.toLowerCase() + '">' + esc(oaeStOf(g, st).name + (qt ? ' ' + qt : '')) + '</span>';
+        est = st === 'NV' || st === 'OK' ? '<span class="mg-e nv">sem NC</span>' : '<span class="mg-e ' + st.toLowerCase() + '">' + esc(ncNome(g, st) + (qt ? ' ' + qt : '')) + '</span>';
       }
       var ult = gi && gi.ult ? '<span class="mg-u">última ' + gi.ult + 'ª</span>' : '<span class="mg-u nunca">nunca medido</span>';
       var vazio = gi && gi.ult && (med || E) ? 'Sem serviço deste grupo ' + (med ? 'na ' + medTxt(an, med) : 'na ' + E + 'ª etapa') + '; a última medição com ele foi a ' + medTxt(an, gi.ult) + '.'
@@ -4358,19 +4410,15 @@
   // cor e situação de um ponto no mapa: concluído, parado, ativo ou sem atividade
   function pointInfo(p) {
     var dono = ownerOf(p);
-    // pontes e segmentos da conservação: a situação pela vistoria (na conservação, "defeito" no lugar de "dano")
+    // pontes e segmentos da conservação: as não conformidades (v121): laranja = NC aberta, azul = só NC em correção, cinza = sem NC
     if (isOae(dono) || isConserva(dono)) {
-      // conferido: algum grupo marcado sem defeito na vistoria ou serviço medido ali (a marcação de campo, dano ou execução, vem antes)
-      var n = oaeNec(p, dono), med = medDoPonto(dono, p), k = n.dn ? 'DN' : n.exec ? 'EX' : (n.ok || med) ? 'OK' : null, nt = oaeNecTxt(n, dono);
-      var nomeK = !k ? 'Sem apontamento' : isConserva(dono) && k === 'OK' ? 'Sem defeito' : isConserva(dono) && k === 'DN' ? 'Defeito observado' : OAE_STATUS[k].name;
-      var conf = k === 'OK' && med ? 'conferido na ' + med.n + 'ª med.' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : k === 'OK' && n.nv ? 'vistoria marcada' : '';
+      var n = oaeNec(p, dono), k = n.dn ? 'DN' : n.exec ? 'EX' : null;
       return {
-        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: nomeK, conf: conf,
-        pctText: k === 'OK' ? conf : !k ? '' : nt === 'sem vistoria' || nt === palavrasDe(dono).semDano ? '' : nt,
-        servs: servicesOf(dono).filter(function (s) { var x = oaeSt(p.serv[s.key]); return x !== 'NA' && x !== 'NV'; }).map(function (s) {
-          var sv = p.serv[s.key], x = oaeSt(sv), qt = comQtd(x) ? fmtQtd(s, sv.q) : '';
-          return { label: s.label, color: OAE_STATUS[x].fill, text: oaeStOf(s, x).name + (qt ? ' · ' + qt : '') + (comQtd(x) && sv.pri ? ' · prioridade' : '') +
-            (comQtd(x) && sv.ci ? ' · conclusão informada' : '') + (comQtd(x) && sv.n ? ' · ' + sv.n : '') };
+        color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k === 'DN' ? 'Não conformidade aberta' : k === 'EX' ? 'NC em correção' : 'Sem não conformidade', pctText: k ? oaeNecTxt(n, dono) : '',
+        servs: servicesOf(dono).filter(function (s) { return comQtd(oaeSt(p.serv[s.key])); }).map(function (s) {
+          var sv = p.serv[s.key], x = oaeSt(sv), qt = fmtQtd(s, sv.q);
+          return { label: s.label, color: OAE_STATUS[x].fill, text: ncNome(s, x) + (qt ? ' · ' + qt : '') + (sv.pri ? ' · prioridade' : '') +
+            (sv.ci ? ' · correção informada' : '') + (sv.n ? ' · ' + sv.n : '') };
         })
       };
     }
@@ -4387,6 +4435,22 @@
       })
     };
   }
+  // tela inicial: no modo Medições (o padrão), pontes e segmentos pela medição (verde = serviço medido ali, cinza = sem
+  // medição); em Não conformidades, pela NC, como no mapa (pointInfo). nc: a NC do item nos dois modos (botão e cartões contam)
+  function visaoInfo(p, modo) {
+    var dono = ownerOf(p), inf = pointInfo(p);
+    if (!isOae(dono) && !isConserva(dono)) return inf;
+    var n = oaeNec(p, dono), k = n.dn + n.exec;
+    inf.nc = n.dn ? 'DN' : n.exec ? 'EX' : null;
+    var med = medDoPonto(dono, p), medT = med ? 'última na ' + med.n + 'ª med.' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : '';
+    // no modo NC, ao lado da situação: quantas NC (com mais de uma) e a última medição
+    if (modo !== 'med') { inf.pctText = [k > 1 ? k + ' NC' : '', medT].filter(Boolean).join(' · '); return inf; }
+    var ncT = k ? k + ' NC' + (n.dn ? '' : ' em correção') : '';
+    return { color: med ? '#1E9E55' : NO_STATUS.fill, status: med ? 'Medido' : 'Sem medição', nc: inf.nc, servs: inf.servs,
+      pctText: medT + (med && ncT ? ' · ' : '') + ncT };
+  }
+  // quem vê as medições de alguma ponte ou conservação: a tela inicial começa em Medições (sem elas, só o modo NC)
+  function temMedVisao() { return !!(banco.on && banco.login) && state.contracts.some(function (c) { return (isOae(c) || isConserva(c)) && parte(c, 'med'); }); }
   // iPhone/iPad: o download comum não chega à galeria; a folha de compartilhar tem "Salvar imagem" e "Salvar em Arquivos"
   function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
   function canShareFile(f) { try { return !!(navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { return false; } }
@@ -4586,15 +4650,15 @@
   function metaSituacao(c, tot) {
     if (!isOae(c)) return ' · avanço médio ' + fmtPct(tot.avg);
     var r = oaeResumo(c);
-    return ' · ' + r.dn + (r.dn === 1 ? ' ponte com dano' : ' pontes com dano') + (r.exec ? ' · ' + r.exec + ' em execução' : '');
+    return ' · ' + (r.nc ? r.nc + (r.nc === 1 ? ' ponte com NC' : ' pontes com NC') : 'nenhuma ponte com NC');
   }
   // o contrato na linha sob o desenho: os pontos ou as pontes e a situação; na conservação, a faixa ("122,00 km · 3 segmentos do SNV")
-  // folha: o texto sob as folhas (na conservação com segmentos e com a folha de colunas, "12 segmentos de vistoria · 8 com defeito ·
+  // folha: o texto sob as folhas (na conservação com segmentos e com a folha de colunas, "12 segmentos · 3 com NC ·
   // " antes da faixa); sem folha, o do mapa, que fica como antes (os segmentos não aparecem no mapa)
   function metaItens(c, tot, folha) {
     if (isConserva(c)) {
-      var n = c.pontos.length, dn = folha && n && FOLHAS_CONSERVA.indexOf('colunas') >= 0 ? oaeResumo(c).dn : -1;
-      return (dn < 0 ? '' : n + (n === 1 ? ' segmento de vistoria · ' : ' segmentos de vistoria · ') + (dn ? dn + ' com defeito · ' : '')) + (faixaTexto(c) || 'sem o km inicial e o final');
+      var n = c.pontos.length, nc = folha && n && FOLHAS_CONSERVA.indexOf('colunas') >= 0 ? oaeResumo(c).nc : -1;
+      return (nc < 0 ? '' : n + (n === 1 ? ' segmento · ' : ' segmentos · ') + (nc ? nc + ' com NC · ' : '')) + (faixaTexto(c) || 'sem o km inicial e o final');
     }
     return tot.n + (isOae(c) ? ' pontes' : ' pontos') + metaSituacao(c, tot);
   }
@@ -4663,7 +4727,8 @@
     visao = window.VisaoGeral({
       host: $('visaoHost'), contratos: function () { return state.contracts; }, nomes: NOMES, publico: isPublico,
       // sem código, o ponto vem só com o km: sem situação (cinza)
-      info: function (p) { return isPublico() ? { status: '', color: '#5C6661', servs: [], pctText: '' } : pointInfo(p); }, isOae: isOae,
+      info: function (p, modo) { return isPublico() ? { status: '', color: '#5C6661', servs: [], pctText: '' } : visaoInfo(p, modo); }, isOae: isOae,
+      temMed: function () { return !isPublico() && temMedVisao(); },
       // a última medição do contrato (cartão: "Conferido até a 48ª med. · ago/26"); quem não vê as medições: null
       medContrato: function (c) { return isPublico() ? null : medDoContrato(c); },
       temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,
@@ -5129,7 +5194,7 @@
             var temDet = sv.q != null || (sv.n && String(sv.n).trim()) || sv.pri || sv.ci || (sv.itens && Object.keys(sv.itens).length);
             if (temDet) {
               var antes = JSON.parse(JSON.stringify(sv)), svK = b.dataset.svc, pId = p.id;
-              offerUndo('A estimativa, a nota e os itens deste serviço saíram junto com a situação.', function () {
+              offerUndo(st === 'OK' && comQtd(oaeSt(sv)) ? 'Não conformidade corrigida: a estimativa, a nota e os itens saíram junto.' : 'A estimativa, a nota e os itens deste serviço saíram junto com a situação.', function () {
                 var p2 = findPoint(pId);
                 if (!p2 || !p2.serv) return;
                 p2.serv[svK] = antes;
@@ -5596,7 +5661,7 @@
       modal('<h2 id="modalTitle">' + esc(oque) + '</h2>' +
         '<fieldset class="folha-op"><legend>O que vai na folha</legend>' +
         // começa sempre em "Só a vistoria": a folha com a análise é de uso interno e não vai à contratada por engano
-        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Só a vistoria</b><small>Estado ' + (isConserva(c) ? 'dos segmentos' : 'das pontes') + ' e observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
+        '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Não conformidades</b><small>As NC ' + (isConserva(c) ? 'dos segmentos' : 'das pontes') + ', a última medição de cada serviço e as observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
         '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
         '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary">Continuar</button></div>',
       function (f) {
@@ -6412,7 +6477,8 @@
       if (so) {
         var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
         var its = comQtd(k) ? itensDe(so.key, v).map(function (x) { return minus1(x.n); }) : [];
-        return oaeStOf(so, k).name + (qt ? ' ' + qt : '') + (its.length ? ': ' + its.join(', ') : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', conclusão informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
+        var nm = ncNome(so, k);
+        return nm.charAt(0).toUpperCase() + nm.slice(1) + (qt ? ' ' + qt : '') + (its.length ? ': ' + its.join(', ') : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', correção informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
       }
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
       return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
@@ -7005,8 +7071,12 @@
         (o.campo ? '<div class="field"><label for="cfCampo">' + esc(o.campo) + '</label><input id="cfCampo" maxlength="300" autocomplete="off"></div>' : '') +
         (o.marcar ? '<label class="cf-marca"><input type="checkbox" id="cfMarca"' + (o.marcar.padrao ? ' checked' : '') + '> <span>' + esc(o.marcar.texto) + '</span></label>' : '') +
         (o.digitar ? '<div class="field cf-dig"><label for="cfDig">Para confirmar, digite <b>' + esc(o.digitar) + '</b></label><input id="cfDig" autocomplete="off" autocorrect="off" spellcheck="false"></div>' : '') +
+        // v119: escolhas ({ k, t, d, perigo }): um botão grande para cada saída; responde { escolha: k }
+        (o.escolhas ? '<div class="cf-escs">' + o.escolhas.map(function (e) {
+          return '<button type="button" class="cf-esc' + (e.perigo ? ' perigo' : '') + '" data-esc="' + esc(e.k) + '"><b>' + esc(e.t) + '</b>' + (e.d ? '<span>' + esc(e.d) + '</span>' : '') + '</button>';
+        }).join('') + '</div>' : '') +
         '<div class="modal-foot"><button type="button" class="btn" data-close>' + esc(o.cancelar || 'Cancelar') + '</button>' +
-        '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button></div>',
+        (o.escolhas ? '' : '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button>') + '</div>',
       function (form) {
         if (o.digitar && semAcento(form.querySelector('#cfDig').value) !== semAcento(o.digitar)) return;
         var c = form.querySelector('#cfCampo');
@@ -7015,6 +7085,14 @@
         closeModal();
         resolve(v);
       }, null, function () { resolve(null); });   // cancelou: quem chamou reabre a lista de onde veio
+      if (o.escolhas) {
+        f.addEventListener('click', function (ev) {
+          var b = ev.target.closest && ev.target.closest('[data-esc]');
+          if (!b) return;
+          closeModal();
+          resolve({ escolha: b.getAttribute('data-esc') });
+        });
+      }
       if (o.digitar) {
         var inp = f.querySelector('#cfDig'), btn = f.querySelector('button[type=submit]');
         inp.addEventListener('input', function () { btn.disabled = semAcento(inp.value) !== semAcento(o.digitar); });
@@ -7618,8 +7696,8 @@
         var sv = p.serv[s.key], k = oaeSt(sv);
         if (k === 'NV' || k === 'NA') return '';
         var qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
-        return s.short + ': ' + oaeStOf(s, k).name.toLowerCase() + (qt ? ' ' + qt : '') + (comQtd(k) && sv.n ? ' (' + sv.n + ')' : '') +
-          (comQtd(k) && sv.pri ? ', prioridade' : '') + (comQtd(k) && sv.ci ? ', conclusão informada pela executora' : '');
+        return s.short + ': ' + ncNome(s, k) + (qt ? ' ' + qt : '') + (comQtd(k) && sv.n ? ' (' + sv.n + ')' : '') +
+          (comQtd(k) && sv.pri ? ', prioridade' : '') + (comQtd(k) && sv.ci ? ', correção informada pela executora' : '');
       });
     } else {
       partes = servicesOf(c).map(function (s) {

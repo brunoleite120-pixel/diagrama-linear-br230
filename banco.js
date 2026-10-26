@@ -152,6 +152,8 @@
         return rpc('fotos_listar', { p_cred: cred, p_escopo: escopo, p_limite: limite || 300, p_antes: new Date(Date.parse(antes) + 1).toISOString() }).then(function (r) { return r || []; });
       });
     },
+    // v119 (migração 26): a situação na equipe (ativa ou deletada, quando e por quem) das fotos guardadas no aparelho
+    fotosSituacao: function (cred, ids) { return rpc('fotos_situacao', { p_cred: cred, p_ids: ids }).then(function (r) { return r || []; }); },
     fotosMini: function (cred, ids) { return rpc('fotos_mini', { p_cred: cred, p_ids: ids }).then(function (r) { return r || []; }); },
     fotoRelatorio: function (cred, ids, marcar) { return rpc('foto_relatorio', { p_cred: cred, p_ids: ids, p_marcar: !!marcar }).then(Number); },
     fotoImportar: function (cred, foto, mini) { return rpc('foto_importar', { p_cred: cred, p_foto: foto, p_mini: mini || null }); },

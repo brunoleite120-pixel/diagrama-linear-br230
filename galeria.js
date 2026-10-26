@@ -253,6 +253,27 @@
     '.gl-s{position:absolute;top:5px;right:5px;min-width:20px;height:20px;box-sizing:border-box;padding:0 5px;border-radius:999px;background:rgba(255,255,255,.93);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;line-height:1;color:var(--ink-2,#3B4540);box-shadow:0 1px 2px rgba(0,0,0,.2)}',
     '.gl-s svg{width:13px;height:13px}',
     '.gl-s.ok{color:#1E7A47}.gl-s.fila{color:#9A5B00;font-size:10px}.gl-s.nuvem{color:var(--accent,#1D4F91)}.gl-s.erro{color:#B42318}',
+    // v119: em "No aparelho" a situação vem escrita ("✓ Na equipe", "Só neste aparelho", "Apagada da equipe"…)
+    '.gl-s.tx{padding:0 6px;max-width:calc(100% - 10px);font-size:10px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:20px}',
+    '.gl-s.tx.ok{color:#17713F}.gl-s.tx.fl{color:#1D4F91}.gl-s.tx.del{color:#9A4300}.gl-s.tx.nc{color:#5C6661}.gl-s.tx.erro{color:#B42318}',
+    // fotos apagadas da equipe (em outro aparelho ou por outra pessoa) que ainda têm cópia aqui: separadas, com o botão para remover
+    '.gl-apg{flex:1 1 100%;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;margin-bottom:8px;padding:12px;border-radius:12px;background:#FFF5EA;border:1px solid #EBC79C}',
+    '.gl-apg>b{font-size:15px;color:#7A3600}',
+    '.gl-apg>span{font-size:13px;line-height:1.4;color:var(--ink-2,#3B4540)}',
+    '.gl-apg .gl-apg-m{display:flex;flex-wrap:wrap;gap:4px;align-items:center}',
+    '.gl-apg-m img{width:56px;height:56px;object-fit:cover;border-radius:6px;filter:grayscale(.85) brightness(.92)}',
+    '.gl-apg-m i{font-style:normal;font-weight:700;color:#7A3600;padding:0 6px}',
+    '.gl-apg .gl-apg-b{display:flex;flex-direction:column;gap:6px}',
+    '.gl-apg-b .btn{justify-content:center;min-height:44px}',
+    '.gl-conf{flex:1 1 100%;font-size:12.5px;color:var(--ink-2,#3B4540)}',
+    '.gl-conf b{color:#17713F}',
+    // aviso que fica até fechar (algo não foi feito): "Ver" e ✕; as fotos de baixo sobem para não ficarem atrás dele
+    '.gl-toast.fixo{left:16px;right:16px;transform:none;margin:0 auto;max-width:560px;padding:8px 6px 8px 14px}',
+    '.gl-toast.fixo>span{flex:1 1 auto;min-width:0}',
+    '.gl-toast.fixo>span{display:flex;flex-direction:column;gap:1px;font-size:13px}',
+    '.gl-toast.fixo>span b{font-size:14px}',
+    '.gl-avon .gl-body{padding-bottom:170px}',
+    '.gl-selon .gl-s.tx{max-width:calc(100% - 40px)}',
     '.gl-s.sobe{padding:0;width:20px}.gl-s.sobe::after{content:"";width:11px;height:11px;box-sizing:border-box;border-radius:50%;border:2px solid #C9D8EC;border-top-color:var(--accent,#1D4F91);animation:glgira 1s linear infinite}',
     '@keyframes glgira{to{transform:rotate(360deg)}}',
     '@media (prefers-reduced-motion:reduce){.gl-s.sobe::after{animation:none}}',
@@ -555,6 +576,8 @@
   // aba Drive: por contrato ou por pessoa, e quando cada pasta foi aberta (para contar as novas)
   var DMODO_KEY = 'diagrama-linear.drive-ver-modo', DVISTO_KEY = 'diagrama-linear.drive-ver-vistos';
   var DET_KEY = 'diagrama-linear.foto-detalhes';   // a foto aberta com os detalhes abertos (a pessoa deixou assim)
+  // v119: a última conferência com a equipe das fotos guardadas neste aparelho ({ em, q: ids perguntados, s: id -> situação })
+  var CONF_KEY = 'diagrama-linear.fotos-conferidas';
   var IC_PASTA = '<svg viewBox="0 0 24 24" fill="#E9B949" stroke="#B8860B" stroke-width="1" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.3l2 2h8.7A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>';   // DRIVE_KEY: a mesma da tela Foto (foto.js)
   function lsLer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsPor(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* sem armazenamento */ } }
@@ -818,8 +841,81 @@
     var dpath = [], dmodo = lsLer(DMODO_KEY) === 'pessoa' ? 'pessoa' : 'contrato', dbusca = '', dlista = null, semMini = {}, dvistos = {};
     try { dvistos = JSON.parse(lsLer(DVISTO_KEY) || '{}') || {}; } catch (e) { dvistos = {}; }
     cacheIds().then(function (m) { guardadas = m; });
+    // v119: conferência com a equipe das fotos guardadas aqui. mantidas: as apagadas que a pessoa quis manter à vista (nesta tela)
+    var conf = lerConf(), confT = 0, confAndando = false, confErro = false, mantidas = {};
+    aoLimpar.push(function () { conf = { em: 0, q: {}, s: {} }; lsPor(CONF_KEY, null); mantidas = {}; });
 
     function login() { return o.getLogin ? o.getLogin() : null; }
+    function lerConf() {
+      try { var c = JSON.parse(lsLer(CONF_KEY) || 'null'); if (c && c.s && c.q) return c; } catch (e) { /* guardado estragado: confere de novo */ }
+      return { em: 0, q: {}, s: {} };
+    }
+    // a situação na equipe de uma foto guardada aqui: 'ativa', 'deletada', 'sem' (perguntada e o banco não devolveu: tirada
+    // com código geral ou de outra pessoa) ou '' (ainda não conferida)
+    function naEquipe(id) { return conf.s[id] ? conf.s[id].st : conf.q[id] ? 'sem' : ''; }
+    // as cópias de fotos já apagadas da equipe (fora as que a pessoa mandou manter à vista)
+    function apagadasAqui() {
+      return Object.keys(locais).filter(function (k) { return locais[k].situacao === 'enviada' && naEquipe(k) === 'deletada' && !mantidas[k]; });
+    }
+    // pergunta ao banco a situação das fotos enviadas que estão neste aparelho (sem baixar nada); no máximo 1 vez por minuto,
+    // a não ser pelo "Atualizar". Sem sinal: fica a última conferência. Ausência na resposta não quer dizer apagada
+    function conferir(forcar) {
+      var l = login();
+      if (!l || !o.Banco || !o.Banco.fotosSituacao || confAndando) return;
+      if (!forcar && Date.now() - confT < 60000) return;
+      var ids = Object.keys(locais).filter(function (k) { return locais[k].situacao === 'enviada'; });
+      if (!ids.length) return;
+      confAndando = true; confT = Date.now();
+      var partes = [];
+      for (var i = 0; i < ids.length; i += 500) partes.push(ids.slice(i, i + 500));
+      if (forcar && aba === 'local') render();
+      Promise.all(partes.map(function (p) { return o.Banco.fotosSituacao(l.codigo, p); })).then(function (rs) {
+        var s = {}, qq = {};
+        ids.forEach(function (k) { qq[k] = 1; });
+        rs.forEach(function (r) { (r || []).forEach(function (f) { s[f.id] = { st: f.situacao, em: f.deletada_em || null, por: f.deletada_por || '' }; }); });
+        conf = { em: Date.now(), q: qq, s: s }; confErro = false;
+        lsPor(CONF_KEY, JSON.stringify(conf));
+      }, function () { confErro = true; }).then(function () { confAndando = false; if (root && aba === 'local') render(); });
+    }
+    // "em 21/10" ou "entre 21 e 23/10" (as datas em que foram apagadas)
+    function quandoApagadas(ems) {
+      var ds = ems.map(function (e) { return data(e); }).filter(Boolean).sort(function (a, b) { return a - b; });
+      if (!ds.length) return '';
+      var f = function (d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }, a = ds[0], b = ds[ds.length - 1];
+      if (f(a) === f(b)) return 'em ' + f(a);
+      return 'entre ' + (a.getMonth() === b.getMonth() ? pad(a.getDate()) : f(a)) + ' e ' + f(b);
+    }
+    function boxApagadas(ids) {
+      var n = ids.length, quando = quandoApagadas(ids.map(function (k) { return conf.s[k] && conf.s[k].em; }));
+      var quem = [];
+      ids.forEach(function (k) { var p = conf.s[k] && conf.s[k].por; if (p && quem.indexOf(p) < 0) quem.push(p); });
+      var minisH = ids.slice(0, 10).map(function (k) { var m = locais[k] && locais[k].mini; return m ? '<img alt="" src="' + esc(m) + '">' : ''; }).join('') + (n > 10 ? '<i>+' + (n - 10) + '</i>' : '');
+      return '<div class="gl-apg" role="region" aria-label="Fotos apagadas da equipe"><b>Apagadas da equipe · ' + plural(n, 'cópia', 'cópias') + ' neste aparelho</b>' +
+        '<span>' + (n === 1 ? 'Esta foto foi apagada' : 'Estas fotos foram apagadas') + ' do Drive' + (quando ? ' ' + quando : '') +
+        (quem.length && quem.length <= 2 ? ' por ' + esc(quem.join(' e ')) : '') + ' (' + (n === 1 ? 'está' : 'estão') + ' na pasta Deletados). Só a cópia deste celular ficou.</span>' +
+        (minisH ? '<span class="gl-apg-m">' + minisH + '</span>' : '') +
+        '<span class="gl-apg-b"><button type="button" class="btn primary" data-g="apg-tirar">Remover ' + (n === 1 ? 'a cópia' : 'as ' + n + ' cópias') + ' deste aparelho</button>' +
+        '<button type="button" class="btn" data-g="apg-manter">Manter por enquanto</button></span></div>';
+    }
+    function confHtml() {
+      if (!login() || !o.Banco || !o.Banco.fotosSituacao) return '';
+      if (!Object.keys(locais).some(function (k) { return locais[k].situacao === 'enviada'; })) return '';
+      var d = conf.em ? new Date(conf.em) : null, hm = d ? pad(d.getHours()) + ':' + pad(d.getMinutes()) : '';
+      var hoje = d && d.toDateString() === new Date().toDateString();
+      var t = confAndando ? 'Conferindo com a equipe…' : !d ? 'Ainda não conferido com a equipe' :
+        confErro ? 'Sem conexão: conferido pela última vez ' + (hoje ? 'às ' + hm : 'em ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' às ' + hm) :
+        hoje ? '<b>✓ Conferido com a equipe às ' + hm + '</b>' : 'Conferido com a equipe em ' + pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' às ' + hm;
+      return '<span class="gl-conf">' + t + (confAndando ? '' : ' · <button type="button" class="gl-lk" data-g="conferir">' + (d ? 'Atualizar' : 'Conferir') + '</button>') + '</span>';
+    }
+    function tirarCopias(ids) {
+      if (!ids.length || !o.drive || !o.drive.apagar) return;
+      o.drive.apagar(ids).then(function () {
+        ids.forEach(function (k) { delete mantidas[k]; });
+        avisoGl(plural(ids.length, 'cópia removida', 'cópias removidas') + ' deste aparelho.');
+        sel = {}; selecionando = false;
+        carregar();
+      }, function () { avisoGl('Não foi possível remover as cópias deste aparelho.'); });
+    }
     // foto da câmera guardada no clique e ainda sem carimbo (a marca vem do rascunho: a carimbada entra no lugar, sem ela)
     function semCar(x) { var lo = x && locais[x.id]; return !!(lo && lo.semCar && lo.situacao === 'aparelho'); }
     // as fotos que estão subindo agora (até 2 juntas; o drive.js antigo diz só uma)
@@ -929,6 +1025,7 @@
           }
         }
         render();
+        if (aba === 'local') conferir();
       }, function (e) {
         if (g !== geracao) return;
         itens = []; carregando = false; erroTxt = msgErro(e);
@@ -1155,7 +1252,7 @@
       return c === 'sem_rede' ? 'sem conexão' : c === 'banco_nao_marcou' ? 'o banco não confirmou; o arquivo ficou onde estava'
         : c === 'nao_desfeito' ? 'o banco não confirmou e o arquivo não voltou: confira em "Conferir com o Drive"'
         : c === PASTA_FORA ? 'pasta principal do Drive indisponível' : c === 'fora_da_pasta' ? 'o arquivo está fora da pasta do Drive da equipe'
-        : c === 'sem_permissao' || c === 'so_criador' ? 'sem permissão' : c || 'erro';
+        : c === 'ja_apagada' ? 'já estava apagada' : c === 'sem_permissao' || c === 'so_criador' ? 'sem permissão' : c || 'erro';
     }
     function erroArquivo(e) {
       var c = e && e.code;
@@ -1185,7 +1282,12 @@
       return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
         (!filtro.km || (it.km != null && isFinite(it.km) && Number(it.km) >= filtro.km[0] - FOLGA_KM && Number(it.km) <= filtro.km[1] + FOLGA_KM)) &&
         (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
-        (aba !== 'local' || !fLocal || (fLocal === 'semcar' ? semCar(it) : !!locais[it.id] && locais[it.id].situacao === fLocal));
+        (aba !== 'local' || !fLocal || (fLocal === 'semcar' ? semCar(it) : !!locais[it.id] && locais[it.id].situacao === fLocal)) &&
+        (aba !== 'local' || !escondida(it.id));
+    }
+    // v119: a cópia de foto já apagada da equipe sai da grade (fica no quadro "Apagadas da equipe"), a não ser que a pessoa a mantenha
+    function escondida(id) {
+      return !selecionando && !mantidas[id] && !!locais[id] && locais[id].situacao === 'enviada' && naEquipe(id) === 'deletada';
     }
     function noPeriodo(it, iv) { if (!iv) return true; var k = diaDaFoto(it.em); return !!k && k >= iv[0] && k <= iv[1]; }
     function filtrar() {
@@ -1300,11 +1402,12 @@
       // No aparelho: Todas · Só aqui · Na fila · No Drive (cada uma com a quantidade; só as que têm foto)
       if (aba === 'local' && itens.length) {
         var cs = { aparelho: 0, fila: 0, enviada: 0, semcar: 0 };
-        itens.forEach(function (it) { var lo = locais[it.id]; if (lo && cs[lo.situacao] != null) cs[lo.situacao]++; if (semCar(it)) cs.semcar++; });
+        var vis = itens.filter(function (it) { return !escondida(it.id); });   // v119: as cópias de apagadas ficam no quadro, fora das contas
+        vis.forEach(function (it) { var lo = locais[it.id]; if (lo && cs[lo.situacao] != null) cs[lo.situacao]++; if (semCar(it)) cs.semcar++; });
         var chipL = function (v, t, k, cls) { return '<button type="button" class="gl-chip' + (cls ? ' ' + cls : '') + '" data-g="fl" data-v="' + v + '" aria-pressed="' + (fLocal === v) + '">' + t + ' · ' + k + '</button>'; };
-        h += '<div class="gl-chips" role="group" aria-label="Situação das fotos">' + chipL('', 'Todas', itens.length) +
+        h += '<div class="gl-chips" role="group" aria-label="Situação das fotos">' + chipL('', 'Todas', vis.length) +
           (cs.semcar || fLocal === 'semcar' ? chipL('semcar', 'Sem carimbo', cs.semcar, 'warn') : '') +
-          [['aparelho', 'Só aqui'], ['fila', 'Na fila'], ['enviada', 'No Drive']].filter(function (x) { return cs[x[0]] || fLocal === x[0]; })
+          [['aparelho', 'Só aqui'], ['fila', 'Na fila'], ['enviada', 'Enviadas']].filter(function (x) { return cs[x[0]] || fLocal === x[0]; })
             .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>';
       }
       if (filtro.km) h += '<button type="button" class="gl-chip" data-g="km-tirar" aria-pressed="true" aria-label="Tirar o filtro do km">' + esc((filtro.km[2] ? filtro.km[2] + ' · ' : '') + 'km ' + String(filtro.km[0]).replace('.', ',') + ' a ' + String(filtro.km[1]).replace('.', ',')) + ' ✕</button>';
@@ -1371,13 +1474,28 @@
     function estado(it) {
       if (aba === 'deletadas') return '';
       var lo = locais[it.id];
-      if (lo) {
-        var sobe = sobemAgora();
+      if (lo && aba !== 'local') {   // nas abas da equipe continua o ícone (a estrela do relatório fica ao lado)
         if (lo.situacao === 'enviada') return '<span class="gl-s ok" title="No Drive e neste aparelho">' + IC_NUVEM + '</span>';
         if (lo.situacao === 'aparelho') return '<span class="gl-s" title="Só neste aparelho">' + IC_APAR + '</span>';
-        if (sobe.indexOf(it.id) >= 0) return '<span class="gl-s sobe" title="Subindo para o Drive"></span>';
-        if (lo.erro && lo.erro !== 'rede') return '<span class="gl-s erro" title="Tentando de novo">!</span>';
+        if (sobemAgora().indexOf(it.id) >= 0) return '<span class="gl-s sobe" title="Subindo para o Drive"></span>';
         return '<span class="gl-s fila" title="Na fila do Drive">fila</span>';
+      }
+      if (lo) {
+        var sobe = sobemAgora();
+        // v119: escrito. "Enviada" sozinho não diz que continua no Drive: depende da conferência com a equipe
+        var tx = function (c, t, dica) { return '<span class="gl-s tx ' + c + '" title="' + esc(dica || t) + '">' + esc(t) + '</span>'; };
+        if (lo.situacao === 'enviada') {
+          var ne = naEquipe(it.id);
+          if (ne === 'deletada') return tx('del', 'Apagada da equipe', 'Apagada do Drive; só a cópia deste aparelho ficou');
+          if (ne === 'ativa') return tx('ok', '✓ Na equipe', 'No Drive e na galeria da equipe');
+          if (ne === 'sem') return tx('ok', '✓ Enviada', 'Enviada ao Drive (o banco não mostra a situação desta foto para o seu acesso)');
+          return tx('nc', 'Não conferida', 'Enviada ao Drive; ainda não conferida com a equipe');
+        }
+        if (semCar(it)) return '';   // o selo "Sem carimbo" já diz que está só aqui
+        if (lo.situacao === 'aparelho') return tx('', 'Só neste aparelho', 'Não vai para o Drive enquanto ficar assim');
+        if (sobe.indexOf(it.id) >= 0) return tx('fl', 'Enviando…');
+        if (lo.erro && lo.erro !== 'rede') return tx('erro', 'Tentando de novo');
+        return tx('fl', 'Aguardando envio', 'Na fila do Drive: sobe quando houver sinal, com o app aberto');
       }
       if (it.origem !== 'banco' && it.origem !== 'drive') return '';
       // no download em andamento: a vez de cada uma
@@ -1397,7 +1515,7 @@
     }
     function legendaHtml() {
       var s1 = function (c, ic, t) { return '<span><span class="gl-s ' + c + '">' + ic + '</span>' + t + '</span>'; };
-      if (aba === 'local') return '<div class="gl-leg">' + s1('ok', IC_NUVEM, 'no Drive') + s1('', IC_APAR, 'só aqui') + s1('fila', 'fila', 'vai subir') + s1('sobe', '', 'subindo') + '</div>';
+      if (aba === 'local') return '';   // v119: a situação vem escrita em cada foto
       if (aba === 'deletadas') return '';
       return '<div class="gl-leg">' + s1('nuvem', IC_BAIXA, 'só no Drive') + s1('', IC_APAR, 'baixada neste aparelho') + '</div>';
     }
@@ -1459,7 +1577,8 @@
         }
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         b += '<button type="button" class="gl-cfg" data-g="cfg">' + IC_CFG + 'Espaço e envio</button>';
-        return aviso + '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
+        var apg = selecionando ? [] : apagadasAqui();
+        return (apg.length ? boxApagadas(apg) : '') + aviso + confHtml() + '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
       }
       if (aba === 'drive') {
         var cartoes = emCartoes(), base = cartoes ? itens.filter(noCaminho) : lista;
@@ -1514,6 +1633,7 @@
           drive: 'Nenhuma foto no Drive ainda' + (dlista && !dlista.amplo ? ' tirada por você' : '') + '.'
         }[aba]) + '</div>';
       }
+      if (!lista.length && aba === 'local' && itens.every(function (it) { return escondida(it.id); })) return '<div class="gl-vazio">Nenhuma outra foto neste aparelho.</div>';
       if (!lista.length) {
         if (foraDoPeriodo()) {
           return '<div class="gl-vazio">Nenhuma foto neste período (' + esc(rotuloPer(per).toLowerCase()) + ').<br>' +
@@ -1605,8 +1725,8 @@
       }
       if (mov) a.push({ k: 'mover', t: '⌖ Contrato e ponto' + (ls.length > 1 ? ' (' + mov + ')' : '') });
       if (fi) a.push({ k: 'segurar', t: 'Não enviar' + (ls.length > 1 ? ' (' + fi + ')' : '') });
-      if (ls.some(function (x) { return locais[x.id]; })) a.push({ k: 'apagar-local', t: '🗑 Apagar do celular', c: 'danger' });
-      if (n >= 2 && aba !== 'deletadas' && ls.some(function (x) { return x.driveId && (x.origem === 'banco' || x.situacao === 'enviada'); })) a.push({ k: 'apagar-drive', t: '🗑 Apagar do Drive', c: 'danger' });
+      // v119: um "Apagar" só; a escolha (só deste celular, ou da equipe e deste celular) vem na janela, com quantas de cada
+      if (ls.some(function (x) { return locais[x.id]; }) || ls.some(podeApagarEquipe)) a.push({ k: 'apagar', t: '🗑 Apagar' + cnt(ls.length), c: 'danger' });
       if (n >= 3 && aba === 'deletadas') a.push({ k: 'restaurar', t: 'Restaurar', c: 'primary' });
       return a;
     }
@@ -2029,7 +2149,9 @@
       linhas.push(esc([kmTxt(it.km), it.lat != null ? Number(it.lat).toFixed(5) + ', ' + Number(it.lng).toFixed(5) : ''].filter(Boolean).join(' · ') || 'Sem km e sem coordenadas'));
       linhas.push(esc([hora(it.em), it.autor ? 'tirada por ' + it.autor : ''].filter(Boolean).join(' · ')));
       if (it.origem === 'local') {
-        linhas.push(it.situacao === 'enviada' ? 'No Drive' + (it.enviada ? ' desde ' + esc(hora(new Date(it.enviada).toISOString())) : '') + ' · também guardada neste aparelho'
+        var cf = conf.s[it.id];
+        linhas.push(it.situacao === 'enviada' && naEquipe(it.id) === 'deletada' ? '<span class="gl-warn">Apagada da equipe' + (cf.por ? ' por ' + esc(cf.por) : '') + (cf.em ? ' em ' + esc(hora(cf.em)) : '') + ' · só a cópia deste aparelho ficou</span>'
+          : it.situacao === 'enviada' ? 'Enviada ao Drive' + (it.enviada ? ' em ' + esc(hora(new Date(it.enviada).toISOString())) : '') + (naEquipe(it.id) === 'ativa' ? ' · na equipe' : '') + ' · também guardada neste aparelho'
           : it.situacao === 'aparelho' ? 'Guardada só neste aparelho · não vai para o Drive (toque em Enviar ao Drive se quiser)'
           : 'Guardada neste aparelho · <span class="gl-warn">na fila do Drive</span>');
       } else {
@@ -2106,8 +2228,44 @@
       el.innerHTML = '<span>' + esc(txt) + '</span><button type="button" data-g="desfazer">Desfazer</button>';
       desfazerFn = fn; clearTimeout(avisoT); avisoT = setTimeout(fecharAviso, 7000);
     }
-    function fecharAviso() { desfazerFn = null; clearTimeout(avisoT); var el = root && q('.gl-toast'); if (el) el.remove(); }
-    function apagarLocal(ls) {
+    function fecharAviso() { desfazerFn = null; avisoDet = null; clearTimeout(avisoT); var el = root && q('.gl-toast'); if (el) el.remove(); if (root) root.classList.remove('gl-avon'); }
+    // v119: o resultado de apagar fica dentro da galeria, acima da barra (o aviso do app cobria a legenda e os botões).
+    // det: { titulo, html, refazer } faz o aviso ficar até fechar, com "Ver" (o que não foi feito e por quê)
+    var avisoDet = null;
+    function avisoGl(txt, sub, det) {
+      if (!root) { if (o.toast) o.toast(txt + (sub ? ' ' + sub : ''), 6000); return; }
+      fecharAviso();
+      var el = document.createElement('div');
+      el.className = 'gl-toast' + (det ? ' fixo' : ''); el.setAttribute('role', det ? 'alert' : 'status');
+      el.innerHTML = '<span><b>' + esc(txt) + '</b>' + (sub ? esc(sub) : '') + '</span>' +
+        (det ? '<button type="button" data-g="aviso-ver">Ver</button><button type="button" data-g="aviso-x" aria-label="Fechar o aviso">✕</button>' : '');
+      root.appendChild(el);
+      if (det) { avisoDet = det; root.classList.add('gl-avon'); } else avisoT = setTimeout(fecharAviso, 6000);
+    }
+    function podeApagarEquipe(x) {
+      return nv() >= 2 && aba !== 'deletadas' && !!x.driveId && x.situacao !== 'deletada' && naEquipe(x.id) !== 'deletada' &&
+        (x.origem === 'banco' || x.situacao === 'enviada');
+    }
+    // v119: "Apagar" pergunta uma vez, com as duas saídas e quantas fotos cada uma pega
+    function escolherApagar(ls) {
+      var loc = ls.filter(function (x) { return locais[x.id]; }), eq = ls.filter(podeApagarEquipe);
+      var eqAqui = eq.filter(function (x) { return locais[x.id]; }).length, naoEnv = loc.filter(function (x) { return locais[x.id].situacao !== 'enviada'; }).length;
+      if (!eq.length) { apagarLocal(ls); return; }   // nada na equipe para apagar (ou o acesso não apaga do Drive): como antes
+      var es = [];
+      if (loc.length) {
+        var fica = eq.length === 1 ? 'A que está na equipe continua no Drive.' : 'As ' + eq.length + ' que estão na equipe continuam no Drive.';
+        es.push({ k: 'cel', t: 'Só deste celular (' + loc.length + ')', d: fica + (naoEnv ? ' ' + (naoEnv === 1 ? 'A 1 que ainda não subiu será perdida: o app avisa antes.' : 'As ' + naoEnv + ' que ainda não subiram serão perdidas: o app avisa antes.') : '') });
+      }
+      es.push({ k: 'eq', perigo: true, t: (eqAqui ? 'Da equipe e deste celular (' : 'Da equipe (') + eq.length + ')',
+        d: 'Vão para a pasta Deletados do Drive; o Administrador pode restaurar.' + (eqAqui ? ' Some também a cópia daqui.' : '') });
+      var n = ls.length;
+      o.confirmar({ titulo: 'Apagar ' + (n === 1 ? 'esta foto' : n + ' fotos'), escolhas: es }).then(function (r) {
+        if (!r || !r.escolha) return;
+        if (r.escolha === 'cel') apagarLocal(ls, true);
+        else moverDrive(eq, true, true);
+      });
+    }
+    function apagarLocal(ls, escolhido) {
       var loc = ls.filter(function (x) { return locais[x.id]; }).map(function (x) { return locais[x.id]; });
       var nao = loc.filter(function (x) { return x.situacao !== 'enviada'; });
       // fiscal: as da fila esperam o envio; as que ele escolheu deixar só no aparelho, ele mesmo pode apagar
@@ -2120,7 +2278,8 @@
       var n = loc.length, sobe = sobemAgora();
       // a que está subindo agora: o envio em curso não para (o arquivo, ou o registro, pode chegar do outro lado)
       var subindo = loc.some(function (x) { return sobe.indexOf(x.id) >= 0 && x.situacao === 'fila'; });
-      o.confirmar({
+      // já escolhido na janela do "Apagar" e nada se perde: não pergunta de novo
+      (escolhido && !nao.length && !subindo && n <= 20 ? Promise.resolve(true) : o.confirmar({
         titulo: 'Apagar do celular ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar do celular',
         html: (nao.length
           ? '<p class="modal-err">' + (nao.length === n ? (n === 1 ? 'Esta foto ainda não foi enviada' : 'Nenhuma delas foi enviada ainda') : plural(nao.length, 'delas ainda não foi enviada', 'delas ainda não foram enviadas')) +
@@ -2129,14 +2288,14 @@
           (subindo ? '<p class="modal-err">' + (n === 1 ? 'Ela' : 'Uma delas') + ' já está sendo enviada agora: pode chegar mesmo assim ao Drive e à galeria da equipe. ' +
             'Se quiser, espere o envio terminar e apague depois pelo "Apagar do Drive".</p>' : ''),
         digitar: nao.length ? 'APAGAR' : (n > 20 ? 'APAGAR' : null)
-      }).then(function (ok) {
+      })).then(function (ok) {
         if (!ok) return;
         o.drive.apagar(loc.map(function (x) { return x.id; })).then(function () {
-          o.toast(plural(n, 'foto apagada', 'fotos apagadas') + ' deste aparelho.');
           if (ver >= 0) fecharVer();
-          sel = {};
+          sel = {}; selecionando = false;
+          avisoGl(plural(n, 'foto apagada', 'fotos apagadas') + ' deste aparelho.');
           carregar();
-        }, function () { o.toast('Não foi possível apagar deste aparelho.', 5000); });
+        }, function () { avisoGl('Não foi possível apagar deste aparelho.'); });
       });
     }
     // as que ficaram só no aparelho vão para a fila do Drive (sim), ou as da fila que ainda não subiram ficam só aqui (não)
@@ -2159,7 +2318,10 @@
         carregar();
       }, function () { o.toast('Não foi possível mudar estas fotos neste aparelho.', 5000); });
     }
-    function moverDrive(ls, apagar) {
+    // escolhido (v119): veio da janela do "Apagar" com "Da equipe e deste celular": não pergunta de novo (só digita APAGAR acima
+    // de 20) e as cópias deste celular saem junto. Foto que já estava apagada da equipe ('ja_apagada', migração 26) conta como
+    // feita: não é falta de permissão
+    function moverDrive(ls, apagar, escolhido) {
       var l = login(), url = o.driveUrl ? o.driveUrl() : null;
       ls = ls.filter(function (x) { return x.driveId && (apagar ? x.situacao !== 'deletada' && (x.origem === 'banco' || x.situacao === 'enviada') : x.situacao === 'deletada'); });
       if (!l || !url || !ls.length || ocupado) return;
@@ -2167,19 +2329,20 @@
       // as que também estão guardadas neste celular: a pessoa escolhe se saem daqui junto (já vem marcado). Sem isso, a cópia
       // continuava em "No aparelho" com a nuvem de "no Drive" depois de apagada do Drive
       var nLoc = apagar ? ls.filter(function (x) { return locais[x.id]; }).length : 0;
-      o.confirmar(apagar ? {
-        titulo: 'Apagar do Drive ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar do Drive',
-        html: '<p>' + (n === 1 ? 'A foto sai' : 'As fotos saem') + ' da galeria da equipe e ' + (n === 1 ? 'vai' : 'vão') + ' para a pasta <b>Deletados</b> do Drive. ' +
-          'Só o Administrador vê essa pasta e pode restaurar.</p>', digitar: n > 1 ? 'APAGAR' : null,
-        marcar: nLoc ? { texto: 'Apagar também deste celular' + (nLoc < n ? ' (' + plural(nLoc, 'está guardada aqui', 'estão guardadas aqui') + ')' : ''), padrao: true } : null
+      (escolhido && apagar && n <= 20 ? Promise.resolve({ marcado: true }) : o.confirmar(apagar ? {
+        titulo: 'Apagar da equipe ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar da equipe',
+        html: '<p>' + (n === 1 ? 'A foto vai' : 'As fotos vão') + ' para a pasta <b>Deletados</b> do Drive e ' + (n === 1 ? 'sai' : 'saem') + ' da galeria da equipe. ' +
+          'O Administrador pode restaurar.</p>', digitar: escolhido ? 'APAGAR' : n > 1 ? 'APAGAR' : null,
+        marcar: nLoc && !escolhido ? { texto: 'Apagar também deste celular' + (nLoc < n ? ' (' + plural(nLoc, 'está guardada aqui', 'estão guardadas aqui') + ')' : ''), padrao: true } : null
       } : {
         titulo: 'Restaurar ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', botao: 'Restaurar',
         html: '<p>' + (n === 1 ? 'Ela volta' : 'Elas voltam') + ' para a pasta original no Drive (se ela não existir mais, para a pasta do contrato e do ponto) ' +
           'e para a galeria da equipe.</p>'
-      }).then(function (ok) {
+      })).then(function (ok) {
         if (!ok) return;
         cancelar = false;
-        var feitos = 0, falhas = [], cadeia = Promise.resolve(), tirar = [], doCel = !!(nLoc && ok.marcado);
+        var feitos = 0, falhas = [], cadeia = Promise.resolve(), tirar = [], doCel = !!(nLoc && (escolhido || ok.marcado));
+        var ja = [], jaAqui = [];   // já estavam apagadas da equipe: quando e por quem; as que têm cópia aqui e ficaram
         ls.forEach(function (it, i) {
           cadeia = cadeia.then(function () {
             if (cancelar) return;
@@ -2190,21 +2353,52 @@
             if (pr) corpo.pastas = pr;
             return o.drive.post(url, corpo).then(function (r) {
               // o banco não marcou e o script não conseguiu devolver o arquivo (versão 6): Drive e galeria ficaram diferentes
-              if (r && r.ok) { feitos++; itemAtualizar(it.id, apagar ? null : { situacao: 'ativa' }); if (doCel && locais[it.id]) tirar.push(it.id); } else falhas.push(r && r.erro === 'banco_nao_marcou' && r.desfeito === false ? 'nao_desfeito' : (r && r.erro) || 'erro');
-            }, function () { falhas.push('sem_rede'); });
+              if (r && r.ok) { feitos++; itemAtualizar(it.id, apagar ? null : { situacao: 'ativa' }); if (doCel && locais[it.id]) tirar.push(it.id); }
+              else if (apagar && r && r.erro === 'ja_apagada') {
+                ja.push(r.deletada_em || null);
+                itemAtualizar(it.id, null);
+                conf.s[it.id] = { st: 'deletada', em: r.deletada_em || null, por: r.deletada_por || '' }; conf.q[it.id] = 1;
+                lsPor(CONF_KEY, JSON.stringify(conf));
+                if (locais[it.id]) { if (doCel) tirar.push(it.id); else jaAqui.push(it.id); }
+              } else falhas.push({ it: it, c: r && r.erro === 'banco_nao_marcou' && r.desfeito === false ? 'nao_desfeito' : (r && r.erro) || 'erro' });
+            }, function () { falhas.push({ it: it, c: 'sem_rede' }); });
           });
         });
-        // só sai do celular a que saiu do Drive (a que falhou continua aqui)
+        // só sai do celular a que saiu do Drive, ou já estava fora dele (a que falhou continua aqui)
         cadeia.then(function () { return tirar.length && o.drive.apagar ? o.drive.apagar(tirar).then(null, function () { tirar = []; }) : null; }).then(function () {
           ocupado = null;
           if (ver >= 0) fecharVer();
           sel = {}; selecionando = false;
-          var t = feitos ? plural(feitos, apagar ? 'foto foi para a Lixeira' : 'foto restaurada', apagar ? 'fotos foram para a Lixeira' : 'fotos restauradas') +
-            (tirar.length ? (tirar.length === feitos ? ' e ' + (feitos === 1 ? 'saiu' : 'saíram') + ' deste celular' : ' (' + tirar.length + ' também deste celular)') : '') + '.' : '';
-          var f0 = falhas.indexOf('nao_desfeito') >= 0 ? 'nao_desfeito' : falhas.indexOf('sem_rede') >= 0 ? 'sem_rede' : falhas[0];
-          if (falhas.length) t += ' ' + plural(falhas.length, 'não foi', 'não foram') + ' (' + motivoDrive(f0) + ').';
-          o.toast(t.trim(), 6000);
+          var nj = ja.length, quando = quandoApagadas(ja.filter(Boolean));
+          // todas já estavam apagadas e as cópias ficaram aqui: a pergunta do que fazer com elas (nada precisou ser feito no Drive)
+          if (apagar && nj && !feitos && !falhas.length && jaAqui.length) {
+            carregar();
+            o.confirmar({
+              titulo: nj === 1 ? 'Esta foto já estava apagada da equipe' : 'Estas ' + nj + ' fotos já estavam apagadas da equipe',
+              html: '<p>' + (nj === 1 ? 'Foi apagada' : 'Foram apagadas') + ' do Drive' + (quando ? ' ' + quando : '') + ' (' + (nj === 1 ? 'está' : 'estão') + ' na pasta Deletados). Nada precisou ser feito no Drive.</p>' +
+                '<p>' + (jaAqui.length === 1 ? 'A cópia continua' : 'As cópias continuam') + ' neste aparelho.</p>',
+              botao: 'Remover ' + (jaAqui.length === 1 ? 'a cópia' : 'as ' + jaAqui.length + ' cópias') + ' deste aparelho', cancelar: 'Agora não'
+            }).then(function (r) { if (r) tirarCopias(jaAqui); });
+            return;
+          }
+          var tiradas = tirar.length, ps = [];
+          if (feitos) ps.push(plural(feitos, apagar ? 'foto apagada da equipe' : 'foto restaurada', apagar ? 'fotos apagadas da equipe' : 'fotos restauradas'));
+          if (nj) ps.push(plural(nj, 'já estava apagada', 'já estavam apagadas'));
+          var t = ps.join(' · ') + (tiradas ? (tiradas === feitos + nj ? ' e ' + (tiradas === 1 ? 'saiu' : 'saíram') + ' deste celular' : ' (' + tiradas + ' também deste celular)') : '') + '.';
+          if (!falhas.length) { avisoGl(t); carregar(); return; }
+          // algo não foi feito: o aviso fica até fechar, com "Ver" (o que e por quê) e "Tentar de novo"; as que falharam continuam marcadas
+          var f0 = falhas.some(function (f) { return f.c === 'nao_desfeito'; }) ? 'nao_desfeito' : falhas.some(function (f) { return f.c === 'sem_rede'; }) ? 'sem_rede' : falhas[0].c;
+          var det = {
+            titulo: plural(falhas.length, 'foto precisa de atenção', 'fotos precisam de atenção'),
+            html: '<ul>' + falhas.map(function (f) {
+              return '<li>' + esc([curto(f.it.cid), f.it.pnome, kmCurto(f.it.km), data(f.it.em) ? pad(data(f.it.em).getDate()) + '/' + pad(data(f.it.em).getMonth() + 1) : ''].filter(Boolean).join(' · ')) + ': ' + esc(motivoDrive(f.c)) + '</li>';
+            }).join('') + '</ul>',
+            refazer: falhas.map(function (f) { return f.it; }), apagar: apagar
+          };
+          avisoGl(ps.length ? t : (apagar ? 'Nenhuma foto foi apagada.' : 'Nenhuma foto foi restaurada.'),
+            plural(falhas.length, 'precisa de atenção', 'precisam de atenção') + ' (' + motivoDrive(f0) + ')', det);
           carregar();
+          falhas.forEach(function (f) { sel[f.it.id] = 1; }); selecionando = true;
         });
       });
     }
@@ -2666,6 +2860,7 @@
       if (k === 'baixar') baixar(ls);
       else if (k === 'por-rel') relatorio(ls, true);
       else if (k === 'tirar-rel') relatorio(ls, false);
+      else if (k === 'apagar') escolherApagar(ls);
       else if (k === 'apagar-local') apagarLocal(ls);
       else if (k === 'enviar-drive') enviarDrive(ls, true);
       else if (k === 'segurar') enviarDrive(ls, false);
@@ -2744,6 +2939,21 @@
       if (g === 'per') { pfAbrir(); return; }
       if (g === 'cts') { abrirCts(); return; }
       if (g === 'desfazer') { var df = desfazerFn; fecharAviso(); if (df) df(); return; }
+      // v119: cópias de fotos apagadas da equipe, conferência com a equipe e o aviso que fica até fechar
+      if (g === 'apg-tirar') { tirarCopias(apagadasAqui()); return; }
+      if (g === 'apg-manter') { apagadasAqui().forEach(function (k) { mantidas[k] = 1; }); render(); return; }
+      if (g === 'conferir') { conferir(true); return; }
+      if (g === 'aviso-x') { fecharAviso(); return; }
+      if (g === 'aviso-ver') {
+        var dv = avisoDet;
+        if (!dv) return;
+        o.confirmar({ titulo: dv.titulo, html: dv.html, botao: 'Tentar de novo', cancelar: 'Fechar' }).then(function (r) {
+          if (!r) return;
+          fecharAviso();
+          moverDrive(dv.refazer, dv.apagar, dv.apagar);
+        });
+        return;
+      }
       if (g === 'detalhes') { detAberto = !detAberto; lsPor(DET_KEY, detAberto ? '1' : null); var vv = q('.gl-ver'); if (vv) { vv.classList.toggle('det', detAberto); var bd = vv.querySelector('[data-g="detalhes"]'); if (bd) { bd.setAttribute('aria-expanded', detAberto); bd.textContent = 'Detalhes ' + (detAberto ? '▴' : '▾'); } } return; }
       if (g === 'cts-fechar') { fecharCts(); return; }
       // a pergunta "sem carimbo" ao enviar (dentro da folha: antes do filtro das folhas, logo abaixo)
