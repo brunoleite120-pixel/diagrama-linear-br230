@@ -136,9 +136,10 @@
     st.modo = (function () { try { return localStorage.getItem(MODO_KEY) === 'nc' ? 'nc' : 'med'; } catch (e) { return 'med'; } })();
     // o botão só aparece para quem tem as duas partes: só as medições fica em 'med', só o acompanhamento em 'nc'
     function temMed() { return !!(o.temMed && o.temMed()); }
-    function temNC() { return !o.temNC || !!o.temNC(); }
+    function temNC() { return o.temNC ? !!o.temNC() : !(o.publico && o.publico()); }
     function doisModos() { return temMed() && temNC(); }
-    function modo() { return !temMed() ? 'nc' : !temNC() ? 'med' : st.modo; }
+    // sem nenhuma das duas (sem código): '' (nada apagado e sem a legenda de cores)
+    function modo() { return temMed() && temNC() ? st.modo : temMed() ? 'med' : temNC() ? 'nc' : ''; }
     function sitsDe(tp) { return tp === 'pc' ? SIT_C : modo() === 'med' ? SIT_M : SIT_O; }
 
     function cel() { return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches); }
@@ -390,7 +391,7 @@
         '<span><i style="width:16px;height:16px;border-radius:50%;border:2px solid #D93025;box-sizing:border-box"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
         '<span>“~” km a conferir</span>' + (mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div>' +
         // conservação e pontes: o que cada cor quer dizer, no modo da tela
-        (tem.conserva || tem.oae ? '<div class="vg-leg vg-leg-c">' + (md === 'med'
+        ((tem.conserva || tem.oae) && md ? '<div class="vg-leg vg-leg-c">' + (md === 'med'
           ? '<span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Medido (serviço medido ali)</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem medição</span>' +
             (doisModos() ? '<span>Onde estão as não conformidades: botão Não conformidades, acima</span>' : '')
