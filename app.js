@@ -722,7 +722,6 @@
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
 
     var oae = isOae(c), an = oae && !semAnalise ? anOf(c) : null, go = oae ? oaeGeom(an) : null;
-    if (an) drawUsoInterno(o);
     drawHeader(o, c, tot, an);
     if (oae) drawLabelsOae(o, c, an, go); else drawLabels(o, c);
 
@@ -1268,7 +1267,6 @@
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
-    if (an) drawUsoInterno(o);   // a folha "Com análise" sai inteira como uso interno, inclusive esta
     drawHeader(o, c);
     sentidoFaixa(o, c, x, w, gray);
 
@@ -1573,7 +1571,6 @@
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
     drawHeader(o, c);
-    if (an) drawUsoInterno(o);   // a folha "Com análise" sai inteira como uso interno
     o.push(T(x, yq + 12, 'PRAZOS E VALORES', { size: 7, bold: true }));
     o.push(T(x, yq + 22, 'do contrato', { size: 6.2, fill: gray }));
     o.push(T(x, yq + 34, 'continuação da', { size: 6.2, fill: gray }));
@@ -1589,7 +1586,7 @@
   // ------------------------------------------------------------------ folha de pontes (contrato tipo 'oae')
   // Cada coluna é uma ponte, em ordem de km. As linhas de status são as dos lotes (OK, Ativo, Parado, N/A), que o fiscal muda.
   // Com a análise das medições carregada (só engenheiro e criador), entram também o medido na ponte (por etapa), a faixa
-  // das medições e os alertas. A folha com a análise é de uso interno (aviso no topo).
+  // das medições e os alertas. A folha com a análise é de uso interno (sem aviso na folha, pedido de 26/10/2026).
   var ALERTA_TXT = {
     junta: 'junta feita de novo (além do comprimento físico)', garantia: 'medido depois da garantia acionada',
     etapa: 'repetido na mesma etapa', garantia5: 'repetido dentro da garantia de 5 anos', vegetacao: 'vegetação refeita antes do intervalo',
@@ -1925,12 +1922,6 @@
     });
     return ord;
   }
-  // aviso no topo da folha com a análise das medições (uso interno)
-  function drawUsoInterno(o) {
-    var t = 'USO INTERNO – ANÁLISE PRELIMINAR DAS MEDIÇÕES', w = textW(t, 7.6, true) + 24, x = (PAGE_W - w) / 2;
-    o.push(R(x, 12, w, 15, { fill: ALERTA_COR, rx: 3 }));
-    o.push(T(PAGE_W / 2, 22.6, t, { size: 7.6, bold: true, fill: '#FFFFFF', anchor: 'middle' }));
-  }
 
   function drawFooterOae(o, c, tot, pageIdx, pageCount, an) {
     var y = G.yFoot, x = G.labelX, gray = '#5C6661';
@@ -1969,7 +1960,7 @@
         : 'Não conformidade (NC): o que a supervisão apontou para melhorar, refazer, consertar ou fazer. ~ = estimativa da supervisão. Correção informada = a contratada diz que corrigiu; a supervisão ainda confere.',
       'KM pelo SNV ' + ((window.SNV_BR230 && window.SNV_BR230.versao) || '') + ' (DNIT); contr. = km do contrato (Anexo VI); ~ antes do km = km estimado, a conferir em campo.'
     ];
-    if (an) notas.push('Em roxo, a análise das medições (uso interno), a preços iniciais: alerta = ponte atendida mais de uma vez na mesma etapa ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
+    if (an) notas.push('Em roxo, a análise das medições, a preços iniciais: alerta = ponte atendida mais de uma vez na mesma etapa ou junta/pingadeira refeita em menos de 1 ano. Indício a conferir.');
     notas.forEach(function (t, i) { o.push(T(x, yn + i * 8.4, fitText(t, 598, 6.1), { size: 6.1, fill: gray })); });
 
     var bx = 640;
@@ -2020,7 +2011,6 @@
     o.push('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ' + PAGE_W + ' ' + PAGE_H + '" width="' + PAGE_W + '" height="' + PAGE_H + '">');
     o.push(R(0, 0, PAGE_W, PAGE_H, { fill: '#FFFFFF' }));
     o.push(R(G.frame, G.frame, PAGE_W - 2 * G.frame, PAGE_H - 2 * G.frame, { stroke: '#17201C', sw: 1.1 }));
-    if (an) drawUsoInterno(o);
     drawHeader(o, c, null, null, colunasKpis(c, r));
     drawLabelsSeg(o, c, g);
     // sem segmento (só quando as colunas são a única folha): o aviso no lugar das colunas, nunca uma página em branco
@@ -2253,7 +2243,7 @@
     lx += textW('Trafegabilidade:', fs, true) + 8;
     TRAF_ORDER.forEach(function (k) { item(caixa(TRAF_STATUS[k]), TRAF_STATUS[k].name, y + 16); });
     var ns = notasColunas(c), s = 6.1, ls;
-    if (an) ns = ['Com a análise das medições (uso interno): cada grupo mostra a última medição com serviço no segmento, pelo local da memória de cálculo (' +
+    if (an) ns = ['Com a análise das medições: cada grupo mostra a última medição com serviço no segmento, pelo local da memória de cálculo (' +
       (an.medicoes && an.medicoes.length ? an.medicoes[0].mes + ' a ' + an.medicoes[an.medicoes.length - 1].mes : '') + '); laranja e azul = as não conformidades. Medição registra quantidade e valor; não comprova execução.'].concat(ns);
     function linhas(z) { return ns.reduce(function (a, t) { return a.concat(wrap(t, 598, z)); }, []); }
     ls = linhas(s);
@@ -5663,7 +5653,7 @@
         '<fieldset class="folha-op"><legend>O que vai na folha</legend>' +
         // começa sempre em "Só a vistoria": a folha com a análise é de uso interno e não vai à contratada por engano
         '<label><input type="radio" name="folha" value="vistoria" checked> <span><b>Não conformidades</b><small>As NC ' + (isConserva(c) ? 'dos segmentos' : 'das pontes') + ', a última medição de cada serviço e as observações. Para enviar à contratada ou ao DNIT.</small></span></label>' +
-        '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo, com o aviso “USO INTERNO – análise preliminar” no topo.</small></span></label></fieldset>' +
+        '<label><input type="radio" name="folha" value="analise"> <span><b>Com a análise das medições</b><small>Valores medidos e alertas em roxo.</small></span></label></fieldset>' +
         '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary">Continuar</button></div>',
       function (f) {
         var com = f.querySelector('input[name=folha]:checked').value === 'analise';
@@ -7139,7 +7129,7 @@
     closeModal();
     renderAll();
     toast(r.papel === 'fiscal'
-      ? 'Olá, ' + r.nome + '. Como fiscal de campo, você faz a vistoria e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.'
+      ? 'Olá, ' + r.nome + '. Como fiscal de campo, você registra as não conformidades e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.'
       : r.papel === 'analista' ? 'Olá, ' + r.nome + '. Como analista, você consulta os contratos liberados para você.'
       : 'Olá, ' + r.nome + ' (' + papelNome(r.papel) + ').', 5000);
     if (location.hash === '#configurar') history.replaceState(null, '', location.pathname + location.search);
@@ -7174,7 +7164,7 @@
   function openAccount() {
     var n = banco.propostas.length;
     var f = modal('<h2 id="modalTitle">' + esc(banco.login.nome || 'Equipe') + '</h2>' +
-      '<p>Este aparelho entrou como <b>' + esc(papelNome(banco.login.papel)) + '</b>.' + (isFiscal() ? ' Você faz a vistoria e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.' :
+      '<p>Este aparelho entrou como <b>' + esc(papelNome(banco.login.papel)) + '</b>.' + (isFiscal() ? ' Você registra as não conformidades e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.' :
         isAnalista() ? ' Você consulta os contratos liberados para você, sem editar.' : '') + '</p>' +
       '<div class="modal-list">' +
       (isEng() ? '<button type="button" class="btn" data-acc="aprov">Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '') + '</button>' : '') +
@@ -7222,7 +7212,7 @@
     { k: 'engenheiro', nome: 'Engenheiro', desc: 'O mesmo que o Administrador: edita tudo, aprova, vê as medições e as fotos de todos, cadastra pessoas e volta os dados para uma cópia. Só não mexe na conta de um Administrador.' },
     { k: 'auxiliar', nome: 'Auxiliar de engenharia', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira, vê as medições e as fotos de todos. Não cadastra pessoas.' },
     { k: 'analista', nome: 'Analista', desc: 'Só consulta, nos contratos marcados abaixo: as medições, o acompanhamento (pontos e status, diagrama e PDF, mapa) ou os dois. Onde tem as medições, também tira fotos e vê as que tirou.', ct: 'analista' },
-    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Nos contratos marcados abaixo: faz a vistoria e muda o status dos serviços (fica aguardando aprovação), tira e envia fotos e vê só as que tirou. Sem diagrama e sem PDF.', ct: 'fiscal' },
+    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Nos contratos marcados abaixo: registra as não conformidades e muda o estado dos serviços (fica aguardando aprovação), tira e envia fotos e vê só as que tirou. Sem diagrama e sem PDF.', ct: 'fiscal' },
     { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas, outros Administradores e voltar os dados para uma cópia.' }
   ];
   function gerarCodigo() {
@@ -7297,7 +7287,7 @@
         (isConserva(c) ? '' : '<label data-ctx="analista"><input type="checkbox" data-ct="' + id + '" data-k="acomp"' + (ehA && a && a.acomp ? ' checked' : '') + '> Acompanhamento</label>') + '</span></div>';
     }).join('');
     return '<fieldset class="us-cts" id="usCts" hidden><legend>Contratos liberados</legend>' +
-      '<p class="hint" data-ctx="fiscal">Marque os contratos em que esta pessoa faz a vistoria e tira as fotos. Ela só vê esses.</p>' +
+      '<p class="hint" data-ctx="fiscal">Marque os contratos em que esta pessoa registra as não conformidades e tira as fotos. Ela só vê esses.</p>' +
       '<p class="hint" data-ctx="analista">Em cada contrato, marque o que o analista vê. <b>Medições</b>: as medições de cada ponto, com os pontos, o diagrama e o mapa, e as fotos dele. ' +
       '<b>Acompanhamento</b>: pontos e status dos serviços, diagrama e PDF, mapa. Na conservação, só as medições. Sem nenhuma, o contrato não aparece para ele.</p>' +
       '<div class="us-ct-todos"><button type="button" class="btn small" data-cts="todos">Marcar todos</button><button type="button" class="btn small" data-cts="nenhum">Desmarcar todos</button></div>' +
