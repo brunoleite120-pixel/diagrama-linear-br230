@@ -4450,7 +4450,8 @@
       pctText: medT + (med && ncT ? ' · ' : '') + ncT };
   }
   // quem vê as medições de alguma ponte ou conservação: a tela inicial começa em Medições (sem elas, só o modo NC)
-  function temMedVisao() { return !!(banco.on && banco.login) && state.contracts.some(function (c) { return (isOae(c) || isConserva(c)) && parte(c, 'med'); }); }
+  // e quem vê a parte de acompanhamento (as NC) de alguma: sem ela (analista só das medições), a tela fica em Medições, sem o botão
+  function temMedVisao(k) { return !!(banco.on && banco.login) && state.contracts.some(function (c) { return (isOae(c) || isConserva(c)) && parte(c, k || 'med'); }); }
   // iPhone/iPad: o download comum não chega à galeria; a folha de compartilhar tem "Salvar imagem" e "Salvar em Arquivos"
   function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
   function canShareFile(f) { try { return !!(navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) { return false; } }
@@ -4728,7 +4729,7 @@
       host: $('visaoHost'), contratos: function () { return state.contracts; }, nomes: NOMES, publico: isPublico,
       // sem código, o ponto vem só com o km: sem situação (cinza)
       info: function (p, modo) { return isPublico() ? { status: '', color: '#5C6661', servs: [], pctText: '' } : visaoInfo(p, modo); }, isOae: isOae,
-      temMed: function () { return !isPublico() && temMedVisao(); },
+      temMed: function () { return !isPublico() && temMedVisao('med'); }, temNC: function () { return !isPublico() && temMedVisao('acomp'); },
       // a última medição do contrato (cartão: "Conferido até a 48ª med. · ago/26"); quem não vê as medições: null
       medContrato: function (c) { return isPublico() ? null : medDoContrato(c); },
       temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,

@@ -134,8 +134,11 @@
     // vê as medições fica no 'nc'. Os pontos críticos não mudam
     var MODO_KEY = 'diagrama-linear-visao-modo';
     st.modo = (function () { try { return localStorage.getItem(MODO_KEY) === 'nc' ? 'nc' : 'med'; } catch (e) { return 'med'; } })();
+    // o botão só aparece para quem tem as duas partes: só as medições fica em 'med', só o acompanhamento em 'nc'
     function temMed() { return !!(o.temMed && o.temMed()); }
-    function modo() { return temMed() ? st.modo : 'nc'; }
+    function temNC() { return !o.temNC || !!o.temNC(); }
+    function doisModos() { return temMed() && temNC(); }
+    function modo() { return !temMed() ? 'nc' : !temNC() ? 'med' : st.modo; }
     function sitsDe(tp) { return tp === 'pc' ? SIT_C : modo() === 'med' ? SIT_M : SIT_O; }
 
     function cel() { return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches); }
@@ -266,7 +269,7 @@
       if (nT < 2) st.ct = false;
       // Medições | Não conformidades (N): só com pontes ou conservação na tela e para quem vê as medições
       var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
-      var bMod = (tem.conserva || tem.oae) && temMed() ? '<div class="vg-modo" role="group" aria-label="Pontes e segmentos">' +
+      var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="Pontes e segmentos">' +
         '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
         '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '">Não conformidades <b>' + nNC + '</b></button></div>' : '';
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
@@ -390,7 +393,7 @@
         (tem.conserva || tem.oae ? '<div class="vg-leg vg-leg-c">' + (md === 'med'
           ? '<span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Medido (serviço medido ali)</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem medição</span>' +
-            (temMed() ? '<span>Onde estão as não conformidades: botão Não conformidades, acima</span>' : '')
+            (doisModos() ? '<span>Onde estão as não conformidades: botão Não conformidades, acima</span>' : '')
           : '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>NC em correção</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '') + '</section>';
@@ -426,7 +429,7 @@
       }
       // modo Medições: quantos segmentos ou pontes têm NC; o toque passa para o modo Não conformidades
       function ncLinha(c, tp, xs) {
-        if (md !== 'med' || (tp !== 'conserva' && tp !== 'oae')) return '';
+        if (md !== 'med' || !doisModos() || (tp !== 'conserva' && tp !== 'oae')) return '';
         var k = xs.filter(function (x) { return x.nc; }).length;
         return k ? '<button type="button" class="vg-ct-nc" data-vg="modo" data-m="nc" data-fid="nc:' + esc(c.id) + '"><span class="nc-bdg">' + k +
           (tp === 'oae' ? (k === 1 ? ' ponte com NC' : ' pontes com NC') : (k === 1 ? ' segmento com NC' : ' segmentos com NC')) + '</span><span>ver onde</span></button>' : '';
