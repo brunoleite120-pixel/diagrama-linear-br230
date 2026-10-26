@@ -750,7 +750,7 @@
       out.push('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>');
       out.push('<name>' + xml(titulo(c)) + '</name>');
       // o que o contrato tem: pontes (424), segmentos de conservação (437, 438) ou pontos críticos (314, 315)
-      var itensKml = c.tipo === 'oae' ? 'Pontes' : c.tipo === 'conserva' ? 'Segmentos de conservação' : 'Pontos críticos';
+      var itensKml = c.tipo === 'oae' ? 'OAEs' : c.tipo === 'conserva' ? 'Segmentos de conservação' : 'Pontos críticos';
       out.push('<description>' + xml(itensKml + ' com km pelo SNV do DNIT, versão ' + snv.versao + '. Gerado em ' + new Date().toLocaleString('pt-BR') + '.') + '</description>');
       out.push('<Style id="rodovia"><LineStyle><color>ff1c2017</color><width>4</width></LineStyle></Style>');
       out.push('<Style id="km"><IconStyle><scale>0.5</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle></Style>');

@@ -1357,7 +1357,7 @@
       }
       var h = aba === 'relatorio' ? '' : linha('', 'Todos os contratos', 'as fotos de todos, cada uma com o nº do contrato', itens.length);
       if (at && c.n[at]) h += linha(at, curto(at), sub(at), c.n[at], 'aberto no app');
-      var GR = [['pc', 'Pontos críticos'], ['conserva', 'Conservação'], ['sinal', 'Sinalização'], ['oae', 'Pontes (OAEs)'], ['', 'Outros']];
+      var GR = [['pc', 'Pontos críticos'], ['conserva', 'Conservação'], ['sinal', 'Sinalização'], ['oae', 'OAEs', 'sigla'], ['', 'Outros']];
       var tipo = function (cid) {
         var co = cts.find(function (x) { return x.id === cid; });
         return !co ? '' : co.tipo === 'oae' ? 'oae' : co.tipo === 'conserva' ? (co.rotuloTipo === 'sinal' ? 'sinal' : 'conserva') : 'pc';
@@ -1366,7 +1366,7 @@
       ids.sort(function (a, b) { var ia = ordem.indexOf(a), ib = ordem.indexOf(b); return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); });
       GR.forEach(function (g) {
         var ls = ids.filter(function (id) { return tipo(id) === g[0]; }).map(function (id) { return linha(id, curto(id), sub(id), c.n[id]); }).join('');
-        if (ls) h += '<div class="gl-cl-g">' + esc(g[1]) + '</div>' + ls;
+        if (ls) h += '<div class="gl-cl-g">' + (g[2] ? '<span class="' + g[2] + '">' + esc(g[1]) + '</span>' : esc(g[1])) + '</div>' + ls;   // "OAEs" sem virar "OAES" na caixa alta
       });
       if (c.sem) h += linha(SEM, 'Sem contrato', 'fotos sem contrato escolhido', c.sem);
       return h || '<div class="gl-cl-v">Nenhum contrato com “' + esc(cl.busca.trim()) + '”.</div>';
@@ -2136,13 +2136,13 @@
       // embaixo: o título e "Detalhes ▾"; a marca do relatório e os avisos que pedem ação (com "Corrigir") sempre à vista;
       // os detalhes abrem por cima da foto, sem ela pular, e o app lembra se a pessoa os deixou abertos
       var oae = ehOae(contratos().find(function (x) { return x.id === it.cid; })), cons = ehCons(it.cid);
-      var tit = [it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome && !cons ? (oae ? 'Ponte ' : 'Ponto ') + it.pnome : cons ? '' : oae ? 'Sem ponte' : 'Sem ponto'].filter(Boolean).join(' · ');
+      var tit = [it.cid ? nomeContrato(it.cid, it) : it.lote || 'Sem contrato', it.pnome && !cons ? (oae ? 'OAE ' : 'Ponto ') + it.pnome : cons ? '' : oae ? 'Sem OAE' : 'Sem ponto'].filter(Boolean).join(' · ');
       var semPto = !it.pid && !cons && podeMover(it), corrigir = ' · <button type="button" class="gl-corr" data-g="mover" data-um="1">Corrigir</button>';
       var marca = [];
       if (semCar(it)) marca.push('<span class="gl-warn">⚠ Sem carimbo: não vai ao Drive</span> · <button type="button" class="gl-corr" data-g="carimbar" data-um="1">Colocar carimbo</button>');
-      if (it.relatorio && semPto) marca.push('<span class="gl-warn">★ Marcada' + (it.relPor ? ' por ' + esc(it.relPor) : '') + ' · falta ' + (oae ? 'a ponte' : 'o ponto') + ' para sair no PDF</span>' + corrigir);
+      if (it.relatorio && semPto) marca.push('<span class="gl-warn">★ Marcada' + (it.relPor ? ' por ' + esc(it.relPor) : '') + ' · falta ' + (oae ? 'a OAE' : 'o ponto') + ' para sair no PDF</span>' + corrigir);
       else if (it.relatorio) marca.push('<span class="gl-est">★ No relatório' + (it.relPor ? ' · marcada por ' + esc(it.relPor) : '') + '</span>');
-      else if (semPto) marca.push('<span class="gl-warn">⚠ ' + (oae ? 'Sem ponte' : 'Sem ponto') + ': não entra no relatório</span>' + corrigir);
+      else if (semPto) marca.push('<span class="gl-warn">⚠ ' + (oae ? 'Sem OAE' : 'Sem ponto') + ': não entra no relatório</span>' + corrigir);
       if (cons && it.relatorio && it.km == null) marca.push('<span class="gl-warn">⚠ Sem km: vai ao relatório sem o km</span>');
       if (it.situacao === 'deletada') marca.push('<span class="gl-warn">Apagada do Drive' + (it.delPor ? ' por ' + esc(it.delPor) : '') + (it.delEm ? ' em ' + esc(hora(it.delEm)) : '') + '</span>');
       var linhas = [];
@@ -2422,7 +2422,7 @@
     // pontosDe, dist, maisPerto e trecho: no começo do arquivo (servem também para ligar os arquivos do Drive aos contratos)
     function rotuloPonto(c, p) {
       var km = p.kmIni == null ? '' : 'km ' + nf(p.kmIni, 2) + (p.kmFim != null && p.kmFim !== p.kmIni && !ehOae(c) ? ' a ' + nf(p.kmFim, 2) : '');
-      return [ehOae(c) ? p.nome || p.codigo || 'Ponte' : 'Ponto ' + (p.nome || '?'), ehOae(c) && p.codigo && p.codigo !== p.nome ? p.codigo : '', km].filter(Boolean).join(' · ');
+      return [ehOae(c) ? p.nome || p.codigo || 'OAE' : 'Ponto ' + (p.nome || '?'), ehOae(c) && p.codigo && p.codigo !== p.nome ? p.codigo : '', km].filter(Boolean).join(' · ');
     }
     function metr(d) { return d < 1 ? Math.round(d * 1000) + ' m' : nf(d, 1) + ' km'; }
     function abrirMover(ls) {
@@ -2457,12 +2457,12 @@
     // lista de pontos do contrato escolhido; já escolhe o ponto atual ou o do km da foto (até 50 m)
     function pontosMover(primeira) {
       var c = contratos().find(function (x) { return x.id === q('#glMvC').value; }), sp = q('#glMvP');
-      q('#glMvPl').textContent = ehOae(c) ? 'Ponte' : 'Ponto';
+      q('#glMvPl').textContent = ehOae(c) ? 'OAE' : 'Ponto';
       sp.closest('label').hidden = !!c && c.tipo === 'conserva';
       var ps = pontosDe(c), perto = mv.km != null && !mv.varios ? maisPerto(c, mv.km) : null, vai = '';
       if (primeira && mv.pid0 && ps.some(function (p) { return p.id === mv.pid0; })) vai = mv.pid0;
       else if (perto && perto.d <= raioPonto(c)) vai = perto.p.id;
-      sp.innerHTML = '<option value="">' + (ehOae(c) ? 'Sem ponte (não entra no relatório)' : 'Sem ponto (não entra no relatório)') + '</option>' +
+      sp.innerHTML = '<option value="">' + (ehOae(c) ? 'Sem OAE (não entra no relatório)' : 'Sem ponto (não entra no relatório)') + '</option>' +
         ps.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === vai ? ' selected' : '') + '>' + esc(rotuloPonto(c, p)) + '</option>'; }).join('');
       sugestao();
     }

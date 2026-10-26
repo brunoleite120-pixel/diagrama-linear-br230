@@ -38,7 +38,7 @@ function appBanco() {
 function motor(source) {
   var d = dom(), store = {}, loc = { hash: '', pathname: '/', search: '' }, banco = appBanco();
   var storage = { getItem: function (k) { return store[k] || null; }, setItem: function (k, v) { store[k] = v; }, removeItem: function (k) { delete store[k]; } };
-  var w = { Banco: banco, scrollTo: function () {}, matchMedia: function () { return { matches: false }; }, VisaoGeral: function () { return { render: function () {} }; } };
+  var w = { Banco: banco, scrollTo: function () {}, addEventListener: function () {}, matchMedia: function () { return { matches: false }; }, VisaoGeral: function () { return { render: function () {} }; } };
   var ctx = { window: w, document: d.document, localStorage: storage, sessionStorage: storage, location: loc,
     history: { state: null, replaceState: function (_, t, u) { loc.hash = u.indexOf('#') >= 0 ? u.slice(u.indexOf('#')) : ''; } },
     navigator: {}, console: console, Intl: Intl, Promise: Promise, Date: Date, setTimeout: setTimeout, clearTimeout: clearTimeout };
@@ -46,7 +46,8 @@ function motor(source) {
   vm.runInContext(fs.readFileSync(path.join(raiz, 'medicoes.js'), 'utf8'), ctx);
   // Expõe as funções privadas só nesta cópia em memória; não altera o app nem a API publicada.
   var seam = "  window.Teste = { configurar: function (cts, dados, papel, acesso) { state = normalize(clone({contracts: cts, activeId: cts[0] && cts[0].id})); banco.on = true; banco.login = papel ? {codigo:'tk_teste', papel:papel} : null; banco.acesso = acesso || null; analise = {dados:dados || {}, estado:{}}; Object.keys(analise.dados).forEach(function (id) { analise.estado[id] = 'ok'; }); visaoOn = true; }, papel: function (p, a) { banco.login = p ? {codigo:'tk_teste',papel:p} : null; banco.acesso = a || null; podarAnalise(); }, parte:parte, anOf:anOf, anCalc:anCalc, carregar:carregarAnalise, abrir: typeof abrirMedicoes === 'function' ? abrirMedicoes : function(){}, render:renderAll, sair: function(){setVisao(false);renderAll();}, visao: function(){setVisao(true);renderAll();}, folhas:function(id){return renderSheets(contractById(id));}, dados:function(){return analise.dados;}, resetEstado: function(id){delete analise.estado[id];}, estado: function(id){return analise.estado[id];} }; renderEditor = function(){}; renderPreview = function(){}; save = function(){};\n";
-  source = source.replace(/^  init\(\);\r?\n/m, seam);
+  // o app.js termina com "if (init() !== false) {" (antes era "init();"): a costura entra no lugar e o init não roda
+  source = source.replace(/^  init\(\);\r?\n/m, seam).replace(/^  if \(init\(\) !== false\) \{\r?\n/m, seam + '  if (false) {\n');
   vm.runInContext(source, ctx);
   return { api: w.Teste, w: w, doc: d.document, els: d.els, banco: banco, loc: loc };
 }
@@ -101,7 +102,11 @@ function calculos() {
   t.click('voltar'); t.click('modo', { v: 'mes' });
   ok(t.host.innerHTML.includes('md-zero'), 'matriz diferencia zeradas');
   ok(t.host.innerHTML.includes('md-ausente'), 'matriz diferencia lacunas');
-  t.click('mes', { v: String(2026 * 12 + 7) }); ok(t.host.innerHTML.includes('ago/26 · 1 medição'), 'detalhe mensal');
+  // o detalhe do mês virou a seção md-mes-det (v109): título só com o mês e a contagem na linha de baixo
+  function detMes() { return (t.host.innerHTML.match(/<section class="card md-card md-mes-det[^"]*">([\s\S]*?)<\/section>/) || [])[1] || ''; }
+  t.click('mes', { v: String(2026 * 12 + 6) }); ok(detMes().includes('<h2>jul/26</h2>') && detMes().includes('R$ 500,00 (PI)'), 'toque no mês troca o detalhe');
+  t.click('mes', { v: String(2026 * 12 + 7) });
+  ok(detMes().includes('<h2>ago/26</h2>') && detMes().includes('1 contrato mediu · 1 medição') && detMes().includes('R$ 600,00 (PI)'), 'detalhe mensal');
   t.click('celula', { cid: 'teste', v: String(2026 * 12 + 7) }); ok(t.host.innerHTML.includes('7ª medição'), 'célula abre medição exata');
   t.click('voltar'); t.click('modo', { v: 'contrato' });
   c.valores = []; t.area.render(); ok(t.host.innerHTML.includes('falta o PI'), 'sem PI não inventa base');
@@ -138,9 +143,17 @@ function acessos() {
     ok(!engine.api.anOf(cs[0]), 'anOf nega análise');
     engine.api.carregar(cs[0], true); igual(chamadas, 0, 'fiscal/público não chama Banco.analise');
   });
-  engine.api.configurar(cs, dados, 'analista', { liberado: { med: true }, restrito: { acomp: true } }); engine.api.abrir();
+  // v126: o contrato liberado vale para tudo (a marca Liberado grava {med, acomp}; med ou acomp antigos também liberam);
+  // o contrato fora de banco.acesso continua restrito
+  engine.api.configurar(cs, dados, 'analista', { liberado: { med: true, acomp: true } }); engine.api.abrir();
   ok(engine.els.medicoesHost.innerHTML.includes('liberado/2026'), 'analista vê permitido');
   ok(!engine.els.medicoesHost.innerHTML.includes('restrito/2026'), 'analista não recebe HTML restrito');
+  ok(!engine.api.parte(cs[1], 'med') && !engine.api.parte(cs[1], 'acomp'), 'contrato não liberado fica sem as duas partes');
+  engine.api.configurar(cs, dados, 'analista', { liberado: { med: true }, restrito: { acomp: true } }); engine.api.abrir();
+  ok(engine.els.medicoesHost.innerHTML.includes('liberado/2026') && engine.els.medicoesHost.innerHTML.includes('restrito/2026'), 'liberado antigo (só med ou só acomp) vale para as medições');
+  // podarAnalise (a cada leitura do banco) usa a mesma regra: o liberado antigo só com acomp não perde as medições do aparelho
+  engine.api.papel('analista', { liberado: { med: true }, restrito: { acomp: true } });
+  ok(!!engine.api.dados().liberado && !!engine.api.dados().restrito, 'nova leitura do banco mantém as medições do liberado antigo');
   engine.api.papel('analista', {}); engine.api.render();
   igual(engine.els.medicoesHost.innerHTML, '', 'revogação limpa área e cache');
   engine.api.configurar(cs, dados, 'engenheiro'); engine.loc.hash = '#medicoes'; engine.api.render();
@@ -199,21 +212,38 @@ function reais() {
   ok(faixa.includes('Medido nos 8 contratos carregados (PI)R$ 256,01 mi'), 'resumo de oito contratos com valor compacto');
   ok(faixa.includes('set/26 OAEs · jun/26 conservação'), 'resumo considera 419 entre todos os contratos reais fornecidos');
 }
-function pontes() {
-  var c = cto('424', 'oae'); c.pontos = [{ id: 'p1', nome: 'Ponte A', kmIni: 2, serv: {} }];
-  var a = { medicoes: [med(1, '2026-09', 150)], pontes: { p1: { meses: { 1: 150 }, grupos: {}, servicos: [{ nome: 'Junta da ponte', cod: '10', g: 'juntas', un: 'm', q: 3, v: 150, meds: '1ª', por: { 1: [3, 150] } }] } } };
-  var t = tela([c], { 424: a }); t.click('abrir', { cid: '424' });
-  ok(t.host.innerHTML.includes('Junta da ponte') && t.host.innerHTML.includes('Ponte A'), '424 detalhe por .por sem consolidado');
-  t.click('aba', { v: 'segmentos' }); ok(t.host.innerHTML.includes('Ponte A') && t.host.innerHTML.includes('R$ 150,00'), '424 por ponte');
+// Proarte (tipo oae, CT 424): na tela, o que era "ponte(s)" agora diz "OAE(s)". Os nomes internos (an.pontes, data-md="ponte",
+// semponte) não mudaram. Os nomes das OAEs e do serviço são neutros, para nenhum texto visível dizer ponte.
+function oaes() {
+  var c = cto('424', 'oae'), vistos = [];
+  c.pontos = [{ id: 'p1', nome: 'Rio Verde', codigo: 'P01', kmIni: 2, serv: {} }, { id: 'p2', nome: 'Córrego Fundo', kmIni: 3, serv: {} }];
+  // 2ª medição: R$ 150,00 na OAE e R$ 50,00 sem OAE (administração local, mobilização e canteiro); a 1ª é zerada
+  var a = { medicoes: [med(1, '2026-08', 0), med(2, '2026-09', 200)], pontes: { p1: { meses: { 2: 150 }, grupos: {}, servicos: [{ nome: 'Junta de dilatação', cod: '10', g: 'juntas', un: 'm', q: 3, v: 150, meds: '2ª', por: { 2: [3, 150] } }] } } };
+  var t = tela([c], { 424: a }, { fotos: function () { return true; } });
+  function h() { vistos.push(t.host.innerHTML); return t.host.innerHTML; }
+  t.click('abrir', { cid: '424' });
+  ok(h().includes('Junta de dilatação') && h().includes('Rio Verde'), '424 detalhe por .por sem consolidado');
+  ok(h().includes(' · OAEs · Lote 01'), '424 caminho diz OAEs');
+  ok(h().includes('>Por OAE</button>') && h().includes('Com local nas OAEs: R$ 150,00 (75,0%)'), '424 aba Por OAE e local nas OAEs');
+  ok(h().includes('<b>Sem OAE</b>'), '424 grupo Sem OAE');
+  t.click('grupo', { g: 'semponte' }); ok(h().includes('R$ 50,00</td><td>Sem OAE</td>'), '424 serviço sem OAE na tabela');
+  t.click('aba', { v: 'segmentos' }); ok(h().includes('Rio Verde') && h().includes('R$ 150,00'), '424 por OAE');
+  ok(texto(h()).includes('Onde ficam · 2 OAEs no trecho, 1 com valor nesta medição'), '424 régua conta OAEs');
+  ok(h().includes('>Mostrar as 1 sem valor nesta medição</button>') && h().includes('Toque numa OAE para ver o km e as medições.'), '424 lista de OAEs');
+  t.click('ponte', { p: 'p1' }); ok(h().includes('<small>OAE · P01</small>') && h().includes('>Fotos da OAE</button>'), '424 painel da OAE');
+  t.click('med', { n: '1' }); ok(h().includes('Esta medição não tem valores localizados nas OAEs.'), '424 medição sem valor nas OAEs');
+  t.click('voltar'); ok(h().includes('<h2>CT 424/2026</h2><small>OAEs</small>'), '424 cartão diz OAEs');
+  t.click('modo', { v: 'mes' }); ok(h().includes('>CT 424<small>OAEs</small>') && h().includes('<small>OAEs · 2ª medição</small>'), '424 matriz e mês dizem OAEs');
+  ok(!vistos.some(function (x) { return /ponte/i.test(texto(x)) || /(?:aria-label|title)="[^"]*ponte/i.test(x); }), '424 nenhum texto diz ponte');
 }
 function desenho() {
-  var c = cto('437'), vazio = cto('314'), sem = cto('315'), ponte = cto('424', 'oae'), cons = cto('419');
+  var c = cto('437'), vazio = cto('314'), sem = cto('315'), oae = cto('424', 'oae'), cons = cto('419');
   c.numero = '02 00437/2021'; vazio.numero = '02 00314/2026'; sem.numero = '02 00315/2026';
   var a = analise([med(56, '2026-04', 1157014.54), med(57, '2026-05', 650556.86)]);
   a.siac = { consulta: '2026-10-20', ficha: { pi_vigente: 66241772.27, termino_execucao: '2027-08-30' }, medicoes: {} };
   a.porMedicao[57] = { a: [1, 650556.86] }; a.cobertura[57] = [300136.17, 350420.69];
   a.servicos[0].cod = ''; a.servicos[0].grupo = '15,0 - 1ª ADEQUAÇÃO - TRANSPORTES';
-  var t = tela([c, vazio, sem, ponte, cons], { 437: a, 314: analise([]), 424: analise([med(27, '2026-09', 729968.92)]), 419: analise([med(35, '2026-06', 2389506.69)]) });
+  var t = tela([c, vazio, sem, oae, cons], { 437: a, 314: analise([]), 424: analise([med(27, '2026-09', 729968.92)]), 419: analise([med(35, '2026-06', 2389506.69)]) });
   var h = t.host.innerHTML, visivel = texto(h), cards = h.match(/<section class="md-cards"[^>]*>([\s\S]*?)<\/section>/)[1];
   ok(visivel.includes('CT 437/2021'), 'nome curto sem 02 nem zeros');
   ok(!visivel.includes('02 00437'), 'nome original só fica fora da área');
@@ -247,7 +277,8 @@ function desenho() {
   ok(tabela.includes('>CT 437<small>Lote 01 · conservação'), 'matriz com CT curto e subtítulo de lote e tipo');
   ok(!tabela.includes('CT 314') && !tabela.includes('CT 315'), 'vazios fora da matriz');
   ok(h.includes('CT 314/2026, CT 315/2026'), 'linha de vazios abaixo da tabela');
-  ok(h.includes('sem medição no SIAC (consulta de 20/10/2026)'), 'legenda usa consulta do SIAC em DD/MM/AAAA');
+  // v109: a legenda separa "— sem medição no mês" (lacuna) de "… ainda não saiu no SIAC", e a data da consulta vai com este
+  ok(h.includes('<i class="md-swatch md-pend"></i>… ainda não saiu no SIAC (consulta de 20/10/2026)</span>'), 'legenda usa consulta do SIAC em DD/MM/AAAA');
   var matriz = { scrollLeft: 0, scrollWidth: 1200, clientWidth: 400 }, montada = false;
   t.host.querySelector = function (q) { return q === '.md-matriz-scroll' && montada ? matriz : null; };
   Object.defineProperty(t.host, 'innerHTML', { get: function () { return h; }, set: function (v) { h = v; montada = true; matriz.scrollLeft = 0; } });
@@ -260,19 +291,62 @@ function desenho() {
   ok(t.host.innerHTML.includes('&lt;img') && !t.host.innerHTML.includes('<img'), 'capítulo escapado');
   ok(t.host.innerHTML.includes('&lt;script&gt;') && !t.host.innerHTML.includes('<script>'), 'serviço escapado');
 }
+// A folha do Proarte passou a dizer "OAE"/"OAEs" no lugar de "ponte"/"pontes". Na base ainda antiga, só esses
+// textos são trocados (sem efeito quando a base já diz OAE); o desenho fora dos <text> segue byte a byte, e o x
+// de um texto só pode mudar na linha em que um rótulo trocado mudou de tamanho ("Pontes: " → "OAEs: " no TOTAL GERAL).
+function trocaOae(t) {
+  return t.replace(/^PONTES COM NC$/, 'OAEs COM NC').replace(/^PONTES$/, 'OAEs').replace(/^PONTE$/, 'OAE')
+    .replace(/^Pontes: $/, 'OAEs: ').replace(/^Pontes com NC: $/, 'OAEs com NC: ').replace(/Extensão das pontes/, 'Extensão das OAEs')
+    .replace(/abertas na ponte/, 'abertas na OAE').replace(/Nenhuma ponte/, 'Nenhuma OAE').replace(/ m de pontes$/, ' m de OAEs')
+    .replace(/(\d) pontes\b/g, '$1 OAEs').replace(/(\d) ponte\b/g, '$1 OAE')
+    // a parte da análise (roxa): título, ALERTAS sem alerta e as notas
+    .replace(/^MEDIDO NA PONTE$/, 'MEDIDO NA OAE').replace(/^nenhuma ponte$/, 'nenhuma OAE')
+    .replace(/o serviço na ponte \(/, 'o serviço na OAE (').replace(/alerta = ponte atendida/, 'alerta = OAE atendida');
+}
+function igualA3Oae(atual, base, msg) {
+  var re = /<text\b([^>]*)>([^<]*)<\/text>/g, linhas = {}, trocou = {};
+  function textos(fs) { var o = []; fs.join('\n').replace(re, function (a, at, t) { o.push([at, t]); return a; }); return o; }
+  function linha(at) { return (at.match(/ y="([^"]*)"/) || [])[1]; }
+  function semX(x) { return [linhas[linha(x[0])] ? x[0].replace(/ x="[^"]*"/, '') : x[0], x[1]]; }
+  var a = textos(atual), b = textos(base).map(function (x, i) { var t = trocaOae(x[1]); if (t !== x[1]) trocou[i] = true; if (t.length !== x[1].length) linhas[linha(x[0])] = true; return [x[0], t]; });
+  // nota cortada com "...": com "OAE" (mais curto que "ponte") cabem mais letras na linha; só nos textos trocados,
+  // compara até onde os dois chegam
+  var ac = a.map(function (y, i) {
+    var x = b[i]; if (!trocou[i] || !x || !/\.\.\.$/.test(x[1]) || !/\.\.\.$/.test(y[1])) return y;
+    var n = Math.min(x[1].length, y[1].length) - 3; b[i] = [x[0], x[1].slice(0, n) + '...']; return [y[0], y[1].slice(0, n) + '...'];
+  });
+  igual(JSON.stringify(atual).replace(re, '<text/>'), JSON.stringify(base).replace(re, '<text/>'), msg + ' (desenho)');
+  igual(ac.map(semX), b.map(semX), msg + ' (textos, com ponte → OAE na base)');
+  ok(!a.some(function (x) { return /ponte/i.test(x[1]); }), msg + ' (nenhum texto diz ponte)');
+}
+// A folha A3 não muda com a área de Medições. A base era o commit 687b22a (o app antes das Medições), que não existe
+// neste repositório e cujas folhas ficaram para trás de propósito (NC no lugar da vistoria, v121 a v125). Agora a base é
+// o HEAD (ou o app.js passado como argumento): o que ainda não foi gravado no app.js não altera as folhas, fora
+// ponte → OAE no Proarte, e abrir as Medições também não.
 function a3() {
-  var base = process.argv[2] ? fs.readFileSync(path.resolve(process.argv[2]), 'utf8') : cp.execFileSync('git', ['show', '687b22a:app.js'], { cwd: raiz, encoding: 'utf8', maxBuffer: 2000000 }), antes = motor(base);
-  var cs = [cto('pc', null), cto('cons'), cto('oae', 'oae')]; cs[0].tipo = null;
-  cs.forEach(function (c) { c.pontos = [{ id: c.id + '-p', nome: 'Trecho de teste', codigo: 'P1', kmIni: 2, kmFim: 3, serv: {}, obs: '', extensao: 1 }]; });
-  var dados = {}, real = path.resolve(raiz, '..', 'dados', 'analise_ct-437.json');
+  var base = process.argv[2] ? fs.readFileSync(path.resolve(process.argv[2]), 'utf8') : cp.execFileSync('git', ['show', 'HEAD:app.js'], { cwd: raiz, encoding: 'utf8', maxBuffer: 2000000 }), antes = motor(base);
+  var cs = [cto('pc', null), cto('cons'), cto('oae', 'oae'), cto('oae0', 'oae'), cto('oaean', 'oae')]; cs[0].tipo = null;
+  cs.slice(0, 3).concat(cs[4]).forEach(function (c) { c.pontos = [{ id: c.id + '-p', nome: 'Trecho de teste', codigo: 'P1', kmIni: 2, kmFim: 3, serv: {}, obs: '', extensao: 1 }]; });
+  cs[4].pontos.push({ id: 'oaean-q', nome: 'Outro trecho', codigo: 'P2', kmIni: 4, kmFim: 4.1, serv: {}, obs: '', extensao: 1 });
+  // oaean: Proarte com análise, para a folha mostrar também a parte das medições (MEDIDO NA OAE, ALERTAS e as notas)
+  var dados = { oaean: { tipo: 'oae', medicoes: [med(1, '2026-03', 100), med(2, '2026-04', 200), med(3, '2026-06', 300)],
+    pontes: { 'oaean-p': { meses: { 1: 100, 3: 300 }, grupos: { juntas: 400 }, servicos: [{ nome: 'Junta de dilatação', cod: '10', g: 'juntas', un: 'm', q: 3, v: 400, meds: '1ª, 3ª', por: { 1: [1, 100], 3: [2, 300] } }] } } } };
+  var real = path.resolve(raiz, '..', 'dados', 'analise_ct-437.json');
   if (fs.existsSync(real)) {
     dados.cons = JSON.parse(fs.readFileSync(real));
     cs[1].pontos = Object.keys(dados.cons.pontes).map(function (id, i) { return { id: id, nome: 'Segmento ' + (i + 1), kmIni: 1 + i, kmFim: 2 + i, serv: {} }; });
   }
+  function compara(msg) {
+    cs.forEach(function (c) {
+      if (c.tipo === 'oae') igualA3Oae(engine.api.folhas(c.id), antes.api.folhas(c.id), msg + c.id);
+      else igual(JSON.stringify(engine.api.folhas(c.id)), JSON.stringify(antes.api.folhas(c.id)), msg + c.id);
+    });
+  }
   antes.api.configurar(cs, dados, 'engenheiro'); engine.api.configurar(cs, dados, 'engenheiro');
-  cs.forEach(function (c) { igual(JSON.stringify(engine.api.folhas(c.id)), JSON.stringify(antes.api.folhas(c.id)), 'A3 idêntico ao HEAD: ' + c.id); });
+  ok(engine.api.folhas('oaean').join('').includes('>MEDIDO NA OAE</text>'), 'A3 do Proarte com análise mostra a parte das medições');
+  compara('A3 idêntico ao HEAD: ');
   engine.api.abrir();
-  cs.forEach(function (c) { igual(JSON.stringify(engine.api.folhas(c.id)), JSON.stringify(antes.api.folhas(c.id)), 'A3 idêntico com medições abertas: ' + c.id); });
+  compara('A3 idêntico com medições abertas: ');
 }
 function corrida() {
   var resolve, chamadas = 0, c = cto('corrida');
@@ -314,5 +388,5 @@ function fila() {
     avanca();
   });
 }
-try { calculos(); acessos(); reais(); pontes(); desenho(); a3(); } catch (e) { console.error(e); process.exitCode = 1; }
+try { calculos(); acessos(); reais(); oaes(); desenho(); a3(); } catch (e) { console.error(e); process.exitCode = 1; }
 if (!process.exitCode) corrida().then(pontosCriticos).then(fila).then(function () { console.log(testes + ' verificações de medições passaram.'); }, function (e) { console.error(e); process.exitCode = 1; });

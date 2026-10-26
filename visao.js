@@ -63,7 +63,7 @@
   function nomesPadrao() {
     // sinal: o grupo da conservação com rotuloTipo 'sinal' (709), "Sinalização" no nome e logo antes das pontes
     var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização' }, ORD = ['pc', 'conserva', 'oae'], GRS = ['pc', 'conserva', 'sinal', 'oae'];
-    var CUR = { pc: 'p. críticos', conserva: 'conserv.', oae: 'pontes', sinal: 'sinaliz.' };
+    var CUR = { pc: 'p. críticos', conserva: 'conserv.', oae: 'OAEs', sinal: 'sinaliz.' };
     function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
     function tipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
     function grupo(c) { return c && c.rotuloTipo === 'sinal' && tipo(c) === 'conserva' ? 'sinal' : tipo(c); }
@@ -90,7 +90,7 @@
   }
   // filtro de situação por tipo de contrato: cada tipo conta à parte (antes o 'c:' juntava tudo que não era ponte)
   var PRE = { pc: 'c:', conserva: 's:', oae: 'o:' };
-  var SIT_GR = [['pc', 'Pontos críticos · situação'], ['conserva', 'Conservação · segmentos'], ['oae', 'Proarte · pontes']];
+  var SIT_GR = [['pc', 'Pontos críticos · situação'], ['conserva', 'Conservação · segmentos'], ['oae', 'Proarte · OAEs']];
   // a busca não liga para acento nem maiúscula ("conservacao", "criticos")
   function semAc(s) { s = String(s == null ? '' : s).toLowerCase(); return s.normalize ? s.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : s; }
   // "A", "A e B", "A, B e C"
@@ -270,7 +270,7 @@
       if (nT < 2) st.ct = false;
       // Medições | Não conformidades (N): só com pontes ou conservação na tela e para quem vê as medições
       var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
-      var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="Pontes e segmentos">' +
+      var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
         '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
         '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '">Não conformidades <b>' + nNC + '</b></button></div>' : '';
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
@@ -342,7 +342,7 @@
         gs.forEach(function (g) {
           var x = g.xs[0];
           if (g.t === 'grupo') {
-            var km = k0 + g.soma / g.xs.length / W * R, pior = null, n = g.xs.length, nome = oae ? ' pontes' : N.tipo(x.c) === 'conserva' ? ' segmentos' : ' pontos';
+            var km = k0 + g.soma / g.xs.length / W * R, pior = null, n = g.xs.length, nome = oae ? ' OAEs' : N.tipo(x.c) === 'conserva' ? ' segmentos' : ' pontos';
             g.xs.forEach(function (y) { if (!pior || (PESO[y.st] || 0) > (PESO[pior.st] || 0)) pior = y; });
             var apG = g.xs.every(function (y) { return y.apag; }) ? ' apag' : '';
             var estilo = ' style="left:' + pc(X(km)) + ';border-color:' + ((PESO[pior.st] || 0) >= 2 ? pior.cor : '#3B4540') + '"';
@@ -362,7 +362,7 @@
             mk += '<button type="button" class="vg-mk grupo' + apG + '" data-vg="ir" data-fid="ga:' + esc(g.xs[0].key) + '" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
             return;
           }
-          var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || (x.oae ? 'Ponte' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
+          var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || (x.oae ? 'OAE' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
           // sem nome (visão pública, que não recebe os nomes): sem rótulo, em vez de um "?" em cima de cada marca
           var temNome = !!(x.p.nome || x.p.codigo);
           if (temNome && cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
@@ -384,10 +384,10 @@
       }).join('') + '</div></div>';
       h += '<div class="vg-row vg-esc"><div class="vg-lab vg-lab-s">Escala</div><div class="vg-trk"><i style="width:' + pc(step / R * 100) + '"></i><span>' + nf(step, 0) + ' km</span></div></div>';
       h += '</div>';
-      // legenda dos contratos mostrados: trecho e losango só com pontos críticos ou conservação; "Ponte" só com pontes
+      // legenda dos contratos mostrados: trecho e losango só com pontos críticos ou conservação; "OAE" só com OAEs
       h += '<div class="vg-leg">' + (tem.pc || tem.conserva ? '<span><i style="width:18px;height:10px;border-radius:2px;background:#2B5797"></i>Trecho no tamanho real</span>' +
         '<span><i style="width:9px;height:9px;transform:rotate(45deg);border-radius:1px;background:#3B4540"></i>Ponto curto demais para esta escala</span>' : '') +
-        (tem.oae ?'<span><i style="width:11px;height:11px;border-radius:50%;background:#7A8580"></i>Ponte</span>' : '') +
+        (tem.oae ?'<span><i style="width:11px;height:11px;border-radius:50%;background:#7A8580"></i>OAE</span>' : '') +
         '<span><i style="width:16px;height:16px;border-radius:50%;border:2px solid #D93025;box-sizing:border-box"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
         '<span>“~” km a conferir</span>' + (mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div>' +
         // conservação e pontes: o que cada cor quer dizer, no modo da tela
@@ -403,8 +403,8 @@
       if (sel) {
         // sem código (o.publico): o banco manda só a posição; o cartão diz só o km e pede o código para abrir
         var pub = !!(o.publico && o.publico());
-        var x = sel, inf = x.inf, nomeS = pub ? (x.oae ? 'Ponte' : 'Ponto') : x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
-        var kmS = x.oae ? 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + (Number(x.p.extensao) ? ' · ' + nf(x.p.extensao, 1) + ' m de ponte' : '')
+        var x = sel, inf = x.inf, nomeS = pub ? (x.oae ? 'OAE' : 'Ponto') : x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
+        var kmS = x.oae ? 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2) + (Number(x.p.extensao) ? ' · ' + nf(x.p.extensao, 1) + ' m de OAE' : '')
           : kmTxt(x, true) + ' · ' + nf(x.kf - x.km, 2) + ' km';
         var servs = (inf.servs || []).map(function (s) {
           return '<div class="vg-sv"><span>' + esc(s.label) + '</span><b><i style="background:' + esc(s.color) + '"></i>' + esc(s.text) + '</b></div>';
@@ -433,7 +433,7 @@
         if (md !== 'med' || !doisModos() || (tp !== 'conserva' && tp !== 'oae')) return '';
         var k = xs.filter(function (x) { return x.nc; }).length;
         return k ? '<button type="button" class="vg-ct-nc" data-vg="modo" data-m="nc" data-fid="nc:' + esc(c.id) + '"><span class="nc-bdg">' + k +
-          (tp === 'oae' ? (k === 1 ? ' ponte com NC' : ' pontes com NC') : (k === 1 ? ' segmento com NC' : ' segmentos com NC')) + '</span><span>ver onde</span></button>' : '';
+          (tp === 'oae' ? (k === 1 ? ' OAE com NC' : ' OAEs com NC') : (k === 1 ? ' segmento com NC' : ' segmentos com NC')) + '</span><span>ver onde</span></button>' : '';
       }
       // resumo por contrato (só os mostrados); embaixo, quantos ficaram fora do filtro
       h += '<section class="vg-cards" aria-label="Resumo dos contratos mostrados">' + cs.map(function (c) {
@@ -445,7 +445,7 @@
         var pad = f ? Math.max((f[1] - f[0]) * 0.03, 0.5) : 0, nome = N.nome(c) || 'Contrato', formal = N.formal(c);
         return '<article class="vg-box vg-ct ' + tp + '"><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
-          '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' ponte' : ' pontes') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de pontes' : ' km de atuação') + '</span></div>' +
+          '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' OAE' : ' OAEs') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de OAEs' : ' km de atuação') + '</span></div>' +
           '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) + ncLinha(c, tp, xs) +
           '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';
@@ -464,15 +464,15 @@
         }).join('');
       }
       h += '<section class="vg-box vg-filtros" aria-label="Busca e filtros"><div class="vg-busca"><label class="vg-cap" for="vgBusca">Buscar</label>' +
-        '<input id="vgBusca" type="search" autocomplete="off" placeholder="km (ex.: 794,5), ponto, ponte ou contrato" value="' + esc(st.q) + '"><div class="vg-res" id="vgRes">' + resultados() + '</div></div>' +
+        '<input id="vgBusca" type="search" autocomplete="off" placeholder="km (ex.: 794,5), ponto, OAE ou contrato" value="' + esc(st.q) + '"><div class="vg-res" id="vgRes">' + resultados() + '</div></div>' +
         SIT_GR.filter(function (g) { return tem[g[0]]; }).map(function (g) {
-          return '<div class="vg-chips"><span class="vg-cap">' + esc(g[1]) + '</span><div>' + chips(sitsDe(g[0]), PRE[g[0]], g[0] === 'oae') + '</div></div>';
+          return '<div class="vg-chips"><span class="vg-cap">' + esc(g[1]).replace(/\bOAEs\b/g, '<span class="sigla">OAEs</span>') + '</span><div>' + chips(sitsDe(g[0]), PRE[g[0]], g[0] === 'oae') + '</div></div>';
         }).join('') + '</section>';
 
       // lista do trecho da tela
       var ord = vis.slice().sort(function (a, b) { return a.km - b.km; }), max = mob ? 8 : 12;
       h += '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>No trecho da tela</h3><span>' + vis.length + (vis.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
-        (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou ponte</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
+        (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou OAE</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
         ord.slice(0, max).map(function (x) {
           var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local |MP )?/, '');
           var sit = '<i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (!x.oae && x.inf.pctText ? ' · ' + esc(x.inf.pctText) : '');
@@ -621,7 +621,7 @@
       // texto de cada contrato para a busca, uma vez por busca: Lote, nº, nome de tela e nome formal (String(): lote ou nº
       // numérico, de backup ou do banco, não pode quebrar a busca)
       var txt = {};
-      d.todos.forEach(function (c) { txt[c.id] = semAc([c.lote, c.numero, N.nome(c), N.formal(c), N.tipo(c) === 'oae' ? 'pontes' : ''].map(function (v) { return v == null ? '' : String(v); }).join(' ')); });
+      d.todos.forEach(function (c) { txt[c.id] = semAc([c.lote, c.numero, N.nome(c), N.formal(c), N.tipo(c) === 'oae' ? 'pontes oae oaes' : ''].map(function (v) { return v == null ? '' : String(v); }).join(' ')); });
       function nota(x) {
         var nome = semAc(x.p.nome), cod = semAc(x.p.codigo), ctw = txt[x.c.id].split(/\s+/), ct = N.numeroCurto(x.c);
         return termos.reduce(function (t, w) { return t + (w === nome || w === cod || ql === nome || ql === cod ? 2 : ctw.indexOf(w) >= 0 || w === ct ? 1 : 0); }, 0);

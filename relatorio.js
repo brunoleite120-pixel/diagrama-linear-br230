@@ -288,7 +288,7 @@
     function conserva(c) { return !!(c && c.tipo === 'conserva'); }
     function titulo(c, p, num) {
       if (o.ehOae(c)) {
-        return [p.codigo, p.nome ? 'PONTE ' + String(p.nome).toUpperCase() : ''].filter(Boolean).join(' · ') +
+        return [p.codigo, p.nome ? 'OAE ' + String(p.nome).toUpperCase() : ''].filter(Boolean).join(' · ') +
           (p.kmIni != null ? ' · KM ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') +
           (p.kmContrato != null && p.kmContrato !== p.kmIni ? ' (CONTR. ' + fmtKm(p.kmContrato) + ')' : '');
       }
@@ -296,7 +296,7 @@
     }
     // nome curto, para a legenda de cada foto quando a folha junta vários pontos
     function curto(c, p, num) {
-      if (o.ehOae(c)) return p.nome ? 'PONTE ' + String(p.nome).toUpperCase() : String(p.codigo || p.id).toUpperCase();
+      if (o.ehOae(c)) return p.nome ? 'OAE ' + String(p.nome).toUpperCase() : String(p.codigo || p.id).toUpperCase();
       return (conserva(c) ? 'SEGMENTO Nº ' : 'PONTO Nº ') + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) : '');
     }
     function localPadrao(c) {
@@ -402,10 +402,10 @@
           h += '<div class="rf-resumo">Nenhuma foto marcada com ★ ' + (S.modo === 'semana' ? 'nesta semana' : S.modo === 'mes' ? 'neste mês' : 'neste período') + ' para este contrato.</div>';
           return h;
         }
-        h += '<div class="rf-resumo">' + (G.cons ? '' : '<b>' + plural(G.pts.length, G.oae ? 'ponte' : 'ponto', G.oae ? 'pontes' : 'pontos') + '</b> · ') +
+        h += '<div class="rf-resumo">' + (G.cons ? '' : '<b>' + plural(G.pts.length, G.oae ? 'OAE' : 'ponto', G.oae ? 'OAEs' : 'pontos') + '</b> · ') +
           plural(G.pts.reduce(function (s, x) { return s + x.fotos.length; }, 0), 'foto', 'fotos') + ' · <b>' + plural(folhas, 'folha', 'folhas') + '</b> A4</div>';
         if (G.pts.length > 1) {
-          h += '<div class="seg rf-folhas" role="group" aria-label="Folhas">' + [['juntar', 'Juntar ' + (G.oae ? 'pontes' : 'pontos') + ' (até 6 fotos por folha)'], ['ponto', 'Uma folha por ' + (G.oae ? 'ponte' : 'ponto')]].map(function (m) {
+          h += '<div class="seg rf-folhas" role="group" aria-label="Folhas">' + [['juntar', 'Juntar ' + (G.oae ? 'OAEs' : 'pontos') + ' (até 6 fotos por folha)'], ['ponto', 'Uma folha por ' + (G.oae ? 'OAE' : 'ponto')]].map(function (m) {
             return '<button type="button" data-rf="folhas" data-v="' + m[0] + '" aria-pressed="' + (S.folhas === m[0]) + '">' + m[1] + '</button>';
           }).join('') + '</div>';
         }
@@ -526,7 +526,7 @@
                   logos: LG, logoSup: o.logoSupervisora,
                   executora: String(c.executora || '-').toUpperCase(), supervisora: String(c.supervisora || '-').toUpperCase(),
                   contrato: c.numero || '', ctSupervisao: c.ctSupervisao || '', objeto: c.objeto || '', local: localPadrao(c),
-                  titulo: varios ? (G.oae ? 'PONTES: ' : conserva(c) ? 'SEGMENTOS: ' : 'PONTOS EMERGENCIAIS: ') + pg.itens.map(function (pd) { return G.oae ? pd.x.curto.replace(/^PONTE /, '') : 'Nº ' + pd.x.num; }).join(' · ')
+                  titulo: varios ? (G.oae ? 'OAEs: ' : conserva(c) ? 'SEGMENTOS: ' : 'PONTOS EMERGENCIAIS: ') + pg.itens.map(function (pd) { return G.oae ? (pd.x.p.nome ? pd.x.curto.replace(/^OAE /, '') : pd.x.curto) : 'Nº ' + pd.x.num; }).join(' · ')
                     : um.x.titulo + (um.partes > 1 ? ' – FOLHA ' + um.parte + '/' + um.partes : ''),
                   periodo: perTxt(per), fotos: imgs, numIni: um.numIni, legendas: legendas, rotDesc: 'Serviço:',
                   desc: varios ? pg.itens.filter(function (pd) { return String(pd.x.desc || '').trim(); }).map(function (pd) { return pd.x.curto + ': ' + String(pd.x.desc).trim().replace(/\s*\n+\s*/g, ' '); }) : um.x.desc,
