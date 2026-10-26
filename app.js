@@ -6121,15 +6121,14 @@
   // sem código: só a visão geral (o banco manda só o trecho dos contratos e a posição dos pontos)
   function isPublico() { return banco.on && !banco.login; }
   function papelNome(p) { return PAPEL_NOME[p] || 'equipe'; }
-  // parte do contrato: med = medições; acomp = pontos e status, diagrama e PDF, mapa. O analista só tem as partes liberadas
-  // para ele em cada contrato (banco.acesso, do banco); os outros papéis, conforme o papel
+  // parte do contrato: med = medições; acomp = pontos e status, diagrama e PDF, mapa. O analista vê as duas nos contratos
+  // liberados para ele (banco.acesso, do banco; desde 26/10/2026 o contrato liberado vale para tudo); os outros, conforme o papel
   function parte(c, k) {
     if (!banco.on) return true;
     if (!banco.login || !c) return false;
     if (isAnalista()) {
       var a = banco.acesso && banco.acesso[c.id];
-      if (k === 'acomp' && isConserva(c)) return false;   // na conservação o analista só tem as medições
-      return !!(a && a[k]);
+      return !!(a && (a.med || a.acomp));
     }
     return k === 'med' ? isEng() : true;
   }
@@ -6137,7 +6136,7 @@
   function anMed(c) { return isAnalista() && parte(c, 'med'); }
   function podeDiagrama(c) { return !isFiscal() && (parte(c, 'acomp') || anMed(c)); }
   function podeMapa(c) { return parte(c, 'acomp') || anMed(c); }
-  // Foto e Galeria: do fiscal ao Administrador, e o analista nos contratos em que tem as medições (só as fotos dele)
+  // Foto e Galeria: do fiscal ao Administrador, e o analista nos contratos liberados para ele (só as fotos dele)
   function podeFotos(c) {
     if (!banco.on || nivel() >= 1) return true;
     if (!isAnalista()) return false;
@@ -7211,7 +7210,7 @@
   var PAPEIS = [
     { k: 'engenheiro', nome: 'Engenheiro', desc: 'O mesmo que o Administrador: edita tudo, aprova, vê as medições e as fotos de todos, cadastra pessoas e volta os dados para uma cópia. Só não mexe na conta de um Administrador.' },
     { k: 'auxiliar', nome: 'Auxiliar de engenharia', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira, vê as medições e as fotos de todos. Não cadastra pessoas.' },
-    { k: 'analista', nome: 'Analista', desc: 'Só consulta, nos contratos marcados abaixo: as medições, o acompanhamento (pontos e status, diagrama e PDF, mapa) ou os dois. Onde tem as medições, também tira fotos e vê as que tirou.', ct: 'analista' },
+    { k: 'analista', nome: 'Analista', desc: 'Só consulta, nos contratos marcados abaixo: tudo do contrato (medições, não conformidades, diagrama e PDF, mapa). Também tira fotos e vê as que tirou.', ct: 'analista' },
     { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Nos contratos marcados abaixo: registra as não conformidades e muda o estado dos serviços (fica aguardando aprovação), tira e envia fotos e vê só as que tirou. Sem diagrama e sem PDF.', ct: 'fiscal' },
     { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas, outros Administradores e voltar os dados para uma cópia.' }
   ];
@@ -7276,20 +7275,18 @@
     });
     carregar();
   }
-  // contratos do fiscal (um por contrato) e do analista (medições e acompanhamento, cada um à parte)
+  // contratos do fiscal e do analista: uma marca "Liberado" por contrato (o analista vê tudo do contrato, só para consulta)
   function usContratosHtml(u) {
     var ac = (u && u.acesso) || {}, ehF = u && u.papel === 'fiscal', ehA = u && u.papel === 'analista';
     var linhas = ctOrdem(state.contracts).map(function (c) {
       var a = ac[c.id], id = esc(c.id);
       return '<div class="us-ct"><span class="us-ct-n">' + esc(ctNome(c)) + '<small>' + esc(abaSub(c)) + '</small></span><span class="us-ct-ops">' +
         '<label data-ctx="fiscal"><input type="checkbox" data-ct="' + id + '" data-k="f"' + (ehF && a ? ' checked' : '') + '> Liberado</label>' +
-        '<label data-ctx="analista"><input type="checkbox" data-ct="' + id + '" data-k="med"' + (ehA && a && a.med ? ' checked' : '') + '> Medições</label>' +
-        (isConserva(c) ? '' : '<label data-ctx="analista"><input type="checkbox" data-ct="' + id + '" data-k="acomp"' + (ehA && a && a.acomp ? ' checked' : '') + '> Acompanhamento</label>') + '</span></div>';
+        '<label data-ctx="analista"><input type="checkbox" data-ct="' + id + '" data-k="lib"' + (ehA && a && (a.med || a.acomp) ? ' checked' : '') + '> Liberado</label></span></div>';
     }).join('');
     return '<fieldset class="us-cts" id="usCts" hidden><legend>Contratos liberados</legend>' +
       '<p class="hint" data-ctx="fiscal">Marque os contratos em que esta pessoa registra as não conformidades e tira as fotos. Ela só vê esses.</p>' +
-      '<p class="hint" data-ctx="analista">Em cada contrato, marque o que o analista vê. <b>Medições</b>: as medições de cada ponto, com os pontos, o diagrama e o mapa, e as fotos dele. ' +
-      '<b>Acompanhamento</b>: pontos e status dos serviços, diagrama e PDF, mapa. Na conservação, só as medições. Sem nenhuma, o contrato não aparece para ele.</p>' +
+      '<p class="hint" data-ctx="analista">Marque os contratos do analista. Em cada um ele vê tudo, só para consulta: as medições, as não conformidades, o diagrama e o PDF, o mapa, e as fotos dele. Os outros não aparecem para ele.</p>' +
       '<div class="us-ct-todos"><button type="button" class="btn small" data-cts="todos">Marcar todos</button><button type="button" class="btn small" data-cts="nenhum">Desmarcar todos</button></div>' +
       (linhas || '<p class="empty">Nenhum contrato cadastrado.</p>') + '</fieldset>';
   }
@@ -7316,7 +7313,7 @@
         form.querySelectorAll('#usCts input[data-ct]:checked').forEach(function (i) {
           var cid = i.dataset.ct, k = i.dataset.k;
           if (papel === 'fiscal' && k === 'f') acesso[cid] = {};
-          if (papel === 'analista' && k !== 'f') { acesso[cid] = acesso[cid] || { med: false, acomp: false }; acesso[cid][k] = true; }
+          if (papel === 'analista' && k === 'lib') acesso[cid] = { med: true, acomp: true };
         });
       }
       var minC = papel === 'criador' ? 8 : 6;
