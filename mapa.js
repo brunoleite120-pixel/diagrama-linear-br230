@@ -240,6 +240,7 @@
     '.mp .leaflet-control-attribution{margin:0}',
     '.mp-map.mp-gira{inset:auto;transition:transform .9s linear;will-change:transform}',
     '.mp-girando .leaflet-tooltip{transform-origin:50% 50%}',
+    '.mp-pinca .leaflet-tooltip-pane{visibility:hidden}',
     '.mp-girando .mp-place span{transform:translate(-50%,-50%) rotate(var(--mp-crot,0deg))}',
     '.mp-navcar{width:44px;height:44px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}',
     '.mp-navcar svg{width:44px;height:44px;transition:transform .9s linear}',
@@ -339,11 +340,17 @@
     var Lf = window.L, snv = opts.snv;
     if (!Lf || !snv || !opts.host) return null;
     if (Lf.Tooltip && !Lf.Tooltip.prototype._mpGira) {
-      var tsp = Lf.Tooltip.prototype._setPosition;
+      // com o mapa girado o rótulo fica em pé (map._mpRot, gravado pelo giraLiga, sem procurar o quadro no DOM a cada rótulo)
+      var tsp = Lf.Tooltip.prototype._setPosition, tup = Lf.Tooltip.prototype._updatePosition;
       Lf.Tooltip.prototype._setPosition = function (pos) {
         tsp.call(this, pos);
-        var el = this._container, g = el && el.closest && el.closest('.mp-girando');
-        if (g) el.style.transform += ' rotate(' + (g.style.getPropertyValue('--mp-crot') || '0deg') + ')';
+        var el = this._container, rot = this._map && this._map._mpRot;
+        if (el && rot) el.style.transform += ' rotate(' + rot + ')';
+      };
+      // na pinça os rótulos ficam escondidos e não são reposicionados a cada quadro; voltam todos de uma vez no fim
+      Lf.Tooltip.prototype._updatePosition = function () {
+        if (this._map && this._map._mpPinca) return;
+        return tup.apply(this, arguments);
       };
       Lf.Tooltip.prototype._mpGira = true;
     }
@@ -391,7 +398,7 @@
     map.attributionControl.setPrefix(false);
     map.attributionControl.addAttribution('Eixo e km: SNV/DNIT ' + esc(snv.versao));
     Lf.control.zoom({ position: 'bottomright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(map);
-    Lf.control.scale({ imperial: false, position: 'bottomright' }).addTo(map);
+    Lf.control.scale({ imperial: false, position: 'bottomright', updateWhenIdle: true }).addTo(map);
     if (map._controlContainer) root.appendChild(map._controlContainer);
     map.createPane('mpRoad').style.zIndex = 410;
     map.createPane('mpRota').style.zIndex = 415;
@@ -412,7 +419,8 @@
       if (!BASES[key]) key = 'mapa';
       baseKey = key;
       if (baseLayer) { map.removeLayer(baseLayer); baseLayer = null; }
-      if (BASES[key].url) baseLayer = Lf.tileLayer(BASES[key].url, BASES[key].opt).addTo(map);
+      if (BASES[key].url) baseLayer = Lf.tileLayer(BASES[key].url, BASES[key].opt).on(REDE_EV).addTo(map);
+      pedeRede(0);
       root.classList.toggle('sat', key === 'satelite');
       root.classList.toggle('osm', key === 'mapa' || key === 'offline');
       var g = q('.mp-bases');
@@ -431,17 +439,63 @@
       g.hidden = !abrir;
       bb.setAttribute('aria-expanded', String(!!abrir));
     }
+    // ---------------- rede de segurança: com Mapa ou Satélite, a base offline e o fundo saem (as imagens online cobrem tudo
+    // e o canvas embaixo era redesenhado à toa) e só voltam quando alguma imagem da vista falha ou demora mais de 1,5 s.
+    // Não dá para confiar no navigator.onLine: com sinal fraco ele diz "online" e as imagens não chegam
+    var offVis = false, rede = { t: null, q: 0, limpo: 0 };
+    var REDE_EV = {
+      tileloadstart: function (e) { e.tile._mpIni = Date.now(); e.tile._mpErro = false; pedeRede(100); },
+      tileerror: function (e) { e.tile._mpErro = true; pedeRede(0); },
+      load: function () { pedeRede(0); }
+    };
+    function pedeRede(ms) {
+      var quando = Date.now() + ms;
+      if (rede.t && rede.q <= quando) return;
+      clearTimeout(rede.t); rede.q = quando; rede.t = setTimeout(confereRede, ms);
+    }
+    function confereRede() {
+      rede.t = null;
+      if (!baseLayer) { mostraOffline(true); return; }
+      var falta = 0, espera = 0, agora = Date.now(), tl = baseLayer._tiles || {};
+      for (var k in tl) {
+        var t = tl[k], el = t.el;
+        if (!t.current || !el || el.classList.contains('leaflet-tile-loaded')) continue;
+        var idade = agora - (el._mpIni || agora);
+        if (el._mpErro || idade >= 1500) falta++; else espera = Math.max(espera, 1500 - idade);
+      }
+      if (falta) { rede.limpo = 0; mostraOffline(true); }
+      else if (espera) rede.limpo = 0;
+      else if (offVis) {
+        // sai só depois que as imagens novas terminam de aparecer (fade de 0,2 s), para não piscar
+        if (!rede.limpo) rede.limpo = agora;
+        if (agora - rede.limpo >= 400) mostraOffline(false); else espera = 450 - (agora - rede.limpo);
+      }
+      if (espera) pedeRede(espera + 50);
+    }
+    function mostraOffline(on) {
+      if (on === offVis) return;
+      offVis = on;
+      buildOffline();
+      syncOffline();
+      syncFundo();
+    }
     setBase(opts.tiles ? (lsGet(BASE_KEY) || 'mapa') : 'offline');
 
-    // ---------------- fundo: cobertura do solo (MapBiomas) em imagens ao longo do eixo, carregadas conforme a vista
+    // ---------------- fundo: cobertura do solo (MapBiomas) em imagens ao longo do eixo, carregadas conforme a vista; as que
+    // ficam longe saem (antes só entravam e, percorrendo o trecho, juntavam até 48 imagens decodificadas)
     var fundo = opts.fundo || window.FUNDO_BR230 || null, bgOn = {};
     function syncFundo() {
       if (!fundo) return;
-      var vb = map.getBounds().pad(0.6);
+      var vb = offVis && map.getSize().x ? map.getBounds() : null, perto = vb && vb.pad(0.6), longe = vb && vb.pad(1);
+      Object.keys(bgOn).forEach(function (k) {
+        if (longe && bgOn[k].getBounds().intersects(longe)) return;
+        map.removeLayer(bgOn[k]); delete bgOn[k];
+      });
+      if (!perto) return;
       fundo.pedacos.forEach(function (p) {
         if (bgOn[p[0]]) return;
         var bb = Lf.latLngBounds([p[1], p[2]], [p[3], p[4]]);
-        if (!bb.intersects(vb)) return;
+        if (!bb.intersects(perto)) return;
         bgOn[p[0]] = Lf.imageOverlay(p[5] || ((fundo.pasta || 'fundo/') + p[0]), bb, { pane: 'mpBg', interactive: false }).addTo(map);
       });
     }
@@ -450,11 +504,17 @@
       map.on('moveend', syncFundo);
     }
 
-    // ---------------- mapa offline: estradas, rios e localidades do OpenStreetMap, conforme o zoom
+    // ---------------- mapa offline: estradas, rios e localidades do OpenStreetMap, conforme o zoom. Montado só na primeira vez
+    // que precisa aparecer (base Offline ou imagens online faltando)
     var osm = opts.osm || window.OSM_BR230 || null, off = null;
+    // margem do canvas além da tela. Com o mapa girado o quadro já é bem maior que a tela, e com 0,4 o canvas passava do
+    // limite do iPhone (16,7 Mpx: a base ficava em branco na rota) e ocupava 70 a 90 MB no Android
+    function padOff() { return gira && gira.on ? 0.05 : 0.4; }
     function buildOffline() {
-      if (!osm || off) return;
-      var rend = Lf.canvas({ pane: 'mpBase', padding: 0.4 }), groups = {}, placed = {};
+      if (!osm || off || !offVis) return;
+      var rend = Lf.canvas({ pane: 'mpBase', padding: padOff() }), groups = {}, placed = {};
+      // o Leaflet 1.9.4 cancela o desenho pendente ao tirar o canvas do mapa mas guarda o pedido: na volta nada seria desenhado
+      rend.on('remove', function () { rend._redrawRequest = null; });
       function grp(k) { return groups[k] || (groups[k] = Lf.layerGroup()); }
       function line(pts, st, poly) {
         var o = { renderer: rend, interactive: false, pane: 'mpBase' };
@@ -496,21 +556,21 @@
         var k = l[0] === 'city' || l[0] === 'town' ? 'cidade' : l[0] === 'village' ? 'vila' : '';
         if (k) label([l[2], l[3]], '<span>' + esc(l[1]) + '</span>', 'mp-place ' + k, k);
       });
-      off = { groups: groups, on: '' };
+      off = { groups: groups, on: '', rend: rend };
       map.attributionControl.addAttribution(esc(osm.atribuicao || '© colaboradores do OpenStreetMap'));
-      syncOffline();
     }
     function syncOffline() {
       if (!off) return;
-      var z = map.getZoom(), want = OFF_ORDER.filter(function (k) { return off.groups[k] && z >= OFF_MINZ[k]; }), key = want.join(',');
+      var z = map.getZoom(), want = offVis ? OFF_ORDER.filter(function (k) { return off.groups[k] && z >= OFF_MINZ[k]; }) : [], key = want.join(',');
       if (key === off.on) return;
       // tira tudo e põe de novo na ordem certa (o canvas desenha na ordem em que as camadas entram)
       OFF_ORDER.forEach(function (k) { if (off.groups[k] && map.hasLayer(off.groups[k])) map.removeLayer(off.groups[k]); });
+      // escondida, a base solta também o canvas (memória e o redesenho a cada movimento)
+      if (!want.length && map.hasLayer(off.rend)) map.removeLayer(off.rend);
       want.forEach(function (k) { off.groups[k].addTo(map); });
       off.on = key;
     }
     map.on('zoomend', syncOffline);
-    buildOffline();
 
     // ---------------- eixo do SNV inteiro (contexto) e localidades dos segmentos
     var full = snv.linha.map(function (v) { return [v[1], v[0]]; });
@@ -584,13 +644,23 @@
       for (var i = 0; i < steps.length; i++) if (steps[i] * 1000 / mpp >= 78) return steps[i];
       return 100;
     }
+    // marcas de km: só refaz quando o passo ou o trecho mudam, e só cria as que estão perto da vista (as de longe saem). Antes
+    // apagava e recriava o contrato inteiro (até 151 rótulos) a cada zoom
+    var kmFeito = { chave: '', k: {} };
     function drawKm() {
-      kmLayer.clearLayers();
-      if (!range) return;
-      var step = kmStep(), first = Math.ceil(range[0] / step) * step;
-      for (var k = first; k <= range[1] + 1e-9; k += step) {
-        Lf.circleMarker(ref.at(k), { pane: 'mpRoad', className: 'mp-km', radius: 3, weight: 1.5, fillOpacity: 1, interactive: false })
-          .bindTooltip('km ' + nf(k, 0), { permanent: true, direction: 'right', offset: [5, 0], className: 'mp-kml' })
+      var step = range ? kmStep() : 0, chave = range ? step + ':' + range[0] + ':' + range[1] : '';
+      if (chave !== kmFeito.chave) { kmLayer.clearLayers(); kmFeito = { chave: chave, k: {} }; }
+      if (!range || !map.getSize().x) return;
+      var vb = map.getBounds(), perto = vb.pad(0.5), longe = vb.pad(1.5), feitos = kmFeito.k;
+      Object.keys(feitos).forEach(function (k) {
+        if (longe.contains(feitos[k].getLatLng())) return;
+        kmLayer.removeLayer(feitos[k]); delete feitos[k];
+      });
+      for (var k = Math.ceil(range[0] / step) * step; k <= range[1] + 1e-9; k += step) {
+        var id = nf(k, 0), ll = ref.at(k);
+        if (feitos[id] || !perto.contains(ll)) continue;
+        feitos[id] = Lf.circleMarker(ll, { pane: 'mpRoad', className: 'mp-km', radius: 3, weight: 1.5, fillOpacity: 1, interactive: false })
+          .bindTooltip('km ' + id, { permanent: true, direction: 'right', offset: [5, 0], className: 'mp-kml' })
           .addTo(kmLayer);
       }
     }
@@ -604,7 +674,14 @@
       if (on && !map.hasLayer(locLayer)) locLayer.addTo(map);
       if (!on && map.hasLayer(locLayer)) map.removeLayer(locLayer);
     }
-    map.on('zoomend', function () { drawKm(); toggleLabels(); toggleLoc(); });
+    function fimPinca() { if (map._mpPinca) { map._mpPinca = false; root.classList.remove('mp-pinca'); giraRotulos(); } }
+    map.on('zoomend', function () { toggleLabels(); toggleLoc(); fimPinca(); });
+    // o Leaflet sempre manda um moveend depois do zoomend: os km entram aqui, também ao arrastar
+    map.on('moveend', function () { fimPinca(); drawKm(); });
+    // pinça com dois dedos: os rótulos somem enquanto os dedos mexem (cada quadro reposicionava centenas deles) e voltam no fim
+    map.on('zoomstart', function () {
+      if (map.touchZoom && map.touchZoom._zooming) { map._mpPinca = true; root.classList.add('mp-pinca'); }
+    });
     // rótulos que se encostam: fica o mais importante (nome do ponto, depois localidade, km, cidade e rio) e os que caem
     // embaixo das caixas do mapa (título, busca, botões, pontos de baixo) somem até o mapa mexer de novo
     var arrumaPedido = false;
@@ -869,15 +946,22 @@
     function ligaBussola() {
       if (bus.ligada || typeof window.DeviceOrientationEvent === 'undefined') return;
       function escuta() {
+        if (bus.ligada) return;
         bus.ligada = true;
-        if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', onBussola);
-        else window.addEventListener('deviceorientation', onBussola);
+        bus.ev = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
+        window.addEventListener(bus.ev, onBussola);
       }
       try {
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
           DeviceOrientationEvent.requestPermission().then(function (r) { if (r === 'granted') escuta(); }, function () {});
         } else escuta();
       } catch (e) { /* sem bússola: fica o rumo do GPS */ }
+    }
+    // o sensor manda cerca de 60 eventos por segundo: desliga junto com o Ao vivo (antes ficava ligado até fechar o app)
+    function desligaBussola() {
+      if (!bus.ligada) return;
+      window.removeEventListener(bus.ev, onBussola);
+      bus.ligada = false; bus.h = null;
     }
     function andando() { return live.heading != null && (live.speed || 0) > 1.5; }
     function bussolaFresca() { return bus.h != null && Date.now() - bus.t < 3000; }
@@ -912,6 +996,7 @@
       if (live.marker) { map.removeLayer(live.marker); live.marker = null; }
       if (live.acc) { map.removeLayer(live.acc); live.acc = null; }
       if (live.wake) { try { live.wake.release(); } catch (e) { /* nada */ } live.wake = null; }
+      desligaBussola();
       liveCard('');
       setGpsBtn();
     }
@@ -921,7 +1006,7 @@
         : 'A localização foi bloqueada. Libere a localização para este site nas permissões do navegador e toque em Ao vivo de novo.')
         : e && e.code === 3 ? 'O GPS ainda não respondeu. Fique em local aberto; a busca continua.'
         : 'Sem sinal de localização no momento.';
-      if (e && e.code === 1) { if (live.watch != null) navigator.geolocation.clearWatch(live.watch); live.watch = null; setGpsBtn(); }
+      if (e && e.code === 1) { if (live.watch != null) navigator.geolocation.clearWatch(live.watch); live.watch = null; if (!nav) desligaBussola(); setGpsBtn(); }
       updateLive();
     }
     function onFix(pos) {
@@ -943,10 +1028,17 @@
         live.marker.setLatLng(ll);
         if (icon) { live.marker.setIcon(icon); live.navIco = false; }
         live.acc.setLatLng(ll).setRadius(c.accuracy || 0);
-        if (live.follow && !nav) map.panTo(ll, { animate: !reduced(), duration: 0.6 });
+        if (live.follow && !nav && !jaEsta(ll)) map.panTo(ll, { animate: !reduced(), duration: 0.6 });
       }
-      if (nav) navTick();
-      updateLive();
+      // na navegação o navTick já desenha o painel (o updateLive desenhava de novo)
+      if (nav) navTick(); else updateLive();
+    }
+    // o ponto já está no centro (até 2 px) e no zoom pedido: mover para o mesmo lugar ainda dispara moveend (fundo, km, rótulos
+    // e o canvas), e com o GPS parado isso acontecia a cada posição, uma vez por segundo
+    function jaEsta(ll, z) {
+      if (z != null && Math.abs(map.getZoom() - z) > 1e-6) return false;
+      var p = map.latLngToContainerPoint(ll), m = map.getSize().divideBy(2);
+      return Math.abs(p.x - m.x) <= 2 && Math.abs(p.y - m.y) <= 2;
     }
     function iconeLivre() {
       var r = rumoLivre();
@@ -1275,6 +1367,7 @@
       var r = Math.ceil(Math.max(Math.hypot(P[0], P[1]), Math.hypot(W - P[0], P[1]), Math.hypot(P[0], H - P[1]), Math.hypot(W - P[0], H - P[1]))) + 8;
       if (!gira.on || !gira.P || Math.abs(gira.P[0] - P[0]) > 20 || Math.abs(gira.P[1] - P[1]) > 20 || gira.S < 2 * r) {
         gira.on = true; gira.P = P; gira.S = 2 * r;
+        if (off) off.rend.options.padding = padOff();
         root.classList.add('mp-girando'); mapEl.classList.add('mp-gira');
         mapEl.style.width = mapEl.style.height = gira.S + 'px';
         mapEl.style.left = (P[0] - r) + 'px'; mapEl.style.top = (P[1] - r) + 'px';
@@ -1285,7 +1378,8 @@
       if (Math.abs(d) < 1 && mapEl.style.transform) return;
       gira.ang += d;
       mapEl.style.transform = 'rotate(' + (-gira.ang).toFixed(1) + 'deg)';
-      root.style.setProperty('--mp-crot', gira.ang.toFixed(1) + 'deg');
+      map._mpRot = gira.ang.toFixed(1) + 'deg';
+      root.style.setProperty('--mp-crot', map._mpRot);
       bussola();
       if (Math.abs(d) >= 2) giraRotulos();
     }
@@ -1293,9 +1387,11 @@
       if (!gira.on) return;
       var car = nav && nav.carLL || live.ll, P = gira.P, z = map.getZoom();
       gira.on = false; gira.ang = 0; gira.P = null; gira.S = 0;
+      if (off) off.rend.options.padding = padOff();
       root.classList.remove('mp-girando'); mapEl.classList.remove('mp-gira');
       mapEl.style.cssText = '';
       root.style.removeProperty('--mp-crot');
+      map._mpRot = null;
       map.invalidateSize({ pan: false });
       if (car && P) centraEm(car, P, z, false);
       bussola();
@@ -1303,8 +1399,8 @@
     }
     // põe o ponto ll na posição P da tela (mapa reto)
     function centraEm(ll, P, z, anim) {
-      var W = root.clientWidth, H = root.clientHeight, pt = map.project(ll, z).subtract(Lf.point(P[0] - W / 2, P[1] - H / 2));
-      map.setView(map.unproject(pt, z), z, { animate: !!anim && !reduced() });
+      var W = root.clientWidth, H = root.clientHeight, pt = map.project(ll, z).subtract(Lf.point(P[0] - W / 2, P[1] - H / 2)), c = map.unproject(pt, z);
+      if (!jaEsta(c, z)) map.setView(c, z, { animate: !!anim && !reduced() });
     }
     // os nomes (km, pontos, lugares) ficam em pé com o mapa girado
     function giraRotulos() {
@@ -1331,7 +1427,7 @@
       var v = live.speed || 0, z = zFixo || (v > 22 ? 15 : v > 11 ? 16 : 17);
       if (norteCima || !nav) { giraDesliga(); centraEm(ll, pontoCarro(), z, true); return; }
       giraLiga(nav.rumo || 0);
-      map.setView(ll, z, { animate: !reduced() });
+      if (!jaEsta(ll, z)) map.setView(ll, z, { animate: !reduced() });
     }
     window.addEventListener('resize', function () { if (nav) { gira.P = null; setTimeout(function () { navUi(); if (live.follow) segue(); }, 150); } });
     // tocar no mapa girado: para de seguir e o mapa volta reto (o toque do Leaflet já conta com o quadro normal)

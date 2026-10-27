@@ -4903,7 +4903,8 @@
     $('selPages').closest('label').hidden = isMap;
     $('folhaSw').classList.toggle('so-diagrama', isMap);
     $('btnWide').textContent = ui.wide ? 'Mostrar editor' : (isMap ? 'Ampliar mapa' : 'Ampliar diagrama');
-    if (isMap && !$('layout').hidden && ensureMap()) { mapa.render(); mapa.show(); }
+    // o renderPreview logo abaixo desenha o mapa; aqui só quando ele vai para as Medições ou a visão geral (antes desenhava duas vezes)
+    if (isMap && !$('layout').hidden && ensureMap()) { if (medicoesOn || (visaoOn && visao && !$('visaoHost').hidden)) mapa.render(); mapa.show(); }
     if (!isMap && !pgAtivo()) pausaMapa();
     renderPreview();
   }
@@ -7033,6 +7034,9 @@
     if (a && a.type === 'checkbox' && a.closest && a.closest('#visaoHost, #medicoesHost')) return false;
     return !!(a && a.closest && a.closest('#editor, #visaoHost, #medicoesHost') && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
   }
+  // ordem dos pontos pelo id ("P2" antes de "P10"); o comparador é montado uma vez só (o localeCompare com as opções montava a
+  // cada comparação)
+  var ORDEM_ID = new Intl.Collator('pt-BR', { numeric: true });
   function fromServer(r) {
     var s = { activeId: state ? state.activeId : null, contracts: [] }, byId = {};
     banco.meta = {};
@@ -7046,7 +7050,7 @@
       var p = clone(row.dados || {}); p.id = row.id; c.pontos.push(p);
       banco.meta[metaKey(row.contrato_id, row.id)] = { m: row.meta || {}, por: row.atualizado_por || null, em: row.atualizado_em || null };
     });
-    s.contracts.forEach(function (c) { c.pontos.sort(function (a, b) { return a.id.localeCompare(b.id, 'pt-BR', { numeric: true }); }); });
+    s.contracts.forEach(function (c) { c.pontos.sort(function (a, b) { return ORDEM_ID.compare(a.id, b.id); }); });
     return s;
   }
   // traz o banco (mais o que ainda não subiu deste aparelho); espera a pessoa parar de digitar
@@ -8260,19 +8264,33 @@
   // algo mais largo que a tela (no iPhone, depois de girar o celular a página rolava para o lado ou encolhia): anota qual
   // elemento passou e quanto, e mostra no fim do menu Dados, para achar a causa no aparelho (22/10/2026)
   var LARG_KEY = 'diagrama-linear.largura';
+  // o que está dentro de quem corta o conteúdo (overflow) não alarga a página: era o caso dos rótulos e imagens do mapa, que
+  // o diagnóstico acusava por engano
+  function cortado(e, W) {
+    for (var a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+      if (a.getBoundingClientRect().right > W + 2) continue;
+      if (getComputedStyle(a).overflowX !== 'visible') return true;
+    }
+    return false;
+  }
   function confereLargura() {
     var W = document.documentElement.clientWidth, pior = null;
     if (!W) return;
-    Array.prototype.forEach.call(document.querySelectorAll('body *'), function (e) {
-      var r = e.getBoundingClientRect();
-      if (!r.width || r.right <= W + 2 || getComputedStyle(e).position === 'fixed') return;
-      var p = e.parentElement, pr = p && p.getBoundingClientRect();
-      if (pr && pr.right > W + 2) return;   // o pai já passou: fica o de fora
-      if (!pior || r.right > pior.r) {
-        var cl = typeof e.className === 'string' ? e.className : (e.className && e.className.baseVal) || '';
-        pior = { r: Math.round(r.right), el: e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (cl ? '.' + cl.trim().split(/\s+/).slice(0, 3).join('.') : '') };
-      }
+    larg.W = W; larg.em = Date.now();
+    // o mapa (Leaflet) corta tudo o que passa da borda: nem entra na conta
+    var tw = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: function (n) { return n.classList && n.classList.contains('leaflet-container') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT; }
     });
+    for (var e = tw.nextNode(); e; e = tw.nextNode()) {
+      var r = e.getBoundingClientRect();
+      if (!r.width || r.right <= W + 2 || getComputedStyle(e).position === 'fixed') continue;
+      var p = e.parentElement, pr = p && p.getBoundingClientRect();
+      if (pr && pr.right > W + 2) continue;   // o pai já passou: fica o de fora
+      if (pior && r.right <= pior.r) continue;
+      if (cortado(e, W)) continue;
+      var cl = typeof e.className === 'string' ? e.className : (e.className && e.className.baseVal) || '';
+      pior = { r: Math.round(r.right), el: e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (cl ? '.' + cl.trim().split(/\s+/).slice(0, 3).join('.') : '') };
+    }
     if (!pior) return;
     var reg = { em: new Date().toISOString(), tela: W, ate: pior.r, el: pior.el, pg: document.body.getAttribute('data-pg') || '', alt: window.innerHeight };
     lsPut(LARG_KEY, reg);
@@ -8285,8 +8303,18 @@
     if (!d) { d = document.createElement('div'); d.id = 'larguraDiag'; d.className = 'menu-versao'; menu.appendChild(d); }
     d.textContent = 'Largura: ' + reg.el + ' até ' + reg.ate + ' px (tela ' + reg.tela + ' × ' + reg.alt + ', ' + (reg.pg || 'início') + ', ' + fmtWhen(reg.em) + ')';
   }
-  var largT = null;
-  function agendaLargura() { clearTimeout(largT); largT = setTimeout(confereLargura, 1200); }
+  // só quando a largura muda de verdade ou o celular gira (no Android a barra de endereço que aparece e some também dá
+  // resize, sem mudar a largura), no máximo uma vez a cada 30 s e com o aparelho folgado
+  var largT = null, larg = { W: 0, em: 0 };
+  function agendaLargura(e) {
+    if (!(e && e.type === 'orientationchange') && document.documentElement.clientWidth === larg.W) return;
+    clearTimeout(largT);
+    largT = setTimeout(function () {
+      var falta = larg.em + 30000 - Date.now();
+      if (falta > 0) { largT = setTimeout(agendaLargura, falta, { type: 'orientationchange' }); return; }
+      if (window.requestIdleCallback) requestIdleCallback(confereLargura, { timeout: 2000 }); else confereLargura();
+    }, 1200);
+  }
   window.addEventListener('resize', agendaLargura);
   window.addEventListener('orientationchange', agendaLargura);
   setTimeout(function () { confereLargura(); mostraLargura(); }, 4000);

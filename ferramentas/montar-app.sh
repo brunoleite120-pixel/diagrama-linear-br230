@@ -27,8 +27,9 @@ cp -R "$SRC/lib" "$SRC/icons" "$DEST/"
 rm -rf "$DEST/icons/android"
 
 # no app: a página vai até a borda da tela (o CSS desvia do relógio e do recorte) e não dá zoom
-troca 's|<meta name="viewport" content="width=device-width, initial-scale=1">|<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">|' "$DEST/index.html"
-grep -q 'viewport-fit=cover' "$DEST/index.html" || { echo "Não achei a linha do viewport em index.html"; exit 1; }
+# (troca o content inteiro: desde 22/10 o site tem minimum-scale e viewport-fit, e a troca antiga não achava mais a linha)
+troca 's|<meta name="viewport" content="[^"]*">|<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover">|' "$DEST/index.html"
+grep -q 'maximum-scale=1, viewport-fit=cover' "$DEST/index.html" || { echo "Não achei a linha do viewport em index.html"; exit 1; }
 
 # ambiente e versão do pacote
 TEXTO_SED=$(printf '%s' "$TEXTO" | sed 's/[|&\\]/\\&/g')
