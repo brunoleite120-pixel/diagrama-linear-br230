@@ -2792,12 +2792,15 @@
     el.innerHTML = '<div class="esc-f" role="dialog" aria-modal="true" aria-labelledby="escT" tabindex="-1"></div>';
     document.body.appendChild(el);
     escolha = { o: o, el: el, fix: null, err: '', mexeu: false, gpsOk: false, aviso: false, mais: false, volta: document.activeElement, hist: false };
-    if (navigator.geolocation && window.MapaSNV && window.MapaSNV.Ref && window.SNV_BR230) {
-      var ref = window.MapaSNV.Ref(window.SNV_BR230), e0 = escolha;
+    // na travessia de Altamira, o km local dela (FotoCarimbo.km.localiza: a mesma régua da foto)
+    var fk = window.FotoCarimbo && window.FotoCarimbo.km;
+    if (navigator.geolocation && fk && fk.localiza && window.MapaSNV && window.SNV_BR230) {
+      var e0 = escolha;
       escolha.gps = navigator.geolocation.watchPosition(function (pos) {
         if (escolha !== e0) return;
-        var l = ref.locate(pos.coords.latitude, pos.coords.longitude), novo = !escolha.fix;
-        escolha.fix = { km: l.km, dist: l.dist, acc: pos.coords.accuracy };
+        var l = fk.localiza(pos.coords.latitude, pos.coords.longitude), novo = !escolha.fix;
+        if (!l) return;
+        escolha.fix = { km: l.km, dist: l.dist, ramal: l.ramal, acc: pos.coords.accuracy };
         if (novo && escolha.mexeu) escolha.aviso = true; else if (!escolha.mexeu) escolha.gpsOk = true;
         desenhaEsc();
       }, function (er) {
@@ -2831,7 +2834,7 @@
   function desenhaEsc() {
     if (!escolha) return;
     var o = escolha.o, f = escolha.fix, rod = window.SNV_BR230 && window.SNV_BR230.rodovia, fc = window.FotoCarimbo && window.FotoCarimbo.km;
-    var perto = escolha.gpsOk && f && f.dist <= 2000 && fc ? fc.contratosAqui(o.cs, f.km, rod) : [];
+    var perto = escolha.gpsOk && f && f.dist <= 2000 && fc ? fc.contratosAqui(o.cs, f.km, rod, f.ramal || '') : [];
     var sug = o.sugerir && o.cs.indexOf(o.sugerir.c) >= 0 ? o.sugerir.c : null;
     function linha(c, tag) {
       tag = tag || (c.id === o.ultimo ? 'Último usado' : '');
@@ -2844,7 +2847,7 @@
     var resto = o.cs.filter(function (c) { return c !== sug && perto.indexOf(c) < 0; }), pertoS = perto.filter(function (c) { return c !== sug; });
     var fraco = f && f.acc > 100;
     if (escolha.gpsOk && f && f.dist <= 2000) {
-      h += '<div class="esc-gps' + (perto.length ? ' ok' : '') + '"><i aria-hidden="true"></i>' + (fraco ? 'Talvez perto de você' : 'Perto de você') + ' · km ' + fmt(f.km, 1) +
+      h += '<div class="esc-gps' + (perto.length ? ' ok' : '') + '"><i aria-hidden="true"></i>' + (fraco ? 'Talvez perto de você' : 'Perto de você') + ' · km ' + (f.ramal ? 'local ' : '') + fmt(f.km, 1) +
         ' <small>(GPS ' + (fraco ? 'fraco, ' : '') + '±' + Math.round(f.acc || 0) + ' m)</small></div>';
       if (pertoS.length) {
         h += '<div class="esc-l">' + pertoS.map(function (c) { return linha(c); }).join('') + '</div>';
@@ -2859,8 +2862,8 @@
         : escolha.err === 'sem' && !f ? 'Sem GPS: escolha na lista.' : f ? 'GPS pronto.' : 'Procurando o GPS… enquanto isso, escolha na lista.';
       h += '<div class="esc-gps"><i aria-hidden="true"></i>' + esc(st) + '</div>';
       if (escolha.aviso && f && f.dist <= 2000 && fc) {
-        var n = fc.contratosAqui(o.cs, f.km, rod).length;
-        if (n) h += '<button type="button" class="esc-aviso" data-e="gps">GPS pronto: ' + n + (n === 1 ? ' contrato' : ' contratos') + ' no km ' + fmt(f.km, 1) + ' · mostrar</button>';
+        var n = fc.contratosAqui(o.cs, f.km, rod, f.ramal || '').length;
+        if (n) h += '<button type="button" class="esc-aviso" data-e="gps">GPS pronto: ' + n + (n === 1 ? ' contrato' : ' contratos') + ' no km ' + (f.ramal ? 'local ' : '') + fmt(f.km, 1) + ' · mostrar</button>';
       }
       h += '<div class="esc-l">' + resto.concat(pertoS).map(function (c) { return linha(c); }).join('') + '</div>';
     }

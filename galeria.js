@@ -374,8 +374,13 @@
   function hora(iso) { var d = data(iso); return d ? dia(iso) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : ''; }
   function mesKey(iso) { var d = data(iso); return d ? d.getFullYear() + '-' + pad(d.getMonth() + 1) : ''; }
   function mesNome(k) { var p = k.split('-'); return MESES[+p[1] - 1] + '/' + p[0]; }
-  function kmCurto(km) { return km == null || km === '' ? '' : 'km ' + Number(km).toFixed(2).replace('.', ','); }
-  function kmTxt(km) { return km == null || km === '' ? '' : 'km ' + Number(km).toFixed(3).replace('.', ','); }
+  // régua do km da foto: '' = eixo; o km local da travessia de Altamira (0 a 15,2) não se cruza com o do eixo (280 a 1000),
+  // então o próprio km diz a régua (FotoCarimbo.km, foto.js)
+  function kmF() { return window.FotoCarimbo && window.FotoCarimbo.km; }
+  function ramalDe(km) { var f = kmF(); return f && f.ramalDoKm && km != null && km !== '' && isFinite(km) ? f.ramalDoKm(Number(km)) : ''; }
+  function kmPre(km) { return ramalDe(km) ? 'km local ' : 'km '; }
+  function kmCurto(km) { return km == null || km === '' ? '' : kmPre(km) + Number(km).toFixed(2).replace('.', ','); }
+  function kmTxt(km) { return km == null || km === '' ? '' : kmPre(km) + Number(km).toFixed(3).replace('.', ','); }
   function tam(b) { return !b ? '' : b >= 1073741824 ? (b / 1073741824).toFixed(1).replace('.', ',') + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' kB'; }
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
   // ---------------------------------------------------------------- período (dia, semana de segunda a domingo, mês, datas)
@@ -641,15 +646,18 @@
       return ka - kb || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
     });
   }
-  // distância (km) do km da foto ao ponto: zero dentro do trecho do ponto
-  function dist(p, km) {
-    if (p.kmIni == null || km == null) return null;
+  // distância (km) do km da foto ao ponto: zero dentro do trecho do ponto; na travessia, pelo km local (foto.js)
+  function dist(p, km, c) {
+    var f = kmF();
+    if (km == null) return null;
+    if (f && f.distPonto) return f.distPonto(p, c, Number(km), ramalDe(km));
+    if (p.kmIni == null) return null;
     var a = p.kmIni, b = p.kmFim != null ? p.kmFim : p.kmIni;
     return km < a ? a - km : km > b ? km - b : 0;
   }
   function maisPerto(c, km) {
     var best = null;
-    pontosDe(c).forEach(function (p) { var d = dist(p, km); if (d != null && (!best || d < best.d)) best = { p: p, d: d }; });
+    pontosDe(c).forEach(function (p) { var d = dist(p, km, c); if (d != null && (!best || d < best.d)) best = { p: p, d: d }; });
     return best;
   }
   function trecho(c) {
@@ -662,7 +670,7 @@
   var FOLGA_KM = 0.05;
   // o km da foto escolhe a ponte (Proarte) a até 150 m dela; os outros pontos, a até 50 m
   function raioPonto(c) { return c && c.tipo === 'oae' ? 0.15 : FOLGA_KM; }
-  function noTrecho(c, km) { var t = c && trecho(c); return !!t && km >= t[0] - FOLGA_KM && km <= t[1] + FOLGA_KM; }
+  function noTrecho(c, km) { var f = kmF(), t = c && (f && f.faixaNo ? f.faixaNo(c, ramalDe(km)) : trecho(c)); return !!t && km >= t[0] - FOLGA_KM && km <= t[1] + FOLGA_KM; }
   // todos os contratos cujo trecho tem o km, na ordem da lista (nunca só "o primeiro": o de conservação e o de pontos críticos
   // cobrem o mesmo trecho, e a ordem não diz qual serviço foi fotografado)
   function ctsDoKm(cs, km) {
@@ -744,7 +752,7 @@
       else if ((m = /^ID (\S+)$/.exec(l))) r.idApp = m[1];
       else if (/^(Cópia do oficial|Pasta original|Apagada por) /.test(l) || l === 'Sem ponto') return;
       else if ((m = /^Ponto (.+)$/.exec(l))) r.pnome = m[1];
-      else if ((m = /^BR\s[^-]*-\s*(\d+(?:,\d+)?)/.exec(l))) r.km = Number(m[1].replace(',', '.'));
+      else if ((m = /^BR\s[^-]*-\s*(?:km local\s*)?(\d+(?:,\d+)?)/.exec(l))) r.km = Number(m[1].replace(',', '.'));
       else if ((m = /^(-?\d+,\d+)\/(-?\d+,\d+)$/.exec(l))) { r.lat = Number(m[1].replace(',', '.')); r.lng = Number(m[2].replace(',', '.')); }
       else if ((m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(l))) r.em = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).toISOString();
       else {
@@ -759,7 +767,7 @@
     if (ps[0] === 'Fotos por pessoa') { if (!r.autor && ps[1]) r.autor = ps[1]; ps = ps.slice(2); }
     if (!r.pnome && ps[1] && ps[1] !== 'Sem ponto') r.pnome = ps[1];
     // nome do arquivo: "Foto BR-230-PA km 822+720 P13 2026-06-23 12h09 (2).jpg"
-    if (r.km == null && (m = /km (\d+)\+(\d{3})/.exec(n))) r.km = Number(m[1]) + Number(m[2]) / 1000;
+    if (r.km == null && (m = /km (?:local )?(\d+)\+(\d{3})/.exec(n))) r.km = Number(m[1]) + Number(m[2]) / 1000;
     if (!r.em && (m = /(\d{4})-(\d{2})-(\d{2}) (\d{2})h(\d{2})/.exec(n))) r.em = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString();
     var c = ligarContrato(cs, nm, { numero: numero, nomes: nomes, pastas: ps, km: r.km }), p = null;
     if (c) {
@@ -2480,10 +2488,10 @@
       mv.sug = null;
       box.className = 'gl-mv-sug';
       if (mv.km == null) { box.innerHTML = ''; return; }
-      var tr = trecho(c), outros = ctsDoKm(contratos(), mv.km).filter(function (x) { return !c || x.id !== c.id; });
+      var tr = c && trecho(c), outros = ctsDoKm(contratos(), mv.km).filter(function (x) { return !c || x.id !== c.id; });
       if (tr && !noTrecho(c, mv.km)) {
         box.className = 'gl-mv-sug fora';
-        box.innerHTML = 'O km da foto (' + nf(mv.km, 2) + ') fica fora do trecho deste contrato (km ' + nf(tr[0], 2) + ' a ' + nf(tr[1], 2) + ').' +
+        box.innerHTML = 'O ' + kmPre(mv.km) + 'da foto (' + nf(mv.km, 2) + ') fica fora do trecho deste contrato (' + (c.kmLocal ? 'km local ' : 'km ') + nf(tr[0], 2) + ' a ' + nf(tr[1], 2) + ').' +
           (!outros.length ? ' Confira o contrato.'
             : (outros.length === 1 ? ' Está no trecho do ' + esc(curto(outros[0].id)) + '. '
               : ' Está no trecho de ' + outros.length + ' contratos: escolha o do serviço fotografado. ') + botoesCt(outros));
@@ -2498,7 +2506,7 @@
       if (!perto) { box.innerHTML = tambem; return; }
       mv.sug = perto.p;
       var rot = esc(ehOae(c) ? perto.p.nome || perto.p.codigo : 'Ponto ' + perto.p.nome);
-      box.innerHTML = 'Pelo km da foto (' + nf(mv.km, 2) + '): ' + (perto.d <= raioPonto(c) ? 'fica no ' + rot : 'o mais perto é ' + rot + ', a ' + metr(perto.d)) +
+      box.innerHTML = 'Pelo ' + kmPre(mv.km) + 'da foto (' + nf(mv.km, 2) + '): ' + (perto.d <= raioPonto(c) ? 'fica no ' + rot : 'o mais perto é ' + rot + ', a ' + metr(perto.d)) +
         (sp.value === perto.p.id ? '' : ' <button type="button" class="btn small" data-g="mv-usar">Usar</button>') + (tambem ? ' ' + tambem : '');
     }
     function fecharMover() { mv = null; var el = root && q('.gl-mv'); if (el) el.remove(); }
