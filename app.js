@@ -4671,9 +4671,72 @@
       })
     };
   }
+  // ---------------- OAEs da BR-230 não atendidas pelo Proarte (planilha PONTES_NOTAS_E_TIPOS_2, 27/10/2026: 62 pontes, 36 do
+  // 424 e 26 de fora). As 26 ficam no cadastro do 424, no campo oaesFora; as 36 continuam sendo os pontos do contrato. Na tela
+  // inicial viram a faixa "OAEs 230" (um contrato só da visão, id 'oaes-230', que nunca vai ao banco), com as não atendidas e,
+  // se a pessoa escolher, também as do 424; no mapa do 424, a camada "Não atendidas"
+  var OAES230_ID = 'oaes-230', COR_NA = '#7A3E9D', COR_AT = '#2F7D8C';
+  // travessia urbana de Altamira (230UPA1005, km próprio): no desenho, a partir do km 624,70 do eixo, como a raia do 731
+  var RAMAL_EIXO = { '230UPA1005': 624.7 };
+  function ctComFora() { return state.contracts.filter(function (c) { return isOae(c) && Array.isArray(c.oaesFora) && c.oaesFora.length; })[0] || null; }
+  // as não atendidas como pontos (cópias marcadas com _na), refeitas só quando a lista do banco muda
+  var naMemo = { src: null, pts: [] };
+  function oaesNa(c) {
+    if (!c || !Array.isArray(c.oaesFora)) return [];
+    if (naMemo.src !== c.oaesFora) {
+      naMemo = { src: c.oaesFora, pts: c.oaesFora.filter(function (p) { return p && typeof p === 'object' && p.id; }).map(function (p) {
+        var q = clone(p);
+        q._na = true;
+        if (q.kmIni == null && typeof q.kmLocal === 'number' && RAMAL_EIXO[q.snv] != null) q.kmDesenho = RAMAL_EIXO[q.snv] + q.kmLocal;
+        return q;
+      }) };
+    }
+    return naMemo.pts;
+  }
+  // a faixa da tela inicial: as não atendidas e as do 424 (cópias com _at = id do ponto no 424). Quem não vê o 424 não tem a faixa
+  var o230 = { de: null, src: null, ct: null };
+  function ctOaes230() {
+    if (isPublico()) return null;
+    var c = ctComFora();
+    if (!c) return null;
+    if (o230.de !== c || o230.src !== c.oaesFora) {
+      var at = c.pontos.filter(function (p) { return p.kmIni != null; }).map(function (p) {
+        return { id: 'at:' + p.id, _at: p.id, nome: p.nome, codigo: p.codigo, kmIni: p.kmIni, kmFim: p.kmFim, extensao: p.extensao, largura: p.largura, municipio: p.municipio, kmConferir: p.kmConferir };
+      });
+      o230 = { de: c, src: c.oaesFora, ct: { id: OAES230_ID, oaes230: true, tipo: 'oae', de: c.id, lote: 'OAEs 230', rodovia: c.rodovia, pontos: oaesNa(c).concat(at) } };
+    }
+    return o230.ct;
+  }
+  // cartão, mapa e KML: tipo, nota proposta (cor pela nota), medidas e código; a do 424 só diz que é atendida
+  function info230(p) {
+    if (p._at) return { color: COR_AT, status: 'Atendida pelo Proarte 424', pctText: '', servs: [] };
+    var nota = p.nota != null ? p.nota + ' · ' + (p.classif || '') : p.notaTxt || 'sem nota';
+    var corN = p.nota == null ? NO_STATUS.fill : p.nota >= 4 ? '#1E9E55' : p.nota === 3 ? '#F2A93B' : '#D93025';
+    var med = [p.extensao ? fmt(p.extensao, 1) + ' m' : '', p.largura ? fmt(p.largura, 2) + ' m' : ''].filter(Boolean).join(' × ');
+    return { color: COR_NA, status: 'Não atendida pelo Proarte', pctText: p.nota != null ? 'nota ' + p.nota : '',
+      servs: [
+        { label: 'Tipo', color: COR_NA, text: p.tipoPonte || p.material || '—' },
+        { label: 'Nota proposta', color: corN, text: nota + (p.notaSge != null ? ' · SGE ' + p.notaSge : '') },
+        med ? { label: 'Extensão × largura', color: COR_NA, text: med } : null,
+        p.codigo ? { label: 'Código SGE', color: COR_NA, text: p.codigo } : null,
+        p.municipio ? { label: 'Município', color: COR_NA, text: p.municipio } : null,
+        p.kmLocal != null ? { label: 'km local', color: COR_NA, text: fmtKm(p.kmLocal) + ' (' + (p.snv || 'travessia') + ', travessia de Altamira)' } : null
+      ].filter(Boolean) };
+  }
+  // da faixa "OAEs 230": a do 424 abre o ponto do contrato (no editor ou no mapa); a não atendida, o mapa do 424 com a camada
+  // ligada (sem p: só liga a camada, com todas)
+  function abrir230(p, noMapa) {
+    var c = ctComFora();
+    if (!c) return;
+    if (p && p._at) { abrirDaVisao(c, c.pontos.filter(function (x) { return x.id === p._at; })[0] || null, noMapa && podeMapa(c)); return; }
+    if (!podeMapa(c) || !(window.MapaSNV && window.L && window.SNV_BR230)) { toast('O mapa do ' + ctNome(c) + ' não está liberado para o seu acesso.', 5000); return; }
+    abrirDaVisao(c, null, true);
+    setTimeout(function () { if (mapa && mapa.extras) mapa.extras(p ? p.id : null); }, 220);
+  }
   // tela inicial: no modo Medições (o padrão), pontes e segmentos pela medição (verde = serviço medido ali, cinza = sem
   // medição); em Não conformidades, pela NC, como no mapa (pointInfo). nc: a NC do item nos dois modos (botão e cartões contam)
   function visaoInfo(p, modo) {
+    if (p._na || p._at) return info230(p);
     var dono = ownerOf(p), inf = pointInfo(p);
     if (!isOae(dono) && !isConserva(dono)) return inf;
     var n = oaeNec(p, dono), k = n.dn + n.exec;
@@ -4833,6 +4896,8 @@
     mexeu = true;
     // com um item aberto no desenho, o contrato dele vem primeiro e a foto já abre no ponto
     var l = ctsFoto(), it = visaoOn && visao && visao.sel ? visao.sel() : null;
+    // na faixa "OAEs 230", a OAE do 424 vale como o ponto dela no contrato; a não atendida não tem contrato
+    if (it && it.c.oaes230) { var c4 = ctComFora(); it = it.p._at && c4 ? { c: c4, p: c4.pontos.filter(function (x) { return x.id === it.p._at; })[0] || null } : null; }
     if (it && l.indexOf(it.c) < 0) it = null;
     escolheCt({ titulo: 'Foto de qual contrato?', sub: 'A foto vai para o contrato que você tocar. Dá para trocar depois, na tela da foto.', cs: l, ultimo: lsGet(FOTO_ULT_KEY),
       sugerir: it ? { c: it.c, rot: (it.p && (it.p.nome || it.p.codigo)) || '' } : null,
@@ -4884,7 +4949,9 @@
     mapa = window.MapaSNV({
       host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo, nomes: NOMES,
       saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, onPhoto: openFoto,
-      onOpen: abrirDoMapa, openLabel: function () { var c = active(); return 'Abrir em ' + (isConserva(c) ? 'Segmentos' : isOae(c) ? 'OAEs' : 'Pontos'); }
+      onOpen: abrirDoMapa, openLabel: function () { var c = active(); return 'Abrir em ' + (isConserva(c) ? 'Segmentos' : isOae(c) ? 'OAEs' : 'Pontos'); },
+      // no 424: as OAEs da BR-230 não atendidas pelo Proarte, que a pessoa liga e desliga no mapa
+      extras: function (c) { return c && c === ctComFora() && !isPublico() ? { pontos: oaesNa(c), info: info230, nome: 'Não atendidas', cor: COR_NA, corCt: COR_AT } : null; }
     });
     return mapa;
   }
@@ -4986,18 +5053,19 @@
   function ensureVisao() {
     if (visao || !window.VisaoGeral || !$('visaoHost')) return visao;
     visao = window.VisaoGeral({
-      host: $('visaoHost'), contratos: function () { return state.contracts; }, nomes: NOMES, publico: isPublico,
+      // mais a faixa "OAEs 230" (só da visão), depois do 424
+      host: $('visaoHost'), contratos: function () { var x = ctOaes230(); return x ? state.contracts.concat([x]) : state.contracts; }, nomes: NOMES, publico: isPublico,
       // sem código, o ponto vem só com o km: sem situação (cinza)
       info: function (p, modo) { return isPublico() ? { status: '', color: '#5C6661', servs: [], pctText: '' } : visaoInfo(p, modo); }, isOae: isOae,
       temMed: function () { return !isPublico() && temMedVisao('med'); }, temNC: function () { return !isPublico() && temMedVisao('acomp'); },
       // a última medição do contrato (cartão: "Conferido até a 48ª med. · ago/26"); quem não vê as medições: null
-      medContrato: function (c) { return isPublico() ? null : medDoContrato(c); },
+      medContrato: function (c) { return isPublico() || c.oaes230 ? null : medDoContrato(c); },
       temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
-      onAbrir: function (c, p) { abrirDaVisao(c, p, false); },
-      onMapa: function (c, p) { abrirDaVisao(c, p, podeMapa(c)); },
-      onFotos: function (c, p) { abrirGaleria({ cid: c.id, pid: p.id }); },
+      onAbrir: function (c, p) { if (c.oaes230) abrir230(p, false); else abrirDaVisao(c, p, false); },
+      onMapa: function (c, p) { if (c.oaes230) abrir230(p, true); else abrirDaVisao(c, p, podeMapa(c)); },
+      onFotos: function (c, p) { if (c.oaes230) { if (p._at) abrirGaleria({ cid: c.de, pid: p._at }); } else abrirGaleria({ cid: c.id, pid: p.id }); },
       // erro num evento da visão (clique, busca, arrasto): mostra o contrato
       onErro: function (e) { console.error(e); visaoOn = false; renderAll(); }
     });

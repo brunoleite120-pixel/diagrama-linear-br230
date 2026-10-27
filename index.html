@@ -237,6 +237,14 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-modo button:focus-visible{outline-offset:-4px}
 .vg-modo button[aria-pressed="true"]:focus-visible{outline-color:#fff}
 .vg-modo b{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--danificado);color:var(--danificado-ink);font-size:12px;line-height:17px;text-align:center}
+/* faixa "OAEs 230": só as não atendidas pelo Proarte ou todas (na caixa "Contratos" e no cartão da faixa) */
+.vg-m230{display:flex;flex-wrap:wrap;width:max-content;max-width:100%;margin:4px 0 6px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.vg-pnl .vg-m230{margin-left:28px}
+.vg-m230 button{min-height:32px;padding:3px 10px;border:0;border-right:1px solid var(--line);background:var(--panel);font-size:12.5px;font-weight:600}
+.vg-m230 button:last-child{border-right:0}
+.vg-m230 button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.vg-m230 button:focus-visible{outline-offset:-4px}
+@media (pointer:coarse){.vg-m230 button{min-height:40px}}
 .vg-mk.apag{opacity:.22}
 .vg-mk.apag.sel{opacity:.7}
 .vg-ct-nc{display:flex;align-items:center;gap:8px;min-height:32px;padding:0;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--accent);text-align:left;cursor:pointer}

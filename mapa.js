@@ -156,6 +156,14 @@
     '.mp-chip{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:32px;padding:4px 10px 4px 8px;border:1px solid var(--mp-line);border-radius:999px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:pointer;font-variant-numeric:tabular-nums}',
     '.mp-chip i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none;box-shadow:0 0 0 2px var(--mp-panel),0 0 0 3px var(--c)}',
     '.mp-chip small{font-weight:500;color:var(--mp-ink-3)}',
+    '.mp-chip.ex i{border-radius:2px;transform:rotate(45deg)}',
+    '.mp-exm i{display:block;width:12px;height:12px;margin:3px;background:var(--c);border:2px solid #FFFFFF;border-radius:2px;transform:rotate(45deg);box-shadow:0 1px 3px rgba(0,0,0,.45)}',
+    '.mp-camadas{display:flex;flex-wrap:wrap;gap:6px}',
+    '.mp-cam{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:4px 12px 4px 8px;border:1px solid var(--mp-line);border-radius:8px;background:var(--mp-panel);color:var(--mp-ink-2);font:inherit;font-size:12.5px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:pointer;font-variant-numeric:tabular-nums}',
+    '.mp-cam i{width:14px;height:14px;border-radius:3px;border:2px solid var(--c);box-sizing:border-box;flex:none}',
+    '.mp-cam[aria-pressed="true"]{color:var(--mp-ink)}',
+    '.mp-cam[aria-pressed="true"] i{background:var(--c);box-shadow:inset 0 0 0 2px var(--mp-panel)}',
+    '.mp-cam small{font-weight:500;color:var(--mp-ink-3)}',
     '.mp-card{background:var(--mp-panel);border:1px solid var(--mp-line);border-radius:10px;padding:10px 12px;box-shadow:0 2px 10px rgba(0,0,0,.18);max-width:420px}',
     '.mp-stamp{font-family:var(--font-mono,ui-monospace,Consolas,monospace);font-size:15px;font-weight:600;letter-spacing:.01em;font-variant-numeric:tabular-nums}',
     '.mp-sub{font-size:12px;color:var(--mp-ink-3);font-variant-numeric:tabular-nums}',
@@ -220,7 +228,7 @@
     '.mp-navbot b{display:block;font-size:19px;font-variant-numeric:tabular-nums}',
     '.mp-navbot small{display:block;font-size:12.5px;color:var(--mp-ink-3);font-variant-numeric:tabular-nums}',
     '.mp-btn.mp-fim{background:#B42318;border-color:#B42318;color:#FFFFFF}',
-    '.mp-navon .mp-left,.mp-navon .mp-chips,.mp-navon .mp-legend,.mp-navon .mp-live{display:none!important}',
+    '.mp-navon .mp-left,.mp-navon .mp-chips,.mp-navon .mp-camadas,.mp-navon .mp-legend,.mp-navon .mp-live{display:none!important}',
     '.mp-alvo{filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}',
     '.mp-car svg{width:34px;height:34px;transition:transform .4s}',
     '.mp-full{position:fixed;inset:0;z-index:2000;border:0;border-radius:0;min-height:0;height:auto}',
@@ -230,7 +238,7 @@
     '@media (max-width:560px){.mp-btn .t{display:none}.mp-btn{padding:5px 8px}.mp-title b{font-size:12.5px}.mp-legend{display:none}.mp-find label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.mp-find input{width:104px}}',
     /* dedo: botões, busca e pontos de baixo com 44 px; o nome do contrato quebra em 2 linhas em vez de cortar. Os pontos de baixo
        descem para a borda e os créditos e a escala sobem para cima deles (sem um cobrir o outro) */
-    '@media (pointer:coarse),(max-width:700px){.mp-bottom{bottom:8px}.mp-full .mp-bottom{bottom:calc(8px + env(safe-area-inset-bottom,0px))}.mp .leaflet-bottom.leaflet-right{margin-bottom:62px}.mp-btn{min-height:44px;min-width:44px;justify-content:center}.mp-find input{min-height:44px;font-size:16px}.mp-chip{min-height:44px;padding:4px 14px 4px 10px}.mp-title b{white-space:normal}}',
+    '@media (pointer:coarse),(max-width:700px){.mp-bottom{bottom:8px}.mp-full .mp-bottom{bottom:calc(8px + env(safe-area-inset-bottom,0px))}.mp .leaflet-bottom.leaflet-right{margin-bottom:62px}.mp-btn{min-height:44px;min-width:44px;justify-content:center}.mp-find input{min-height:44px;font-size:16px}.mp-chip,.mp-cam{min-height:44px;padding:4px 14px 4px 10px}.mp-title b{white-space:normal}}',
     /* celular deitado: pouca altura. Fica a tela cheia e um botão que mostra as outras ferramentas; o nome do contrato já está na barra do topo */
     '.mp-mais{display:none}',
     '@media (max-height:500px) and (orientation:landscape) and (max-width:1100px){.mp-mais{display:inline-flex}.mp-tools:not(.abertas)>*:not([data-mp="full"]):not(.mp-mais){display:none}.mp-title,.mp-legend{display:none}}',
@@ -388,6 +396,7 @@
           '<button class="mp-btn mp-centro" type="button" data-mp="follow" hidden>' + ICON.centro + 'Centralizar</button>' +
           '<div class="mp-card mp-navbot" hidden></div>' +
           '<div class="mp-legend"></div>' +
+          '<div class="mp-camadas" role="group" aria-label="OAEs no mapa" hidden></div>' +
           '<div class="mp-chips" role="list" aria-label="Pontos do contrato"></div>' +
         '</div>' +
       '</div>';
@@ -592,6 +601,9 @@
     // ---------------- camadas do contrato
     var ctLayer = Lf.layerGroup().addTo(map), ptsLayer = Lf.layerGroup().addTo(map), lblLayer = Lf.layerGroup(), kmLayer = Lf.layerGroup().addTo(map);
     var range = null, pts = [], lastCid = null, bounds = null, findMarker = null;
+    // OAEs a mais (opts.extras: no 424, as da BR-230 não atendidas pelo Proarte): "Proarte" e "Não atendidas" ligam e desligam
+    // cada grupo (as duas ligadas = todas). A escolha das não atendidas fica no aparelho; o Proarte volta ligado a cada contrato
+    var EX_KEY = 'diagrama-linear.mapa-oaes-fora', camadas = { ct: true, ex: lsGet(EX_KEY) !== '0' };
 
     function contractRange(c) {
       var a = c.kmIni, b = c.kmFim;
@@ -630,6 +642,23 @@
       if (opts.onPhoto) h += '<button class="mp-btn mp-pop-foto" type="button" data-mp="foto" data-pid="' + esc(p.id) + '">' + ICON.cam + 'Foto com carimbo</button>';
       if (opts.onOpen) h += '<button class="mp-btn mp-pop-abrir" type="button" data-mp="abrir" data-pid="' + esc(p.id) + '">' + esc(opts.openLabel ? opts.openLabel(p) : 'Abrir') + '</button>';
       h += '</div>';
+      return h;
+    }
+
+    // OAE a mais (não atendida pelo Proarte): posição pela coordenada da planilha (a travessia de Altamira fica fora do eixo);
+    // sem foto nem "Abrir" (não é ponto do contrato). Rota pelo eixo só com km na BR-230; senão, o Google Maps
+    function llExtra(p) { return typeof p.lat === 'number' && typeof p.lon === 'number' ? [p.lat, p.lon] : p.kmIni != null ? ref.at(p.kmIni) : null; }
+    function popupExtra(p, info) {
+      var ll = llExtra(p), km = p.kmIni != null ? 'km ' + km2(p.kmIni) : p.kmLocal != null ? 'km local ' + km2(p.kmLocal) : '-';
+      var h = '<div class="mp-pop" style="--c:' + info.color + '">' +
+        '<h3>' + esc(p.nome || 'OAE') + '<span class="tag">' + esc(info.status) + '</span></h3>' +
+        '<dl><div><dt>Posição</dt><dd>' + esc(km) + '</dd></div><div><dt>Extensão</dt><dd>' + (p.extensao ? nf(p.extensao, 1) + ' m' : '-') + '</dd></div>' +
+        '<div><dt>Largura</dt><dd>' + (p.largura ? nf(p.largura, 2) + ' m' : '-') + '</dd></div></dl>' +
+        '<p class="co">' + coordDnit(ll) + (p.municipio ? '<br>' + esc(p.municipio) + (p.snv ? ' · SNV ' + esc(p.snv) : '') : '') + '</p>';
+      if (info.servs && info.servs.length) h += '<ul>' + info.servs.map(function (s) { return '<li style="--c:' + s.color + '"><span>' + esc(s.label) + '</span><b>' + esc(s.text) + '</b></li>'; }).join('') + '</ul>';
+      if (p.obs) h += '<p class="co">' + esc(p.obs) + '</p>';
+      if (opts.gps && p.kmIni != null) h += '<div class="rotas">' + botaoRota(p.kmIni, p.nome, '', 'Rota até aqui') + '</div>';
+      h += '<div class="links"><a href="' + routeUrl(ll) + '" target="_blank" rel="noopener">' + (opts.gps ? 'Abrir no Google Maps' : 'Rota até aqui') + '</a></div></div>';
       return h;
     }
 
@@ -725,8 +754,13 @@
           .bindTooltip(esc(m.nome || 'Marco') + ' · km ' + km2(m.km), { direction: 'top', offset: [0, -6], className: 'mp-lbl' })
           .addTo(ctLayer);
       });
+      // as OAEs a mais deste contrato (só no 424) e o que está ligado
+      var ex = opts.extras ? opts.extras(c) : null;
+      if (!ex || !ex.pontos.length) ex = null;
+      if (c.id !== lastCid) camadas.ct = true;
+      var verCt = !ex || camadas.ct;
       // conservação: os segmentos não entram no mapa até o passo 2.4 (só a linha do contrato e os marcos)
-      var sorted = (c.tipo === 'conserva' ? [] : c.pontos).filter(function (p) { return p.kmIni != null; }).sort(function (a, b) { return a.kmIni - b.kmIni; });
+      var sorted = (c.tipo === 'conserva' || !verCt ? [] : c.pontos).filter(function (p) { return p.kmIni != null; }).sort(function (a, b) { return a.kmIni - b.kmIni; });
       sorted.forEach(function (p) {
         var info = opts.pointInfo(p), kf = p.kmFim != null ? p.kmFim : p.kmIni;
         var line = ref.slice(p.kmIni, kf), mid = ref.at((p.kmIni + kf) / 2);
@@ -752,6 +786,23 @@
           .addTo(lblLayer);
         pts.push({ p: p, info: info, group: group, kf: kf });
       });
+      if (ex && camadas.ex) ex.pontos.forEach(function (p) {
+        var ll = llExtra(p);
+        if (!ll) return;
+        var info = ex.info(p), group = Lf.featureGroup().addTo(ptsLayer);
+        // losango: a OAE não é do contrato (as do contrato são trechos na cor da situação)
+        Lf.marker(ll, { pane: 'mpPts', keyboard: false, icon: Lf.divIcon({ className: 'mp-exm', html: '<i style="--c:' + info.color + '"></i>', iconSize: [18, 18] }) })
+          .bindTooltip(esc(p.nome) + ' · ' + esc(info.status), { direction: 'top', offset: [0, -8], className: 'mp-lbl' })
+          .addTo(group);
+        group.bindPopup(function () { return popupExtra(p, ex.info(p)); }, { maxWidth: popW(), autoPanPaddingTopLeft: [12, 116], autoPanPaddingBottomRight: [64, 70] });
+        Lf.marker(ll, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
+          .bindTooltip(esc(p.nome), { permanent: true, direction: 'top', offset: [0, -10], className: 'mp-lbl' })
+          .addTo(lblLayer);
+        pts.push({ p: p, info: info, group: group, kf: p.kmFim != null ? p.kmFim : p.kmIni, ex: true });
+      });
+      // as duas listas juntas, pelo km (a travessia de Altamira, sem km no eixo, pelo km de onde ela sai)
+      if (ex) pts.sort(function (a, b) { return kmOrd(a) - kmOrd(b); });
+      renderCamadas(ex, c);
       renderChips();
       renderLegend();
       if (c.id !== lastCid) {
@@ -766,9 +817,21 @@
       pedeArrumar();
     }
 
+    function kmOrd(x) { return x.p.kmIni != null ? x.p.kmIni : x.p.kmDesenho != null ? x.p.kmDesenho : 0; }
+    // [Proarte · 36] [Não atendidas · 26]: só no contrato com OAEs a mais
+    function renderCamadas(ex, c) {
+      var el = q('.mp-camadas');
+      el.hidden = !ex;
+      if (!ex) { el.innerHTML = ''; return; }
+      var nCt = c.pontos.filter(function (p) { return p.kmIni != null; }).length;
+      el.innerHTML = [['ct', nomes.nome(c) || 'Contrato', nCt, ex.corCt || '#2B5797'], ['ex', ex.nome || 'Não atendidas', ex.pontos.length, ex.cor || '#7A3E9D']].map(function (k) {
+        return '<button class="mp-cam" type="button" data-mp="cam" data-k="' + k[0] + '" aria-pressed="' + !!camadas[k[0]] + '" style="--c:' + k[3] + '"><i></i>' + esc(k[1]) + ' <small>' + k[2] + '</small></button>';
+      }).join('');
+    }
     function renderChips() {
       q('.mp-chips').innerHTML = pts.map(function (x, i) {
-        return '<button class="mp-chip" type="button" role="listitem" data-i="' + i + '" style="--c:' + x.info.color + '" title="' + esc(x.p.nome + ' · km ' + km2(x.p.kmIni) + ' a ' + km2(x.kf)) + '"><i></i>' + esc(x.p.nome) + ' <small>' + km2(x.p.kmIni) + '</small></button>';
+        var km = x.p.kmIni != null ? km2(x.p.kmIni) : x.p.kmLocal != null ? 'local ' + km2(x.p.kmLocal) : '';
+        return '<button class="mp-chip' + (x.ex ? ' ex' : '') + '" type="button" role="listitem" data-i="' + i + '" style="--c:' + x.info.color + '" title="' + esc(x.p.nome + (x.ex ? ' · ' + x.info.status : ' · km ' + km2(x.p.kmIni) + ' a ' + km2(x.kf))) + '"><i></i>' + esc(x.p.nome) + ' <small>' + km + '</small></button>';
       }).join('');
     }
     function renderLegend() {
@@ -837,6 +900,7 @@
       });
       out.push('<Folder><name>' + xml(itensKml) + '</name>');
       pts.forEach(function (x) {
+        if (x.ex) return;
         var p = x.p, st = '#' + styles[x.info.color], a = ref.at(p.kmIni), b = ref.at(x.kf);
         var desc = 'km ' + km2(p.kmIni) + ' a ' + km2(x.kf) + ' (' + nf(Math.max(0, x.kf - p.kmIni), 2) + ' km)\n' +
           x.info.status + (x.info.pctText ? ' · ' + x.info.pctText : '') + '\nInício ' + coordDnit(a) + '\nFim ' + coordDnit(b) +
@@ -846,6 +910,17 @@
         out.push('<Placemark><name>' + xml(p.nome + ' fim · km ' + km2(x.kf)) + '</name><styleUrl>' + st + '</styleUrl><Point><coordinates>' + kmlCoords([b]) + '</coordinates></Point></Placemark>');
       });
       out.push('</Folder>');
+      var exs = pts.filter(function (x) { return x.ex; });
+      if (exs.length) {
+        out.push('<Folder><name>' + xml(exs[0].info.status) + '</name>');
+        exs.forEach(function (x) {
+          var p = x.p, ll = llExtra(p);
+          var desc = (p.kmIni != null ? 'km ' + km2(p.kmIni) : p.kmLocal != null ? 'km local ' + km2(p.kmLocal) + (p.snv ? ' (' + p.snv + ')' : '') : '') + '\n' + x.info.status + '\n' + coordDnit(ll) +
+            (x.info.servs || []).map(function (s) { return '\n' + s.label + ': ' + s.text; }).join('') + (p.obs ? '\n' + p.obs : '');
+          out.push('<Placemark><name>' + xml(p.nome) + '</name><description>' + xml(desc) + '</description><styleUrl>#' + styles[x.info.color] + '</styleUrl><Point><coordinates>' + kmlCoords([ll]) + '</coordinates></Point></Placemark>');
+        });
+        out.push('</Folder>');
+      }
       if (range) {
         out.push('<Folder><name>' + xml(rodovia + ' (eixo SNV)') + '</name><Placemark><name>' + xml(rodovia + ' · km ' + km2(range[0]) + ' a ' + km2(range[1])) + '</name><styleUrl>#rodovia</styleUrl><LineString><tessellate>1</tessellate><coordinates>' + kmlCoords(ref.slice(range[0], range[1])) + '</coordinates></LineString></Placemark></Folder>');
         out.push('<Folder><name>Marcos de km (SNV)</name>');
@@ -1457,6 +1532,14 @@
       else if (act === 'kml') exportKml();
       else if (act === 'foto') { if (opts.onPhoto) opts.onPhoto(b.dataset.pid || ''); }
       else if (act === 'abrir') { if (opts.onOpen) { map.closePopup(); opts.onOpen(b.dataset.pid || ''); } }
+      // Proarte / Não atendidas: desligar o único grupo ligado liga o outro (o mapa nunca fica sem OAE nenhuma)
+      else if (act === 'cam') {
+        var k = b.dataset.k, o2 = k === 'ct' ? 'ex' : 'ct';
+        camadas[k] = !camadas[k];
+        if (!camadas[k] && !camadas[o2]) camadas[o2] = true;
+        lsSet(EX_KEY, camadas.ex ? '1' : '0');
+        map.closePopup(); render();
+      }
       else if (act === 'gps') {
         if (!opts.gps) { if (q('.mp-live').hidden) noGpsCard(); else liveCard(''); setGpsBtn(); }
         else if (live.watch) stopGps(); else startGps();
@@ -1481,6 +1564,12 @@
       buildKml: buildKml,
       // abre o ponto pelo id (vindo da visão geral)
       foco: function (id) { for (var j = 0; j < pts.length; j++) if (pts[j].p.id === id) { focusPoint(j); return true; } return false; },
+      // liga as OAEs a mais (da tela inicial, faixa "OAEs 230") e, com id, abre a escolhida
+      extras: function (id) {
+        camadas.ex = true; lsSet(EX_KEY, '1'); render();
+        for (var j = 0; id && j < pts.length; j++) if (pts[j].ex && pts[j].p.id === id) { focusPoint(j); return true; }
+        return false;
+      },
       ref: ref,
       map: map
         };
