@@ -363,7 +363,17 @@
       Lf.Tooltip.prototype._mpGira = true;
     }
     injectStyle();
-    var ref = Ref(snv), host = opts.host, rodovia = snv.rodovia || 'BR-230/PA';
+    var eixoRef = Ref(snv), ref = eixoRef, host = opts.host, rodovia = snv.rodovia || 'BR-230/PA';
+    // contrato com km próprio (c.kmLocal, o 731 na travessia urbana de Altamira): o km e a linha vêm do segmento c.ramal
+    // (snv-ramais.js), por dentro da cidade, e não do eixo, que contorna Altamira. ref passa a ser o do contrato aberto
+    var ramais = opts.ramais || window.SNV_RAMAIS || {}, ramalRefs = {}, ramalAtivo = null;
+    function refDe(c) {
+      var r = c && c.kmLocal && c.ramal ? ramais[c.ramal] : null;
+      if (!r || !r.linha || r.linha.length < 2) return eixoRef;
+      return ramalRefs[c.ramal] || (ramalRefs[c.ramal] = Ref(r));
+    }
+    // "BR 230/PA · km local 3,71" no contrato de km próprio
+    function stampL(loc) { var s = stamp(rodovia, loc); return ramalAtivo ? s.replace(/^(\S+ \S+) - /, '$1 · km local ') : s; }
     var notify = opts.notify || function () {}, nomes = opts.nomes || nomesPadrao();
     // "Pontos Críticos 314 · CT 02 00314/2026 · BR-230/PA"
     function titulo(c) { return [nomes.nome(c), nomes.numeroCT(c), c.rodovia || rodovia].filter(Boolean).join(' · '); }
@@ -584,6 +594,10 @@
     // ---------------- eixo do SNV inteiro (contexto) e localidades dos segmentos
     var full = snv.linha.map(function (v) { return [v[1], v[0]]; });
     Lf.polyline(full, { pane: 'mpRoad', className: 'mp-ctx', weight: 2, interactive: false }).addTo(map);
+    Object.keys(ramais).forEach(function (k) {
+      var r = ramais[k];
+      if (r && r.linha && r.linha.length > 1) Lf.polyline(r.linha.map(function (v) { return [v[1], v[0]]; }), { pane: 'mpRoad', className: 'mp-ctx', weight: 2, interactive: false }).addTo(map);
+    });
     var locLayer = Lf.layerGroup().addTo(map);
     var seen = {};
     snv.segmentos.forEach(function (s, i) {
@@ -736,11 +750,12 @@
       var c = opts.getContract();
       ctLayer.clearLayers(); ptsLayer.clearLayers(); lblLayer.clearLayers();
       pts = [];
+      ref = refDe(c); ramalAtivo = ref === eixoRef ? null : c.ramal;
       if (!c) { range = null; drawKm(); q('.mp-t1').textContent = 'Sem contrato'; q('.mp-t2').textContent = ''; q('.mp-chips').innerHTML = ''; return; }
       range = contractRange(c);
       q('.mp-t1').textContent = titulo(c);
       q('.mp-t2').textContent = range
-        ? 'km ' + km2(range[0]) + ' a ' + km2(range[1]) + ' · SNV ' + snv.versao
+        ? 'km ' + (ramalAtivo ? 'local ' : '') + km2(range[0]) + ' a ' + km2(range[1]) + (ramalAtivo ? ' · ' + ramalAtivo : '') + ' · SNV ' + snv.versao
         : c.kmLocal ? 'km próprio (' + (c.ramal || 'ramal') + '): o mapa ainda não desenha esta travessia' : 'Sem km cadastrado';
       if (range) {
         var line = ref.slice(range[0], range[1]);
@@ -922,7 +937,7 @@
         out.push('</Folder>');
       }
       if (range) {
-        out.push('<Folder><name>' + xml(rodovia + ' (eixo SNV)') + '</name><Placemark><name>' + xml(rodovia + ' · km ' + km2(range[0]) + ' a ' + km2(range[1])) + '</name><styleUrl>#rodovia</styleUrl><LineString><tessellate>1</tessellate><coordinates>' + kmlCoords(ref.slice(range[0], range[1])) + '</coordinates></LineString></Placemark></Folder>');
+        out.push('<Folder><name>' + xml(rodovia + (ramalAtivo ? ' (travessia urbana, SNV ' + ramalAtivo + ')' : ' (eixo SNV)')) + '</name><Placemark><name>' + xml(rodovia + ' · km ' + (ramalAtivo ? 'local ' : '') + km2(range[0]) + ' a ' + km2(range[1])) + '</name><styleUrl>#rodovia</styleUrl><LineString><tessellate>1</tessellate><coordinates>' + kmlCoords(ref.slice(range[0], range[1])) + '</coordinates></LineString></Placemark></Folder>');
         out.push('<Folder><name>Marcos de km (SNV)</name>');
         for (var k = Math.ceil(range[0] / 5) * 5; k <= range[1]; k += 5) {
           out.push('<Placemark><name>km ' + nf(k, 0) + '</name><styleUrl>#km</styleUrl><Point><coordinates>' + kmlCoords([ref.at(k)]) + '</coordinates></Point></Placemark>');
@@ -1135,7 +1150,7 @@
       if (loc.dist > 2000) {
         h += '<div class="mp-stamp">Fora da ' + esc(rodovia) + '</div><div class="mp-sub">' + nf(loc.dist / 1000, 1) + ' km do eixo · ponto mais próximo no km ' + km2(loc.km) + '</div>';
       } else {
-        h += '<div class="mp-stamp">' + esc(stamp(rodovia, loc)) + '</div>';
+        h += '<div class="mp-stamp">' + esc(stampL(loc)) + '</div>';
         h += '<div class="mp-sub">' + coordDnit(live.ll) + (live.speed != null && isFinite(live.speed) ? ' · ' + Math.round(live.speed * 3.6) + ' km/h' : '') + (live.accuracy ? ' · precisão ' + Math.round(live.accuracy) + ' m' : '') + '</div>';
         var dir = direction(), here = null, ahead = null, behind = null;
         pts.forEach(function (x) {
@@ -1175,6 +1190,7 @@
       if (/^IN[ÍI]CIO TRAVESSIA/.test(s.de || '')) travessias.push({ km: s.kmIni, n: (/RIO ([^(]+)/.exec(s.de) || [0, ''])[1].trim() });
     });
     function sentido(kmA, kmB) {
+      if (ramalAtivo) return kmB >= kmA ? 'o acesso oeste de Altamira' : 'o acesso leste de Altamira';   // travessia: km crescente para oeste
       var up = kmB >= kmA, c = cidades.filter(function (x) { return up ? x.km > kmA + 0.5 : x.km < kmA - 0.5; }).sort(function (a, b) { return up ? a.km - b.km : b.km - a.km; })[0];
       return c ? c.n : (up ? 'km crescente' : 'km decrescente');
     }
@@ -1386,7 +1402,7 @@
       bn.title = norteCima ? 'Norte para cima (toque para a direção do carro)' : 'Direção do carro para cima (toque para norte)'; bn.setAttribute('aria-label', bn.title);
       if (n.chegou) {
         top.innerHTML = NAV_ICO.chegada + '<div class="mp-nav-txt"><b>Você chegou</b><span>' + esc(n.alvo.nome) + '</span></div>';
-        bot.innerHTML = (live.loc && live.loc.dist < 2000 ? '<div class="mp-stamp">' + esc(stamp(rodovia, live.loc)) + '</div>' : '') +
+        bot.innerHTML = (live.loc && live.loc.dist < 2000 ? '<div class="mp-stamp">' + esc(stampL(live.loc)) + '</div>' : '') +
           '<div class="mp-row">' + (opts.onPhoto ? '<button class="mp-btn" type="button" data-mp="foto" data-pid="' + esc(n.alvo.pid || '') + '">' + ICON.cam + 'Foto com carimbo</button>' : '') +
           '<button class="mp-btn mp-fim" type="button" data-mp="nav-fim">Encerrar</button></div>';
         return;
