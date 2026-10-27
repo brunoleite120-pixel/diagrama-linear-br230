@@ -186,7 +186,7 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-fora{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:-4px;font-size:12.5px;color:var(--ink-2)}
 .vg-fora .btn{color:var(--accent)}
 .vg-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
-.vg-ct{display:grid;gap:7px;min-width:0;align-content:start;border-top:3px solid var(--vg-t,var(--line))}
+.vg-ct{display:grid;grid-template-columns:minmax(0,1fr);gap:7px;min-width:0;align-content:start;border-top:3px solid var(--vg-t,var(--line))}
 .vg-ct-h{display:flex;flex-direction:column;gap:1px;min-width:0}
 .vg-ct-h h3{margin:0;font-size:15px;font-weight:650}
 .vg-ct-h span{font-size:12px;color:var(--ink-3)}
@@ -238,9 +238,9 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-modo button[aria-pressed="true"]:focus-visible{outline-color:#fff}
 .vg-modo b{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--danificado);color:var(--danificado-ink);font-size:12px;line-height:17px;text-align:center}
 /* faixa "OAEs 230": só as não atendidas pelo Proarte ou todas (na caixa "Contratos" e no cartão da faixa) */
-.vg-m230{display:flex;flex-wrap:wrap;width:max-content;max-width:100%;margin:4px 0 6px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.vg-m230{display:flex;width:max-content;max-width:100%;margin:4px 0 6px;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .vg-pnl .vg-m230{margin-left:28px}
-.vg-m230 button{min-height:32px;padding:3px 10px;border:0;border-right:1px solid var(--line);background:var(--panel);font-size:12.5px;font-weight:600}
+.vg-m230 button{flex:1 1 auto;min-width:0;min-height:32px;padding:3px 10px;border:0;border-right:1px solid var(--line);background:var(--panel);font-size:12.5px;font-weight:600}
 .vg-m230 button:last-child{border-right:0}
 .vg-m230 button[aria-pressed="true"]{background:var(--ink);color:#fff}
 .vg-m230 button:focus-visible{outline-offset:-4px}
