@@ -4896,8 +4896,12 @@
     mexeu = true;
     // com um item aberto no desenho, o contrato dele vem primeiro e a foto já abre no ponto
     var l = ctsFoto(), it = visaoOn && visao && visao.sel ? visao.sel() : null;
-    // na faixa "OAEs 230", a OAE do 424 vale como o ponto dela no contrato; a não atendida não tem contrato
-    if (it && it.c.oaes230) { var c4 = ctComFora(); it = it.p._at && c4 ? { c: c4, p: c4.pontos.filter(function (x) { return x.id === it.p._at; })[0] || null } : null; }
+    // na faixa "OAEs 230", a OAE do 424 vale como o ponto dela no contrato; a não atendida vai para o 424 como OAE não atendida
+    // (a foto sai sem o contrato e sem a executora na legenda: foto.js)
+    if (it && it.c.oaes230) {
+      var c4 = ctComFora(), p4 = it.p;
+      it = c4 ? { c: c4, p: (p4._at ? c4.pontos.filter(function (x) { return x.id === p4._at; }) : (c4.oaesFora || []).filter(function (x) { return x.id === p4.id; }))[0] || null } : null;
+    }
     if (it && l.indexOf(it.c) < 0) it = null;
     escolheCt({ titulo: 'Foto de qual contrato?', sub: 'A foto vai para o contrato que você tocar. Dá para trocar depois, na tela da foto.', cs: l, ultimo: lsGet(FOTO_ULT_KEY),
       sugerir: it ? { c: it.c, rot: (it.p && (it.p.nome || it.p.codigo)) || '' } : null,
@@ -5065,7 +5069,7 @@
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
       onAbrir: function (c, p) { if (c.oaes230) abrir230(p, false); else abrirDaVisao(c, p, false); },
       onMapa: function (c, p) { if (c.oaes230) abrir230(p, true); else abrirDaVisao(c, p, podeMapa(c)); },
-      onFotos: function (c, p) { if (c.oaes230) { if (p._at) abrirGaleria({ cid: c.de, pid: p._at }); } else abrirGaleria({ cid: c.id, pid: p.id }); },
+      onFotos: function (c, p) { if (c.oaes230) abrirGaleria({ cid: c.de, pid: p._at || p.id }); else abrirGaleria({ cid: c.id, pid: p.id }); },
       // erro num evento da visão (clique, busca, arrasto): mostra o contrato
       onErro: function (e) { console.error(e); visaoOn = false; renderAll(); }
     });

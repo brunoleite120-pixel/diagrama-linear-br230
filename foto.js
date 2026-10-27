@@ -85,11 +85,22 @@
   }
   // pontos críticos: a foto só é do contrato até 1 km de algum ponto (o 267 vai do km 613,50 ao 744,98 com 3 pontos; no meio
   // ficam a Proarte e a conservação). Sem ponto com km, vale o trecho do contrato (decidido em 22/10/2026).
-  // Proarte: só até 500 m de uma OAE (o 424 vai do km 301 ao 999 e era sugerido em toda a rodovia; pedido de 27/10/2026)
+  // Proarte: só até 500 m de uma OAE (o 424 vai do km 301 ao 999 e era sugerido em toda a rodovia; pedido de 27/10/2026),
+  // contando também as OAEs da BR-230 não atendidas pelo Proarte
   var PC_RAIO = 1, OAE_RAIO = 0.5;
+  // OAEs não atendidas pelo Proarte (c.oaesFora, só no 424), marcadas com _na: contam nos 500 m e entram como ponto da foto;
+  // a legenda delas sai sem o contrato e sem a executora (decisão de 27/10/2026). As da travessia de Altamira, só com km
+  // local, não têm km no eixo e ficam de fora da conta
+  var foraMemo = { src: null, out: [] };
+  function oaesFora(c) {
+    var src = c && c.tipo === 'oae' && Array.isArray(c.oaesFora) ? c.oaesFora : null;
+    if (!src) return [];
+    if (foraMemo.src !== src) foraMemo = { src: src, out: src.map(function (p) { var q = {}; for (var k in p) q[k] = p[k]; q._na = true; return q; }) };
+    return foraMemo.out;
+  }
   function pcMaisPerto(c, km) {
     var best = null;
-    (c.pontos || []).forEach(function (p) {
+    (c.pontos || []).concat(oaesFora(c)).forEach(function (p) {
       if (p.kmIni == null) return;
       var a = Math.min(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni), b = Math.max(p.kmIni, p.kmFim != null ? p.kmFim : p.kmIni);
       var d = km < a ? a - km : km > b ? km - b : 0;
@@ -899,6 +910,7 @@
       if (k === 'coord' && !st.ll && st.km == null) return 'sem local nesta foto';
       if (k === 'ponto' && !findPoint(st.pid)) return semPontos() ? 'conservação: sem ponto' : 'nenhum ponto nesta foto';
       if (k === 'desc' && !(st.desc || '').trim()) return 'vazia nesta foto';
+      if ((k === 'contrato' || k === 'executora') && (findPoint(st.pid) || {})._na) return 'OAE não atendida pelo Proarte';
       if (k === 'executora' && !(c && c.executora)) return 'o contrato não tem';
       if (k === 'supervisora' && !(c && c.supervisora)) return 'o contrato não tem';
       return '';
@@ -1206,7 +1218,7 @@
     // as funções de desenho e de texto leem `st`: no lote, cada foto passa por aqui
     function withItem(it, fn) { var old = st; st = it; try { return fn(); } finally { st = old; } }
     // pontos do contrato que a foto pode ter; a conservação fica "sem ponto" até o passo 2.5 (os segmentos não entram na foto)
-    function pontosDe(c) { return !c || c.tipo === 'conserva' ? [] : c.pontos || []; }
+    function pontosDe(c) { return !c || c.tipo === 'conserva' ? [] : (c.pontos || []).concat(oaesFora(c)); }
     function findPoint(id) { var c = contract(); return c && id ? pontosDe(c).find(function (p) { return p.id === id; }) || null : null; }
     function identify(km) {
       var c = contract(), best = null;
@@ -1260,7 +1272,7 @@
       list.forEach(function (p) {
         var b = p.kmFim != null ? p.kmFim : p.kmIni, d = st.km == null ? null : st.km < p.kmIni ? p.kmIni - st.km : st.km > b ? st.km - b : 0;
         var dist = d == null ? '' : d === 0 ? ' · aqui' : ' · a ' + (d < 1 ? Math.round(d * 1000) + ' m' : nf(d, 1) + ' km');
-        h += '<option value="' + esc(p.id) + '"' + (p.id === st.pid ? ' selected' : '') + '>' + esc(p.nome) + ' (km ' + nf(p.kmIni, 2) + ')' + dist + '</option>';
+        h += '<option value="' + esc(p.id) + '"' + (p.id === st.pid ? ' selected' : '') + '>' + esc(p.nome) + ' (km ' + nf(p.kmIni, 2) + ')' + (p._na ? ' · não atendida' : '') + dist + '</option>';
       });
       return h;
     }
@@ -1435,9 +1447,12 @@
       if (C.rodkm) out.push(st.km != null ? kmLine(st.km, st.side, st.dist, C.lado) : rodovia().replace(/^BR-/, 'BR '));
       if (C.coord && ll) out.push(coordTxt(ll));
       if (C.data && st.date) out.push(dateTxt(st.date));
-      if (C.ponto && p) out.push('Ponto ' + p.nome + ' - km ' + nf(p.kmIni, 2) + (p.kmFim != null ? ' a ' + nf(p.kmFim, 2) : ''));
-      if (C.contrato && c) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
-      if (C.executora && c && c.executora) out.push('Executora: ' + c.executora);
+      // OAE não atendida pelo Proarte: a legenda sai sem o contrato e sem a executora (nenhuma empresa atende a ponte)
+      var na = !!(p && p._na);
+      if (C.ponto && p) out.push(na ? 'OAE não atendida pelo Proarte: ' + p.nome + ' - km ' + nf(p.kmIni, 2)
+        : 'Ponto ' + p.nome + ' - km ' + nf(p.kmIni, 2) + (p.kmFim != null ? ' a ' + nf(p.kmFim, 2) : ''));
+      if (C.contrato && c && !na) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
+      if (C.executora && c && c.executora && !na) out.push('Executora: ' + c.executora);
       if (C.supervisora && c && c.supervisora) out.push('Supervisão: ' + c.supervisora);
       var desc = (st.desc || '').trim() || (st.bi != null && batch ? batch.common.trim() : '');
       if (C.desc && desc) out.push({ wrap: desc });

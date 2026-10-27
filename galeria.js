@@ -634,8 +634,9 @@
   // ---------------------------------------------------------------- pontos e trecho do contrato (km)
   // conservação: vazio até o passo 2.5 (os segmentos não entram na sugestão pelo km, na lista do "Contrato e ponto" nem no trecho,
   // que vem do km do contrato)
+  // no 424, também as OAEs da BR-230 não atendidas pelo Proarte (c.oaesFora), que a tela Foto oferece como ponto
   function pontosDe(c) {
-    return (c && c.tipo === 'conserva' ? [] : (c && c.pontos) || []).slice().sort(function (a, b) {
+    return (c && c.tipo === 'conserva' ? [] : ((c && c.pontos) || []).concat(c && c.tipo === 'oae' && Array.isArray(c.oaesFora) ? c.oaesFora : [])).slice().sort(function (a, b) {
       var ka = a.kmIni != null ? a.kmIni : 1e9, kb = b.kmIni != null ? b.kmIni : 1e9;
       return ka - kb || String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
     });
@@ -2406,7 +2407,7 @@
     function pastasDaFoto(it) {
       var c = contratos().find(function (x) { return x.id === it.cid; }), pa = c ? nomesCt.pasta(c) : '';
       if (!pa) return null;
-      var p = it.pid ? (c.pontos || []).find(function (x) { return x.id === it.pid; }) : null;
+      var p = it.pid ? pontosDe(c).find(function (x) { return x.id === it.pid; }) : null;
       return [pa, it.pid ? (p && p.nome) || it.pnome || 'Ponto sem nome' : 'Sem ponto'];
     }
     // ---------------------------------------------------------------- contrato e ponto da foto
@@ -2543,7 +2544,7 @@
     function salvarMover() {
       if (!mv || mv.salvando) return;
       var cid = q('#glMvC').value, pid = q('#glMvP').value || null, ls = mv.ls;
-      var c = contratos().find(function (x) { return x.id === cid; }), p = pid ? (c.pontos || []).find(function (x) { return x.id === pid; }) : null;
+      var c = contratos().find(function (x) { return x.id === cid; }), p = pid ? pontosDe(c).find(function (x) { return x.id === pid; }) : null;
       var lote = nomesCt.formal(c) || 'Contrato';   // o texto gravado com a foto: Lote e nº do CT
       var meta = { cid: cid, pid: pid, pnome: p ? p.nome || null : null, lote: lote };
       // como o foto.js monta: pasta pelo nº do contrato; a antiga (o Lote) vai junto para o script renomear a da pessoa

@@ -437,7 +437,7 @@
         var servs = (inf.servs || []).map(function (s) {
           return '<div class="vg-sv"><span>' + esc(s.label) + '</span><b><i style="background:' + esc(s.color) + '"></i>' + esc(s.text) + '</b></div>';
         }).join('');
-        // faixa "OAEs 230": a do 424 abre no contrato (e tem fotos); a não atendida só vai ao mapa
+        // faixa "OAEs 230": a do 424 abre no contrato; a não atendida vai ao mapa. As duas têm fotos (a não atendida, no 424)
         var c230 = !!x.c.oaes230, do424 = c230 && !!x.p._at;
         h += '<aside class="vg-box vg-card" aria-label="Ponto escolhido" data-key="' + esc(x.key) + '"><div class="vg-card-top"><div><small>' + esc(c230 ? 'OAEs 230 · ' + (do424 ? 'Proarte 424' : 'não atendida pelo Proarte') : N.completo(x.c)) + '</small>' +
           '<h3>' + esc(nomeS) + '</h3><span>' + kmS + '</span></div><button type="button" class="vg-x" data-vg="fechar" aria-label="Fechar">×</button></div>' +
@@ -446,7 +446,7 @@
             (x.p.obs ? '<p class="vg-obs">' + esc(x.p.obs) + '</p>' : '') + '</details>' : '') +
           '<div class="vg-acoes">' + (c230 && !do424 ? '' : '<button type="button" class="btn primary" data-vg="abrir">' + (pub ? 'Entrar para ver' : do424 ? 'Abrir no Proarte 424' : 'Abrir no contrato') + '</button>') +
           (!x.c.kmLocal && (typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn' + (c230 && !do424 ? ' primary' : '') + '" data-vg="mapa">Ver no mapa</button>' : '') +
-          (o.temFotos && o.temFotos() && (!c230 || do424) ? '<button type="button" class="btn" data-vg="fotos">Fotos</button>' : '') + '</div></aside>';
+          (o.temFotos && o.temFotos() ? '<button type="button" class="btn" data-vg="fotos">Fotos</button>' : '') + '</div></aside>';
       }
       h += '</div>';
 
