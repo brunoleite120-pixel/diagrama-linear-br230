@@ -132,9 +132,11 @@
     var FILTRO_KEY = 'diagrama-linear-visao-contratos-' + ((window.AMBIENTE && window.AMBIENTE.nome) || 'oficial');
     var filtro = lerFiltro(FILTRO_KEY), selM = mapaDe(filtro.sel), vistosM = mapaDe(filtro.vistos);
     // modo das pontes e da conservação: 'med' (Medições, o padrão) ou 'nc' (Não conformidades: só as NC acesas). Quem não
-    // vê as medições fica no 'nc'. Os pontos críticos não mudam
+    // vê as medições fica no 'nc'. Os pontos críticos não mudam. A tela sempre abre em Medições (combinado em 26/10/2026):
+    // o 'nc' vale só nesta aba (sessionStorage); guardado no aparelho, prendia a tela em "sem NC", toda cinza (28/10/2026)
     var MODO_KEY = 'diagrama-linear-visao-modo';
-    st.modo = (function () { try { return localStorage.getItem(MODO_KEY) === 'nc' ? 'nc' : 'med'; } catch (e) { return 'med'; } })();
+    try { localStorage.removeItem(MODO_KEY); } catch (e) { /* sem armazenamento */ }
+    st.modo = (function () { try { return sessionStorage.getItem(MODO_KEY) === 'nc' ? 'nc' : 'med'; } catch (e) { return 'med'; } })();
     // o botão só aparece para quem tem as duas partes: só as medições fica em 'med', só o acompanhamento em 'nc'
     function temMed() { return !!(o.temMed && o.temMed()); }
     function temNC() { return o.temNC ? !!o.temNC() : !(o.publico && o.publico()); }
@@ -797,7 +799,7 @@
       else if (a === 'dir') ir(st.k0 + R * 0.4, st.k1 + R * 0.4);
       else if (a === 'chip') { st.off[b.dataset.fk] = !st.off[b.dataset.fk]; render(); }
       // Medições | Não conformidades; do cartão de um contrato, o desenho sobe para a tela
-      else if (a === 'modo') { st.modo = b.dataset.m === 'nc' ? 'nc' : 'med'; try { localStorage.setItem(MODO_KEY, st.modo); } catch (e) { /* vale só nesta visita */ } render(); if (baixo) verDesenho(); }
+      else if (a === 'modo') { st.modo = b.dataset.m === 'nc' ? 'nc' : 'med'; try { sessionStorage.setItem(MODO_KEY, st.modo); } catch (e) { /* vale só nesta visita */ } render(); if (baixo) verDesenho(); }
       // "Tudo": limpa a escolha e fecha a caixa; sem escolha (só com zoom), enquadra tudo. "Contratos" abre ou fecha a
       // caixa; "Mostrar todos" (na caixa e embaixo dos cartões) limpa a escolha. As marcações vêm pelo 'change'
       else if (a === 'ftudo') { st.ct = false; if (filtro.sel) mudaFiltro(null); else { st.k0 = null; render(); } }
