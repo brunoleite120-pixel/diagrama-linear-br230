@@ -209,20 +209,23 @@
     function copia230(x, d) { return !!(x.c.oaes230 && x.p._at && (d.dentro[x.c.de] || !x.on)); }
     // nomes em cima das marcas de uma raia, sem um cobrir o outro: o escolhido primeiro; os outros, da esquerda para a
     // direita, no centro da marca ou empurrados até quase a ponta do nome (o nome continua em cima da marca). Antes só
-    // cabia centrado, e dois nomes vizinhos a 60 px (Pilão e Para Pedro, 1,5 km) perdiam um deles (28/10/2026)
+    // cabia centrado, e dois nomes vizinhos a 60 px (Pilão e Para Pedro, 1,5 km) perdiam um deles (28/10/2026).
+    // Sem lugar em cima, o nome vai para a linha de baixo da marca (Paraná, Penetecal II, P5 do 314; 29/10/2026)
     function rotulos(cand) {
-      var ocup = [], h = '';
-      function livre(a, b) { return ocup.every(function (o) { return b + 4 <= o[0] || a >= o[1] + 4; }); }
+      var ocup = [[], []], h = '';
+      function livre(l, a, b) { return ocup[l].every(function (o) { return b + 4 <= o[0] || a >= o[1] + 4; }); }
       function poe(r) {
         var folga = Math.max(0, r.lw / 2 - 8), lim0 = -2 + r.lw / 2, lim1 = W + 2 - r.lw / 2;
-        var tenta = [0], k;
+        var tenta = [0], k, l;
         for (k = 2; k <= folga; k += 2) tenta.push(k, -k);
-        for (k = 0; k < tenta.length; k++) {
-          var c = r.cx + tenta[k];
-          if (c < lim0 || c > lim1 || !livre(c - r.lw / 2, c + r.lw / 2)) continue;
-          ocup.push([c - r.lw / 2, c + r.lw / 2]);
-          h += '<span class="vg-rot' + (r.sel ? ' sel' : '') + '" style="left:' + pc(c / W * 100) + '">' + esc(r.txt) + '</span>';
-          return;
+        for (l = 0; l < (r.sel ? 1 : 2); l++) {
+          for (k = 0; k < tenta.length; k++) {
+            var c = r.cx + tenta[k];
+            if (c < lim0 || c > lim1 || !livre(l, c - r.lw / 2, c + r.lw / 2)) continue;
+            ocup[l].push([c - r.lw / 2, c + r.lw / 2]);
+            h += '<span class="vg-rot' + (l ? ' baixo' : '') + (r.sel ? ' sel' : '') + '" style="left:' + pc(c / W * 100) + '">' + esc(r.txt) + '</span>';
+            return;
+          }
         }
       }
       cand.filter(function (r) { return r.sel; }).forEach(poe);
