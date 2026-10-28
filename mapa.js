@@ -600,6 +600,8 @@
     });
     var locLayer = Lf.layerGroup().addTo(map);
     var seen = {};
+    // o SNV escreve "PONTE S/RIO ANAPÚ": no mapa sai "PONTE SOBRE O RIO ANAPÚ" (S/ lia como "sem rio")
+    function locNome(t) { return String(t || '').replace(/(^|\s)S\/\s*(?=[A-ZÁ-Ú])/g, '$1SOBRE O '); }
     snv.segmentos.forEach(function (s, i) {
       [[s.kmIni, s.de], [s.kmFim, s.ate]].forEach(function (pair, j) {
         if (j === 0 && i > 0) return;
@@ -607,7 +609,7 @@
         if (seen[key]) return;
         seen[key] = true;
         Lf.circleMarker(ref.at(pair[0]), { pane: 'mpPts', radius: 4, weight: 2, color: '#FFFFFF', fillColor: '#17201C', fillOpacity: 1 })
-          .bindTooltip(esc(pair[1]) + ' · km ' + km2(pair[0]), { permanent: true, direction: 'left', offset: [-6, 0], className: 'mp-loc' })
+          .bindTooltip(esc(locNome(pair[1])) + ' · km ' + km2(pair[0]), { permanent: true, direction: 'left', offset: [-6, 0], className: 'mp-loc' })
           .addTo(locLayer);
       });
     });
