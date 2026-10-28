@@ -207,6 +207,28 @@
     // OAE do 424 repetida na faixa "OAEs 230" (modo Todas, p._at): na lista do trecho e na busca fica só a do Proarte 424.
     // A cópia só aparece sozinha quando o 424 está fora do filtro e a faixa OAEs 230 está mostrada
     function copia230(x, d) { return !!(x.c.oaes230 && x.p._at && (d.dentro[x.c.de] || !x.on)); }
+    // nomes em cima das marcas de uma raia, sem um cobrir o outro: o escolhido primeiro; os outros, da esquerda para a
+    // direita, no centro da marca ou empurrados até quase a ponta do nome (o nome continua em cima da marca). Antes só
+    // cabia centrado, e dois nomes vizinhos a 60 px (Pilão e Para Pedro, 1,5 km) perdiam um deles (28/10/2026)
+    function rotulos(cand) {
+      var ocup = [], h = '';
+      function livre(a, b) { return ocup.every(function (o) { return b + 4 <= o[0] || a >= o[1] + 4; }); }
+      function poe(r) {
+        var folga = Math.max(0, r.lw / 2 - 8), lim0 = -2 + r.lw / 2, lim1 = W + 2 - r.lw / 2;
+        var tenta = [0], k;
+        for (k = 2; k <= folga; k += 2) tenta.push(k, -k);
+        for (k = 0; k < tenta.length; k++) {
+          var c = r.cx + tenta[k];
+          if (c < lim0 || c > lim1 || !livre(c - r.lw / 2, c + r.lw / 2)) continue;
+          ocup.push([c - r.lw / 2, c + r.lw / 2]);
+          h += '<span class="vg-rot' + (r.sel ? ' sel' : '') + '" style="left:' + pc(c / W * 100) + '">' + esc(r.txt) + '</span>';
+          return;
+        }
+      }
+      cand.filter(function (r) { return r.sel; }).forEach(poe);
+      cand.filter(function (r) { return !r.sel; }).forEach(poe);
+      return h;
+    }
     function faixaDe(c, its) {
       var a = kmVis(c, num(c.kmIni)), b = kmVis(c, num(c.kmFim));
       if (!noKm(a)) a = null;
@@ -359,7 +381,7 @@
         }
         var gs = agrupar(null);
         if (st.sel && gs.some(function (g) { return g.t === 'grupo' && !preso(g) && g.xs.some(function (y) { return y.key === st.sel; }); })) gs = agrupar(st.sel);
-        var ult = -1e9, rot = '', mk = '';
+        var rot = '', mk = '', cand = [];
         gs.forEach(function (g) {
           var x = g.xs[0];
           if (g.t === 'grupo') {
@@ -386,11 +408,12 @@
           var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || (x.oae ? 'OAE' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
           // sem nome (visão pública, que não recebe os nomes): sem rótulo, em vez de um "?" em cima de cada marca
           var temNome = !!(x.p.nome || x.p.codigo);
-          if (temNome && cx - lw / 2 >= ult + 4 && cx - lw / 2 >= -2 && cx + lw / 2 <= W + 2) { ult = cx + lw / 2; rot += '<span class="vg-rot" style="left:' + pc(X(mid)) + '">' + esc(nome) + (x.p.kmConferir ? ' ~' : '') + '</span>'; }
+          if (temNome) cand.push({ cx: cx, lw: lw, txt: nome + (x.p.kmConferir ? ' ~' : ''), sel: st.sel === x.key });
           var tip = (x.oae ? nome + (x.p.codigo ? ' · ' + x.p.codigo : '') : nome) + ' · ' + kmTxt(x, g.t === 'barra') + ' · ' + x.st;
           mk += '<button type="button" class="vg-mk ' + g.t + (x.apag ? ' apag' : '') + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-key="' + esc(x.key) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" style="left:' + pc(X(g.t === 'barra' ? x.km : mid)) +
             (g.t === 'barra' ? ';width:' + pc((x.kf - x.km) / R * 100) : '') + ';background:' + x.cor + '"></button>';
         });
+        rot = rotulos(cand);
         var f = d.fx[c.id], a = f ? Math.max(f[0], k0) : 0, b = f ? Math.min(f[1], k1) : 0;
         var banda = f && b > a ? '<i class="vg-banda' + (oae ? ' oae' : '') + '" style="left:' + pc(X(a)) + ';width:' + pc((b - a) / R * 100) + '"></i>' : '';
         // computador: "Pontos Críticos 314" e "p. críticos · 18 na tela"; celular (coluna estreita): "314" e "p. críticos"
