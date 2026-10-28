@@ -200,6 +200,9 @@
       return (cacheIt = { lista: out, on: dentro, semKm: semKm, fora: fora, foraC: foraC, todos: todos, mostra: mostra, dentro: on,
         escolha: escolha, ativo: ativo, aviso: aviso, novos: novos, fx: fx, por: por });
     }
+    // OAE do 424 repetida na faixa "OAEs 230" (modo Todas, p._at): na lista do trecho e na busca fica só a do Proarte 424.
+    // A cópia só aparece sozinha quando o 424 está fora do filtro e a faixa OAEs 230 está mostrada
+    function copia230(x, d) { return !!(x.c.oaes230 && x.p._at && (d.dentro[x.c.de] || !x.on)); }
     function faixaDe(c, its) {
       var a = kmVis(c, num(c.kmIni)), b = kmVis(c, num(c.kmFim));
       if (!noKm(a)) a = null;
@@ -525,8 +528,9 @@
         }).join('') + '</section>';
 
       // lista do trecho da tela
-      var ord = vis.slice().sort(function (a, b) { return a.km - b.km; }), max = mob ? 8 : 12;
-      h += '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>No trecho da tela</h3><span>' + vis.length + (vis.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
+      var visL = vis.filter(function (x) { return !copia230(x, d); });
+      var ord = visL.sort(function (a, b) { return a.km - b.km; }), max = mob ? 8 : 12;
+      h += '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>No trecho da tela</h3><span>' + visL.length + (visL.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
         (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou OAE</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
         ord.slice(0, max).map(function (x) {
           var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local |MP )?/, '');
@@ -684,7 +688,7 @@
         return termos.reduce(function (t, w) { return t + (w === nome || w === cod || ql === nome || ql === cod ? 2 : ctw.indexOf(w) >= 0 || w === ct ? 1 : 0); }, 0);
       }
       var ach = d.lista.filter(function (x) {
-        if (nl != null && nLote(x.c) !== nl) return false;
+        if (copia230(x, d) || (nl != null && nLote(x.c) !== nl)) return false;
         var s = semAc((x.p.nome || '') + ' ' + (x.p.codigo || '')) + ' ' + txt[x.c.id];
         return termos.every(function (w) { return s.indexOf(w) >= 0; });
       }).map(function (x) { return { x: x, n: nota(x) }; }).sort(function (a, b) { return b.n - a.n || b.x.on - a.x.on || a.x.km - b.x.km; }).map(function (r) { return r.x; });

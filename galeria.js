@@ -750,8 +750,10 @@
     String(f.descricao || '').split('\n').map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (l) {
       if ((m = /^(?:Tirada|Enviada) por (.+?)(?: \([^)]*\))?$/.exec(l))) r.autor = m[1];
       else if ((m = /^ID (\S+)$/.exec(l))) r.idApp = m[1];
-      else if (/^(Cópia do oficial|Pasta original|Apagada por) /.test(l) || l === 'Sem ponto') return;
+      else if (/^(Cópia do oficial|Pasta original|Apagada por) /.test(l) || l === 'Sem ponto' || l === 'Sem OAE') return;
       else if ((m = /^Ponto (.+)$/.exec(l))) r.pnome = m[1];
+      // Proarte: "OAE Panelas" (v135); se não for uma OAE do contrato, a linha volta para a descrição
+      else if (!r.pnome && (m = /^OAE (.+)$/.exec(l))) { r.pnome = m[1]; r.oaeLinha = l; }
       else if ((m = /^BR\s[^-]*-\s*(?:km local\s*)?(\d+(?:,\d+)?)/.exec(l))) r.km = Number(m[1].replace(',', '.'));
       else if ((m = /^(-?\d+,\d+)\/(-?\d+,\d+)$/.exec(l))) { r.lat = Number(m[1].replace(',', '.')); r.lng = Number(m[2].replace(',', '.')); }
       else if ((m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(l))) r.em = new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).toISOString();
@@ -774,6 +776,7 @@
       p = r.pnome ? pontosDe(c).find(function (x) { return x.nome === r.pnome; }) : null;
       if (!p && r.km != null) { var pp = maisPerto(c, r.km); if (pp && pp.d <= raioPonto(c)) p = pp.p; }
     }
+    if (r.oaeLinha && !(p && p.nome === r.pnome)) r.desc.unshift(r.oaeLinha);
     return { id: r.idApp && r.idApp.length >= 4 ? r.idApp.slice(0, 80) : 'drv_' + f.id, drive_id: f.id, drive_url: linkDrive(f.id) || null, nome_arquivo: n || 'foto.jpg',
       tamanho: f.tamanho || null, autor_nome: r.autor || 'Sem nome', contrato_id: c ? c.id : null, ponto_id: p ? p.id : null, ponto_nome: p ? p.nome : null,
       lote: c ? nm.formal(c) : null, km: r.km != null ? Math.round(r.km * 1000) / 1000 : null, lat: r.lat, lng: r.lng,

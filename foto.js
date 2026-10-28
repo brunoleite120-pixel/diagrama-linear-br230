@@ -33,7 +33,7 @@
     { k: 'lado', label: 'Lado e distância do eixo', on: true },
     { k: 'coord', label: 'Coordenadas', on: true },
     { k: 'data', label: 'Data e hora', on: true },
-    { k: 'ponto', label: 'Ponto crítico', on: true },
+    { k: 'ponto', label: 'Ponto crítico ou OAE', on: true },
     { k: 'contrato', label: 'Lote e contrato', curto: 'lote', on: true },
     { k: 'executora', label: 'Executora', on: true },
     { k: 'supervisora', label: 'Supervisora', on: true },
@@ -769,6 +769,8 @@
       return n.length > 1 ? n.slice(0, -1).join(', ') + ' e ' + n[n.length - 1] : n.join('');
     }
     function has(list, c) { return !!c && list.some(function (x) { return x.id === c.id; }); }
+    // no Proarte (CT 424) a ponte é "OAE", nunca "ponto" (legenda, texto do Drive e campos)
+    function oaeCt(c) { return !!c && c.tipo === 'oae'; }
     function rangeTxt(c) { var r = lotRange(c); return r ? (c.kmLocal ? 'km local ' : 'km ') + nf(r[0], 2) + ' a ' + nf(r[1], 2) : ''; }
     function rodovia() { var c = contract(); return (c && c.rodovia) || snv.rodovia || 'BR-230/PA'; }
 
@@ -1357,7 +1359,10 @@
     }
     // conservação: só contrato e km; o campo Ponto some (os segmentos são divisão nossa)
     function semPontos() { var c = contract(); return !!c && c.tipo === 'conserva'; }
-    function renderPontos() { var sp = q('#ftPonto'); sp.innerHTML = pontoOptions(); sp.closest('label').hidden = semPontos(); }
+    function renderPontos() {
+      var sp = q('#ftPonto'), lb = sp.closest('label');
+      sp.innerHTML = pontoOptions(); lb.hidden = semPontos(); lb.firstChild.textContent = oaeCt(contract()) ? 'OAE' : 'Ponto';
+    }
     function pontoOptions() {
       // as OAEs da travessia (só km local) entram na ordem do eixo pela coordenada (a travessia corta o contorno)
       var c = contract(), list = c ? pontosDe(c).filter(function (p) { return p.kmIni != null || p.kmLocal != null; }) : [], ord = {};
@@ -1549,7 +1554,7 @@
       // OAE não atendida pelo Proarte: a legenda sai sem o contrato e sem a executora (nenhuma empresa atende a ponte)
       var na = !!(p && p._na);
       if (C.ponto && p) out.push(na ? 'OAE não atendida pelo Proarte: ' + p.nome + ' - ' + kmPTxt(p, c)
-        : 'Ponto ' + p.nome + ' - ' + kmPTxt(p, c) + (p.kmFim != null && p.kmIni != null ? ' a ' + nf(p.kmFim, 2) : ''));
+        : (oaeCt(c) ? 'OAE ' : 'Ponto ') + p.nome + ' - ' + kmPTxt(p, c) + (p.kmFim != null && p.kmIni != null ? ' a ' + nf(p.kmFim, 2) : ''));
       if (C.contrato && c && !na) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
       if (C.executora && c && c.executora && !na) out.push('Executora: ' + c.executora);
       if (C.supervisora && c && c.supervisora) out.push('Supervisão: ' + c.supervisora);
@@ -1837,7 +1842,7 @@
         var info = [
           c ? nomes.nome(c) : '',
           c && nomes.formal(c) !== nomes.nome(c) ? nomes.formal(c) : '',
-          p ? 'Ponto ' + p.nome : semPontos() ? '' : 'Sem ponto',
+          p ? (oaeCt(c) ? 'OAE ' : 'Ponto ') + p.nome : semPontos() ? '' : oaeCt(c) ? 'Sem OAE' : 'Sem ponto',
           st.km != null ? kmLine(st.km, st.side, st.dist, true, st.ramal) : '',
           ll ? coordTxt(ll) : '',
           st.date ? dateTxt(st.date) : '',
@@ -2002,7 +2007,7 @@
           '<div class="ft-grid">' +
             (contracts().length > 1 ? '<label class="ft-f full"><span>Contrato</span><select data-b="lote"' + d + '></select></label>' : '') +
             '<label class="ft-f"><span>km</span><input data-b="km"' + d + ' inputmode="decimal" autocomplete="off"></label>' +
-            '<label class="ft-f"><span>Ponto</span><select data-b="ponto"' + d + '></select></label>' +
+            '<label class="ft-f"><span>' + (oaeCt(byId(it.cid) || activeContract()) ? 'OAE' : 'Ponto') + '</span><select data-b="ponto"' + d + '></select></label>' +
             '<label class="ft-f full"><span>Descrição desta foto</span><input data-b="desc"' + d + ' maxlength="240" autocomplete="off"></label>' +
           '</div>' + (opts.drive ? '<label class="ft-chk"><input type="checkbox" data-b="drive"' + d + (it.drive !== false ? ' checked' : '') + '> Enviar ao Drive</label>' : '') + '</div>';
       el.querySelector('[data-b="km"]').value = it.km != null ? nf(it.km, 2) : '';
@@ -2246,7 +2251,7 @@
       if (!el || p < 0 || !it) { fechaLoteVer(); return; }
       var c = byId(it.cid), pt = null;
       if (c && it.pid) pontosDe(c).forEach(function (x) { if (x.id === it.pid) pt = x; });
-      var onde = [c ? lotName(c) : 'Sem contrato', pt ? 'Ponto ' + (pt.nome || '') : '', it.km != null ? (it.ramal ? 'km local ' : 'km ') + nf(it.km, 2) : 'sem km'].filter(Boolean).join(' · ');
+      var onde = [c ? lotName(c) : 'Sem contrato', pt ? (oaeCt(c) ? 'OAE ' : 'Ponto ') + (pt.nome || '') : '', it.km != null ? (it.ramal ? 'km local ' : 'km ') + nf(it.km, 2) : 'sem km'].filter(Boolean).join(' · ');
       el.innerHTML = '<div class="ft-ver-top"><button type="button" data-ft="lv-fecha">← Voltar</button><span class="ft-verc">' + (p + 1) + ' de ' + v.length + '</span>' +
         '<button type="button" data-ft="lv-ant" aria-label="Anterior"' + (p ? '' : ' disabled') + '>‹</button>' +
         '<button type="button" data-ft="lv-prox" aria-label="Próxima"' + (p < v.length - 1 ? '' : ' disabled') + '>›</button></div>' +
