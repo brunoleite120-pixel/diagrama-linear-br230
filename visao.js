@@ -146,6 +146,8 @@
     // as do 424 (p._at). A escolha fica no aparelho
     var M230_KEY = 'diagrama-linear-visao-oaes230';
     st.m230 = (function () { try { return localStorage.getItem(M230_KEY) === 'todas' ? 'todas' : 'na'; } catch (e) { return 'na'; } })();
+    // "Todas" só vale com o Proarte 424 fora da tela: com ele mostrado, as do 424 ficam só na faixa dele (pedido de 28/10/2026)
+    function todas230(d, c) { return st.m230 === 'todas' && !(c && d.dentro[c.de]); }
     function m230(v) { st.m230 = v === 'todas' ? 'todas' : 'na'; try { localStorage.setItem(M230_KEY, st.m230); } catch (e) { /* vale só nesta visita */ } }
     // [Só não atendidas] [Todas] (na caixa "Contratos" e no cartão da faixa)
     function botoes230(fid) {
@@ -180,7 +182,7 @@
         if (ok && [c.kmIni, c.kmFim].some(function (v) { var n = kmVis(c, num(v)); return n != null && !noKm(n); })) foraC++;
         // conservação (passo 2.4): os segmentos entram como trechos, na cor da pior situação do segmento
         c.pontos.forEach(function (p) {
-          if (c.oaes230 && p._at && st.m230 !== 'todas') return;
+          if (c.oaes230 && p._at && (st.m230 !== 'todas' || on[c.de])) return;
           // travessia de Altamira (km próprio): desenhada em p.kmDesenho, como a raia do 731
           var km = p.kmDesenho != null ? num(p.kmDesenho) : kmVis(c, num(p.kmIni)), kf = p.kmDesenho != null ? km : kmVis(c, num(p.kmFim));
           if (km == null) { if (ok) semKm++; return; }
@@ -393,8 +395,8 @@
         var rotT = !mob && tp === 'conserva' ? N.palavra(c).toLowerCase() : N.curto(c);   // pelo contrato: a sinalização (709) tem nome próprio
         // "OAEs 230": no celular "OAEs" e "BR-230"; no computador, o que está mostrando (só as não atendidas ou todas)
         var lb = c.oaes230 ? (mob ? 'OAEs' : 'OAEs 230') : mob ? N.numeroCurto(c) || N.nome(c) : N.nome(c);
-        if (c.oaes230) rotT = mob ? 'BR-230' : st.m230 === 'todas' ? 'todas da BR-230' : 'não atendidas';
-        h += '<div class="vg-row vg-lane"><div class="vg-lab" title="' + esc(c.oaes230 ? 'OAEs da BR-230 ' + (st.m230 === 'todas' ? '(todas)' : 'não atendidas pelo Proarte') : N.completo(c)) + '"><b>' + esc(lb) + '</b><small>' +
+        if (c.oaes230) rotT = mob ? 'BR-230' : todas230(d, c) ? 'todas da BR-230' : 'não atendidas';
+        h += '<div class="vg-row vg-lane"><div class="vg-lab" title="' + esc(c.oaes230 ? 'OAEs da BR-230 ' + (todas230(d, c) ? '(todas)' : 'não atendidas pelo Proarte') : N.completo(c)) + '"><b>' + esc(lb) + '</b><small>' +
           esc(rotT) + (c.kmLocal ? ' · km próprio' : '') + (mob ? '' : ' · ' + xs.length + ' na tela') + '</small></div>' +
           '<div class="vg-trk">' + grade + banda + rot + mk + '</div></div>';
       });
@@ -484,7 +486,7 @@
         var pad = f ? Math.max((f[1] - f[0]) * 0.03, 0.5) : 0;
         return '<article class="vg-box vg-ct oae"><div class="vg-ct-h"><h3>OAEs 230</h3><span>BR-230 · fora do Proarte</span></div>' +
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + '</div>' : '') +
-          '<div class="vg-ct-n"><b>' + na.length + ' não atendidas</b><span>' + nf(ext, 2) + ' km de OAEs' + (nAt && st.m230 === 'todas' ? ' · mais ' + nAt + ' do Proarte 424' : '') + '</span></div>' +
+          '<div class="vg-ct-n"><b>' + na.length + ' não atendidas</b><span>' + nf(ext, 2) + ' km de OAEs' + (nAt && todas230(d, c) ? ' · mais ' + nAt + ' do Proarte 424' : nAt && st.m230 === 'todas' ? ' · as do 424 ficam na faixa do Proarte 424' : '') + '</span></div>' +
           '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' +
           ['madeira', 'concreto', 'mistas'].filter(function (m) { return por[m]; }).map(function (m) { return por[m] + ' ' + m; }).join(' · ') + ' · nota proposta: ' +
           NT.filter(function (s) { return nt[s[0]]; }).map(function (s) { return nt[s[0]] + ' ' + s[1]; }).join(', ') + '</div>' +
@@ -803,7 +805,12 @@
       else if (a === 'pronto') fechaCaixa(true);
       else if (a === 'ftodos') { mudaFiltro(null); if (baixo) verDesenho(); }
       // faixa "OAEs 230": só as não atendidas ou todas; e o mapa do 424 com as não atendidas ligadas
-      else if (a === 'm230') { m230(b.dataset.m); render(); avisa(st.m230 === 'todas' ? 'OAEs 230: mostrando todas, com as do Proarte 424.' : 'OAEs 230: mostrando só as não atendidas pelo Proarte.'); }
+      else if (a === 'm230') {
+        m230(b.dataset.m); render();
+        var d2 = itens(), c2 = d2.todos.filter(function (c) { return c.oaes230; })[0];
+        avisa(todas230(d2, c2) ? 'OAEs 230: mostrando todas, com as do Proarte 424.' : st.m230 === 'todas' ? 'OAEs 230: o Proarte 424 está na tela, então as dele aparecem só na faixa do 424.'
+          : 'OAEs 230: mostrando só as não atendidas pelo Proarte.');
+      }
       else if (a === 'mapa230') { o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onMapa(c, null); }); }
       else if (a === 'fechar') fechar();
       // o grupo no mesmo km passa pelos itens um a um: o foco fica nele
