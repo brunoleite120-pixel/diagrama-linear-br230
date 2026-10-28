@@ -600,8 +600,8 @@
     });
     var locLayer = Lf.layerGroup().addTo(map);
     var seen = {};
-    // o SNV escreve "PONTE S/RIO ANAPÚ": no mapa sai "PONTE SOBRE O RIO ANAPÚ" (S/ lia como "sem rio")
-    function locNome(t) { return String(t || '').replace(/(^|\s)S\/\s*(?=[A-ZÁ-Ú])/g, '$1SOBRE O '); }
+    // o SNV escreve "PONTE S/RIO ANAPÚ" e "P/VITÓRIA DO XINGU": no mapa sai "SOBRE O RIO" e "PARA VITÓRIA" (S/ lia como "sem rio")
+    function locNome(t) { return String(t || '').replace(/(^|\s)S\/\s*(?=[A-ZÁ-Ú])/g, '$1SOBRE O ').replace(/(^|[\s(])P\/\s*(?=[A-ZÁ-Ú])/g, '$1PARA '); }
     snv.segmentos.forEach(function (s, i) {
       [[s.kmIni, s.de], [s.kmFim, s.ate]].forEach(function (pair, j) {
         if (j === 0 && i > 0) return;

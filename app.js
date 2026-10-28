@@ -1142,11 +1142,11 @@
   }
   // nome do SNV (em maiúsculas no snv-br230.js) em caixa de título, como a maquete: "Fim da Pavimentação", "Entr. PA-370",
   // "Entr. BR-163/230 (Rurópolis)"
-  // "S/RIO" do SNV sai "sobre o Rio" (S/ lia como "sem rio")
+  // "S/RIO" do SNV sai "sobre o Rio" (S/ lia como "sem rio") e "P/" sai "para"
   function snvTitulo(s) {
-    return String(s || '').replace(/(^|\s)S\/\s*(?=[A-ZÁ-Ú])/g, '$1SOBRE O ').toLowerCase().replace(/(^|[\s(\/])([^\s(\/])/g, function (a, b, l) { return b + l.toUpperCase(); })
-      .replace(/(^|\s)([A-Z][a-z])-(?=\d)/g, function (a, b, p) { return b + p.toUpperCase() + '-'; })
-      .replace(/\bEntr(?=\s)/g, 'Entr.').replace(/\s(Da|De|Do|Das|Dos|E|O|Sobre)(?=\s)/g, function (a) { return a.toLowerCase(); });
+    return String(s || '').replace(/(^|\s)S\/\s*(?=[A-ZÁ-Ú])/g, '$1SOBRE O ').replace(/(^|[\s(])P\/\s*(?=[A-ZÁ-Ú])/g, '$1PARA ').toLowerCase().replace(/(^|[\s(\/])([^\s(\/])/g, function (a, b, l) { return b + l.toUpperCase(); })
+      .replace(/(^|[\s\/])([A-Z][a-z])-(?=\d)/g, function (a, b, p) { return b + p.toUpperCase() + '-'; })
+      .replace(/\bEntr(?=\s)/g, 'Entr.').replace(/\s(Da|De|Do|Das|Dos|E|O|Sobre)(?=\s)/g, function (a) { return a.toLowerCase(); }).replace(/\(Para(?=\s)/g, '(para');
   }
   // notas do rodapé da folha em escala, nesta ordem e cada uma só quando vale: conversão do km (quando a régua do km do contrato
   // sai em alguma faixa), asterisco das pontas (quando o cadastro discorda da régua), régua indisponível ou fora do domínio
