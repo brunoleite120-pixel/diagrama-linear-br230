@@ -1551,9 +1551,10 @@
       if (C.rodkm) out.push(st.km != null ? kmLine(st.km, st.side, st.dist, C.lado, st.ramal) : rodovia().replace(/^BR-/, 'BR '));
       if (C.coord && ll) out.push(coordTxt(ll));
       if (C.data && st.date) out.push(dateTxt(st.date));
-      // OAE não atendida pelo Proarte: a legenda sai sem o contrato e sem a executora (nenhuma empresa atende a ponte)
+      // OAE não atendida pelo Proarte: a legenda sai sem o contrato e sem a executora (nenhuma empresa atende a ponte), e a
+      // linha da OAE é só o nome dela ("Ponte sobre o Rio Pacajá - km 406,91"; pedido do dono, 29/10/2026)
       var na = !!(p && p._na);
-      if (C.ponto && p) out.push(na ? 'OAE não atendida pelo Proarte: ' + p.nome + ' - ' + kmPTxt(p, c)
+      if (C.ponto && p) out.push(na ? p.nome + ' - ' + kmPTxt(p, c)
         : (oaeCt(c) ? 'OAE ' : 'Ponto ') + p.nome + ' - ' + kmPTxt(p, c) + (p.kmFim != null && p.kmIni != null ? ' a ' + nf(p.kmFim, 2) : ''));
       if (C.contrato && c && !na) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
       if (C.executora && c && c.executora && !na) out.push('Executora: ' + c.executora);
