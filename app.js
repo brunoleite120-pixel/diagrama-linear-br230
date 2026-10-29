@@ -3285,12 +3285,15 @@
         var on = comQtd(cur), mx = mais ? mais(s, cur) : '', temItens = isOae(ownerOf(p)) && !!OAE_ITENS[s.key];
         var pk = pv ? oaeSt(pv) : '', pend = pk && pk !== cur ? '<small class="nc-pend">Aguardando aprovação: ' + esc(ncNome(s, pk)) + '</small>' : '';
         var bt = function (k, cl, t) { return '<button type="button" class="' + cl + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '">' + t + '</button>'; };
+        var rc = rascChave(active().id, p.id, s.key), rb = '<div class="nc-rasc" data-rasc="' + esc(rc) + '"' + (rascLer()[rc] ? '' : ' hidden') + '><span><b>Rascunho</b> · ainda não ' + (isFiscal() ? 'enviado' : 'salvo') + '</span>' +
+          '<button type="button" data-act="nc-descartar" data-id="' + id + '" data-svc="' + s.key + '">Descartar</button>' +
+          '<button type="button" class="pri" data-act="nc-salvar" data-id="' + id + '" data-svc="' + s.key + '">' + (isFiscal() ? 'Enviar para aprovação' : 'Salvar') + '</button></div>';
         var cab = '<div class="svc-name">' + esc(s.short) + (on && s.q ? ' <small class="svc-un">' + esc(s.q.replace(/ com (dano|defeito)$/, ' na NC') + ' (estimativa)') + '</small>' : '') + (extra ? extra(s) : '') + '</div>';
         if (!on) {
           h += '<div class="svc oae nc-sem">' + cab + '<div class="nc-l">' + (cur === 'NA'
             ? '<span>Não se aplica aqui</span>' + bt('NA', 'nc-na', 'Desfazer N/A')
             : '<span>Sem não conformidade</span>' + bt('DN', 'nc-add', '+ Não conformidade') + bt('NA', 'nc-na', 'N/A')) + '</div>' +
-            pend + (mx ? '<div class="svc-marcas">' + mx + '</div>' : '') + '</div>';
+            rb + pend + (mx ? '<div class="svc-marcas">' + mx + '</div>' : '') + '</div>';
           return;
         }
         h += '<div class="svc oae nc-on">' + cab + '<div class="nc-card' + (cur === 'EX' ? ' co' : '') + '">' +
@@ -3299,13 +3302,13 @@
           (s.un ? '<span class="nc-qt" aria-hidden="true">Quantidade estimada</span><div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (sv.q != null ? esc(sv.q) : '') + '"' +
             ' placeholder="~" aria-label="' + esc(s.short + ': estimativa, ' + s.q.replace(/ com (dano|defeito)$/, ' na NC')) + '"><span>' + esc(s.un) + '</span></div>' : '') +
           (temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
-          '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="' + (temItens ? 'Outro item ou local (opcional)' : 'Onde / o quê (opcional)') + '" aria-label="' + esc((temItens ? 'Outro item ou local: ' : 'Onde ou o quê: ') + s.short) + '">' +
+          '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="' + (temItens ? 'Outro item ou local' : 'O que é e onde') + '" aria-label="' + esc((temItens ? 'Outro item ou local: ' : 'Onde ou o quê: ') + s.short) + '">' +
           '<div class="svc-marcas">' + Object.keys(OAE_MARCAS).map(function (m) {
               var pm = pv && comQtd(pv.st) && !!pv[m] !== !!sv[m] ? ' pend' : '';
               return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
                 '<i aria-hidden="true">' + (m === 'pri' ? '!' : '✓') + '</i>' + esc(OAE_MARCAS[m].name) + '</button>';
             }).join('') + mx + '</div>' +
-          '<div class="nc-acts">' + (cur === 'EX' ? bt('DN', '', 'Voltar para aberta') : bt('EX', '', 'Em correção')) + bt('OK', 'pri', 'Corrigida ✓') + '</div>' + pend +
+          '<div class="nc-acts">' + (cur === 'EX' ? bt('DN', '', 'Voltar para aberta') : bt('EX', '', 'Em correção')) + bt('OK', 'pri', 'Corrigida ✓') + '</div>' + rb + pend +
           '</div></div>';
         return;
       }
@@ -5566,6 +5569,44 @@
         var fd = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="set-desemp"][data-ind="' + dInd.k + '"][data-v="' + dv + '"]');
         if (fd) try { fd.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
         break;
+      case 'nc-salvar':
+      case 'nc-descartar':
+        p = findPoint(b.dataset.id);
+        if (!p) return;
+        flushSave();   // o que acabou de ser digitado entra no rascunho antes
+        var rsv = b.dataset.svc, rch = rascChave(c.id, p.id, rsv), rm = rascLer(), rd = rm[rch], rcur = p.serv[rsv];
+        if (!rd) { rascTela(); return; }
+        if (act === 'nc-descartar') {
+          var rguard = clone(rcur), rpid = p.id;
+          p.serv[rsv] = rd.a ? clone(rd.a) : { st: 'NV' };
+          delete rm[rch]; rascGravar(rm);
+          rerenderPoint(p);
+          save();
+          offerUndo('Rascunho da não conformidade descartado.', function () {
+            var p2 = findPoint(rpid);
+            if (!p2) return;
+            p2.serv[rsv] = rguard;
+            rerenderPoint(p2);
+            save();
+          });
+          return;
+        }
+        // NC nova: precisa dizer o que é (os itens marcados ou o texto)
+        if (rcur && comQtd(oaeSt(rcur)) && !(rd.a && comQtd(oaeSt(rd.a))) && !ncDescrita(rcur)) {
+          var temIt = isOae(c) && !!OAE_ITENS[rsv];
+          toast('Diga o que é a não conformidade antes de ' + (isFiscal() ? 'enviar' : 'salvar') + ': ' + (temIt ? 'marque os itens ou escreva em "Outro item ou local".' : 'escreva em "O que é e onde".'), 6000);
+          var rn = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] input[data-nota][data-svcpct="' + rsv + '"]');
+          if (rn && !temIt) try { rn.focus(); } catch (e) { /* sem foco */ }
+          return;
+        }
+        delete rm[rch]; rascGravar(rm);
+        rascSolta[rch] = true;
+        trackChanges();   // agora a mudança entra na fila e sobe
+        delete rascSolta[rch];
+        scheduleFlush(0);
+        rascTela();
+        if (!isFiscal()) toast('Não conformidade salva.', 3000);
+        return;
       case 'set-marca':
         p = findPoint(b.dataset.id);
         if (!p) return;
@@ -6871,11 +6912,102 @@
       '<button type="button" class="btn primary">Entendi</button>';
     bar.querySelector('button').addEventListener('click', function () { banco.conf = []; keepSync(); bar.remove(); });
   }
+  // rascunho da não conformidade (29/10/2026, pedido do dono): a NC nova, ou a mudança no que uma NC descreve (quantidade,
+  // itens, texto, marcas), fica só neste aparelho até a pessoa tocar em "Salvar" (o fiscal, em "Enviar para aprovação").
+  // Antes, o toque em "+ Não conformidade" subia em 1 s, ainda vazio, e cada campo preenchido subia separado. Trocar só a
+  // situação de uma NC já salva (em correção, corrigida, voltar para aberta, N/A) continua indo direto. Guardado por pessoa:
+  // {pessoa: {'contrato|ponto|grupo': {a: o grupo como está no banco, v: o grupo como está aqui}}}. Na base da fila
+  // (banco.base) o grupo fica como está no banco; assim, ao salvar, a diferença sobe numa alteração só
+  var RASC_KEY = 'diagrama-linear.nc-rascunhos', rascSolta = {};   // rascSolta: os que a pessoa acabou de salvar (sobem)
+  function rascDono() { return banco.on && banco.login ? String(banco.login.uid || banco.login.nome || '') : ''; }
+  function rascTodos() { var t = lsGet(RASC_KEY); return t && typeof t === 'object' ? t : {}; }
+  function rascLer() { var d = rascDono(); return (d && rascTodos()[d]) || {}; }
+  function rascGravar(m) {
+    var d = rascDono(), t = rascTodos();
+    if (!d) return;
+    if (Object.keys(m).length) t[d] = m; else delete t[d];
+    lsPut(RASC_KEY, Object.keys(t).length ? t : null);
+  }
+  function rascChave(cid, pid, svc) { return cid + '|' + pid + '|' + svc; }
+  function rascPonto(s, ch) {
+    var x = ch.split('|'), c = s.contracts.find(function (q) { return q.id === x[0]; }), p = c && c.pontos.find(function (q) { return q.id === x[1]; });
+    return p ? { p: p, svc: x[2] } : null;
+  }
+  function ncDet(sv) { return JSON.stringify([sv.q == null ? null : sv.q, sv.n || '', sv.itens || [], !!sv.pri, !!sv.ci]); }
+  function ncDescrita(sv) { return !!((sv.n && String(sv.n).trim()) || (Array.isArray(sv.itens) && sv.itens.length)); }
+  // a mudança deste grupo abre rascunho? NC nova, ou NC que continua NC com outra descrição
+  function abreRasc(c, svc, f) {
+    if (!c || !isContinuo(c) || svc === TRAFEG.key) return false;
+    var na = !!f.a && comQtd(oaeSt(f.a)), nv = !!f.v && comQtd(oaeSt(f.v));
+    return nv && (!na || ncDet(f.a) !== ncDet(f.v));
+  }
+  // tira da lista de alterações o que é rascunho (e abre os rascunhos novos)
+  function segurarRasc(ops) {
+    if (!rascDono()) return ops;
+    var m = rascLer(), mudou = false;
+    var out = ops.filter(function (op) {
+      if (op.t !== 'ponto_campos') return true;
+      var c = contractById(op.cid);
+      Object.keys(op.campos).forEach(function (k) {
+        if (k.indexOf('serv.') !== 0) return;
+        var svc = k.slice(5), ch = rascChave(op.cid, op.id, svc), f = op.campos[k];
+        if (!m[ch]) {
+          if (rascSolta[ch] || !abreRasc(c, svc, f)) return;
+          m[ch] = { a: 'a' in f ? clone(f.a) : null };
+          mudou = true;
+        }
+        delete op.campos[k];
+      });
+      return Object.keys(op.campos).length > 0;
+    });
+    if (mudou) rascGravar(m);
+    return out;
+  }
+  // o rascunho acompanha a tela; o que voltou a ser igual ao banco (ou cujo ponto sumiu) deixa de ser rascunho
+  function rascAtualiza() {
+    var m = rascLer(), mudou = false;
+    Object.keys(m).forEach(function (ch) {
+      var r = rascPonto(state, ch), sv = r && r.p.serv[r.svc];
+      if (!sv || same(sv, m[ch].a)) { delete m[ch]; mudou = true; return; }
+      if (!same(sv, m[ch].v)) { m[ch].v = clone(sv); mudou = true; }
+    });
+    if (mudou) rascGravar(m);
+  }
+  // na base da fila, os grupos em rascunho ficam como estão no banco
+  function rascNaBase() {
+    if (!banco.base) return;
+    var m = rascLer();
+    Object.keys(m).forEach(function (ch) {
+      var r = rascPonto(banco.base, ch);
+      if (!r) return;
+      if (m[ch].a) r.p.serv[r.svc] = clone(m[ch].a); else delete r.p.serv[r.svc];
+    });
+  }
+  // o banco acabou de ser lido (s): o rascunho volta por cima, e o "como está no banco" passa a ser o de agora
+  function rascReaplica(s) {
+    var m = rascLer(), mudou = false;
+    Object.keys(m).forEach(function (ch) {
+      var r = rascPonto(s, ch);
+      if (!r || !m[ch].v) { delete m[ch]; mudou = true; return; }
+      var agora = r.p.serv[r.svc];
+      if (!same(agora || null, m[ch].a)) { m[ch].a = agora ? clone(agora) : null; mudou = true; }
+      r.p.serv[r.svc] = clone(m[ch].v);
+    });
+    if (mudou) rascGravar(m);
+  }
+  function rascTela() {
+    var m = rascLer();
+    document.querySelectorAll('[data-rasc]').forEach(function (el) { el.hidden = !m[el.getAttribute('data-rasc')]; });
+    syncStatus();
+  }
   // chamada a cada alteração local (save): o que mudou desde a última vez entra na fila
   function trackChanges() {
     if (!banco.on || !banco.base) return;
-    var ops = diffOps(banco.base, state);
+    var ops = segurarRasc(diffOps(banco.base, state));
+    rascAtualiza();
     banco.base = clone(state);
+    rascNaBase();
+    rascTela();
     if (!ops.length) return;
     enqueue(ops);
     scheduleFlush(1200);
@@ -7157,8 +7289,10 @@
         if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
         trackChanges();   // o que acabou de ser mudado aqui entra na fila antes de trocar o estado
         state = normalize(applyOps(fromServer(r), banco.pend));
+        rascReaplica(state);
         separarArquivados(state);
         banco.base = clone(state);
+        rascNaBase();
         try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
         renderAll();
         entradaFiscal();
@@ -7198,6 +7332,8 @@
     else if (banco.at) t = (window.AMBIENTE && AMBIENTE.previa ? 'Banco de teste · ' : 'Banco da equipe · ') + hhmm(banco.at);
     else t = 'Conectando ao banco…';
     if (localFalhou && !aba.ro) { t += ' · não salvou no navegador'; warn = true; }
+    var nRasc = aba.ro ? 0 : Object.keys(rascLer()).length;
+    if (nRasc) { t += ' · ' + nRasc + ' NC em rascunho (' + (isFiscal() ? 'não enviada' : 'não salva') + ')'; warn = true; }
     var dq = driveQ && driveReady() ? driveQ.info() : null;
     if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo' || dq.erro === 'recusado' || dq.erro === 'script'; }
     el.textContent = t;
@@ -7218,6 +7354,7 @@
     if (limpou) limparDadosAparelho();
     banco.login = l;
     lsPut(LOGIN_KEY, l);
+    rascNaBase();
     if (banco.on && l) devolverGuardadas(l);
     // o aparelho ficou vazio: lê o banco já com o acesso novo (sem esperar alguém gravar algo para a versão mudar)
     if (limpou) { banco.versao = 0; setTimeout(function () { refresh(true); }, 0); }
