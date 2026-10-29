@@ -1292,6 +1292,7 @@
     function semPeriodo(it) {
       if (aba === 'drive') return (dbusca.trim() ? true : noCaminho(it)) && naBusca(it);   // a busca vale para o Drive todo
       return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
+        (!filtro.ids || filtro.ids.indexOf(it.id) >= 0) &&
         (!filtro.km || (it.km != null && isFinite(it.km) && Number(it.km) >= filtro.km[0] - FOLGA_KM && Number(it.km) <= filtro.km[1] + FOLGA_KM)) &&
         (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
         (aba !== 'local' || !fLocal || (fLocal === 'semcar' ? semCar(it) : !!locais[it.id] && locais[it.id].situacao === fLocal)) &&
@@ -1422,6 +1423,7 @@
           [['aparelho', 'Só aqui'], ['fila', 'Na fila'], ['enviada', 'Enviadas']].filter(function (x) { return cs[x[0]] || fLocal === x[0]; })
             .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>';
       }
+      if (filtro.ids) h += '<button type="button" class="gl-chip" data-g="ids-tirar" aria-pressed="true" aria-label="Tirar o filtro das fotos da NC">' + esc(filtro.idsNome + ' · ' + filtro.ids.length + (filtro.ids.length === 1 ? ' foto' : ' fotos')) + ' ✕</button>';
       if (filtro.km) h += '<button type="button" class="gl-chip" data-g="km-tirar" aria-pressed="true" aria-label="Tirar o filtro do km">' + esc((filtro.km[2] ? filtro.km[2] + ' · ' : '') + 'km ' + String(filtro.km[0]).replace('.', ',') + ' a ' + String(filtro.km[1]).replace('.', ',')) + ' ✕</button>';
       if ((Object.keys(ps).length || filtro.pid || semPonto) && !ehCons(filtro.cid)) {
         h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>';
@@ -3029,6 +3031,7 @@
       else if (g === 'grande') carregarGrande();
       else if (g === 'ver-sem') { filtro.pid = SEM; render(); }
       else if (g === 'km-tirar') { filtro.km = null; render(); }
+      else if (g === 'ids-tirar') { filtro.ids = null; render(); }
       else if (g === 'drive-trazer') trazerDoDrive();
       else if (g === 'drive-pastas') pastasDrive();
       else if (g === 'drive-conferir') conferirDrive();
@@ -3101,18 +3104,21 @@
       // página do celular: o contrato do app vira a ficha "314 · 28"; a galeria abre em Todos (menos "Fotos deste ponto",
       // do segmento e a aba Relatório, que ficam no contrato)
       ctApp = pagina && f.cid ? f.cid : '';
-      var noCt = f.cid && (!pagina || f.pid || f.km || f.aba === 'relatorio');
+      var noCt = f.cid && (!pagina || f.pid || f.km || f.ids || f.aba === 'relatorio');
       filtro = { cid: noCt ? f.cid : '', pid: f.pid || '', autor: '', mes: '' };
+      // "Fotos da NC" (cartão da não conformidade): só as fotos da lista da NC
+      filtro.ids = Array.isArray(f.ids) && f.ids.length ? f.ids.slice() : null;
+      filtro.idsNome = String(f.idsNome || 'Fotos da NC');
       // "Fotos do segmento" (Medições, conservação): as fotos do contrato no km do segmento
       filtro.km = f.km && isFinite(f.km[0]) && isFinite(f.km[1]) ? [Math.min(f.km[0], f.km[1]), Math.max(f.km[0], f.km[1]), String(f.kmNome || '')] : null;
       // "Fotos deste ponto": todas as datas do ponto (sem trocar a escolha guardada); senão, o período guardado neste aparelho
-      per = f.pid || filtro.km ? { modo: 'tudo', off: 0, de: '', ate: '' } : lerPer();
+      per = f.pid || filtro.km || filtro.ids ? { modo: 'tudo', off: 0, de: '', ate: '' } : lerPer();
       pf = null;
       cl = null; ec = null;
       recolher(false); recY = 0;
       fecharMover();
       var vis = abasVisiveis().map(function (a) { return a.k; });
-      aba = f.aba && vis.indexOf(f.aba) >= 0 ? f.aba : (f.pid || filtro.km ? (vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local') : (vis.indexOf(aba) >= 0 ? aba : 'local'));
+      aba = f.aba && vis.indexOf(f.aba) >= 0 ? f.aba : (f.pid || filtro.km || filtro.ids ? (vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local') : (vis.indexOf(aba) >= 0 ? aba : 'local'));
       sel = {}; selecionando = false; ver = -1; itens = []; fLocal = ''; semRede = 0; bs = null; cfg = false;
       cacheIds().then(function (m) { guardadas = m; });
       limparEnviadas(o.drive).then(function (k) { if (k && root && aba === 'local') carregar(); });

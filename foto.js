@@ -1275,6 +1275,7 @@
       o.ll = null; o.km = null; o.ramal = ''; o.side = ''; o.dist = null; o.acc = null; o.src = 'manual'; o.pid = ''; o.cid = ac ? ac.id : '';
       // foto guardada que volta para o carimbo (Galeria › sem carimbo): fica no contrato e no ponto que já tinha
       if (ex.cid && byId(ex.cid)) o.cid = ex.cid;
+      if (opts.nc && byId(opts.nc.cid)) o.cid = opts.nc.cid;
       o.date = ex.date || (from === 'camera' ? new Date() : new Date(file.lastModified || Date.now()));
       o.from = from;
       o.meta = ex;
@@ -1292,6 +1293,7 @@
         var auto = o.km != null ? identify(o.km) : null;
         o.pid = pertoPonto(auto) ? auto.p.id : (opts.initialPoint || '');
         if (ex.cid && ex.cid === o.cid && ex.pid && findPoint(ex.pid)) o.pid = ex.pid;
+        if (opts.nc && opts.nc.cid === o.cid) { o.pid = findPoint(opts.nc.pid) ? opts.nc.pid : ''; if (!o.desc) o.desc = opts.nc.desc || ''; }
         if (!o.ll && o.pid) { var p0 = findPoint(o.pid); if (p0) kmDoPonto(o, p0); }
       });
     }
@@ -1693,6 +1695,7 @@
           if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1, querEnviar: a.drive !== false });
           return opts.drive.add([item]).then(function () {
             a.feita = ver; a.como = como; a.erroG = false; a.guardando = false;
+            if (opts.nc && opts.onNc && item.meta && item.meta.nc && !a.descartada) opts.onNc(opts.nc, [item.id]);   // foto da NC: entra na lista da NC
             if (como === 'fila') refreshDrive();
           });
         });
@@ -1734,6 +1737,7 @@
       a.descartada = true;
       clearTimeout(guardaT); guardaT = null;
       guardaP.then(function () { return ja && opts.drive && opts.drive.apagar ? opts.drive.apagar([a.uid]) : null; }).then(function () { notify('Foto descartada.'); refreshDrive(); }, function () { notify('Não foi possível tirar a foto do aparelho.'); });
+      if (opts.nc && opts.onNcTirar) opts.onNcTirar(opts.nc, [a.uid]);   // a foto descartada sai da NC
       startView();
     }
     // fechar, Nova foto/seleção e Ver na galeria: se a foto nunca ficou guardada no aparelho (sem espaço?), pergunta antes
@@ -1854,6 +1858,7 @@
         var meta = { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? nomes.formal(c) : null,
           km: st.km != null ? Math.round(st.km * 1000) / 1000 : null, lat: ll ? ll[0] : null, lng: ll ? ll[1] : null,
           em: d ? d.toISOString() : null, desc: desc || null };
+        if (opts.nc && c && c.id === opts.nc.cid) meta.nc = { cid: opts.nc.cid, pid: opts.nc.pid, svc: opts.nc.svc };
         return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && nomes.pasta(c)) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'],
           pastaAntiga: nomes.pastaAntiga(c), descricao: info, meta: meta, enviar: st.drive !== false };
       });
@@ -1865,6 +1870,11 @@
       if (batch) list.forEach(function (x) { var it = batch.items.find(function (y) { return y.uid === x.id; }); if (it && semNada(it)) x.enviar = false; });
       var b0 = batch, mud0 = batch && batch.mud;
       opts.drive.add(list).then(function () {
+        // foto da não conformidade: os ids entram na lista de fotos da NC (app)
+        if (opts.nc && opts.onNc) {
+          var ncIds = list.filter(function (x) { return x.meta && x.meta.nc; }).map(function (x) { return x.id; });
+          if (ncIds.length) opts.onNc(opts.nc, ncIds);
+        }
         if (batch) {
           var ids = list.map(function (x) { return x.id; }), vai = list.filter(function (x) { return x.enviar !== false; }).map(function (x) { return x.id; });
           batch.items.forEach(function (it) {
@@ -3097,6 +3107,8 @@
     function open(o) {
       o = o || {};
       opts.initialPoint = o.pointId || '';
+      // foto da não conformidade: { cid, pid, svc, nome, desc } (a foto fica no contrato e no ponto da NC e entra na lista dela)
+      opts.nc = o.nc || null;
       if (!root) build();
       (document.fullscreenElement || document.body).appendChild(root);
       document.documentElement.style.overflow = 'hidden';
@@ -3104,6 +3116,7 @@
       startGps();
       startView();
       refreshDrive();
+      if (opts.nc) notify('Foto da não conformidade (' + opts.nc.nome + '): ao salvar, a foto entra na NC.', 5000);
       if (o.fotos && o.fotos.length) onFiles(o.fotos.map(function (x) { return x.file; }), 'camapp', o.fotos.map(function (x) { return x.meta; }));
       setTimeout(function () { var x = q('.ft-x'); if (x) x.focus(); }, 30);
     }

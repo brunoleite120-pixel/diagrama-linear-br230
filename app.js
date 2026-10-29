@@ -2701,9 +2701,9 @@
     var c = active(), f = glPend || {};
     glPend = null;
     syncTopbar();   // a página fica fixa logo abaixo da barra: mede de novo antes de abrir
-    if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba)) return;
+    if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba && !f.ids)) return;
     glPgCid = c.id;
-    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg('diagrama'); } });
+    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, ids: f.ids, idsNome: f.idsNome, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg('diagrama'); } });
   }
   function abreGaleriaGeral() {
     syncTopbar();
@@ -3303,6 +3303,7 @@
             ' placeholder="~" aria-label="' + esc(s.short + ': estimativa, ' + s.q.replace(/ com (dano|defeito)$/, ' na NC')) + '"><span>' + esc(s.un) + '</span></div>' : '') +
           (temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
           '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + s.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="' + (temItens ? 'Outro item ou local' : 'O que é e onde') + '" aria-label="' + esc((temItens ? 'Outro item ou local: ' : 'Onde ou o quê: ') + s.short) + '">' +
+          ncFotosHtml(id, s, sv) +
           '<div class="svc-marcas">' + Object.keys(OAE_MARCAS).map(function (m) {
               var pm = pv && comQtd(pv.st) && !!pv[m] !== !!sv[m] ? ' pend' : '';
               return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
@@ -4914,7 +4915,82 @@
       sugerir: it ? { c: it.c, rot: (it.p && (it.p.nome || it.p.codigo)) || '' } : null,
       aoEscolher: function (c) { fotoCid = c.id; lsPut(FOTO_ULT_KEY, c.id); abreFoto(it && it.c === c && it.p ? it.p.id : pid, fotos); } });
   }
-  function abreFoto(pid, fotos) {
+  // foto da não conformidade (29/10/2026): abre no contrato e no ponto da NC, com a descrição da NC; a foto salva entra na
+  // lista de fotos da NC (sv.fotos, os ids da galeria), que sobe junto com a NC (rascunho até "Salvar"/"Enviar para aprovação")
+  function ncDescFoto(c, p, s, sv) {
+    var its = itensDe(s.key, sv).map(function (x) { return minus1(x.n); });
+    if (sv.n && String(sv.n).trim()) its.push(String(sv.n).trim());
+    return 'Não conformidade' + (isConserva(c) && p.nome ? ' · ' + p.nome : '') + ' · ' + s.short + (its.length ? ': ' + its.join(', ') : '');
+  }
+  function openFotoNc(c, p, s) {
+    if (!podeFotos(c)) { toast(banco.login ? 'Seu acesso não inclui fotos.' : 'Entre com o seu código para tirar fotos.'); return; }
+    var sv = p.serv[s.key];
+    if (!window.FotoCarimbo || !sv || !comQtd(oaeSt(sv))) return;
+    fotoCid = c.id;
+    abreFoto(p.id, null, { cid: c.id, pid: p.id, svc: s.key, nome: s.short, desc: ncDescFoto(c, p, s, sv) });
+  }
+  // as fotos salvas na tela da foto aberta pela NC
+  function ncFotosChegaram(nc, ids) {
+    var c = contractById(nc.cid), p = c && c.pontos.find(function (x) { return x.id === nc.pid; }), sv = p && p.serv[nc.svc];
+    if (!sv || !comQtd(oaeSt(sv))) { toast('A não conformidade não está mais aberta: a foto ficou só na galeria.', 6000); return; }
+    var l = Array.isArray(sv.fotos) ? sv.fotos.slice() : [], n0 = l.length;
+    ids.forEach(function (x) { if (x && l.indexOf(x) < 0) l.push(x); });
+    if (l.length === n0) return;
+    sv.fotos = l;
+    if (c === active()) rerenderPoint(p);
+    save();
+    toast((l.length - n0 === 1 ? 'A foto entrou' : 'As ' + (l.length - n0) + ' fotos entraram') + ' na não conformidade. Toque em ' + (isFiscal() ? '"Enviar para aprovação"' : '"Salvar"') + ' na NC.', 6000);
+  }
+  // a foto descartada na tela da foto sai da lista da NC
+  function ncFotosSairam(nc, ids) {
+    var c = contractById(nc.cid), p = c && c.pontos.find(function (x) { return x.id === nc.pid; }), sv = p && p.serv[nc.svc];
+    if (!sv || !Array.isArray(sv.fotos)) return;
+    var l = sv.fotos.filter(function (x) { return ids.indexOf(x) < 0; });
+    if (l.length === sv.fotos.length) return;
+    if (l.length) sv.fotos = l; else delete sv.fotos;
+    if (c === active()) rerenderPoint(p);
+    save();
+  }
+  // miniaturas das fotos da NC (cartão da NC e mudança aguardando aprovação): as do aparelho (fila do Drive) e as do banco
+  function ncFtHtml(fid, tira) {
+    return '<span class="nc-ft" data-foto="' + esc(fid) + '"><button type="button" class="nc-ft-v" data-act="nc-fotos-ver" aria-label="Ver as fotos da NC"><img alt=""></button>' +
+      (tira ? '<button type="button" class="nc-ft-x" data-act="nc-foto-tirar" data-id="' + esc(tira.id) + '" data-svc="' + esc(tira.svc) + '" data-foto="' + esc(fid) + '" aria-label="Tirar esta foto da NC" title="Tirar esta foto da NC">×</button>' : '') + '</span>';
+  }
+  function ncFotosHtml(id, s, sv) {
+    var fts = Array.isArray(sv.fotos) ? sv.fotos : [], pode = podeFotos(active()) && !readOnly();
+    if (!fts.length && !pode) return '';
+    return '<div class="nc-fotos" data-nome="' + esc('NC · ' + s.short) + '">' + fts.map(function (fid) { return ncFtHtml(fid, pode ? { id: id, svc: s.key } : null); }).join('') +
+      (pode ? '<button type="button" class="nc-foto-add" data-act="nc-foto" data-id="' + id + '" data-svc="' + s.key + '">📷 Foto da NC</button>' : '') + '</div>';
+  }
+  var ncMini = {}, ncMiniPedindo = {}, ncMiniT = null;
+  function ncMinis() {
+    ncMiniT = null;
+    var falta = [];
+    document.querySelectorAll('.nc-ft img:not([src])').forEach(function (im) {
+      var id = im.closest('.nc-ft').dataset.foto;
+      if (ncMini[id]) im.src = ncMini[id]; else if (falta.indexOf(id) < 0 && !ncMiniPedindo[id]) falta.push(id);
+    });
+    if (!falta.length) return;
+    falta.forEach(function (id) { ncMiniPedindo[id] = 1; });
+    (driveQ ? driveQ.list() : Promise.resolve([])).then(function (l) {
+      (l || []).forEach(function (r) { if (r.mini && falta.indexOf(r.id) >= 0 && !ncMini[r.id]) ncMini[r.id] = URL.createObjectURL(r.mini); });
+      var resto = falta.filter(function (id) { return !ncMini[id]; }).slice(0, 40);
+      if (!resto.length || !banco.login || !window.Banco || !window.Banco.fotosMini) return;
+      return window.Banco.fotosMini(banco.login.codigo, resto).then(function (arr) {
+        (arr || []).forEach(function (m) { if (m && m.id && m.jpeg) ncMini[m.id] = 'data:image/jpeg;base64,' + m.jpeg; });
+      });
+    }).catch(function () { /* sem rede: fica o quadrado cinza */ }).then(function () {
+      falta.forEach(function (id) { delete ncMiniPedindo[id]; });
+      document.querySelectorAll('.nc-ft img:not([src])').forEach(function (im) {
+        var u = ncMini[im.closest('.nc-ft').dataset.foto];
+        if (u) im.src = u; else im.closest('.nc-ft').classList.add('sem');
+      });
+    });
+  }
+  if (window.MutationObserver) new MutationObserver(function () {
+    if (!ncMiniT && document.querySelector('.nc-ft:not(.sem) img:not([src])')) ncMiniT = setTimeout(ncMinis, 60);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  function abreFoto(pid, fotos, nc) {
     if (!foto && window.FotoCarimbo) {
       foto = window.FotoCarimbo({
         snv: window.SNV_BR230, logoSrc: window.UNIFILAR_LOGO && window.UNIFILAR_LOGO.src, nomes: NOMES,
@@ -4926,6 +5002,7 @@
           return l.indexOf(c) >= 0 ? c : l[0] || null;
         },
         getContracts: ctsFoto,
+        onNc: ncFotosChegaram, onNcTirar: ncFotosSairam,
         setActiveContract: function (id) {
           // tela inicial: a troca fica só na foto, o app continua na tela inicial
           if (semCtNaTela()) { if (ctsFoto().some(function (c) { return c.id === id; })) { fotoCid = id; lsPut(FOTO_ULT_KEY, id); } return; }
@@ -4953,7 +5030,7 @@
         clearTeamLogo: function () { return saveTeamLogo({ t: 'apagar_config', chave: 'fotoLogo' }); }
       });
     }
-    if (foto) foto.open({ pointId: pid || '', fotos: fotos || null });
+    if (foto) foto.open({ pointId: pid || '', fotos: fotos || null, nc: nc || null });
   }
   function ensureMap() {
     if (mapa || !window.MapaSNV) return mapa;
@@ -5361,6 +5438,17 @@
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item' && act !== 'set-desemp') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
+    if (act === 'nc-fotos-ver') {
+      var ncb = b.closest('.nc-fotos'), ncIds = ncb ? [].map.call(ncb.querySelectorAll('.nc-ft'), function (x) { return x.dataset.foto; }) : [];
+      if (ncIds.length) abrirGaleria({ cid: c.id, ids: ncIds, idsNome: ncb.dataset.nome || 'Fotos da NC' });
+      return;
+    }
+    if (act === 'nc-foto') {
+      if (readOnly()) { toast('Para tirar fotos, entre com o seu código.'); openLogin(); return; }
+      var ncp = findPoint(b.dataset.id), ncs = servicesOf(c).find(function (x) { return x.key === b.dataset.svc; });
+      if (ncp && ncs) openFotoNc(c, ncp, ncs);
+      return;
+    }
     // barra do gráfico: escolhe a medição (o topo e a curva ABC passam a ser só dela); tocar de novo, ou "Todas as medições", volta a todas
     if (act === 'med-bar' || act === 'abc-todas') {
       var art = b.closest('article.pt');
@@ -5537,7 +5625,7 @@
           delete sv.pct;
           if (!comQtd(st)) {
             // tinha o que perder: "Desfazer" por alguns segundos (um toque sem querer no celular apagava a anotação)
-            var temDet = sv.q != null || (sv.n && String(sv.n).trim()) || sv.pri || sv.ci || (sv.itens && Object.keys(sv.itens).length);
+            var temDet = sv.q != null || (sv.n && String(sv.n).trim()) || sv.pri || sv.ci || (sv.itens && Object.keys(sv.itens).length) || (sv.fotos && sv.fotos.length);
             if (temDet) {
               var antes = JSON.parse(JSON.stringify(sv)), svK = b.dataset.svc, pId = p.id;
               offerUndo(st === 'OK' && comQtd(oaeSt(sv)) ? 'Não conformidade corrigida: a estimativa, a nota e os itens saíram junto.' : 'A estimativa, a nota e os itens deste serviço saíram junto com a situação.', function () {
@@ -5548,7 +5636,7 @@
                 afterEdit('set-st', active());
               });
             }
-            delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens;
+            delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens; delete sv.fotos;
           }
         } else if (st === 'OK') sv.pct = 100;
         else if (st === 'NA') sv.pct = 0;
@@ -5568,6 +5656,15 @@
         if (dc) { var dh = desempResumoHtml(c); if (dh) dc.outerHTML = dh; else dc.remove(); }
         var fd = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="set-desemp"][data-ind="' + dInd.k + '"][data-v="' + dv + '"]');
         if (fd) try { fd.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+        break;
+      case 'nc-foto-tirar':
+        p = findPoint(b.dataset.id);
+        var tsv = p && p.serv[b.dataset.svc];
+        if (!tsv || !Array.isArray(tsv.fotos)) return;
+        tsv.fotos = tsv.fotos.filter(function (x) { return x !== b.dataset.foto; });
+        if (!tsv.fotos.length) delete tsv.fotos;
+        rerenderPoint(p);
+        toast('A foto saiu desta não conformidade (continua na galeria).', 4000);
         break;
       case 'nc-salvar':
       case 'nc-descartar':
@@ -6861,7 +6958,9 @@
         var k = oaeSt(v), qt = comQtd(k) ? fmtQtd(so, v.q) : '';
         var its = comQtd(k) ? itensDe(so.key, v).map(function (x) { return minus1(x.n); }) : [];
         var nm = ncNome(so, k);
-        return nm.charAt(0).toUpperCase() + nm.slice(1) + (qt ? ' ' + qt : '') + (its.length ? ': ' + its.join(', ') : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', correção informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '');
+        var nf = comQtd(k) && Array.isArray(v.fotos) ? v.fotos.length : 0;
+        return nm.charAt(0).toUpperCase() + nm.slice(1) + (qt ? ' ' + qt : '') + (its.length ? ': ' + its.join(', ') : '') + (comQtd(k) && v.pri ? ', prioridade' : '') + (comQtd(k) && v.ci ? ', correção informada' : '') + (comQtd(k) && v.n ? ' (' + v.n + ')' : '') +
+          (nf ? ', ' + nf + (nf === 1 ? ' foto' : ' fotos') : '');
       }
       var st = STATUS[v.st] ? STATUS[v.st].name : (v.st || '?');
       return st + (v.st === 'A' || v.st === 'P' ? ' ' + (Number(v.pct) || 0) + '%' : '');
@@ -6933,7 +7032,7 @@
     var x = ch.split('|'), c = s.contracts.find(function (q) { return q.id === x[0]; }), p = c && c.pontos.find(function (q) { return q.id === x[1]; });
     return p ? { p: p, svc: x[2] } : null;
   }
-  function ncDet(sv) { return JSON.stringify([sv.q == null ? null : sv.q, sv.n || '', sv.itens || [], !!sv.pri, !!sv.ci]); }
+  function ncDet(sv) { return JSON.stringify([sv.q == null ? null : sv.q, sv.n || '', sv.itens || [], !!sv.pri, !!sv.ci, sv.fotos || []]); }
   function ncDescrita(sv) { return !!((sv.n && String(sv.n).trim()) || (Array.isArray(sv.itens) && sv.itens.length)); }
   // a mudança deste grupo abre rascunho? NC nova, ou NC que continua NC com outra descrição
   function abreRasc(c, svc, f) {
@@ -7965,7 +8064,9 @@
   function propCampos(x) {
     return Object.keys(x.campos || {}).map(function (k) {
       var a = x.campos[k].a;
-      return '<li><b>' + esc(fieldName(k, x.contrato_id)) + ':</b> ' + (a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, x.campos[k].v)) + '</b></li>';
+      var v = x.campos[k].v, fts = k.indexOf('serv.') === 0 && v && Array.isArray(v.fotos) ? v.fotos : [];
+      return '<li><b>' + esc(fieldName(k, x.contrato_id)) + ':</b> ' + (a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, v)) + '</b>' +
+        (fts.length ? '<div class="nc-fotos" data-nome="' + esc('NC · ' + fieldName(k, x.contrato_id)) + '">' + fts.map(function (fid) { return ncFtHtml(fid, null); }).join('') + '</div>' : '') + '</li>';
     }).join('');
   }
   function propHtml(cid, p) {
