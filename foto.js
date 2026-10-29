@@ -990,7 +990,7 @@
       if (k === 'coord' && !st.ll && st.km == null) return 'sem local nesta foto';
       if (k === 'ponto' && !findPoint(st.pid)) return semPontos() ? 'conservação: sem ponto' : 'nenhum ponto nesta foto';
       if (k === 'desc' && !(st.desc || '').trim()) return 'vazia nesta foto';
-      if ((k === 'contrato' || k === 'executora') && (findPoint(st.pid) || {})._na) return 'OAE não atendida pelo Proarte';
+      if ((k === 'contrato' || k === 'executora') && ((findPoint(st.pid) || {})._na || (c && c.semProarte))) return 'OAE não atendida pelo Proarte';
       if (k === 'executora' && !(c && c.executora)) return 'o contrato não tem';
       if (k === 'supervisora' && !(c && c.supervisora)) return 'o contrato não tem';
       return '';
@@ -1555,7 +1555,7 @@
       if (C.data && st.date) out.push(dateTxt(st.date));
       // OAE não atendida pelo Proarte: a legenda sai sem o contrato e sem a executora (nenhuma empresa atende a ponte), e a
       // linha da OAE é só o nome dela ("Ponte sobre o Rio Pacajá - km 406,91"; pedido do dono, 29/10/2026)
-      var na = !!(p && p._na);
+      var na = !!(p && p._na) || !!(c && c.semProarte);   // o item "OAEs sem Proarte" (sem contrato) também
       if (C.ponto && p) out.push(na ? p.nome + ' - ' + kmPTxt(p, c)
         : (oaeCt(c) ? 'OAE ' : 'Ponto ') + p.nome + ' - ' + kmPTxt(p, c) + (p.kmFim != null && p.kmIni != null ? ' a ' + nf(p.kmFim, 2) : ''));
       if (C.contrato && c && !na) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
