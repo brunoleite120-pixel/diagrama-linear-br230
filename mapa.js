@@ -122,6 +122,7 @@
     '  position:relative;height:100%;min-height:360px;border:1px solid var(--mp-line);border-radius:8px;overflow:hidden;background:var(--mp-bg);color:var(--mp-ink);font-size:13px;isolation:isolate}',
     '.mp-map{position:absolute;inset:0;background:var(--mp-bg);font:inherit}',
     '.mp .leaflet-container{background:var(--mp-bg);font:inherit;outline:0}',
+    '.mp .leaflet-container.mp-tecl:focus::after{content:"";position:absolute;inset:0;z-index:1001;pointer-events:none;box-shadow:inset 0 0 0 2px var(--mp-accent)}',
     '.mp.sat{--mp-road:#FFE27A;--mp-road-case:#1B1B1B;--mp-ctx:#E8E8E8}',
     '.mp.osm{--mp-road:#17201C;--mp-road-case:#FFFFFF;--mp-ctx:#5C6661}',
     '.mp-road{stroke:var(--mp-road)}.mp-road-case{stroke:var(--mp-road-case)}.mp-ctx{stroke:var(--mp-ctx);stroke-dasharray:6 6}',
@@ -414,6 +415,11 @@
     function q(sel) { return root.querySelector(sel); }
 
     var map = Lf.map(q('.mp-map'), { zoomControl: false, zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 6, maxZoom: 19, worldCopyJump: false, tap: true });
+    // anel do mapa só com o foco vindo do teclado: no clique ou toque o Leaflet foca o mapa por script, e :focus-visible também valeria
+    (function (el) {
+      el.addEventListener('keyup', function (e) { if (e.key === 'Tab' && e.target === el) el.classList.add('mp-tecl'); });
+      ['mousedown', 'touchstart', 'blur'].forEach(function (t) { el.addEventListener(t, function () { el.classList.remove('mp-tecl'); }, { passive: true }); });
+    })(map.getContainer());
     map.attributionControl.setPrefix(false);
     map.attributionControl.addAttribution('Eixo e km: SNV/DNIT ' + esc(snv.versao));
     Lf.control.zoom({ position: 'bottomright', zoomInTitle: 'Aproximar', zoomOutTitle: 'Afastar' }).addTo(map);
@@ -1564,7 +1570,7 @@
       }
       else if (act === 'gps-stop') stopGps();
       else if (act === 'close-live') { live.err = ''; liveCard(''); setGpsBtn(); }
-      else if (act === 'follow') { live.follow = !live.follow; if (live.follow && live.ll) { if (nav) { navUi(); segue(); } else map.panTo(live.ll); } updateLive(); }
+      else if (act === 'follow') { live.follow = !live.follow; if (live.follow && live.ll) { if (nav) { navUi(); segue(); } else map.panTo(live.ll, { animate: !reduced() }); } updateLive(); }
     });
     map.on('click', function () { basesMenu(false); });
     q('.mp-find').addEventListener('submit', function (e) { e.preventDefault(); goKm(q('#mpFindKm').value); });

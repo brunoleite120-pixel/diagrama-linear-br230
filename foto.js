@@ -577,6 +577,8 @@
     '.ft-batch.ft-gerando .ft-blist .ft-item input,.ft-batch.ft-gerando .ft-blist .ft-item select,.ft-batch.ft-gerando .ft-blist .ft-item textarea{pointer-events:none;opacity:.6}',
     // foto do lote aberta em tela cheia (tocar na prévia): passar o dedo troca de foto, puxar para baixo fecha (gestos.js)
     '.ft-ver{position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;background:#0E1311;color:#fff}',
+    '.ft .ft-ver :focus-visible,.ft .ft-cam :focus-visible{outline-color:#86AEE6}',
+    '.ft .ft-cam .ft-campop :focus-visible{outline-color:var(--ft-accent)}',
     '.ft-ver-top{display:flex;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) 10px calc(12px + env(safe-area-inset-left,0px))}',
     '.ft-ver-top .ft-verc{flex:1;text-align:center;font-size:13px;color:#C9D0CC;font-variant-numeric:tabular-nums}',
     '.ft-ver-top button{min-height:38px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font:inherit;font-size:14px;cursor:pointer}',

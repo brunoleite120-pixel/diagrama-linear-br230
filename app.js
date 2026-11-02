@@ -6346,14 +6346,15 @@
       return;
     }
     var el = document.querySelector('.pt[data-id="' + CSS.escape(id) + '"]');
-    if (el) el.scrollIntoView(direto ? { block: 'start' } : { behavior: 'smooth', block: 'start' });
+    if (el) el.scrollIntoView(direto ? { block: 'start' } : { behavior: rolagem(), block: 'start' });
   }
 
   // item novo com os Dados abertos: eles ficam depois dos serviços; a tela vai até o nome e o km (sem foco: o teclado não sobe)
+  function rolagem() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'; } catch (e) { return 'smooth'; } }
   function scrollToDados(id) {
     scrollToPoint(id);
     var d = document.querySelector('.pt[data-id="' + CSS.escape(id) + '"] .pt-dados[open]:not(.pt-des)');
-    if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (d) d.scrollIntoView({ behavior: rolagem(), block: 'center' });
   }
 
   // clique no desenho abre o ponto no editor; "Abrir para ler" (celular) abre a tela cheia nessa página
@@ -9055,7 +9056,7 @@
       var x = e.target.closest('.fn-b');
       if (!x) return;
       var s2 = $('pages').querySelectorAll('.sheet')[Number(x.dataset.fi)];
-      if (s2) s2.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (s2) s2.scrollIntoView({ block: 'start', behavior: rolagem() });
     });
     $('pages').addEventListener('scroll', function () { marcaFolha(); }, { passive: true });
     // dedo: com um campo de texto em uso (teclado aberto), a barra das páginas some para não ficar no meio da tela

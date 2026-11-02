@@ -779,14 +779,15 @@
         // cabe com os botões do topo do desenho: o desenho logo abaixo da barra; senão, o marcador no meio da faixa livre
         dy = rm.bottom - rd.top <= base - topo ? rd.top - topo : (rm.top + rm.bottom) / 2 - (topo + base) / 2;
       } else dy = rd.top - topo;
-      if (Math.abs(dy) > 2) window.scrollBy({ top: dy, behavior: 'smooth' });
+      if (Math.abs(dy) > 2) window.scrollBy({ top: dy, behavior: rolagem() });
     }
     // computador: o desenho e o cartão ficam em cima, e a busca, a lista e os cartões dos contratos embaixo. A ação feita lá
     // embaixo rola até o topo do desenho ou do cartão só se ele passou para cima da tela (o html{scroll-padding-top}
     // desconta a barra do topo); à vista, não rola
+    function rolagem() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'; } catch (e) { return 'smooth'; } }
     function verTopo(el) {
       var tb = document.querySelector('.topbar'), topo = tb ? tb.getBoundingClientRect().bottom : 0;
-      if (el && el.scrollIntoView && el.getBoundingClientRect().top < topo) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (el && el.scrollIntoView && el.getBoundingClientRect().top < topo) el.scrollIntoView({ block: 'start', behavior: rolagem() });
     }
     // o desenho mudou por uma ação lá de baixo ("Ver no desenho", "Ir ao km", "Mostrar todos"): ele vem à vista
     function verDesenho() { if (cel()) enquadrar(); else verTopo(host.querySelector('.vg-diag')); }
@@ -794,7 +795,7 @@
     // dela fica logo abaixo da barra do topo. À vista, não rola
     function verCaixa() {
       var p = host.querySelector('.vg-pnl');
-      if (p && p.scrollIntoView && p.getBoundingClientRect().bottom > window.innerHeight) p.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (p && p.scrollIntoView && p.getBoundingClientRect().bottom > window.innerHeight) p.scrollIntoView({ block: 'nearest', behavior: rolagem() });
     }
 
     // dedo (pointer: coarse): um toque até 12 px de um marcador conta nele, sem mudar o desenho em escala.
