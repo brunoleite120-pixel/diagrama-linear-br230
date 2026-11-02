@@ -165,7 +165,8 @@
   // só a volta dos pontos que têm km local nela (as OAEs não atendidas do 424). A conservação do eixo não passa na travessia
   function faixaNo(c, ramal) {
     if (c.kmLocal) return (c.ramal || '') === ramal ? lotRange(c) : null;
-    if (!ramal) return lotRange(c);
+    // OAEs sem Proarte: a faixa é só do km da primeira à última OAE; a folga dos 500 m vale também nas pontas
+    if (!ramal) { var r = lotRange(c); return r && c.semProarte ? [r[0] - OAE_RAIO, r[1] + OAE_RAIO] : r; }
     var ks = [];
     (c.pontos || []).concat(oaesFora(c)).forEach(function (p) { var k = kmPonto(p, c, ramal); if (k) ks.push(k[0], k[1]); });
     if (!ks.length) return null;
