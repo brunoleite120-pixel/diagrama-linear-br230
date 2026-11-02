@@ -885,6 +885,17 @@ body[data-pg="mapa"] .map-host .mp-chip{min-height:44px;padding-left:12px;paddin
 .nc-ft-x{position:absolute;top:2px;right:2px;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:rgba(23,32,28,.75);color:#fff;font-size:16px;line-height:24px;cursor:pointer}
 .nc-foto-add{min-height:40px;padding:0 12px;border:1px solid var(--line-campo);border-radius:8px;background:#fff;font:inherit;font-size:13px;font-weight:650;color:var(--ink)}
 .prop li .nc-fotos{margin:6px 0 2px}
+.nc-gal-box .nc-gal-rot{font-weight:650;color:var(--atencao-ink);overflow-wrap:anywhere}
+.nc-gal-c{display:flex;flex-direction:column;gap:10px}
+.nc-gal-box .nc-gal-av{color:var(--atencao-ink)}
+.nc-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.nc-gal-i{position:relative;display:flex;flex-direction:column;gap:2px;min-width:0;padding:2px;border:2px solid transparent;border-radius:10px;background:none;font:inherit;text-align:left;cursor:pointer}
+.nc-gal-i .nc-ft{display:block;width:100%;height:auto;aspect-ratio:1}
+.nc-gal-i img{display:block;width:100%;height:100%;object-fit:cover}
+.nc-gal-i img:not([src]){visibility:hidden}
+.nc-gal-i small{font-size:12px;line-height:1.25;color:var(--ink-2)}
+.nc-gal-i[aria-pressed="true"]{border-color:var(--accent);background:#E7EEF7}
+.nc-gal-i[aria-pressed="true"]::after{content:"✓";position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:15px;font-weight:700;line-height:26px;text-align:center}
 @media (max-width:600px){.nc-rasc>span{flex-basis:100%}.nc-rasc button{flex:1 1 0}}
 /* celular em pé: a faixa do rascunho fica presa acima da barra de baixo (e da Foto, que sobe sobre ela) enquanto o cartão está na
    tela. Para isso: o #editor não pode rolar (o overflow:auto é do painel do computador; aqui ele tem a altura do conteúdo e só

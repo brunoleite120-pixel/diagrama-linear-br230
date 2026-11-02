@@ -874,6 +874,20 @@
     return acc;
   }
 
+  function listarFotos(Banco, cod, escopo) {
+    var tudo = [], vistos = {};
+    function pag(antes, antesId, n) {
+      return Banco.fotosListar(cod, escopo, 1000, antes, antesId).then(function (arr) {
+        var novos = 0;
+        arr.forEach(function (f) { if (!vistos[f.id]) { vistos[f.id] = 1; tudo.push(f); novos++; } });
+        // a seguinte começa depois da última (hora e id, migração 25): fotos com a mesma hora na emenda não ficam de fora
+        var ult = arr[arr.length - 1], t = ult ? ult.tirada_em || ult.enviada_em : null;
+        if (arr.length < 1000 || !novos || n >= 50 || !t || !isFinite(Date.parse(t))) return tudo;
+        return pag(t, ult.id, n + 1);
+      });
+    }
+    return pag(null, null, 1);
+  }
   window.Galeria = function (o) {
     var nomesCt = o.nomes || nomesPadrao();   // funções de nome do contrato (o.nomes do app.js ou a cópia curta)
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
@@ -1009,20 +1023,7 @@
     }
     // o banco devolve no máximo 1000 de cada vez (as mais recentes): pede as anteriores à última até acabar. Fotos com a mesma
     // hora na emenda: a seguinte começa depois do par (hora, id). Se alguma vier de novo, sai repetida pelo id
-    function listarTodas(cod, escopo) {
-      var tudo = [], vistos = {};
-      function pag(antes, antesId, n) {
-        return o.Banco.fotosListar(cod, escopo, 1000, antes, antesId).then(function (arr) {
-          var novos = 0;
-          arr.forEach(function (f) { if (!vistos[f.id]) { vistos[f.id] = 1; tudo.push(f); novos++; } });
-          // a seguinte começa depois da última (hora e id, migração 25): fotos com a mesma hora na emenda não ficam de fora
-          var ult = arr[arr.length - 1], t = ult ? ult.tirada_em || ult.enviada_em : null;
-          if (arr.length < 1000 || !novos || n >= 50 || !t || !isFinite(Date.parse(t))) return tudo;
-          return pag(t, ult.id, n + 1);
-        });
-      }
-      return pag(null, null, 1);
-    }
+    function listarTodas(cod, escopo) { return listarFotos(o.Banco, cod, escopo); }
     function deBanco(f) {
       return { id: f.id, nome: f.nome_arquivo || 'foto.jpg', origem: 'banco', cid: f.contrato_id || '', pid: f.ponto_id || '', pnome: f.ponto_nome || '', lote: f.lote || '',
         km: f.km, lat: f.lat, lng: f.lng, em: f.tirada_em || f.enviada_em, desc: f.descricao || '', autor: f.autor_nome || '', situacao: f.situacao,
@@ -3328,6 +3329,7 @@
     }
     return { open: open, close: close, changed: changed, voltar: voltar, isOpen: function () { return !!root; }, baixando: function () { return bx ? bx.ls.length - bx.fim : 0; } };
   };
+  window.Galeria.listarTodas = listarFotos;   // a NC lista as fotos do ponto do mesmo jeito (app.js)
   // as contas sem tela, para o teste em ferramentas/teste-galeria.js (node, sem banco)
   window.Galeria.limparEnviadas = limparEnviadas;
   window.Galeria.puras = { linkDrive: linkDrive, ctsDoKm: ctsDoKm, porKm: porKm, partes: partes, resumoMover: resumoMover, FOLGA_KM: FOLGA_KM, POR_MOVER: POR_MOVER };

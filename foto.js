@@ -402,6 +402,10 @@
     /* celular: o contrato desce para baixo do título, com até 2 linhas, em vez de sair cortado */
     '@media (max-width:560px){.ft-head{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;row-gap:1px}.ft-head h2{grid-column:1;grid-row:1}.ft-head .ft-ct{grid-column:1;grid-row:2;white-space:normal;overflow:visible;line-height:1.3}.ft-head .ft-x{grid-column:2;grid-row:1 / span 2;min-width:44px;min-height:44px}}',
     '.ft-ct{font-size:12.5px;color:var(--ft-ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}',
+    // foto aberta pela NC: a faixa faz parte do cabeçalho, no alto de todas as etapas
+    '.ft.com-nc .ft-head{flex-wrap:wrap}',
+    '.ft-ncb{flex:1 1 100%;grid-column:1 / -1;margin:0;padding:6px 10px;border-left:4px solid var(--atencao-forte,#C98A00);border-radius:6px;background:var(--atencao-bg,#FFF4D6);color:var(--atencao-ink,#5C3D00);font-size:13px;line-height:1.35;overflow-wrap:anywhere}',
+    '.ft-ncb[hidden]{display:none}',
     '.ft-x{border:1px solid var(--ft-line);background:var(--ft-panel);color:var(--ft-ink);border-radius:8px;min-width:40px;min-height:40px;font-size:20px;line-height:1;cursor:pointer}',
     '.ft-body{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior-x:none;padding:16px}',   /* nada arrasta a tela para o lado (iPhone) */
     '.ft-start{max-width:520px;margin:4vh auto 0;display:flex;flex-direction:column;gap:12px}',
@@ -651,6 +655,7 @@
     '.ft-camgl i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3BD16F;margin-right:6px}',
     '.ft-camlot{border:0;border-radius:999px;padding:6px 10px;background:rgba(154,91,0,.9);color:#fff;font:inherit;font-size:12.5px}',
     '.ft-camlotx{flex:1 1 100%;padding:7px 10px;border-radius:8px;background:rgba(0,0,0,.7);color:#FFB4A8}',
+    '.ft-camnc{flex:1 1 100%;padding:6px 10px;border-radius:8px;background:rgba(0,0,0,.7);color:#fff;overflow-wrap:anywhere}',
     // prévia: o recorte da foto e o carimbo como vão sair, por cima da imagem
     '.ft-camov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}',
     '.ft-camfoot{display:flex;flex-direction:column}',
@@ -826,7 +831,7 @@
       root.setAttribute('aria-modal', 'true');
       root.setAttribute('aria-labelledby', 'ftTitle');
       root.innerHTML =
-        '<div class="ft-head"><h2 id="ftTitle">Foto com carimbo</h2><span class="ft-ct"></span><button type="button" class="ft-x" data-ft="close" aria-label="Fechar">×</button></div>' +
+        '<div class="ft-head"><h2 id="ftTitle">Foto com carimbo</h2><span class="ft-ct"></span><button type="button" class="ft-x" data-ft="close" aria-label="Fechar">×</button><p class="ft-ncb" id="ftNcb" hidden></p></div>' +
         '<div class="ft-body">' +
           '<div class="ft-start">' +
             '<h3>Tirar ou importar fotos</h3>' +
@@ -1282,8 +1287,19 @@
       if (!here.length || !cur || has(here, cur)) return '';
       return ' · <span class="ft-warn">' + (here.length === 1 ? 'este km é do contrato ' + esc(lotName(here[0])) : 'este km está nos contratos ' + esc(lotNames(here))) + '</span>';
     }
+    // a faixa da foto da NC. A foto levada para outro contrato não entra na NC (driveItem), e a faixa sai junto
+    function ncTitulo() { return 'Foto da NC · ' + opts.nc.nome + (opts.nc.ponto ? ' · ' + opts.nc.ponto : ''); }
+    function renderNcFaixa() {
+      var nc = opts.nc, its = batch ? liveItems() : null;
+      var on = !!nc && (its ? !its.length || its.some(function (it) { return it.cid === nc.cid; }) : !st || st.cid === nc.cid), el = q('.ft-ncb');
+      root.classList.toggle('com-nc', on);
+      el.hidden = !on;
+      el.innerHTML = on ? '<b>' + esc(ncTitulo()) + '.</b> Ao salvar, entra na NC.' : '';
+      if (on) root.setAttribute('aria-describedby', 'ftNcb'); else root.removeAttribute('aria-describedby');
+    }
     function renderHead() {
       var c = contract();
+      renderNcFaixa();
       if (batch) {   // lote de fotos: os lotes/contratos em uso
         var seen = {}, names = [];
         readyItems().forEach(function (it) { var x = byId(it.cid); if (x && !seen[x.id]) { seen[x.id] = 1; names.push(lotName(x)); } });
@@ -1356,6 +1372,7 @@
       // foto guardada que volta para o carimbo (Galeria › sem carimbo): fica no contrato e no ponto que já tinha
       if (ex.cid && byId(ex.cid)) o.cid = ex.cid;
       if (opts.nc && byId(opts.nc.cid)) o.cid = opts.nc.cid;
+      o.nc = opts.nc;   // a NC da tela em que a foto nasceu: ao fechar, ela ainda grava, e outra tela pode já ter aberto
       o.date = ex.date || (from === 'camera' ? new Date() : new Date(file.lastModified || Date.now()));
       o.from = from;
       o.meta = ex;
@@ -1779,7 +1796,7 @@
           if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1, querEnviar: a.drive !== false });
           return opts.drive.add([item]).then(function () {
             a.feita = ver; a.como = como; a.erroG = false; a.guardando = false;
-            if (opts.nc && opts.onNc && item.meta && item.meta.nc && !a.descartada) opts.onNc(opts.nc, [item.id]);   // foto da NC: entra na lista da NC
+            if (opts.onNc && item.meta && item.meta.nc && !a.descartada) opts.onNc(item.meta.nc, [item.id]);   // foto da NC: entra na lista da NC
             if (como === 'fila') refreshDrive();
           });
         });
@@ -1942,7 +1959,7 @@
         var meta = { cid: c ? c.id : null, pid: p ? p.id : null, pnome: p ? p.nome || null : null, lote: c ? nomes.formal(c) : null,
           km: st.km != null ? Math.round(st.km * 1000) / 1000 : null, lat: ll ? ll[0] : null, lng: ll ? ll[1] : null,
           em: d ? d.toISOString() : null, desc: desc || null };
-        if (opts.nc && c && c.id === opts.nc.cid) meta.nc = { cid: opts.nc.cid, pid: opts.nc.pid, svc: opts.nc.svc };
+        if (st.nc && c && c.id === st.nc.cid) meta.nc = { cid: st.nc.cid, pid: st.nc.pid, svc: st.nc.svc };
         return { id: st.uid || newUid(), nome: name, blob: blob, pastas: [(c && nomes.pasta(c)) || 'Sem lote', p ? p.nome || 'Ponto sem nome' : 'Sem ponto'],
           pastaAntiga: nomes.pastaAntiga(c), descricao: info, meta: meta, enviar: st.drive !== false };
       });
@@ -1955,9 +1972,9 @@
       var b0 = batch, mud0 = batch && batch.mud;
       opts.drive.add(list).then(function () {
         // foto da não conformidade: os ids entram na lista de fotos da NC (app)
-        if (opts.nc && opts.onNc) {
-          var ncIds = list.filter(function (x) { return x.meta && x.meta.nc; }).map(function (x) { return x.id; });
-          if (ncIds.length) opts.onNc(opts.nc, ncIds);
+        if (opts.onNc) {
+          var ncL = list.filter(function (x) { return x.meta && x.meta.nc; });
+          if (ncL.length) opts.onNc(ncL[0].meta.nc, ncL.map(function (x) { return x.id; }));
         }
         if (batch) {
           var ids = list.map(function (x) { return x.id; }), vai = list.filter(function (x) { return x.enviar !== false; }).map(function (x) { return x.id; });
@@ -2687,8 +2704,8 @@
     }
     function camFix() { return lastFix && Date.now() - lastFix.t < 30000 ? lastFix : null; }
     function renderCamGps() {
-      var el = q('.ft-camgps'), f = camFix();
-      if (!f) { el.innerHTML = '<span class="ft-camgl"><span class="ft-warn">' + esc(lastFixErr || 'Procurando o GPS…') + '</span> As fotos tiradas agora ficam sem local.</span>'; return; }
+      var el = q('.ft-camgps'), f = camFix(), nc = opts.nc ? '<span class="ft-camnc"><b>' + esc(ncTitulo()) + '.</b> Ao salvar, entra na NC.</span>' : '';
+      if (!f) { el.innerHTML = nc + '<span class="ft-camgl"><span class="ft-warn">' + esc(lastFixErr || 'Procurando o GPS…') + '</span> As fotos tiradas agora ficam sem local.</span>'; return; }
       // uma linha só: GPS, km e ponto; "N contratos neste km" vira um botão que abre o aviso inteiro
       var loc = locate(f.ll), h, lot = '';
       if (loc.dist > 2000) h = 'GPS ' + Math.round(f.acc || 0) + ' m · fora da ' + esc(rodovia()) + ' (' + nf(loc.dist / 1000, 1) + ' km do eixo)';
@@ -2700,7 +2717,7 @@
         lot = gpsLot(loc.km, loc.ramal);
       }
       var nLot = lot ? lotsAt(loc.km, loc.ramal).length : 0;
-      el.innerHTML = '<span class="ft-camgl"><i aria-hidden="true"></i>' + h + '</span>' +
+      el.innerHTML = nc + '<span class="ft-camgl"><i aria-hidden="true"></i>' + h + '</span>' +
         (lot ? '<button type="button" class="ft-camlot" data-ft="cam-lots" aria-expanded="' + camLotsAberto + '">' + (nLot === 1 ? 'km de outro contrato' : nLot + ' contratos neste km') + ' \u25be</button>' +
           (camLotsAberto ? '<span class="ft-camlotx">' + lot.replace(/^ · /, '') + '</span>' : '') : '');
     }
@@ -3193,7 +3210,7 @@
     function open(o) {
       o = o || {};
       opts.initialPoint = o.pointId || '';
-      // foto da não conformidade: { cid, pid, svc, nome, desc } (a foto fica no contrato e no ponto da NC e entra na lista dela)
+      // foto da não conformidade: { cid, pid, svc, nome, ponto, desc } (a foto fica no contrato e no ponto da NC e entra na lista dela)
       opts.nc = o.nc || null;
       if (!root) build();
       (document.fullscreenElement || document.body).appendChild(root);
@@ -3202,7 +3219,6 @@
       startGps();
       startView();
       refreshDrive();
-      if (opts.nc) notify('Foto da não conformidade (' + opts.nc.nome + '): ao salvar, a foto entra na NC.', 5000);
       if (o.fotos && o.fotos.length) onFiles(o.fotos.map(function (x) { return x.file; }), 'camapp', o.fotos.map(function (x) { return x.meta; }));
       setTimeout(function () { var x = q('.ft-x'); if (x) x.focus(); }, 30);
     }

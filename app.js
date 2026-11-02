@@ -5111,7 +5111,72 @@
     var sv = p.serv[s.key];
     if (!window.FotoCarimbo || !sv || !comQtd(oaeSt(sv))) return;
     fotoCid = c.id;
-    abreFoto(p.id, null, { cid: c.id, pid: p.id, svc: s.key, nome: s.short, desc: ncDescFoto(c, p, s, sv) });
+    abreFoto(p.id, null, { cid: c.id, pid: p.id, svc: s.key, nome: s.short, ponto: p.nome || p.codigo || '', desc: ncDescFoto(c, p, s, sv) });
+  }
+  // "Usar foto da galeria do app" (cartão da NC): as fotos daquele ponto (na conservação, do km do segmento, como "Fotos do
+  // segmento") que a pessoa já vê na galeria, as do aparelho e as do banco, para marcar. As marcadas entram pelo mesmo caminho da
+  // foto tirada (ncFotosChegaram): vão para o rascunho da NC e nada sobe aqui
+  function ncFotosDoPonto(c, p) {
+    var folga = window.FotoCarimbo.km.FOLGA_KM, km = isConserva(c) ? [Math.min(Number(p.kmIni), Number(p.kmFim)) - folga, Math.max(Number(p.kmIni), Number(p.kmFim)) + folga] : null;
+    function aqui(cid, pid, k) { return cid === c.id && (km ? k != null && isFinite(k) && Number(k) >= km[0] && Number(k) <= km[1] : pid === p.id); }
+    return Promise.all([driveQ.list().catch(function () { return []; }), window.Galeria.listarTodas(window.Banco, banco.login.codigo, nivel() >= 2 ? 'todas' : 'minhas').then(function (arr) { return { arr: arr }; }, function (e) { return { erro: e }; })]).then(function (r) {
+      var vistos = {}, fotos = [], eq = r[1].arr;
+      if (eq) eq.forEach(function (f) { vistos[f.id] = f; });
+      r[0].forEach(function (x) {
+        var m = x.meta || {}, f = vistos[x.id];
+        // sem o rascunho do clique (a foto sem carimbo) e sem a cópia de foto que saiu da equipe. A que está no banco fica no ponto
+        // de lá: pode ter sido movida em outro aparelho, e a cópia daqui não fica sabendo
+        if (m.rascunho || !(f ? aqui(f.contrato_id, f.ponto_id, f.km) : aqui(m.cid, m.pid, m.km)) || (eq && x.situacao === 'enviada' && !f)) return;
+        vistos[x.id] = 2;
+        fotos.push({ id: x.id, em: m.em || '', desc: m.desc || '', aqui: x.situacao === 'aparelho' });
+      });
+      if (eq) eq.forEach(function (f) { if (vistos[f.id] === f && aqui(f.contrato_id, f.ponto_id, f.km)) fotos.push({ id: f.id, em: f.tirada_em || f.enviada_em || '', desc: f.descricao || '', aqui: false }); });
+      fotos.sort(function (a, b) { return String(b.em).localeCompare(String(a.em)); });
+      return { fotos: fotos, erro: r[1].erro || null };
+    });
+  }
+  function ncUsarGaleria(c, p, s) {
+    var nome = p.nome || p.codigo || '', ponto = isOae(c) ? 'Esta OAE' : isConserva(c) ? 'Este segmento' : 'Este ponto', nc = { cid: c.id, pid: p.id, svc: s.key };
+    var f = modal('<h2 id="modalTitle">Usar foto da galeria do app</h2><p class="nc-gal-rot">' + esc('Foto da NC · ' + s.short + (nome ? ' · ' + nome : '')) + '</p>' +
+      '<div class="nc-gal-c" aria-live="polite"><p>Carregando as fotos…</p></div>' +
+      '<div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button type="submit" class="btn primary" disabled>Usar foto</button></div>', function (form) {
+        var ids = [].map.call(form.querySelectorAll('.nc-gal-i[aria-pressed="true"]'), function (b) { return b.dataset.foto; });
+        if (!ids.length) return;
+        closeModal();
+        ncFotosChegaram(nc, ids);
+        var bt = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="nc-foto-gal"][data-svc="' + CSS.escape(s.key) + '"]');
+        if (bt) try { bt.focus({ preventScroll: true }); } catch (e) { /* navegador antigo */ }
+      }, 'nc-gal-box');
+    var usar = f.querySelector('button[type=submit]');
+    // sem foto para marcar, a saída é tirar uma pela Foto da NC
+    function semFoto(msg) {
+      f.querySelector('.nc-gal-c').innerHTML = '<p>' + esc(msg) + '</p>';
+      f.querySelector('[data-close]').textContent = 'Fechar';
+      usar.type = 'button'; usar.disabled = false; usar.textContent = 'Tirar foto da NC';
+      usar.addEventListener('click', function () { closeModal(function () { openFotoNc(c, p, s); }); });
+    }
+    ncFotosDoPonto(c, p).then(function (r) {
+      if (!f.isConnected) return;
+      var sv = p.serv[s.key], ja = sv && Array.isArray(sv.fotos) ? sv.fotos : [], l = r.fotos.filter(function (x) { return ja.indexOf(x.id) < 0; });
+      if (!l.length) {
+        semFoto(r.erro ? errText(r.erro) : r.fotos.length ? 'As fotos ' + (ponto === 'Esta OAE' ? 'desta OAE' : ponto === 'Este segmento' ? 'deste segmento' : 'deste ponto') + ' já estão nesta NC.' : ponto + ' ainda não tem foto na galeria do app.');
+        return;
+      }
+      f.querySelector('.nc-gal-c').innerHTML = (r.erro ? '<p class="nc-gal-av">' + esc(errText(r.erro)) + ' Aqui estão só as fotos deste aparelho.</p>' : '') +
+        '<p>Marque as fotos. Elas entram no rascunho da NC e nada é enviado até você tocar em "' + (isFiscal() ? 'Enviar para aprovação' : 'Salvar') + '".</p><div class="nc-gal" role="group" aria-label="Fotos">' + l.map(function (x) {
+          var d = x.em && isFinite(Date.parse(x.em)) ? new Date(x.em).toLocaleDateString('pt-BR') : '';
+          return '<button type="button" class="nc-gal-i" aria-pressed="false" data-foto="' + esc(x.id) + '" aria-label="' + esc('Foto' + (d ? ' de ' + d : '') + (x.desc ? ': ' + x.desc : '')) + '"><span class="nc-ft" data-foto="' + esc(x.id) + '"><img alt=""></span>' +
+            (d ? '<small>' + d + '</small>' : '') + (x.aqui ? '<small>só neste aparelho</small>' : '') + '</button>';
+        }).join('') + '</div>';
+      f.querySelector('.nc-gal').addEventListener('click', function (e) {
+        var b = e.target.closest('.nc-gal-i');
+        if (!b) return;
+        b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+        var n = f.querySelectorAll('.nc-gal-i[aria-pressed="true"]').length;
+        usar.disabled = !n;
+        usar.textContent = n > 1 ? 'Usar ' + n + ' fotos' : n ? 'Usar 1 foto' : 'Usar foto';
+      });
+    });
   }
   // as fotos salvas na tela da foto aberta pela NC
   function ncFotosChegaram(nc, ids) {
@@ -5124,6 +5189,14 @@
     if (c === active()) rerenderPoint(p);
     save();
     toast((l.length - n0 === 1 ? 'A foto entrou' : 'As ' + (l.length - n0) + ' fotos entraram') + ' na não conformidade. Toque em ' + (isFiscal() ? '"Enviar para aprovação"' : '"Salvar"') + ' na NC.', 6000);
+  }
+  // quantas destas fotos a pessoa ainda acha na galeria (no aparelho ou no banco)
+  function ncFotosNaGaleria(ids) {
+    return Promise.all([driveQ.list(), window.Galeria.listarTodas(window.Banco, banco.login.codigo, nivel() >= 2 ? 'todas' : 'minhas')]).then(function (r) {
+      var ha = {};
+      r[0].concat(r[1]).forEach(function (f) { ha[f.id] = 1; });
+      return ids.filter(function (x) { return ha[x]; }).length;
+    });
   }
   // a foto descartada na tela da foto sai da lista da NC
   function ncFotosSairam(nc, ids) {
@@ -5144,13 +5217,14 @@
     var fts = Array.isArray(sv.fotos) ? sv.fotos : [], pode = podeFotos(active()) && !readOnly();
     if (!fts.length && !pode) return '';
     return '<div class="nc-fotos" data-nome="' + esc('NC · ' + s.short) + '">' + fts.map(function (fid) { return ncFtHtml(fid, pode ? { id: id, svc: s.key } : null); }).join('') +
-      (pode ? '<button type="button" class="nc-foto-add" data-act="nc-foto" data-id="' + id + '" data-svc="' + s.key + '">📷 Foto da NC</button>' : '') + '</div>';
+      (pode ? '<button type="button" class="nc-foto-add" data-act="nc-foto" data-id="' + id + '" data-svc="' + s.key + '">📷 Foto da NC</button>' +
+        (galeriaOn() ? '<button type="button" class="nc-foto-add" data-act="nc-foto-gal" data-id="' + id + '" data-svc="' + s.key + '">Usar foto da galeria do app</button>' : '') : '') + '</div>';
   }
   var ncMini = {}, ncMiniPedindo = {}, ncMiniT = null;
   function ncMinis() {
     ncMiniT = null;
-    var falta = [];
-    document.querySelectorAll('.nc-ft img:not([src])').forEach(function (im) {
+    var falta = [], depois = [];   // depois: as que passam de 40 vão no pedido seguinte (a galeria do ponto pede muitas)
+    document.querySelectorAll('.nc-ft:not(.sem) img:not([src])').forEach(function (im) {
       var id = im.closest('.nc-ft').dataset.foto;
       if (ncMini[id]) im.src = ncMini[id]; else if (falta.indexOf(id) < 0 && !ncMiniPedindo[id]) falta.push(id);
     });
@@ -5158,17 +5232,19 @@
     falta.forEach(function (id) { ncMiniPedindo[id] = 1; });
     (driveQ ? driveQ.list() : Promise.resolve([])).then(function (l) {
       (l || []).forEach(function (r) { if (r.mini && falta.indexOf(r.id) >= 0 && !ncMini[r.id]) ncMini[r.id] = URL.createObjectURL(r.mini); });
-      var resto = falta.filter(function (id) { return !ncMini[id]; }).slice(0, 40);
+      var resto = falta.filter(function (id) { return !ncMini[id]; });
       if (!resto.length || !banco.login || !window.Banco || !window.Banco.fotosMini) return;
+      depois = resto.slice(40); resto = resto.slice(0, 40);
       return window.Banco.fotosMini(banco.login.codigo, resto).then(function (arr) {
         (arr || []).forEach(function (m) { if (m && m.id && m.jpeg) ncMini[m.id] = 'data:image/jpeg;base64,' + m.jpeg; });
       });
-    }).catch(function () { /* sem rede: fica o quadrado cinza */ }).then(function () {
+    }).catch(function () { depois = [];   /* sem rede: fica o quadrado cinza */ }).then(function () {
       falta.forEach(function (id) { delete ncMiniPedindo[id]; });
       document.querySelectorAll('.nc-ft img:not([src])').forEach(function (im) {
-        var u = ncMini[im.closest('.nc-ft').dataset.foto];
-        if (u) im.src = u; else im.closest('.nc-ft').classList.add('sem');
+        var id = im.closest('.nc-ft').dataset.foto, u = ncMini[id];
+        if (u) im.src = u; else if (depois.indexOf(id) < 0) im.closest('.nc-ft').classList.add('sem');
       });
+      if (depois.length && !ncMiniT) ncMiniT = setTimeout(ncMinis, 60);
     });
   }
   if (window.MutationObserver) new MutationObserver(function () {
@@ -5657,6 +5733,12 @@
       if (ncp && ncs) openFotoNc(c, ncp, ncs);
       return;
     }
+    if (act === 'nc-foto-gal') {
+      if (readOnly()) { toast('Para usar fotos, entre com o seu código.'); openLogin(); return; }
+      var ngp = findPoint(b.dataset.id), ngs = servicesOf(c).find(function (x) { return x.key === b.dataset.svc; });
+      if (ngp && ngs && podeFotos(c) && galeriaOn() && ngp.serv[ngs.key] && comQtd(oaeSt(ngp.serv[ngs.key]))) ncUsarGaleria(c, ngp, ngs);
+      return;
+    }
     // barra do gráfico: escolhe a medição (o topo e a curva ABC passam a ser só dela); tocar de novo, ou "Todas as medições", volta a todas
     if (act === 'med-bar' || act === 'abc-todas') {
       var art = b.closest('article.pt');
@@ -5926,11 +6008,19 @@
         if (!rd) { rascTela(); return; }
         if (act === 'nc-descartar') {
           var rguard = clone(rcur), rpid = p.id, rcid = c.id;
+          // as fotos que só o rascunho tinha saem da NC e ficam na galeria (nada é apagado)
+          var rft0 = rd.a && Array.isArray(rd.a.fotos) ? rd.a.fotos : [], rftn = (rcur && Array.isArray(rcur.fotos) ? rcur.fotos : []).filter(function (x) { return rft0.indexOf(x) < 0; });
+          var ravs = function (n) { return 'Rascunho da não conformidade descartado.' + (n ? ' ' + (n === 1 ? '1 foto continua' : n + ' fotos continuam') + ' na galeria. Se a foto foi tirada só para esta NC, ' + (isFiscal() ? 'peça ao engenheiro para apagar.' : 'apague lá.') : ''); };
           p.serv[rsv] = rd.a ? clone(rd.a) : { st: 'NV' };
           delete rm[rch]; rascGravar(rm);
           rerenderPoint(p);
           save();
-          offerUndo('Rascunho da não conformidade descartado.', function () {
+          // a foto já apagada da galeria não conta: o aviso sai na hora e acerta o número depois de conferir (sem rede, fica como está)
+          if (rftn.length && galeriaOn()) ncFotosNaGaleria(rftn).then(function (n) {
+            var ru = document.querySelector('#undoBar span');
+            if (ru && ru.textContent === ravs(rftn.length)) ru.textContent = ravs(n);
+          }, function () { /* sem rede */ });
+          offerUndo(ravs(rftn.length), function () {
             var c2 = contractById(rcid), p2 = c2 && c2.pontos.find(function (q) { return q.id === rpid; });   // a pessoa pode ter ido a outro contrato: a barra continua na tela
             if (!p2) return;
             p2.serv[rsv] = rguard;
@@ -5960,6 +6050,10 @@
         rascTela();
         schedulePreview();
         if (!isFiscal()) toast('Não conformidade salva.', 3000);
+        // a foto da NC que está só neste aparelho sobe junto: sem isso, quem aprova não a vê
+        if (driveQ && rcur && Array.isArray(rcur.fotos) && rcur.fotos.length) driveQ.enviar(rcur.fotos, true).then(function (m) {
+          if (m) toast((isFiscal() ? '' : 'Não conformidade salva. ') + (m === 1 ? '1 foto da NC que estava só neste aparelho foi' : m + ' fotos da NC que estavam só neste aparelho foram') + ' para a fila do Drive.', 5000);
+        }, function () { /* segue no aparelho: dá para enviar pela galeria */ });
         return;
       case 'set-marca':
         p = findPoint(b.dataset.id);
