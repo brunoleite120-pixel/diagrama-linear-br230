@@ -366,7 +366,7 @@
   function oaeNec(p, c) {
     var r = { dn: 0, exec: 0, ok: 0, nv: 0, aval: 0, pri: 0, ci: 0 };
     servicesOf(c || ownerOf(p)).forEach(function (s) {
-      var sv = p.serv[s.key], st = oaeSt(sv);
+      var sv = svSalvo(p, s.key, c), st = oaeSt(sv);
       if (st === 'NA') return;
       r.aval++;
       if (st === 'NV') r.nv++;
@@ -397,7 +397,7 @@
       if (n.pri) r.pri++;
       if (!n.aval || n.nv === n.aval) r.nv++;
       lista.forEach(function (s) {
-        var sv = p.serv[s.key], gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
+        var sv = svSalvo(p, s.key, c), gr = r.grupos[s.key], q = sv && sv.q != null ? Number(sv.q) : NaN;
         if (oaeSt(sv) !== 'DN') return;
         gr.pontes++;
         if (s.un && s.un !== '%') { if (isFinite(q)) gr.q += q; else gr.semQ++; }
@@ -1702,7 +1702,7 @@
     // grupos: cor = estado marcado na vistoria; "~" = estimativa do dano; contorno roxo = alerta alto nas medições.
     // Com a análise, a célula mostra a última restauração e, por cima, o que a vistoria viu depois (celRest)
     servicesOf(c || ownerOf(p)).forEach(function (s, i) {
-      var sv = p.serv[s.key], k = oaeSt(sv), st = oaeStOf(s, k), y = g.yServ + i * g.servStep;
+      var sv = svSalvo(p, s.key, c), k = oaeSt(sv), st = oaeStOf(s, k), y = g.yServ + i * g.servStep;
       var gi = a && a.grupos ? a.grupos[s.key] : null;
       if (an) celRest(o, an, a, p, s, sv, k, bx, y, bw, g.servH);
       else celNC(o, medO, aO, s, sv || {}, k, bx, y, bw, g.servH, false);
@@ -1751,7 +1751,7 @@
     // os itens marcados na vistoria saem no alto, um grupo por linha (com o "outro item ou local" do grupo)
     var itl = [];
     servicesOf(c || ownerOf(p)).forEach(function (s) {
-      var sv = p.serv[s.key] || {}, k = oaeSt(sv), its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
+      var sv = svSalvo(p, s.key, c) || {}, k = oaeSt(sv), its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
       if (!its.length && !(comQtd(k) && sv.n)) return;
       var tx = s.short + (k === 'EX' ? ' (NC em correção)' : '') + ': ' + its.join(', ') + (sv.n ? (its.length ? ' · ' : '') + sv.n : '');
       wrap('• ' + tx, bw - 10, fs).forEach(function (x, j) { itl.push({ t: j ? '  ' + x : x, cor: '#5C3D00' }); });
@@ -2122,7 +2122,7 @@
     var kt = trafSt(sv.trafeg);
     celEstado(o, TRAFEG, sv.trafeg, kt, TRAF_STATUS[kt], bx, g.yTraf, bw, g.servH);
     servicesOf(c).forEach(function (s, i) {
-      var x = sv[s.key], k = oaeSt(x);
+      var x = svSalvo(p, s.key, c), k = oaeSt(x);
       if (an) celRest(o, an, a, p, s, x || {}, k, bx, g.yServ + i * g.servStep, bw, g.servH);
       else celNC(o, medO, aO, s, x || {}, k, bx, g.yServ + i * g.servStep, bw, g.servH, true);
     });
@@ -2147,7 +2147,7 @@
     var sv = p.serv || {}, notas = [], t = sv.trafeg, nt = txtLimpo(t && t.n), kt = trafSt(t);
     if (nt && (kt === 'R' || kt === 'I')) notas.push(TRAFEG.short + ': ' + nt);
     servicesOf(c).forEach(function (s) {
-      var x = sv[s.key], n = txtLimpo(x && x.n);
+      var x = svSalvo(p, s.key, c), n = txtLimpo(x && x.n);
       if (n && comQtd(oaeSt(x))) notas.push((s.tot || s.short) + ': ' + n);
     });
     return { obs: p.obs || '', notas: notas };
@@ -2277,9 +2277,10 @@
   }
 
   // ------------------------------------------------------------------ estado
-  // aba/dadosAb/grpAb: aba aberta na ponte (vist | med), "Dados da OAE" aberto e grupos abertos na aba Medições ("pid|grupo");
+  // aba/dadosAb/grpAb: aba do item aberto (vist | med), "Dados" recolhidos abertos e grupos abertos na aba Medições ("pid|grupo");
+  // abaCt: a última aba tocada, vale para os próximos itens enquanto o contrato estiver aberto ({ cid, v }; v null = padrão);
   // medModo: grupo | abc (aba Medições); servModo: o mesmo nos serviços do contrato (resumo da análise)
-  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, dadosAb: {}, desAb: {}, grpAb: {}, ocAb: {}, medModo: 'grupo', servModo: 'grupo', voltar: null };
+  var state, ui = { contractOpen: false, open: {}, wide: false, medSel: {}, medGlobal: {}, trechosErro: '', aba: {}, abaPad: {}, abaCt: null, dadosAb: {}, desAb: {}, grpAb: {}, ocAb: {}, medModo: 'grupo', servModo: 'grupo', voltar: null, lista: null, resAb: {} };
 
   function validState(s) {
     return s && Array.isArray(s.contracts) && s.contracts.every(function (c) {
@@ -2337,6 +2338,7 @@
   function gravarAgora() {
     saveTimer = null;
     if (aba.ro) return;   // outra aba edita: esta não grava por cima
+    undoConfere();
     var el = document.getElementById('saveState');
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
@@ -2371,8 +2373,9 @@
   var $ = function (id) { return document.getElementById(id); };
   var toastTimer = null;
   function toast(msg, ms) {
-    var t = $('toast');
+    var t = $('toast'), ub = undoFica && $('undoBar');
     t.textContent = msg;
+    t.style.bottom = ub && ub.getClientRects().length ? (window.innerHeight - ub.getBoundingClientRect().top + 8) + 'px' : '';   // a barra de Desfazer sem prazo não esconde o aviso
     t.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 3200);
@@ -2432,7 +2435,7 @@
     var np = document.querySelector('#pgNav [data-pg="pontos"] .pg-t');
     if (np && at) np.textContent = isConserva(at) ? 'Segmentos' : isOae(at) ? 'OAEs' : 'Pontos';
   }
-  function ctCurto(c) { var n = ctNumeroCurto(c); return n ? CT_CURTO[ctGrupo(c)] + ' ' + n : ctNome(c); }
+  function ctCurto(c) { var n = ctNumeroCurto(c); return semContrato(c) ? 'S/Proarte' : n ? CT_CURTO[ctGrupo(c)] + ' ' + n : ctNome(c); }
 
   // ---------------- celular e tablet: atalhos Pontos · Diagrama · Mapa (o editor fica em cima da folha) e, no celular em pé,
   // a barra do topo que encolhe ao rolar para baixo (fica só a 2ª linha, com o contrato curto) e volta ao rolar para cima.
@@ -2527,6 +2530,7 @@
   function geralAtivo() { return visaoOn && !medicoesOn && !!$('visaoHost') && !isPublico() && state.contracts.length > 0 && !(mmPc && mmPc.matches); }
   function marcaPg(k) { $('pgNav').querySelectorAll('[data-pg]').forEach(function (b) { if (b.dataset.pg === k) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }); }
   function aplicaPg() {
+    undoTelaConfere();
     var nav = $('pgNav'), on = pgAtivo(), g = !on && geralAtivo();
     if (!nav) return;
     nav.hidden = !on && !g;
@@ -2622,7 +2626,9 @@
   // tocar em "Abrir em OAEs" no balão do mapa
   function abrirDoMapa(pid) {
     if (!findPoint(pid)) return;
+    undoProxima();
     ui.open = {}; ui.open[pid] = true;
+    listaMostra(findPoint(pid), active());
     ui.voltar = mdOn() ? { pg: 'mapa' } : null;
     if (pgAtivo()) irPg('pontos');
     renderEditor();
@@ -3051,10 +3057,10 @@
     c.pontos.forEach(function (p) { usados[txtLimpo(p.nome).toUpperCase()] = true; });
     for (var i = c.pontos.length + 1; ; i++) { var n = 'S' + String(i).padStart(2, '0'); if (!usados[n]) return n; }
   }
-  // toque num botão da trafegabilidade: T, R ou I; tocar de novo no marcado volta a sem vistoria. A nota fica sempre (q, pri, ci
-  // e pct não existem aqui)
+  // toque num botão da trafegabilidade: T, R ou I; "Limpar" (NV) volta a sem vistoria. A nota fica sempre (q, pri, ci e pct não
+  // existem aqui)
   function trafToque(sv, st) {
-    var r = { st: TRAF_ORDER.indexOf(st) >= 0 && trafSt(sv) !== st ? st : 'NV' };
+    var r = { st: TRAF_ORDER.indexOf(st) >= 0 ? st : 'NV' };
     if (sv && sv.n) r.n = sv.n;
     return r;
   }
@@ -3101,9 +3107,11 @@
     return h.join('');
   }
   function renderEditor() {
+    abaArruma();
     var c = active(), cons = isConserva(c);
     var h = [];
     ui.trechosErro = '';   // o erro da lista de limites recusada vale até o editor ser refeito
+    if (!ui.lista || ui.lista.cid !== c.id) ui.lista = listaNova(c.id, false);   // outro contrato: busca limpa e "Só com NC" desligado
     h.push('<section class="card">');
     // conservação: o tipo no título, numa linha embaixo, só para leitura (sem número, o nome de tela é o Lote, que não diz o tipo)
     h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span>' +
@@ -3195,13 +3203,15 @@
     h.push('</section>');
 
     var pts = sortedPoints(c), oae = isOae(c);
-    if (oae || cons) { carregarAnalise(c); h.push(analiseResumoHtml(c)); }
-    if (isPavimentada(c)) h.push(desempResumoHtml(c));
+    // celular: a análise e o desempenho numa linha fechada, para a lista subir; tablet e computador: à direita, no Resumo do contrato
+    var cel = !mdOn() && !!(mmCel && mmCel.matches);
+    if (oae || cons) { carregarAnalise(c); h.push(cel ? analiseLinha(c) : analiseResumoHtml(c)); }
+    if (isPavimentada(c)) h.push(cel ? desempLinha(c) : desempResumoHtml(c));
     var iLista = h.length;   // até aqui, o resumo do contrato (dados, análise, desempenho); daqui em diante, a lista
     // conservação: a lista "Segmentos". Sem nenhum, só "Gerar segmentos" (pelos limites dos trechos); com pelo menos um, só
     // "+ Segmento" (os dois nunca juntos: um segmento solto num contrato vazio esconderia o "Gerar")
     if (cons) {
-      h.push('<div class="points-head"><h2>Segmentos<span class="count">' + pts.length + '</span></h2>' + (pts.length ? '<button type="button" class="btn small" data-act="add-point">+ Segmento</button>' :
+      h.push('<div class="points-head"><h2>Segmentos<span class="count" id="ptCount" data-t="' + pts.length + '">' + pts.length + '</span></h2>' + (pts.length ? '<button type="button" class="btn small" data-act="add-point">+ Segmento</button>' :
         '<button type="button" class="btn small" data-act="gerar-segmentos">Gerar segmentos</button>') + '</div>');
       h.push('<div class="hint"><b>Faixa do contrato:</b> ' + esc(faixaTexto(c) || 'informe o km inicial e o final nos dados do contrato') + '</div>');
       if (pts.length) h.push('<div class="hint">Ordenados por km, como no diagrama. Toque num segmento (aqui ou no desenho) para marcar o estado.</div>');
@@ -3212,10 +3222,10 @@
       var anL = anOf(c), gL = medGlobalDe(c, anL), vL = function (p) { var a = anL.pontes && anL.pontes[p.id]; return a ? Number(a.meses[String(gL)]) || 0 : 0; };
       var nTot = pts.length;
       pts = pts.filter(function (p) { return vL(p) > 0; }).sort(function (x, y) { return vL(y) - vL(x); });
-      h.push('<div class="points-head"><h2>OAEs<span class="count">' + pts.length + ' de ' + nTot + '</span></h2><button type="button" class="btn small" data-act="an-med" data-v="0">Todas por km</button></div>');
+      h.push('<div class="points-head"><h2>OAEs<span class="count" id="ptCount" data-t="' + pts.length + ' de ' + nTot + '">' + pts.length + ' de ' + nTot + '</span></h2><button type="button" class="btn small" data-act="an-med" data-v="0">Todas por km</button></div>');
       h.push('<div class="hint">Só as OAEs com serviço na ' + esc(medTxt(anL, gL)) + ', da maior para a menor. Ao abrir uma, o gráfico já mostra essa medição.</div>');
     } else {
-      h.push('<div class="points-head"><h2>' + (oae ? 'OAEs' : 'Pontos críticos') + '<span class="count">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ OAE' : '+ Ponto') + '</button></div>');
+      h.push('<div class="points-head"><h2>' + (oae ? 'OAEs' : 'Pontos críticos') + '<span class="count" id="ptCount" data-t="' + pts.length + '">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ OAE' : '+ Ponto') + '</button></div>');
       h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa OAE (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
         'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
     }
@@ -3227,6 +3237,7 @@
       if (pAb) ui.open[pAb.id] = true;
       if (!pAb) ui.voltar = null;
     }
+    if (pts.length) h.push(listaFiltroHtml(c, cons ? 'segmento' : oae ? 'OAE' : 'ponto'));
     h.push('<div class="pt-list" id="ptList">');
     pts.forEach(function (p) { h.push(p === pAb ? ptMarcadoHtml(p) : pointCard(p)); });
     h.push('</div>');
@@ -3238,7 +3249,7 @@
     } else if (isFiscal() && cons && !pts.length) {
       nota = '<div class="ro-note fiscal-note"><span>Este contrato de conservação ainda não tem segmentos.</span></div>';
     }
-    var ed = $('editor');
+    var ed = $('editor'), aeB = document.activeElement, fB = aeB && aeB.id === 'ptBusca' ? { s: aeB.selectionStart, e: aeB.selectionEnd } : null;   // o redesenho não fecha o teclado da busca
     ed.classList.toggle('ld', md);
     if (md) {
       var resBtn = '<button type="button" class="ld-resumo" data-act="ld-resumo" aria-current="' + !pAb + '"><span class="ld-resumo-t"><b>Resumo do contrato</b>' +
@@ -3246,7 +3257,76 @@
       ed.innerHTML = '<div class="ld-l">' + nota + resBtn + h.slice(iLista).join('') + dicaInstalarHtml() + '</div>' +
         '<div class="ld-r">' + (pAb ? voltarHtml() + pointCard(pAb) : '<h2 class="ld-tit">Resumo do contrato</h2>' + h.slice(0, iLista).join('')) + '</div>';
     } else ed.innerHTML = nota + h.join('') + dicaInstalarHtml();
+    listaAplica();
     lockEditor();
+    var bB = fB && $('ptBusca');
+    if (bB) try { bB.focus({ preventScroll: true }); bB.setSelectionRange(fB.s, fB.e); } catch (e) { /* sem foco */ }
+  }
+  // ---------------- busca e "Só com NC" da lista do contrato. ui.lista vale para um contrato: q = o texto, so = só com NC. Filtrar
+  // só esconde cartões (hidden), sem redesenhar o editor: o teclado não fecha. O item aberto não fecha quando sai do filtro.
+  // fix: os que estavam no filtro quando a pessoa mexeu nele; aberto e em fix não some enquanto é editado (corrigiu a última NC ou
+  // mudou o nome), só depois de fechar
+  function listaNova(cid, so) { return { cid: cid, q: '', so: !!so, fix: null }; }
+  function listaLimpa() { ui.lista = listaNova(active().id, false); }
+  // o fiscal só tem o modo NC e não o escolheu: vê a lista inteira, para marcar NC em local novo e não perder de vista o item que enviou
+  function listaSoNc() { return !!visao && visao.modoNc() && !isFiscal(); }
+  function comNc(p, c) { var n = oaeNec(p, c); return n.dn + n.exec > 0; }
+  function listaFiltroHtml(c, it) {
+    var ph = 'Buscar ' + it + ' ou km', temNc = it !== 'ponto' && parte(c, 'acomp');
+    return '<div class="lista-fil"><label class="cts-busca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>' +
+      '<input id="ptBusca" data-lbusca="1" type="search" inputmode="search" autocomplete="off" placeholder="' + ph + '" aria-label="' + ph + '" value="' + esc(ui.lista.q) + '"></label>' +
+      (temNc ? '<button type="button" class="lista-sonc" id="ptSoNc" data-act="lista-sonc" aria-pressed="false" hidden></button>' : '') + '</div><div class="hint lista-nada" id="ptNada" role="status" hidden></div>';
+  }
+  // as faixas de km em que o item é achado. Segmento: km Atualizado e km do contrato (709: só o do contrato, o do site é só a
+  // posição no eixo; 731: o km local, que é o km dele). OAE: um km só ou, na travessia de Altamira, o km local
+  function listaFaixas(c, p) {
+    var f = [], par = function (a, b) { if (typeof a === 'number' && isFinite(a)) f.push(typeof b === 'number' && isFinite(b) ? [Math.min(a, b), Math.max(a, b)] : [a, a]); };
+    if (!isConserva(c) || !kmSoContrato(c)) par(p.kmIni, p.kmFim);
+    if (p.kmIni == null) par(p.kmLocal);
+    if (isConserva(c)) { var a = kmDoContrato(c, p.kmIni), b = kmDoContrato(c, p.kmFim); if (a && b) par(a.km, b.km); }
+    return f;
+  }
+  // o que passa no filtro: nome (sem ligar para acento, termos em qualquer ordem) ou km (as formas da Visão geral) e, com "Só com
+  // NC", só os que têm NC salva. Km que nenhuma faixa contém: o mais perto (a OAE fica num km só; 322 acha a do km 322,77)
+  function listaAcha(c, ps, L) {
+    var base = L.so ? ps.filter(function (p) { return comNc(p, c); }) : ps, q = L.q.trim();
+    if (!q) return base;
+    var km = window.VisaoGeral && VisaoGeral.kmBusca ? VisaoGeral.kmBusca(q) : null, t = semAcento(q).split(' ');
+    var r = base.filter(function (p) {
+      var s = semAcento([p.nome, p.descricao, p.codigo].join(' '));
+      return t.every(function (w) { return s.indexOf(w) >= 0; }) || (km != null && listaFaixas(c, p).some(function (x) { return km >= x[0] - 1e-6 && km <= x[1] + 1e-6; }));
+    });
+    if (r.length || km == null) return r;
+    var mp = null, md = Infinity;
+    base.forEach(function (p) { listaFaixas(c, p).forEach(function (x) { var d = Math.min(Math.abs(km - x[0]), Math.abs(km - x[1])); if (d < md) { md = d; mp = p; } }); });
+    return mp ? [mp] : [];
+  }
+  // aplica o filtro ao que está na tela. A linha do item aberto no lado a lado (.pt-marcado) não tem data-id no .pt, só no botão
+  function listaAplica() {
+    var l = $('ptList'), L = ui.lista, c = active();
+    if (!l || !L || L.cid !== c.id) return;
+    var itens = [].map.call(l.children, function (el) { var h = el.dataset.id ? el : el.querySelector('.pt-head'); return { el: el, p: h ? findPoint(h.dataset.id) : null }; }).filter(function (x) { return x.p; });
+    var ps = itens.map(function (x) { return x.p; }), bt = $('ptSoNc'), nNc = bt ? ps.filter(function (p) { return comNc(p, c); }).length : 0;
+    if (!nNc) L.so = false;
+    if (bt) { bt.hidden = !nNc; bt.textContent = 'Só com NC (' + nNc + ')'; bt.setAttribute('aria-pressed', String(L.so)); }
+    var ativo = L.so || !!L.q.trim(), acha = ativo ? listaAcha(c, ps, L) : ps;
+    if (!L.fix) { L.fix = {}; acha.forEach(function (p) { L.fix[p.id] = true; }); }
+    acha.forEach(function (p) { if (ui.open[p.id]) L.fix[p.id] = true; });   // entrou na lista depois (outra medição, sincronização) e foi aberto: também não some enquanto é editado
+    var k = 0;
+    itens.forEach(function (x) { var v = !ativo || acha.indexOf(x.p) >= 0 || (ui.open[x.p.id] && L.fix[x.p.id]); x.el.hidden = !v; if (v) k++; });
+    var ct = $('ptCount'), nd = $('ptNada');
+    if (ct) ct.textContent = ativo ? k + ' de ' + ps.length : ct.getAttribute('data-t');
+    if (nd) { nd.hidden = !ativo || k > 0; nd.textContent = k ? '' : 'Nada encontrado' + (L.so ? ' com NC' : '') + '. Confira o nome ou o km.'; }
+  }
+  function listaMuda() { ui.lista.fix = null; listaAplica(); }
+  // abrir um item vindo de fora da lista (mapa, desenho, análise, rascunho): se o filtro o esconde, o filtro sai
+  function listaMostra(p, c) {
+    var anM = isOae(c) ? anOf(c) : null, gM = medGlobalDe(c, anM), aM = gM && anM.pontes ? anM.pontes[p.id] : null;
+    if (gM && !(aM && Number(aM.meses[String(gM)]) > 0)) delete ui.medGlobal[c.id];   // a lista por medição não tem este item: volta a lista inteira
+    var L = ui.lista;
+    if (!L || L.cid !== c.id || (!L.so && !L.q.trim())) return;
+    L.fix = null;
+    if (listaAcha(c, sortedPoints(c), L).indexOf(p) < 0) ui.lista = listaNova(c.id, false);
   }
   // na lista lado a lado, a linha do item aberto (sem data-id no .pt: os seletores do cartão acham só o da direita)
   function ptMarcadoHtml(p) {
@@ -3265,7 +3345,34 @@
     }).join('');
     var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
     var np = banco.on ? propsDo(active().id, p.id).length : 0;
-    return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span><span class="pt-km">KM ' + km + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV;
+    return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span><span class="pt-km">KM ' + km + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV + resumoPonto(p, c, np);
+  }
+  // linha escrita do cartão fechado, com o nome curto dos serviços (o nome nos quadrados só está no title, que não aparece no toque).
+  // Ponto: Parado primeiro, depois Ativo; "Tudo concluído" só com serviço feito e nada Ativo ou Parado (N/A não conta; todos N/A, nada)
+  function nomesCurtos(l) { return esc(l.length > 2 ? l.slice(0, 2).join(', ') + ' e mais ' + (l.length - 2) : l.join(', ')); }
+  function resumoHtml(tx, np) {
+    if (np) tx.push('<b class="ag">Aguardando aprovação</b>');
+    return tx.length ? '<span class="pt-resumo">' + tx.join(' · ') + '</span>' : '';
+  }
+  function resumoPonto(p, c, np) {
+    var por = { OK: [], A: [], P: [], NA: [] }, tx = [];
+    servicesOf(c).forEach(function (s) { var st = (p.serv[s.key] || {}).st; (por[st] || por.NA).push(s.short); });
+    if (por.P.length) tx.push('<b class="p">Parado:</b> ' + nomesCurtos(por.P));
+    if (por.A.length) tx.push('<b class="a">Ativo:</b> ' + nomesCurtos(por.A));
+    if (!tx.length && por.OK.length) tx.push('<b class="ok">Tudo concluído</b>');
+    return resumoHtml(tx, np);
+  }
+  // OAE e segmento: os grupos com NC salva e, à parte, os em rascunho. Sem NC, nenhuma linha
+  function resumoNc(p, c, np) {
+    var sal = [], ras = [], soEx = true, tx = [];
+    servicesOf(c).forEach(function (s) {
+      if (rascNova(c, p, s.key)) { ras.push(s.short); return; }
+      var k = oaeSt(svSalvo(p, s.key, c));
+      if (comQtd(k)) { sal.push(s.short); if (k !== 'EX') soEx = false; }
+    });
+    if (sal.length) tx.push('<b class="nc">NC:</b> ' + nomesCurtos(sal) + (soEx ? ' (em correção)' : ''));
+    if (ras.length) tx.push('<b class="rc">Rascunho:</b> ' + nomesCurtos(ras));
+    return resumoHtml(tx, np);
   }
 
   // botões de status de cada serviço. Pontos críticos (obra feita uma vez): OK, Ativo, Parado, N/A e o % executado.
@@ -3289,20 +3396,20 @@
         var on = comQtd(cur), mx = mais ? mais(s, cur) : '', temItens = isOae(ownerOf(p)) && !!OAE_ITENS[s.key];
         var pk = pv ? oaeSt(pv) : '', pend = pk && pk !== cur ? '<small class="nc-pend">Aguardando aprovação: ' + esc(ncNome(s, pk)) + '</small>' : '';
         var bt = function (k, cl, t) { return '<button type="button" class="' + cl + '" data-act="set-st" data-id="' + id + '" data-svc="' + s.key + '" data-st="' + k + '">' + t + '</button>'; };
-        var rc = rascChave(active().id, p.id, s.key), rb = '<div class="nc-rasc" data-rasc="' + esc(rc) + '"' + (rascLer()[rc] ? '' : ' hidden') + '><span><b>Rascunho</b> · ainda não ' + (isFiscal() ? 'enviado' : 'salvo') + '</span>' +
+        var rc = rascChave(active().id, p.id, s.key), nova = rascNova(active(), p, s.key), rb = '<div class="nc-rasc" data-rasc="' + esc(rc) + '"' + (rascLer()[rc] ? '' : ' hidden') + '><span><b>Rascunho</b> · ainda não ' + (isFiscal() ? 'enviado' : 'salvo') + (rascLer()[rc] && 'a0' in rascLer()[rc] ? '. Outra pessoa alterou esta NC. Se ' + (isFiscal() ? 'enviar' : 'salvar') + ', a sua fica por cima e o aviso mostra o que saiu' : '') + '</span>' +
           '<button type="button" data-act="nc-descartar" data-id="' + id + '" data-svc="' + s.key + '">Descartar</button>' +
           '<button type="button" class="pri" data-act="nc-salvar" data-id="' + id + '" data-svc="' + s.key + '">' + (isFiscal() ? 'Enviar para aprovação' : 'Salvar') + '</button></div>';
         var cab = '<div class="svc-name">' + esc(s.short) + (on && s.q ? ' <small class="svc-un">' + esc(s.q.replace(/ com (dano|defeito)$/, ' na NC') + ' (estimativa)') + '</small>' : '') + (extra ? extra(s) : '') + '</div>';
         if (!on) {
-          h += '<div class="svc oae nc-sem">' + cab + '<div class="nc-l">' + (cur === 'NA'
+          h += '<div class="svc oae nc-sem' + (cur === 'NA' ? '' : ' nc-um') + '">' + cab + '<div class="nc-l">' + (cur === 'NA'
             ? '<span>Não se aplica aqui</span>' + bt('NA', 'nc-na', 'Desfazer N/A')
             : '<span>Sem não conformidade</span>' + bt('DN', 'nc-add', '+ Não conformidade') + bt('NA', 'nc-na', 'N/A')) + '</div>' +
             rb + pend + (mx ? '<div class="svc-marcas">' + mx + '</div>' : '') + '</div>';
           return;
         }
         h += '<div class="svc oae nc-on">' + cab + '<div class="nc-card' + (cur === 'EX' ? ' co' : '') + '">' +
-          '<div class="nc-l1"><span class="nc-chip ' + (cur === 'EX' ? 'co">Em correção' : 'ab">Aberta') + '</span>' + (sv.ci ? '<span class="nc-chip in">Correção informada</span>' : '') +
-            '<span class="nc-tipo">' + esc(cur === 'EX' ? 'em execução pela contratada' : 'aguarda a correção') + '</span></div>' +
+          '<div class="nc-l1"><span class="nc-chip ' + (nova ? 'ra">Rascunho' : cur === 'EX' ? 'co">Em correção' : 'ab">Aberta') + '</span>' + (sv.ci ? '<span class="nc-chip in">Correção informada</span>' : '') +
+            '<span class="nc-tipo">' + esc(nova ? 'só neste aparelho' : cur === 'EX' ? 'em execução pela contratada' : 'aguarda a correção') + '</span></div>' +
           (s.un ? '<span class="nc-qt" aria-hidden="true">Quantidade estimada</span><div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (sv.q != null ? esc(sv.q) : '') + '"' +
             ' placeholder="~" aria-label="' + esc(s.short + ': estimativa, ' + s.q.replace(/ com (dano|defeito)$/, ' na NC')) + '"><span>' + esc(s.un) + '</span></div>' : '') +
           (temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
@@ -3313,13 +3420,13 @@
               return '<button type="button" class="marca ' + m + pm + '" data-act="set-marca" data-id="' + id + '" data-svc="' + s.key + '" data-m="' + m + '" aria-pressed="' + !!sv[m] + '" title="' + esc(OAE_MARCAS[m].title + (pm ? ' (aguardando aprovação)' : '')) + '">' +
                 '<i aria-hidden="true">' + (m === 'pri' ? '!' : '✓') + '</i>' + esc(OAE_MARCAS[m].name) + '</button>';
             }).join('') + mx + '</div>' +
-          '<div class="nc-acts">' + (cur === 'EX' ? bt('DN', '', 'Voltar para aberta') : bt('EX', '', 'Em correção')) + bt('OK', 'pri', 'Corrigida ✓') + '</div>' + rb + pend +
+          (nova ? '' : '<div class="nc-acts">' + (cur === 'EX' ? bt('DN', '', 'Voltar para aberta') : bt('EX', '', 'Em correção')) + bt('OK', 'pri', 'Corrigida ✓') + '</div>') + rb + pend +
           '</div></div>';
         return;
       }
-      var pctDisabled = (sv.st === 'OK' || sv.st === 'NA');
+      var semPct = (sv.st === 'OK' || sv.st === 'NA');   // o % aparece em Ativo e Parado (Parado guarda até onde o serviço foi)
       h += '<div class="svc"><div class="svc-name">' + esc(s.short) + (extra ? extra(s) : '') + '</div><div class="seg" role="group" aria-label="' + esc(s.short) + '">' + segs + '</div>' +
-        '<div class="pct-in"><input type="number" min="0" max="100" step="1" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (pctDisabled ? (sv.st === 'OK' ? 100 : '') : (Number(sv.pct) || 0)) + '"' + (pctDisabled ? ' disabled' : '') + ' aria-label="Percentual executado de ' + esc(s.short) + '"><span>%</span></div></div>';
+        (semPct ? '' : '<div class="pct-in"><input type="number" min="0" max="100" step="1" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (Number(sv.pct) || 0) + '" aria-label="Percentual executado de ' + esc(s.short) + '"><span>%</span></div>') + '</div>';
     });
     return h;
   }
@@ -3344,7 +3451,11 @@
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + pointHead(p) + '</button>';
     if (open) {
       var id = esc(p.id), len = pointLen(p);
-      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(active().id, p.id)) : '') + '<div class="grid">';
+      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(active().id, p.id)) : '');
+      h += '<div class="section-title">Serviços</div>';
+      h += servHtml(p, servicesOf(ownerOf(p)));
+
+      h += '<details class="pt-dados" data-id="' + id + '"' + (ui.dadosAb[p.id] ? ' open' : '') + '><summary>Dados do ponto <span>· nome, km, volumes</span></summary><div class="grid">';
       h += field('Nome do ponto', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
       h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
       h += field('KM inicial', 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
@@ -3352,10 +3463,7 @@
       h += field('Enrocamento (m³)', 'data-p="enr" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.enr, 2));
       h += field('Solo-brita (m³)', 'data-p="sb" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.sb, 2));
       if (p.bgs != null || (ownerOf(p) || {}).temBgs) h += field('BGS prevista (m³)', 'data-p="bgs" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.bgs, 2));
-      h += '</div>';
-
-      h += '<div class="section-title">Serviços</div>';
-      h += servHtml(p, servicesOf(ownerOf(p)));
+      h += '</div></details>';
 
       h += '<div class="section-title">Dispositivos de drenagem (OAC)<button type="button" class="btn small" data-act="add-dev" data-id="' + id + '">+ Dispositivo</button></div>';
       if (!p.disp.length) h += '<div class="empty">Nenhum dispositivo neste ponto.</div>';
@@ -3398,6 +3506,9 @@
   function rerenderPoint(p) {
     var art = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"]');
     if (art) art.outerHTML = pointCard(p);
+    var mk = document.querySelector('.pt-marcado [data-id="' + CSS.escape(p.id) + '"]');   // a linha do item na lista lado a lado
+    if (mk) mk.innerHTML = pointHead(p);
+    listaAplica();
     lockEditor();
   }
   // refaz o cartão da ponte (abas, medição escolhida) e devolve o foco ao botão equivalente, sem rolar a tela
@@ -3408,10 +3519,10 @@
     var el = foco && document.querySelector('.pt[data-id="' + CSS.escape(pid) + '"] ' + foco);
     if (el && !el.disabled) try { el.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
   }
-  // "Dados da OAE" (aba Vistoria) continua aberto ou fechado quando o cartão é refeito
+  // os "Dados" recolhidos (OAE, ponto, segmento) continuam abertos ou fechados quando o cartão é refeito
   document.addEventListener('toggle', function (e) {
     var d = e.target;
-    if (d && d.classList && d.classList.contains('pt-dados') && d.dataset.id) ui.dadosAb[d.dataset.id] = d.open;
+    if (d && d.classList && d.classList.contains('pt-dados') && !d.classList.contains('pt-des') && d.dataset.id) ui.dadosAb[d.dataset.id] = d.open;
     if (d && d.classList && d.classList.contains('pt-des') && d.dataset.id) ui.desAb[d.dataset.id] = d.open;
     // "Onde foi medido" (segmento da conservação): a lista só é montada aberta; ao abrir, lê as ocorrências e refaz o cartão
     if (d && d.classList && d.classList.contains('an-oc') && d.dataset.id) {
@@ -3783,14 +3894,35 @@
     }
     return h;
   }
+  function anSemTxt(c) {
+    var e = analise.estado[c.id];
+    return e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba ou voltar ao app.' : 'Nenhuma análise das medições cadastrada para este contrato.';
+  }
+  // celular: uma linha fechada, de altura fixa (carregar não empurra a lista), que abre o cartão logo embaixo. A abertura fica só
+  // na memória (ui.resAb): o app abre sempre fechado, senão a lista volta a 3.624 px a cada visita
+  function resLinha(c, k, tit, sub, filtro, corpo) {
+    var ab = !!ui.resAb[c.id + '|' + k];
+    return '<button type="button" class="res-lin" data-act="res-lin" data-v="' + k + '" aria-expanded="' + ab + '"><span class="res-lin-t"><b>' + esc(tit) + '</b>' +
+      (sub ? ' <span' + (filtro ? ' class="fil"' : '') + '>· ' + esc(sub) + '</span>' : '') + '</span>' + ICON_CHEV + '</button>' + (ab ? corpo() : '');
+  }
+  // a etapa ou a medição escolhida aparece na linha, para o filtro não ficar escondido; carregando ou com erro, o texto de hoje
+  function analiseLinha(c) {
+    if (!banco.on || !parte(c, 'med')) return '';
+    var an = anOf(c);
+    if (!an) return '<div class="res-lin' + (analise.estado[c.id] === 'erro' ? ' erro' : '') + '" role="status"><span class="res-lin-t"><span>' + esc(anSemTxt(c)) + '</span></span></div>';
+    var E = etapaDe(an), g = medGlobalDe(c, an), mm = g ? mesMed(an, g) : '', fil = [E ? E + 'ª etapa' : '', g ? g + 'ª medição' + (mm ? ' (' + mm + ')' : '') : ''].filter(Boolean).join(' · ');
+    return resLinha(c, 'an', 'Análise das medições', fil || (an.sobre && an.sobre.em ? 'atualizada em ' + fmtIsoDate(an.sobre.em) : ''), !!fil, function () { return analiseResumoHtml(c); });
+  }
+  function desempLinha(c) {
+    if (!banco.on || !parte(c, 'med') || !c.pontos.length) return '';
+    var r = desempResumo(c);
+    return resLinha(c, 'des', 'Desempenho', r.nvis ? r.nvis + ' de ' + r.nseg + ' segmentos avaliados' : 'nenhum segmento avaliado', false, function () { return desempResumoHtml(c); });
+  }
   function analiseResumoHtml(c) {
     if (!banco.on) return '';
     if (!parte(c, 'med')) return '';   // sem as medições: nada aparece (ninguém fica sabendo o que outros acessos veem)
-    var an = anOf(c), e = analise.estado[c.id];
-    if (!an) {
-      var t = e === 'carregando' || !e ? 'Carregando a análise das medições…' : e === 'erro' ? 'Não foi possível carregar a análise das medições agora. Ela volta a ser pedida quando você trocar de aba ou voltar ao app.' : 'Nenhuma análise das medições cadastrada para este contrato.';
-      return '<div class="an-note">' + esc(t) + '</div>';
-    }
+    var an = anOf(c);
+    if (!an) return '<div class="an-note">' + esc(anSemTxt(c)) + '</div>';
     if (an.tipo === 'conserva') return analiseConsHtml(c, an);
     var r = an.resumo || {}, sobre = an.sobre || {}, E = etapaDe(an), ei = etapaInfo(an, E), cob = coberturaEtapas(c, an), nAl = 0, pAl = 0;
     c.pontos.forEach(function (p) { var k = alertasEm(an.pontes ? an.pontes[p.id] : null, E).length; nAl += k; if (k) pAl++; });
@@ -3881,17 +4013,18 @@
 
   function ponteHead(p, c) {
     var dots = servicesOf(c).map(function (s) {
-      var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
+      if (rascNova(c, p, s.key)) return rascDot(s);
+      var sv = svSalvo(p, s.key, c), k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
       var its = comQtd(k) ? itensDe(s.key, sv).map(function (x) { return minus1(x.n); }) : [];
       return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + ncNome(s, k) + (qt ? ' · ' + qt : '') + (its.length ? ' · ' + its.join(', ') : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · correção informada' : '')) + '"></span>';
     }).join('');
-    var n = oaeNec(p, c), nc = n.dn ? 'dn' : n.exec ? 'exec' : 'nv', nt = ncBdg(n);
+    var n = oaeNec(p, c), nc = n.dn ? 'dn' : n.exec ? 'exec' : 'nv', nt = ncBdg(n) + rascBdg(c, p);
     var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
     var np = banco.on ? propsDo(c.id, p.id).length : 0;
     var badge = (n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '') +
       (function () { var k = alertasEm(a, etapaDe(an)).length; return k ? '<b class="pt-al" title="' + k + (k === 1 ? ' alerta' : ' alertas') + ' na análise das medições">' + k + '</b>' : ''; })();
     return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null || p.kmLocal != null ? (p.codigo ? ' · ' : '') + 'km ' + kmPtTxt(p) : '') + (a ? ultTagHtml(c, an, a) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n, c)) + '">' + nt + '</span>' + ICON_CHEV;
+      '<span class="pt-km">' + badge + esc(p.codigo || '') + (p.kmIni != null || p.kmLocal != null ? (p.codigo ? ' · ' : '') + 'km ' + kmPtTxt(p) : '') + (a ? ultTagHtml(c, an, a) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct nec-' + nc + '" title="' + esc(oaeNecTxt(n, c)) + '">' + nt + '</span>' + ICON_CHEV + resumoNc(p, c, np);
   }
 
   function ponteCard(p, c) {
@@ -3902,7 +4035,7 @@
       var id = esc(p.id), an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null;
       // com a análise (engenheiro, auxiliar, Administrador): duas abas, Vistoria e Medições. Sem ela (fiscal), só a vistoria
       var soMed = !parte(c, 'acomp');   // analista só com as medições: sem a vistoria
-      var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
+      var aba = a && (soMed || abaDe(c, p) === 'med') ? 'med' : 'vist';
       if (soMed && !a) return h + '<div class="pt-body"><div class="an-note">' + (analise.estado[c.id] === 'carregando' ? 'Carregando as medições…' : 'Sem medições desta OAE.') + '</div></div></article>';
       h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '');
       if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes da OAE">' + [['vist', 'Não conformidades'], ['med', 'Medições']].map(function (x) {
@@ -3966,7 +4099,8 @@
       return '<span class="pt-name" title="' + esc(nomeA) + '">' + esc(nomeA) + '</span><span class="pt-km">' + esc(kmA) + (aA ? ultTagHtml(c, anA, aA) : '') + '</span><span class="pt-dots"></span><span class="pt-pct"></span>' + ICON_CHEV;
     }
     var dots = servicesOf(c).map(function (s) {
-      var sv = p.serv[s.key], k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
+      if (rascNova(c, p, s.key)) return rascDot(s);
+      var sv = svSalvo(p, s.key, c), k = oaeSt(sv), qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
       return '<span class="dot ' + k + '" title="' + esc(s.short + ': ' + ncNome(s, k) + (qt ? ' · ' + qt : '') + (comQtd(k) && sv.pri ? ' · prioridade' : '') + (comQtd(k) && sv.ci ? ' · correção informada' : '')) + '"></span>';
     }).join('');
     var n = oaeNec(p, c), kt = trafSt(p.serv[TRAFEG.key]), len = pointLen(p), contr = segContrTxt(c, p), snv = snvDoSegmento(p);
@@ -3977,8 +4111,8 @@
     var badge = n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '';
     return '<span class="pt-name" title="' + esc(nome) + '">' + esc(nome) + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
       '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(km) + (aS ? ultTagHtml(c, anS, aS) : '') + '</span><span class="pt-dots">' + dots + '</span>' +
-      '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c) + (kt === 'NV' ? '' : ' · ' + TRAF_STATUS[kt].name)) + '">' + ncBdg(n) +
-        (kt === 'R' || kt === 'I' ? '<small class="pt-traf">' + esc(TRAF_STATUS[kt].name.toLowerCase()) + '</small>' : '') + '</span>' + ICON_CHEV;
+      '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c) + (kt === 'NV' ? '' : ' · ' + TRAF_STATUS[kt].name)) + '">' + ncBdg(n) + rascBdg(c, p) +
+        (kt === 'R' || kt === 'I' ? '<small class="pt-traf">' + esc(TRAF_STATUS[kt].name.toLowerCase()) + '</small>' : '') + '</span>' + ICON_CHEV + resumoNc(p, c, np);
   }
   // cartão aberto (classe oae só pelo leiaute dos cartões das pontes; cons para as regras próprias): nome, descrição, extensão
   // (o 1º campo só de leitura, que refreshPointHead atualiza), km Atualizado, km do contrato e SNV (só de leitura, acompanham o
@@ -3992,7 +4126,7 @@
       var kmR = c.kmLocal ? ' · km local (' + (c.ramal || 'ramal') + ')' : soK ? ' · posição no eixo (não aparece nas folhas)' : ' · km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '');
       // com as medições: abas Vistoria e Medições, como na ponte; o analista (sem o acompanhamento) vê só as medições
       var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null, soMed = !parte(c, 'acomp');
-      var aba = a && (soMed || ui.aba[p.id] === 'med') ? 'med' : 'vist';
+      var aba = a && (soMed || abaDe(c, p) === 'med') ? 'med' : 'vist';
       h += '<div class="pt-body">' + (banco.on && !soMed ? lastLine(metaKey(c.id, p.id)) : '');
       if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes do segmento">' + [['vist', 'Não conformidades'], ['med', 'Medições']].map(function (x) {
         return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
@@ -4004,15 +4138,6 @@
         return h + '<div class="section-title">Medições deste segmento</div><div class="an-note">' + esc(!banco.on ? 'As medições aparecem com o banco da equipe ligado.' : eA === 'carregando' || !eA ? 'Carregando as medições…' :
           eA === 'erro' ? 'Não foi possível carregar as medições agora.' : an ? 'Nenhuma medição com serviço neste segmento.' : 'Nenhuma medição cadastrada para este contrato.') + '</div></div></article>';
       }
-      h += '<div class="grid">';
-      h += field('Nome', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
-      h += field('Descrição (opcional)', 'data-p="descricao" data-id="' + id + '" type="text"', p.descricao);
-      h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
-      h += field('KM inicial' + kmR, 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
-      h += field('KM final' + kmR, 'data-p="kmFim" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmFim));
-      h += field(soK ? txtLimpo(c.rotuloKmContrato) : 'KM do contrato', 'data-segc="1" type="text" readonly tabindex="-1"', segContrTxt(c, p).replace(/^contr\. /, ''));
-      h += field('Segmento do SNV', 'data-segsnv="1" type="text" readonly tabindex="-1"', snvDoSegmento(p));
-      h += '</div>';
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Não conformidades por serviço' + (vis ? '<span class="sub-vis">atualizado ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
       // com a análise: a última medição de cada grupo neste segmento (verde) ou "nunca medido"
@@ -4022,6 +4147,16 @@
           : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço neste segmento">nunca medido</span>';
       } : null, null, trafHtml(p));
       if (isPavimentada(c)) h += desempHtml(p, c);
+      // o cadastro, recolhido: depois das NC e antes das observações
+      h += '<details class="pt-dados" data-id="' + id + '"' + (ui.dadosAb[p.id] ? ' open' : '') + '><summary>Dados do segmento <span>· nome, km, SNV</span></summary><div class="grid">';
+      h += field('Nome', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
+      h += field('Descrição (opcional)', 'data-p="descricao" data-id="' + id + '" type="text"', p.descricao);
+      h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
+      h += field('KM inicial' + kmR, 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
+      h += field('KM final' + kmR, 'data-p="kmFim" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmFim));
+      h += field(soK ? txtLimpo(c.rotuloKmContrato) : 'KM do contrato', 'data-segc="1" type="text" readonly tabindex="-1"', segContrTxt(c, p).replace(/^contr\. /, ''));
+      h += field('Segmento do SNV', 'data-segsnv="1" type="text" readonly tabindex="-1"', snvDoSegmento(p));
+      h += '</div></details>';
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
       h += '<div class="pt-foot"><span class="pt-foot-l"></span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir segmento</button></div>';
@@ -4040,7 +4175,8 @@
         var pend = pv[d.key] === v && cur !== v ? ' pend' : '';
         return '<button type="button" class="' + (v === 'A' ? 'OK' : 'DN') + pend + '" data-act="set-desemp" data-id="' + id + '" data-ind="' + d.k + '" data-v="' + v + '" aria-pressed="' + (cur === v) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + DESEMP_ST[v] + '</button>';
       }).join('');
-      return '<div class="svc oae des"><div class="svc-name">' + esc(d.n) + ' <small class="svc-un">peso ' + d.peso + '</small>' + (cur ? '' : ' <small class="svc-nv">não avaliado</small>') + '</div>' +
+      return '<div class="svc oae des"><div class="svc-name svc-comlimpar"><span>' + esc(d.n) + ' <small class="svc-un">peso ' + d.peso + '</small>' + (cur ? '' : ' <small class="svc-nv">não avaliado</small>') + '</span>' +
+        (cur && !readOnly() ? '<button type="button" class="svc-limpar" data-act="set-desemp" data-id="' + id + '" data-ind="' + d.k + '" data-v="" aria-label="Limpar ' + esc(d.n) + '">Limpar</button>' : '') + '</div>' +
         '<div class="seg" role="group" aria-label="' + esc(d.n) + '">' + bts + '</div></div>';
     }).join('');
     var sub = nv === DESEMP_IND.length ? 'não avaliado' : (nn ? nn + (nn === 1 ? ' não atende' : ' não atendem') : 'todos atendem') + (nv ? ' · ' + nv + ' não avaliados' : '');
@@ -4071,7 +4207,7 @@
     }).join('') + '</ul></section>';
     return h;
   }
-  // trafegabilidade do segmento: Trafegável, Com restrição, Interrompido (tocar de novo desmarca) e a nota, sempre à vista e com
+  // trafegabilidade do segmento: Trafegável, Com restrição, Interrompido ("Limpar" desmarca) e a nota, sempre à vista e com
   // data-svcpct (o fiscal escreve); sem estimativa nem marcas. "pend" = proposta de um fiscal com outro estado
   function trafHtml(p) {
     var id = esc(p.id), sv = p.serv[TRAFEG.key] || { st: 'NV' }, cur = trafSt(sv), pv = propServ(active().id, p.id)[TRAFEG.key];
@@ -4079,7 +4215,7 @@
       var pend = pv && pv.st === k && cur !== k ? ' pend' : '';
       return '<button type="button" class="' + k + pend + '" data-act="set-st" data-id="' + id + '" data-svc="' + TRAFEG.key + '" data-st="' + k + '" aria-pressed="' + (cur === k) + '"' + (pend ? ' title="Aguardando aprovação"' : '') + '>' + TRAF_STATUS[k].btn + '</button>';
     }).join('');
-    return '<div class="svc oae traf"><div class="svc-name">' + esc(TRAFEG.short) + '</div>' +
+    return '<div class="svc oae traf"><div class="svc-name svc-comlimpar"><span>' + esc(TRAFEG.short) + '</span>' + (cur !== 'NV' && !readOnly() ? '<button type="button" class="svc-limpar" data-act="set-st" data-id="' + id + '" data-svc="' + TRAFEG.key + '" data-st="NV" aria-label="Limpar ' + esc(TRAFEG.short) + '">Limpar</button>' : '') + '</div>' +
       '<div class="seg" role="group" aria-label="' + esc(TRAFEG.short) + '">' + segs + '</div>' +
       '<input class="svc-nota" type="text" maxlength="140" data-svcpct="' + TRAFEG.key + '" data-nota="1" data-id="' + id + '" value="' + esc(sv.n || '') + '" placeholder="Onde / o quê (opcional)" aria-label="Onde ou o quê: trafegabilidade">' +
       '</div>';
@@ -4212,6 +4348,29 @@
       (u.idade ? ', ' + u.idade + (u.idade === 1 ? ' mês' : ' meses') + ' antes da ' + medTxt(an, u.fim.n) + ', a última do contrato' : ', a última do contrato');
     return ' <span class="pt-ult u-' + u.cls + '" title="' + esc(tip) + '">' + esc(u.m ? 'Última ' + u.m.n + 'ª · ' + u.m.mes : an.tipo === 'conserva' ? 'Nunca medido' : 'Nunca medida') + '</span>';
   }
+  // aba com que o item abre: a última tocada neste contrato; sem toque, Medições com a lista filtrada por uma medição (o gráfico já
+  // vem nela; só OAE tem esse filtro) e Não conformidades sem ela. Vindo da tela inicial, Não conformidades (abrirDaVisao). O item aberto guarda a sua: tocar em outro item não vira esta sem aviso
+  function abaDe(c, p) {
+    if (!ui.aba[p.id]) { ui.aba[p.id] = (ui.abaCt && ui.abaCt.cid === c.id && ui.abaCt.v) || (isOae(c) && medGlobalDe(c, anOf(c)) ? 'med' : 'vist'); ui.abaPad[p.id] = true; }
+    return ui.aba[p.id];
+  }
+  // saiu do contrato: volta ao padrão. Item fechado: esquece a aba dele
+  function abaArruma() {
+    var c = active();
+    if (!c) return;
+    if (!ui.abaCt || ui.abaCt.cid !== c.id) { abaZera(c); return; }
+    Object.keys(ui.aba).forEach(function (id) { if (!ui.open[id]) { delete ui.aba[id]; delete ui.abaPad[id]; } });
+  }
+  function abaZera(c) { ui.abaCt = { cid: c.id, v: null }; ui.aba = {}; ui.abaPad = {}; }
+  // a medição da lista mudou (só OAE filtra): a aba que veio do padrão é recalculada, também nos itens abertos; a tocada fica.
+  // Escolher uma medição pede o gráfico, como diz o texto da lista: um "Não conformidades" tocado antes dela deixa de valer para os próximos
+  function abaMed(c) {
+    if (!isOae(c)) return;
+    if (!ui.abaCt || ui.abaCt.cid !== c.id) abaZera(c);
+    if (ui.abaCt.v === 'vist' && medGlobalDe(c, anOf(c))) ui.abaCt.v = null;
+    Object.keys(ui.abaPad).forEach(function (id) { delete ui.aba[id]; });
+    ui.abaPad = {};
+  }
   // medição escolhida na lista (por contrato), se existir nesta análise
   function medGlobalDe(c, an) {
     var n = c && ui.medGlobal[c.id];
@@ -4268,8 +4427,8 @@
   }
   // com itens marcados que têm serviço nas medições, a conferência é por item (o serviço daquele item), não pelo grupo inteiro
   function cmpGrupo(c, p, key, an, gi) {
-    if (oaeSt(p.serv[key]) !== 'DN') return null;
-    var aP = an.pontes && an.pontes[p.id], its = aP ? itensDe(key, p.serv[key]).filter(function (x) { return x.med; }) : [];
+    if (oaeSt(svSalvo(p, key, c)) !== 'DN') return null;
+    var aP = an.pontes && an.pontes[p.id], its = aP ? itensDe(key, svSalvo(p, key, c)).filter(function (x) { return x.med; }) : [];
     if (its.length) {
       var viI = vistIdx(c, p, key), nunca = [], logo = null;
       its.forEach(function (x) {
@@ -4369,7 +4528,7 @@
     servicesOf(c).forEach(function (s) {
       var cm = cmpGrupo(c, p, s.key, an, a.grupos ? a.grupos[s.key] : null);
       if (!cm) return;
-      var qt = fmtQtd(s, (p.serv[s.key] || {}).q);
+      var qt = fmtQtd(s, (svSalvo(p, s.key, c) || {}).q);
       rows.push(s.short + ': ' + (qt ? cm.t.replace(/^não conformidade aberta/, 'não conformidade aberta (' + qt + ')') : cm.t) + '.');
     });
     if (!rows.length) return '';
@@ -4478,7 +4637,7 @@
       if (ac) est = '<span class="mg-e nv">fora dos grupos</span>';
       else if (!parte(c, 'acomp')) est = '';   // analista só das medições: sem o estado da vistoria
       else {
-        var sv = p.serv[g.key], st = oaeSt(sv), qt = comQtd(st) ? fmtQtd(g, sv.q) : '';
+        var sv = svSalvo(p, g.key, c), st = oaeSt(sv), qt = comQtd(st) ? fmtQtd(g, sv.q) : '';
         est = st === 'NV' || st === 'OK' ? '<span class="mg-e nv">sem NC</span>' : '<span class="mg-e ' + st.toLowerCase() + '">' + esc(ncNome(g, st) + (qt ? ' ' + qt : '')) + '</span>';
       }
       var ult = gi && gi.ult ? '<span class="mg-u">última ' + gi.ult + 'ª</span>' : '<span class="mg-u nunca">nunca medido</span>';
@@ -4664,8 +4823,8 @@
       var n = oaeNec(p, dono), k = n.dn ? 'DN' : n.exec ? 'EX' : null;
       return {
         color: k ? OAE_STATUS[k].fill : NO_STATUS.fill, status: k === 'DN' ? 'Não conformidade aberta' : k === 'EX' ? 'NC em correção' : 'Sem não conformidade', pctText: k ? oaeNecTxt(n, dono) : '',
-        servs: servicesOf(dono).filter(function (s) { return comQtd(oaeSt(p.serv[s.key])); }).map(function (s) {
-          var sv = p.serv[s.key], x = oaeSt(sv), qt = fmtQtd(s, sv.q);
+        servs: servicesOf(dono).filter(function (s) { return comQtd(oaeSt(svSalvo(p, s.key, dono))); }).map(function (s) {
+          var sv = svSalvo(p, s.key, dono), x = oaeSt(sv), qt = fmtQtd(s, sv.q);
           return { label: s.label, color: OAE_STATUS[x].fill, text: ncNome(s, x) + (qt ? ' · ' + qt : '') + (sv.pri ? ' · prioridade' : '') +
             (sv.ci ? ' · correção informada' : '') + (sv.n ? ' · ' + sv.n : '') };
         })
@@ -4764,11 +4923,12 @@
     if (!isOae(dono) && !isConserva(dono)) return inf;
     var n = oaeNec(p, dono), k = n.dn + n.exec;
     inf.nc = n.dn ? 'DN' : n.exec ? 'EX' : null;
+    inf.ncN = k;
     var med = medDoPonto(dono, p), medT = med ? 'última na ' + med.n + 'ª med.' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : '';
     // no modo NC, ao lado da situação: quantas NC (com mais de uma) e a última medição
     if (modo !== 'med') { inf.pctText = [k > 1 ? k + ' NC' : '', medT].filter(Boolean).join(' · '); return inf; }
     var ncT = k ? k + ' NC' + (n.dn ? '' : ' em correção') : '';
-    return { color: med ? '#1E9E55' : NO_STATUS.fill, status: med ? 'Medido' : 'Sem medição', nc: inf.nc, servs: inf.servs,
+    return { color: med ? '#1E9E55' : NO_STATUS.fill, status: med ? 'Medido' : 'Sem medição', nc: inf.nc, ncN: k, servs: inf.servs,
       pctText: medT + (med && ncT ? ' · ' : '') + ncT };
   }
   // quem vê as medições de alguma ponte ou conservação: a tela inicial começa em Medições (sem elas, só o modo NC)
@@ -5102,6 +5262,7 @@
     previewSujo = false;
     if (medicoesOn) { desenhaMedicoes(); return; }
     if (visaoOn && visao && !$('visaoHost').hidden) { if (!desenhaVisao()) renderAll(); return; }
+    if (visaoOn && $('contratosHost') && !$('contratosHost').hidden) { renderContratos(); return; }
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
       mapa.render();
@@ -5156,6 +5317,7 @@
   function setVisao(on) {
     if (medicoesOn) { medicoesOn = false; hashMedicoes(false); }
     visaoOn = !!on;
+    if (on) ui.abaCt = null;
     try { if (on) sessionStorage.removeItem(INICIO_KEY); else sessionStorage.setItem(INICIO_KEY, '1'); } catch (e) { /* sem armazenamento */ }
   }
   function ensureVisao() {
@@ -5171,6 +5333,8 @@
       temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,
       // a não atendida abre no item OAEs sem Proarte (as NC dela)
       temSemProarte: function () { return !isPublico() && !!ctSemProarte(); },
+      // "1 rascunho neste aparelho": à parte do número do botão, que conta só as NC salvas
+      rascunhos: function () { return rascNaLista().length; }, onRascunho: rascIr,
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
       onAbrir: function (c, p) { if (c.oaes230) abrir230(p, false); else abrirDaVisao(c, p, false); },
@@ -5256,13 +5420,17 @@
   // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
   function abrirDaVisao(c, p, noMapa) {
     if (isPublico()) { toast('Entre com o seu código para abrir o contrato.', 5000); openLogin(); return; }
+    undoProxima();
     var era = visaoOn;
     mexeu = true;
     setVisao(false);
     if (analise.estado[c.id] === 'erro') delete analise.estado[c.id];
     state.activeId = c.id;
     ui.open = {};
-    if (p) ui.open[p.id] = true;
+    // vindo da tela inicial: busca limpa e, no modo Não conformidades, a lista só com as NC
+    if (era) ui.lista = listaNova(c.id, listaSoNc());
+    if (p) { ui.open[p.id] = true; listaMostra(p, c); }
+    if (p && era) { abaZera(c); ui.aba[p.id] = 'vist'; }   // da tela inicial, abre em Não conformidades, mesmo com uma medição escolhida antes na lista
     save();
     renderAll();
     syncTopbar();   // o PDF voltou à barra, que pode ter mudado de altura: mede antes de rolar (o observer só avisa depois)
@@ -5306,6 +5474,7 @@
   }
   function onInput(e) {
     var t = e.target, c = active();
+    if (t.dataset.lbusca) { if (e.type === 'input') { ui.lista.q = t.value; listaMuda(); } return; }   // busca da lista: só muda a tela, vale para qualquer um (o change vem também do campo que o redesenho tira)
     if (isFiscal() && !t.dataset.svcpct) return;
     // pontes por medição (análise das medições): só muda a tela
     if (t.dataset.anmed) {
@@ -5313,6 +5482,7 @@
       var nm = Number(t.value) || null;
       if (nm) ui.medGlobal[c.id] = nm; else delete ui.medGlobal[c.id];
       ui.medSel = {};
+      abaMed(c);
       renderEditor();
       var sm = document.querySelector('[data-anmed]');
       if (sm) sm.focus();
@@ -5414,6 +5584,7 @@
           if (q == null) delete sv2.q; else sv2.q = so && so.un === '%' ? clamp(q, 0, 100) : Math.max(0, q);
         }
       } else sv2.pct = clamp(Number(t.value) || 0, 0, 100);
+      rascAbreJa(c, p2, t.dataset.svcpct);
       refreshPointHead(p2);
     } else if (t.dataset.dev != null && t.dataset.df) {
       var p3 = findPoint(t.dataset.id);
@@ -5425,7 +5596,8 @@
     }
     // prazo e valor não são vistoria; no segmento, nome, descrição, km e observações também não (só o que se viu: estado,
     // estimativa e nota, ramo data-svcpct)
-    if (!t.dataset.c && t.dataset.marco == null && t.dataset.pf == null && !(isConserva(c) && t.dataset.p)) marcaVistoria(c);
+    // NC em rascunho: a data só muda ao Salvar (nc-salvar)
+    if (!t.dataset.c && t.dataset.marco == null && t.dataset.pf == null && !(isConserva(c) && t.dataset.p) && !(t.dataset.svcpct && rascLer()[rascChave(c.id, t.dataset.id, t.dataset.svcpct)])) marcaVistoria(c);
     save();
     schedulePreview();
   }
@@ -5438,6 +5610,7 @@
       setVisao(false);
       state.activeId = tab.dataset.tab;
       ui.open = {};
+      if (veioDaVisao) ui.lista = listaNova(state.activeId, listaSoNc());
       save();
       renderAll();
       if (veioDaVisao) window.scrollTo(0, 0);
@@ -5508,6 +5681,8 @@
     }
     if (act === 'pt-aba') {
       ui.aba[b.dataset.id] = b.dataset.v === 'med' ? 'med' : 'vist';
+      delete ui.abaPad[b.dataset.id];
+      ui.abaCt = { cid: c.id, v: ui.aba[b.dataset.id] };
       refazPonte(b.dataset.id, '.pt-abas [data-v="' + ui.aba[b.dataset.id] + '"]');
       return;
     }
@@ -5544,7 +5719,7 @@
     if (act === 'an-etapa') {
       var ev = Number(b.dataset.v) || 0;
       ui.medSel = {};
-      if (c) delete ui.medGlobal[c.id];
+      if (c) delete ui.medGlobal[c.id];   // a aba não muda: quem está em Medições continua nela
       if (ev !== etapaSel) { etapaSel = ev; lsPut(ETAPA_KEY, ev || null); }
       renderEditor();
       return;
@@ -5594,17 +5769,29 @@
       var nv = Number(b.dataset.v) || null;
       if (nv) ui.medGlobal[c.id] = nv; else delete ui.medGlobal[c.id];
       ui.medSel = {};
+      abaMed(c);
       renderEditor();
       return;
     }
-    if (act === 'ld-resumo') { ui.open = {}; ui.voltar = null; renderEditor(); return; }
+    if (act === 'ld-resumo') { undoProxima(); ui.open = {}; ui.voltar = null; renderEditor(); return; }
+    if (act === 'lista-sonc') { ui.lista.so = !ui.lista.so; listaMuda(); return; }
+    if (act === 'res-lin') {
+      var rk = c.id + '|' + b.dataset.v;
+      ui.resAb[rk] = !ui.resAb[rk];
+      renderEditor();
+      var rf = document.querySelector('[data-act="res-lin"][data-v="' + b.dataset.v + '"]');
+      if (rf) try { rf.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+      return;
+    }
     if (act === 'ld-voltar') { var vv = ui.voltar; ui.voltar = null; if (vv) voltarDe(vv); return; }
     // ponte citada no resumo da análise: abre o cartão dela
     if (act === 'an-ir') {
       var pidIr = b.dataset.id, anIr = anOf(c), gIr = medGlobalDe(c, anIr), aIr = anIr && anIr.pontes ? anIr.pontes[pidIr] : null;
       if (gIr && !(aIr && Number(aIr.meses[String(gIr)]) > 0)) delete ui.medGlobal[c.id];
+      undoProxima();
       if (mdOn()) { ui.open = {}; ui.voltar = null; }
       ui.open[pidIr] = true;
+      if (findPoint(pidIr)) listaMostra(findPoint(pidIr), c);
       renderEditor();
       var alvo = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(pidIr) : pidIr) + '"]');
       if (alvo) alvo.scrollIntoView({ block: 'start' });
@@ -5616,6 +5803,8 @@
         renderEditor();
         return;
       case 'toggle-point':
+        undoProxima();
+        if (document.activeElement && document.activeElement.id === 'ptBusca') document.activeElement.blur();   // abriu um resultado: o teclado fecha
         if (mdOn()) {
           var abre = !ui.open[b.dataset.id];
           ui.open = {}; ui.voltar = null;
@@ -5636,50 +5825,76 @@
         if (!p) return;
         var sv = p.serv[b.dataset.svc], st = b.dataset.st;
         if (!sv) return;
-        // trafegabilidade do segmento: só T, R e I (tocar de novo volta a sem vistoria); a nota nunca é apagada (trafToque)
+        // trafegabilidade do segmento: só T, R e I; tocar no marcado não muda nada, "Limpar" (NV) volta a sem vistoria; a nota nunca é apagada (trafToque)
         if (b.dataset.svc === TRAFEG.key) {
-          if (!isConserva(c) || TRAF_ORDER.indexOf(st) < 0) return;
+          if (!isConserva(c) || (st !== 'NV' && TRAF_ORDER.indexOf(st) < 0) || trafSt(sv) === st) return;
           p.serv[TRAFEG.key] = trafToque(sv, st);
           rerenderPoint(p);
+          if (st === 'NV') limparFoco(p, '.svc.traf .seg button');
           break;
         }
         if (isConserva(c) && !OAE_STATUS[st]) return;   // estado da trafegabilidade num grupo: ignorado
         if (isContinuo(c)) {
-          if (oaeSt(sv) === st) st = 'NV';   // tocar de novo no status marcado desmarca (volta para sem vistoria)
+          if (oaeSt(sv) === st) st = 'NV';   // "Desfazer N/A": o botão do estado marcado desmarca (volta para sem vistoria)
+          var corr = st === 'OK' && comQtd(oaeSt(sv));
+          if (corr) flushSave();   // o que acabou de ser digitado entra no rascunho antes
           // serviço contínuo: a estimativa, o "onde" e as marcas só valem com dano observado ou em execução
           delete sv.pct;
           if (!comQtd(st)) {
             // tinha o que perder: "Desfazer" por alguns segundos (um toque sem querer no celular apagava a anotação)
             var temDet = sv.q != null || (sv.n && String(sv.n).trim()) || sv.pri || sv.ci || (sv.itens && Object.keys(sv.itens).length) || (sv.fotos && sv.fotos.length);
-            if (temDet) {
-              var antes = JSON.parse(JSON.stringify(sv)), svK = b.dataset.svc, pId = p.id;
-              offerUndo(st === 'OK' && comQtd(oaeSt(sv)) ? 'Não conformidade corrigida: a estimativa, a nota e os itens saíram junto.' : 'A estimativa, a nota e os itens deste serviço saíram junto com a situação.', function () {
-                var p2 = findPoint(pId);
+            if (temDet || corr) {
+              var antes = JSON.parse(JSON.stringify(sv)), svK = b.dataset.svc, pId = p.id, cId = c.id, rmC = rascLer(), rdC = corr ? rmC[rascChave(cId, pId, svK)] : null;
+              // Corrigida sobe direto: a descrição mudada e ainda não salva sai junto, e o Desfazer devolve o rascunho
+              if (rdC && rdC.a && comQtd(oaeSt(rdC.a))) { delete rmC[rascChave(cId, pId, svK)]; rascGravar(rmC); } else rdC = null;
+              offerUndo(!corr ? 'A estimativa, a nota e os itens deste serviço saíram junto com a situação.' : !temDet ? 'NC marcada como corrigida' : sv.fotos && sv.fotos.length ? 'A estimativa, a nota, os itens e as fotos saíram desta NC; as fotos continuam na galeria' : 'A estimativa, a nota e os itens saíram desta NC', function () {
+                var c2 = contractById(cId), p2 = c2 && c2.pontos.find(function (q) { return q.id === pId; });   // a pessoa pode ter ido a outro contrato: a barra de Corrigida fica até a próxima ação
                 if (!p2 || !p2.serv) return;
-                p2.serv[svK] = antes;
+                p2.serv[svK] = rdC ? clone(rdC.a) : antes;
+                // a NC salva volta salva e sobe, como a Corrigida subiu: não abre rascunho. Havia rascunho: ele volta por cima
+                var rcU = rascChave(cId, pId, svK);
+                rascSolta[rcU] = true;
+                trackChanges();
+                delete rascSolta[rcU];
+                if (rdC) { var mU = rascLer(); rdC.v = clone(antes); mU[rcU] = rdC; rascGravar(mU); p2.serv[svK] = antes; }
                 rerenderPoint(p2);
-                afterEdit('set-st', active());
-              });
+                afterEdit('set-st', c2);
+              }, { fica: corr });
             }
             delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens; delete sv.fotos;
           }
-        } else if (st === 'OK') sv.pct = 100;
-        else if (st === 'NA') sv.pct = 0;
+        } else if (st === 'OK' || st === 'NA') {
+          // ponto crítico: o % digitado sumia ao passar por OK ou N/A (de volta, Ativo vira 50% e Parado 0%): Desfazer devolve
+          if ((sv.st === 'A' || sv.st === 'P') && Number(sv.pct) > 0 && Number(sv.pct) !== (sv.st === 'A' ? 50 : 0)) {
+            var st0 = sv.st, pct0 = sv.pct, svK0 = b.dataset.svc, pId0 = p.id, cId0 = c.id, sN = servicesOf(c).find(function (x) { return x.key === svK0; });
+            offerUndo((sN ? sN.short : 'O serviço') + ' foi para ' + STATUS[st].btn + '. O % digitado era ' + pct0 + '%.', function () {
+              var c2 = contractById(cId0), p2 = c2 && c2.pontos.find(function (q) { return q.id === pId0; }), s2 = p2 && p2.serv[svK0];
+              if (!s2) return;
+              s2.st = st0; s2.pct = pct0;
+              rerenderPoint(p2);
+              afterEdit('set-st', c2);
+            }, {});
+          }
+          sv.pct = st === 'OK' ? 100 : 0;
+        }
         else if (sv.st === 'OK' || sv.st === 'NA') sv.pct = st === 'A' ? 50 : 0;
         sv.st = st;
+        if (corr && undoFica) undoFica.g = { cid: c.id, pid: p.id, svc: b.dataset.svc, v: clone(sv) };
+        rascAbreJa(c, p, b.dataset.svc);
         rerenderPoint(p);
         break;
       case 'set-desemp':
         p = findPoint(b.dataset.id);
         var dInd = DESEMP_IND.find(function (d) { return d.k === b.dataset.ind; }), dv = b.dataset.v;
-        if (!p || !isPavimentada(c) || !dInd || !DESEMP_ST[dv]) return;
-        if (p.serv[dInd.key] === dv) delete p.serv[dInd.key]; else p.serv[dInd.key] = dv;
+        if (!p || !isPavimentada(c) || !dInd || (dv && !DESEMP_ST[dv]) || (dv ? p.serv[dInd.key] === dv : !p.serv[dInd.key])) return;   // tocar no marcado não muda nada; "Limpar" (data-v vazio) tira
+        if (dv) p.serv[dInd.key] = dv; else delete p.serv[dInd.key];
         ui.desAb[p.id] = true;
         rerenderPoint(p);
         // o resumo do contrato (fora do cartão do segmento) acompanha
-        var dc = document.querySelector('.des-card');
-        if (dc) { var dh = desempResumoHtml(c); if (dh) dc.outerHTML = dh; else dc.remove(); }
-        var fd = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="set-desemp"][data-ind="' + dInd.k + '"][data-v="' + dv + '"]');
+        var dc = document.querySelector('.des-card'), dl = document.querySelector('[data-act="res-lin"][data-v="des"]');
+        if (dl) { if (dc) dc.remove(); dl.outerHTML = desempLinha(c); }
+        else if (dc) { var dh = desempResumoHtml(c); if (dh) dc.outerHTML = dh; else dc.remove(); }
+        var fd = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] .seg [data-act="set-desemp"][data-ind="' + dInd.k + '"]' + (dv ? '[data-v="' + dv + '"]' : ''));   // depois de "Limpar", o foco vai para o 1º botão do indicador
         if (fd) try { fd.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
         break;
       case 'nc-foto-tirar':
@@ -5693,21 +5908,24 @@
         break;
       case 'nc-salvar':
       case 'nc-descartar':
+        if (aba.ro) { toast('Só consulta: o app está aberto em outra aba, e o rascunho fica lá.', 5000); return; }
         p = findPoint(b.dataset.id);
         if (!p) return;
         flushSave();   // o que acabou de ser digitado entra no rascunho antes
         var rsv = b.dataset.svc, rch = rascChave(c.id, p.id, rsv), rm = rascLer(), rd = rm[rch], rcur = p.serv[rsv];
         if (!rd) { rascTela(); return; }
         if (act === 'nc-descartar') {
-          var rguard = clone(rcur), rpid = p.id;
+          var rguard = clone(rcur), rpid = p.id, rcid = c.id;
           p.serv[rsv] = rd.a ? clone(rd.a) : { st: 'NV' };
           delete rm[rch]; rascGravar(rm);
           rerenderPoint(p);
           save();
           offerUndo('Rascunho da não conformidade descartado.', function () {
-            var p2 = findPoint(rpid);
+            var c2 = contractById(rcid), p2 = c2 && c2.pontos.find(function (q) { return q.id === rpid; });   // a pessoa pode ter ido a outro contrato: a barra continua na tela
             if (!p2) return;
             p2.serv[rsv] = rguard;
+            var mD = rascLer();   // volta o rascunho que saiu, como estava: nada sobe sem Salvar
+            rd.v = clone(rguard); mD[rch] = rd; rascGravar(mD);
             rerenderPoint(p2);
             save();
           });
@@ -5722,11 +5940,15 @@
           return;
         }
         delete rm[rch]; rascGravar(rm);
-        rascSolta[rch] = true;
+        rascSolta[rch] = 'a0' in rd ? { a: rd.a0 } : true;
+        marcaVistoria(c);   // a data de vistoria sobe junto com a NC, não antes
         trackChanges();   // agora a mudança entra na fila e sobe
         delete rascSolta[rch];
+        save();   // a data também fica guardada no aparelho
         scheduleFlush(0);
+        rerenderPoint(p);
         rascTela();
+        schedulePreview();
         if (!isFiscal()) toast('Não conformidade salva.', 3000);
         return;
       case 'set-marca':
@@ -5735,6 +5957,7 @@
         var svm = p.serv[b.dataset.svc], mk = b.dataset.m;
         if (b.dataset.svc === TRAFEG.key || !svm || !OAE_MARCAS[mk] || !comQtd(oaeSt(svm))) return;   // a trafegabilidade não tem marcas
         if (svm[mk]) delete svm[mk]; else svm[mk] = true;
+        rascAbreJa(c, p, b.dataset.svc);
         rerenderPoint(p);
         break;
       case 'set-item':
@@ -5745,6 +5968,7 @@
         var li = Array.isArray(svi.itens) ? svi.itens.slice() : [], ji = li.indexOf(ki);
         if (ji >= 0) li.splice(ji, 1); else li.push(ki);
         if (li.length) svi.itens = li; else delete svi.itens;
+        rascAbreJa(c, p, b.dataset.svc);
         rerenderPoint(p);
         var fi = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] [data-act="set-item"][data-svc="' + b.dataset.svc + '"][data-it="' + ki + '"]');
         if (fi) try { fi.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
@@ -5768,8 +5992,10 @@
         }
         c.pontos.push(p);
         ui.open = {}; ui.open[p.id] = true;
+        if (!isOae(c)) ui.dadosAb[p.id] = true;   // ponto e segmento novos: acertar o nome e o km
+        listaLimpa();   // o item novo não some da vista
         renderEditor();
-        scrollToPoint(p.id);
+        scrollToDados(p.id);
         break;
       case 'dup-point':
         p = findPoint(b.dataset.id);
@@ -5779,8 +6005,10 @@
         cp.nome = (p.nome || 'P') + ' (cópia)';
         c.pontos.push(cp);
         ui.open = {}; ui.open[cp.id] = true;
+        ui.dadosAb[cp.id] = true;
+        listaLimpa();
         renderEditor();
-        scrollToPoint(cp.id);
+        scrollToDados(cp.id);
         break;
       case 'del-point':
         p = findPoint(b.dataset.id);
@@ -5878,11 +6106,12 @@
       default:
         return;
     }
-    afterEdit(act, c);
+    afterEdit(act, c, !!(p && b.dataset.svc && rascLer()[rascChave(c.id, p.id, b.dataset.svc)]));
   }
   // na conservação, só marcar o estado conta como vistoria: gerar, acrescentar, excluir e desfazer a exclusão não contam
-  function afterEdit(act, c) {
-    if (isConserva(c) ? act === 'set-st' || act === 'set-marca' || act === 'set-desemp' : POINT_ACTS.indexOf(act) >= 0) marcaVistoria(c);
+  // semData: o toque foi numa NC em rascunho, a data só muda ao Salvar (nc-salvar)
+  function afterEdit(act, c, semData) {
+    if (!semData && (isConserva(c) ? act === 'set-st' || act === 'set-marca' || act === 'set-desemp' : POINT_ACTS.indexOf(act) >= 0)) marcaVistoria(c);
     save();
     schedulePreview();
   }
@@ -5993,7 +6222,15 @@
     }).then(function (r) {
       var c = contractById(cid);
       if (!r || !c) return;
-      var copia = clone(p);
+      flushSave();   // o que acabou de ser digitado entra no rascunho antes
+      // rascunho não sobe com o Desfazer: a cópia fica como está no banco, e os rascunhos do item reabrem depois que ele voltar
+      var copia = clone(p), rsM = rascLer(), rsX = {};
+      Object.keys(rsM).forEach(function (ch) {
+        var x = ch.split('|');
+        if (x[0] !== cid || x[1] !== p.id) return;
+        rsX[x[2]] = clone(rsM[ch]); rsX[x[2]].v = clone(p.serv[x[2]]);
+        copia.serv[x[2]] = rsM[ch].a ? clone(rsM[ch].a) : { st: 'NV' };
+      });
       c.pontos = c.pontos.filter(function (x) { return x.id !== p.id; });
       if (c === active()) renderEditor();
       afterEdit('del-point', c);
@@ -6001,8 +6238,15 @@
         var cc = contractById(cid);
         if (!cc) { toast('O contrato deste ' + it + ' não existe mais.'); return; }
         if (cc.pontos.some(function (x) { return x.id === copia.id; })) return;
-        cc.pontos.push(clone(copia));
-        if (cc === active()) { ui.open = {}; ui.open[copia.id] = true; renderEditor(); scrollToPoint(copia.id); }
+        var volta = clone(copia);
+        cc.pontos.push(volta);
+        if (Object.keys(rsX).length) {
+          trackChanges();
+          var mX = rascLer();
+          Object.keys(rsX).forEach(function (s) { mX[rascChave(cid, volta.id, s)] = rsX[s]; volta.serv[s] = clone(rsX[s].v); });
+          rascGravar(mX);
+        }
+        if (cc === active()) { ui.open = {}; ui.open[copia.id] = true; listaLimpa(); renderEditor(); scrollToPoint(copia.id); }
         afterEdit('add-point', cc);
         toast(It + ' ' + (copia.nome || '') + ' de volta.');
       });
@@ -6010,11 +6254,12 @@
   }
   // com o banco ninguém exclui contrato: o Administrador arquiva (sai de todas as telas e os dados ficam guardados, D-2)
   function arquivarContrato(c) {
-    var nome = ctNome(c) || 'Contrato', cid = c.id;
+    var nome = ctNome(c) || 'Contrato', cid = c.id, nRs = Object.keys(rascLer()).filter(function (ch) { return ch.split('|')[0] === cid; }).length;
     confirmar({
       titulo: 'Arquivar o contrato ' + nome + '?',
       html: '<p>O contrato <b>' + esc(ctCompleto(c)) + '</b> sai de todas as telas, para todos: lista, Visão geral, Medições, mapa, foto e galeria.</p>' +
-        '<p>Nada é apagado: os <b>' + c.pontos.length + ' ' + itensTxt(c) + '</b>, as fotos e as medições ficam guardados no banco. Você restaura quando quiser em Dados › Contratos arquivados.</p>',
+        '<p>Nada é apagado: os <b>' + c.pontos.length + ' ' + itensTxt(c) + '</b>, as fotos e as medições ficam guardados no banco. Você restaura quando quiser em Dados › Contratos arquivados.</p>' +
+        (nRs ? '<p>' + (nRs === 1 ? 'Sua NC em rascunho neste contrato fica guardada neste aparelho e só volta' : 'Suas ' + nRs + ' NC em rascunho neste contrato ficam guardadas neste aparelho e só voltam') + ' se ele for restaurado. Para salvar ou descartar, faça isso antes de arquivar.</p>' : ''),
       digitar: nome, botao: 'Arquivar contrato', perigo: true
     }).then(function (r) {
       if (!r || !contractById(cid) || state.contracts.length < 2) return;
@@ -6050,12 +6295,35 @@
       toast('Contrato ' + nome + ' excluído.' + (banco.on ? ' Dá para restaurar pela lixeira.' : ''), 5000);
     });
   }
-  // barra "Desfazer" por alguns segundos depois de excluir
-  var undoTimer = null;
-  function offerUndo(msg, fn) {
-    var old = $('undoBar');
-    if (old) old.remove();
-    clearTimeout(undoTimer);
+  // "Limpar" some com a marca: o foco vai para o 1º botão do grupo, sem rolar
+  function limparFoco(p, sel) {
+    var f = document.querySelector('.pt[data-id="' + CSS.escape(p.id) + '"] ' + sel);
+    if (f) try { f.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+  }
+  // barra "Desfazer" por alguns segundos depois de excluir. o (só em set-st): { fica: fica até a próxima ação ou até fechar, sem
+  // prazo: outra alteração nos dados, abrir ou fechar um item, trocar de tela ou de contrato (rolar e o redesenho da sincronização
+  // não contam; a Foto e as janelas só a escondem, index.html) }; quando o fiscal manda para aprovação, a barra sai: nos dados não
+  // há mais o que desfazer (undoFecha). undoFica.g: o grupo como a Corrigida deixou (refresh: outra pessoa mudou, a barra sai)
+  var undoTimer = null, undoFica = null, undoProp = false;
+  function undoFecha() { var old = $('undoBar'); if (old) old.remove(); clearTimeout(undoTimer); undoFica = null; undoProp = false; }
+  // chamada ao gravar: o 1º registro depois de abrir a barra é o do próprio toque; dali em diante, dados diferentes fecham a barra
+  function undoConfere() {
+    if (!undoFica) return;
+    var j = JSON.stringify(state.contracts);
+    if (undoFica.j == null) undoFica.j = j; else if (undoFica.j !== j) undoFecha();
+  }
+  function undoProxima() { if (undoFica) undoFecha(); }
+  function undoTela() { return [state.activeId, visaoOn, medicoesOn, visaoOn ? telaG : pg].join('|'); }
+  function undoTelaConfere() { if (undoFica && undoFica.tela !== undoTela()) undoFecha(); }
+  function undoGrupoMudou() {
+    var g = undoFica.g, c = g && state.contracts.find(function (x) { return x.id === g.cid; }), p = c && c.pontos.find(function (x) { return x.id === g.pid; });
+    return !!g && !(p && ncIgual(p.serv[g.svc], g.v));
+  }
+  function offerUndo(msg, fn, o) {
+    undoFecha();
+    var fica = !!(o && o.fica);
+    undoFica = fica ? { j: null, tela: undoTela() } : null;
+    undoProp = !!o;
     var bar = document.createElement('div');
     bar.id = 'undoBar';
     bar.className = 'share-ready';
@@ -6063,10 +6331,10 @@
     bar.innerHTML = '<span></span><button type="button" class="btn primary">Desfazer</button><button type="button" class="btn" aria-label="Fechar">×</button>';
     bar.querySelector('span').textContent = msg;
     var b = bar.querySelectorAll('button');
-    b[0].addEventListener('click', function () { bar.remove(); fn(); });
-    b[1].addEventListener('click', function () { bar.remove(); });
+    b[0].addEventListener('click', function () { undoFecha(); fn(); });
+    b[1].addEventListener('click', undoFecha);
     (document.fullscreenElement || document.body).appendChild(bar);
-    undoTimer = setTimeout(function () { bar.remove(); }, 12000);
+    if (!fica) undoTimer = setTimeout(undoFecha, 12000);
   }
 
   // na troca de página do celular o ponto aparece direto (a página acabou de abrir: não há de onde deslizar)
@@ -6081,6 +6349,13 @@
     if (el) el.scrollIntoView(direto ? { block: 'start' } : { behavior: 'smooth', block: 'start' });
   }
 
+  // item novo com os Dados abertos: eles ficam depois dos serviços; a tela vai até o nome e o km (sem foco: o teclado não sobe)
+  function scrollToDados(id) {
+    scrollToPoint(id);
+    var d = document.querySelector('.pt[data-id="' + CSS.escape(id) + '"] .pt-dados[open]:not(.pt-des)');
+    if (d) d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   // clique no desenho abre o ponto no editor; "Abrir para ler" (celular) abre a tela cheia nessa página
   var ICON_LER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/><path d="M11 8.5v5M8.5 11h5"/></svg>';
   function onPreviewClick(e) {
@@ -6093,7 +6368,9 @@
     var sh = g.closest('.sheet'), fol = sh ? Array.prototype.indexOf.call($('pages').querySelectorAll('.sheet'), sh) : -1, topo = $('pages').scrollTop;
     if (pgAtivo()) irPg('pontos');
     if (ui.wide) toggleWide(false);
+    undoProxima();
     ui.open = {}; ui.open[id] = true;
+    if (findPoint(id)) listaMostra(findPoint(id), active());
     ui.voltar = trocou && mdOn() ? { pg: 'diagrama', folha: fol, top: topo } : null;
     renderEditor();
     scrollToPoint(id, trocou);
@@ -6204,7 +6481,14 @@
 
   // ------------------------------------------------------------------ backup
   function downloadBackup() {
-    var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    // NC em rascunho fica fora: ao abrir o backup, ela subiria como salva sem ninguém ter tocado em Salvar
+    var s = clone(state), m = rascLer();
+    Object.keys(m).forEach(function (ch) {
+      var x = ch.split('|'), c = s.contracts.filter(function (k) { return k.id === x[0]; })[0],
+        p = c && c.pontos.filter(function (k) { return k.id === x[1]; })[0];
+      if (p) p.serv[x[2]] = clone(m[ch].a || { st: 'NV' });
+    });
+    var blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
     var name = 'backup-diagrama-linear-' + todayIso() + '.json';
     saveBlob(name, blob, isIOS() ? 'Backup pronto: ' + name : 'Backup salvo na pasta de downloads.');
   }
@@ -6223,12 +6507,12 @@
       var estranhas = situacoesEstranhas(s);
       if (estranhas.length) { toast('Esse backup tem ' + estranhas.length + ' situação(ões) que o site não conhece (ex.: ' + estranhas[0] + '). Nada foi trocado.', 9000); return; }
       try { normalize(clone(s)); } catch (e) { toast('Esse arquivo não é um backup válido deste site.'); return; }
-      var np =s.contracts.reduce(function (n, c) { return n + c.pontos.length; }, 0);
+      var np =s.contracts.reduce(function (n, c) { return n + c.pontos.length; }, 0), nRs = Object.keys(rascLer()).length;
       confirmar({
         titulo: 'Trocar os dados pelos do backup?',
         html: '<p>Arquivo <b>' + esc(file.name) + '</b>: ' + s.contracts.length + ' contrato(s) e ' + np + ' pontos.</p><p>' + (banco.on
           ? 'Todos passam a ver os dados do backup. Antes da troca o banco guarda uma cópia de como está agora (menu Dados › Lixeira e cópias).'
-          : 'Os dados atuais deste aparelho serão substituídos.') + '</p>',
+          : 'Os dados atuais deste aparelho serão substituídos.') + '</p>' + (nRs ? '<p>' + (nRs === 1 ? 'A NC em rascunho deste aparelho é descartada.' : 'As ' + nRs + ' NC em rascunho deste aparelho são descartadas.') + '</p>' : ''),
         digitar: banco.on ? 'SUBSTITUIR' : null, botao: 'Trocar pelos do backup', perigo: true
       }).then(function (r) {
         if (!r) return;
@@ -6236,7 +6520,12 @@
         s.activeId = s.contracts.some(function (c) { return c.id === state.activeId; }) ? state.activeId : s.activeId;
         state = s;
         ui.open = {};
+        // vale para todos: as NC do backup sobem inteiras, nenhuma fica em rascunho neste aparelho
+        rascGravar({});
+        banco.restaurando = true;
         save();
+        flushSave();
+        banco.restaurando = false;
         renderAll();
         toast(banco.on ? 'Backup carregado. Enviando ao banco…' : 'Backup carregado.');
       });
@@ -6579,7 +6868,9 @@
   }
   function abaSoLeitura() {
     if (aba.dono) { flushSave(); keepSync(); }   // era a aba que editava: grava o que estava esperando antes de parar
+    rascSaiDoEstado();
     aba.dono = false; aba.ro = true; aba.pronto = true;
+    undoFecha();   // daqui, o Desfazer não subiria
     clearTimeout(flushTimer);
     abaBarra('outra');
     aplicaPapel();
@@ -6794,7 +7085,8 @@
   }
   // a fila guarda uma operação por ponto/contrato; as que já estão a caminho do banco ficam como estão
   function enqueue(ops) {
-    ops.forEach(function (op) {
+    ops.forEach(function (op0) {
+      var op = clone(op0);   // a fila tem a sua cópia: o que se mexe depois na tela (um rascunho) não entra nela
       var sent = banco.pend.slice(0, banco.sending), rest = banco.pend.slice(banco.sending);
       if (op.t === 'apagar_contrato') rest = rest.filter(function (x) { return x.cid !== op.id; });
       var k = opKey(op), i = rest.findIndex(function (x) { return opKey(x) === k; });
@@ -6929,7 +7221,7 @@
     servicesOf(c).concat(isConserva(c) ? [TRAFEG] : [], isPavimentada(c) ? DESEMP_IND : []).forEach(function (s) {
       // vist/vpor (migração 24, D-25): a última mudança de situação, quantidade ou percentual; sem eles, a última alteração
       var f = x.m && x.m['serv.' + s.key], t = f && Date.parse(f.vist || f.em);
-      var marcado = s === TRAFEG ? trafSt(p.serv[s.key]) !== 'NV' : s.peso ? !!DESEMP_ST[p.serv[s.key]] : oaeSt(p.serv[s.key]) !== 'NV';
+      var marcado = s === TRAFEG ? trafSt(p.serv[s.key]) !== 'NV' : s.peso ? !!DESEMP_ST[p.serv[s.key]] : oaeSt(svSalvo(p, s.key, c)) !== 'NV';
       if (isFinite(t) && marcado && (!best || t > best.t)) best = { t: t, por: f.vpor || f.por, em: f.vist || f.em };
     });
     return best;
@@ -6946,11 +7238,64 @@
     return 'Última alteração: <b>' + esc(l.por || 'sem nome') + '</b> · ' + esc(fmtWhen(l.em)) + f;
   }
   function lastLine(key) {
-    var h = lastHtml(key);
-    return '<div class="last-edit" data-last="' + esc(key) + '"' + (h ? '' : ' hidden') + '>' + h + '</div>';
+    var m = momTexto(key), h = m ? esc(m) : lastHtml(key);
+    return '<div class="last-edit' + (m ? ' mom ' + momento.f : '') + '" data-last="' + esc(key) + '"' + (m && momento.alt[key] ? ' style="min-height:' + momento.alt[key] + 'px"' : '') + (h ? '' : ' hidden') + '>' + h + '</div>';
   }
   function refreshLastLines() {
-    document.querySelectorAll('[data-last]').forEach(function (el) { var h = lastHtml(el.getAttribute('data-last')); el.innerHTML = h; el.hidden = !h; });
+    document.querySelectorAll('[data-last]').forEach(function (el) { var k = el.getAttribute('data-last'), m = momTexto(k), h = m ? esc(m) : lastHtml(k);
+      if (m && !el.classList.contains('mom')) momento.alt[k] = el.offsetHeight;   // com o momento, a linha guarda a altura que tinha: o cartão não pula
+      el.innerHTML = h; el.hidden = !h; el.className = 'last-edit' + (m ? ' mom ' + momento.f : ''); el.style.minHeight = m && momento.alt[k] ? momento.alt[k] + 'px' : '';
+    });
+  }
+  // celular e tablet: o momento do envio aparece na linha do item alterado (env, ok, off, fal) e ela fica presa abaixo do topo
+  // (index.html). Fica aqui, não no cartão, que é refeito a cada toque. Fiscal não entra: ele tem o aviso de envio para aprovação.
+  // NC em rascunho não entra: não vai para a fila
+  var momento = { f: '', ch: {}, hora: '', alt: {} }, momTimer = null;
+  function momVale() { return !!(banco.on && banco.login && !isFiscal() && !aba.ro && mmAtalhos && mmAtalhos.matches); }
+  function momTexto(key) {
+    if (!momento.f || !momento.ch[key] || !momVale()) return '';
+    return momento.f === 'env' ? 'Enviando…' : momento.f === 'ok' ? '✓ Salvo na equipe · ' + momento.hora :
+      momento.f === 'mem' ? 'Só na memória · deixe o app aberto até subir' : momento.f === 'off' ? 'Guardado neste aparelho · sobe quando voltar o sinal' : 'Guardado neste aparelho · sobe quando o banco voltar';
+  }
+  // o item alterado; só o contrato quando a mudança não foi em nenhum item (a data da vistoria sobe junto com o item)
+  function momChaves(ops) {
+    var ch = {}, pt = false;
+    ops.forEach(function (op) { if (/ponto/.test(op.t) && op.cid && op.id) { ch[metaKey(op.cid, op.id)] = 1; pt = true; } });
+    if (!pt) ops.forEach(function (op) { if (op.id) ch[metaKey(op.id)] = 1; });
+    return ch;
+  }
+  // só as trocas de estado vão para o aviso falado, fora da tela (a linha é refeita a cada toque e nem existe com o item fechado)
+  function momFase(f) {
+    clearTimeout(momTimer);
+    if (f === momento.f) return;
+    momento.f = f;
+    refreshLastLines();
+    var av = $('momAviso');
+    if (av) av.textContent = f === 'env' ? 'Enviando' : f === 'ok' ? 'Salvo na equipe às ' + momento.hora : f === 'mem' ? 'Só na memória, deixe o app aberto até subir' : f === 'off' ? 'Guardado neste aparelho, sobe quando voltar o sinal' : f === 'fal' ? 'Guardado neste aparelho, sobe quando o banco voltar' : '';
+  }
+  // o que não subiu agora: sem espaço no aparelho, a fila está só na memória (keepSync)
+  function momEspera(f) { return banco.semEspaco ? 'mem' : f; }
+  function momNovo(ops) {
+    if (!momVale()) return;
+    var ch = momChaves(ops);
+    if (momento.f && momento.f !== 'ok') Object.keys(momento.ch).forEach(function (k) { ch[k] = 1; });
+    momento.ch = ch;
+    var f = banco.online === false ? momEspera('off') : 'env';
+    if (f === momento.f) refreshLastLines(); else momFase(f);   // na mesma fase, pode ser outro item
+  }
+  function momSalvo() {
+    if (!momVale() || !momento.f) return;
+    momento.hora = hhmm(new Date());
+    momFase('ok');
+    momTimer = setTimeout(function () { momFase(''); }, 4000);
+  }
+  // acompanha a fila (syncStatus): sem sinal, falha do banco, volta do sinal. Fila vazia sem "salvo" (desfeito, recusado): a linha volta
+  function momSync() {
+    if (!momVale()) { if (momento.f) momFase(''); return; }
+    if (momento.f === 'ok') return;
+    if (!banco.pend.length) { if (momento.f) momFase(''); return; }
+    if (!momento.f) momento.ch = momChaves(banco.pend);   // o app abriu com alterações na fila
+    momFase(banco.online === false ? momEspera('off') : banco.falhas ? momEspera('fal') : 'env');
   }
   // depois de gravar: o que entrou passa a ter este aparelho como último a alterar
   function noteMeta(ops, conf) {
@@ -7043,21 +7388,102 @@
   // {pessoa: {'contrato|ponto|grupo': {a: o grupo como está no banco, v: o grupo como está aqui}}}. Na base da fila
   // (banco.base) o grupo fica como está no banco; assim, ao salvar, a diferença sobe numa alteração só
   var RASC_KEY = 'diagrama-linear.nc-rascunhos', rascSolta = {};   // rascSolta: os que a pessoa acabou de salvar (sobem)
-  function rascDono() { return banco.on && banco.login ? String(banco.login.uid || banco.login.nome || '') : ''; }
+  var rascMem = null;   // a leitura guardada: a visão geral e a folha passam por milhares de grupos
+  var rascSoMem = false;   // aparelho sem espaço: o rascunho está só na memória, até uma gravação dar certo
+  // quem só consulta (a outra aba edita, ou analista) fica com o que está no banco: os rascunhos ficam guardados e não aparecem
+  function rascDono() { return banco.on && banco.login && !aba.ro && !isAnalista() ? String(banco.login.uid || banco.login.nome || '') : ''; }
   function rascTodos() { var t = lsGet(RASC_KEY); return t && typeof t === 'object' ? t : {}; }
-  function rascLer() { var d = rascDono(); return (d && rascTodos()[d]) || {}; }
+  function rascLer() {
+    var d = rascDono();
+    if (!d) return {};
+    if (!rascMem || rascMem.d !== d) { rascMem = { d: d, m: rascTodos()[d] || {} }; rascSoMem = false; }
+    return rascMem.m;
+  }
+  window.addEventListener('storage', function (e) { if (!rascSoMem && (!e.key || e.key.slice(-RASC_KEY.length) === RASC_KEY)) rascMem = null; });   // outra aba mexeu (na prévia, a chave vem com o prefixo)
   function rascGravar(m) {
     var d = rascDono(), t = rascTodos();
     if (!d) return;
+    rascMem = { d: d, m: m };   // não gravou (sem espaço): vale o da memória, com selo e Salvar, e nada se perde em silêncio
     if (Object.keys(m).length) t[d] = m; else delete t[d];
-    lsPut(RASC_KEY, Object.keys(t).length ? t : null);
+    var so = !lsPut(RASC_KEY, Object.keys(t).length ? t : null) && Object.keys(m).length > 0;
+    if (so && !rascSoMem) toast('Este aparelho está sem espaço: o rascunho da NC está só na memória. ' + (isFiscal() ? 'Envie para aprovação' : 'Salve a NC') + ' antes de fechar o app.', 9000);
+    rascSoMem = so;
   }
   function rascChave(cid, pid, svc) { return cid + '|' + pid + '|' + svc; }
+  // o grupo como está no banco: quem conta ou desenha (contagens, folha, PDF, mapa, visão geral) lê por aqui; só o item aberto
+  // mostra o rascunho. Sem rascunho, sai logo com o grupo de sempre
+  function svSalvo(p, key, c) {
+    var m = rascLer();
+    for (var x in m) { var d = m[rascChave((c || ownerOf(p)).id, p.id, key)]; return d ? d.a || { st: 'NV' } : p.serv[key]; }
+    return p.serv[key];
+  }
+  // NC que nunca foi salva (no banco o grupo está sem NC): selo Rascunho, etiqueta própria, pé só com Descartar e Salvar.
+  // A NC já salva com a descrição mudada continua sendo NC salva, com os valores do banco na lista e na folha
+  function rascNova(c, p, key) {
+    var d = rascLer()[rascChave(c.id, p.id, key)];
+    return !!d && !(d.a && comQtd(oaeSt(d.a))) && comQtd(oaeSt(p.serv[key]));
+  }
+  function rascDot(s) { return '<span class="dot rasc" title="' + esc(s.short + ': NC em rascunho, ainda não ' + (isFiscal() ? 'enviada' : 'salva')) + '"></span>'; }
+  function rascBdg(c, p) {
+    var n = servicesOf(c).filter(function (s) { return rascNova(c, p, s.key); }).length;
+    return n ? '<span class="nc-bdg rasc">' + n + ' NC · rascunho</span>' : '';
+  }
+  // a NC entra em rascunho já no toque: o selo, o pé e a data não esperam os 300 ms do save
+  function rascAbreJa(c, p, svc) {
+    if (!rascDono() || !banco.base) return;
+    var ch = rascChave(c.id, p.id, svc), m = rascLer(), r = rascPonto(banco.base, ch), a = r ? r.p.serv[svc] : null, v = p.serv[svc];
+    if (!r || m[ch] || rascSolta[ch] || !abreRasc(c, svc, { a: a, v: v })) return;
+    m[ch] = { a: a ? clone(a) : null, v: clone(v) };
+    rascGravar(m);
+  }
+  // ao abrir o app: a cópia guardada pode ter vindo de uma aba de consulta, sem os rascunhos. Sem isto, ao gravar, eles seriam dados por desfeitos
+  function rascNaTela() {
+    var m = rascLer();
+    Object.keys(m).forEach(function (ch) {
+      var r = rascPonto(state, ch);
+      if (r && m[ch].v) r.p.serv[r.svc] = clone(m[ch].v);
+    });
+  }
+  // esta aba passou a só consultar: o que está na tela volta a ser o do banco
+  function rascSaiDoEstado() {
+    var m = rascLer();
+    Object.keys(m).forEach(function (ch) {
+      var r = rascPonto(state, ch);
+      if (r) r.p.serv[r.svc] = m[ch].a ? clone(m[ch].a) : { st: 'NV' };
+    });
+  }
+  // os rascunhos cujo item está na lista: contrato arquivado não conta (o rascunho fica guardado e volta se ele for restaurado)
+  function rascNaLista() {
+    return Object.keys(rascLer()).map(function (ch) {
+      var x = ch.split('|'), c = contractById(x[0]), p = c && c.pontos.find(function (q) { return q.id === x[1]; }), s = c && servicesOf(c).find(function (q) { return q.key === x[2]; });
+      return p && s ? { ch: ch, c: c, p: p, s: s } : null;
+    }).filter(Boolean);
+  }
+  // o botão da linha de estado e o aviso da tela inicial: um rascunho abre o item; mais de um, uma lista curta
+  function rascIr() {
+    var l = rascNaLista();
+    if (!l.length) return;
+    if (l.length === 1) { rascAbre(l[0]); return; }
+    var f = modal('<h2 id="modalTitle">NC em rascunho</h2><p class="hint">Só neste aparelho, até ' + (isFiscal() ? 'enviar para aprovação' : 'salvar') + '.</p><div class="rasc-l">' + l.map(function (x, i) {
+      return '<button type="button" data-i="' + i + '"><b>' + esc(x.p.nome || '?') + ' · ' + esc(x.s.short) + '</b><small>' + esc(ctNome(x.c)) + '</small></button>';
+    }).join('') + '</div><button type="button" class="btn" data-close>Fechar</button>');
+    f.querySelector('.rasc-l').addEventListener('click', function (e) { var b = e.target.closest('[data-i]'); if (b) { closeModal(); rascAbre(l[Number(b.dataset.i)]); } });
+  }
+  function rascAbre(x) {
+    if (!ui.abaCt || ui.abaCt.cid !== x.c.id) abaZera(x.c);
+    ui.aba[x.p.id] = 'vist';
+    delete ui.abaPad[x.p.id];
+    abrirDaVisao(x.c, x.p, false);
+    var el = [].find.call(document.querySelectorAll('[data-rasc]'), function (e) { return e.getAttribute('data-rasc') === x.ch; });
+    if (el) el.closest('.svc').scrollIntoView({ block: 'start' });
+  }
   function rascPonto(s, ch) {
     var x = ch.split('|'), c = s.contracts.find(function (q) { return q.id === x[0]; }), p = c && c.pontos.find(function (q) { return q.id === x[1]; });
     return p ? { p: p, svc: x[2] } : null;
   }
   function ncDet(sv) { return JSON.stringify([sv.q == null ? null : sv.q, sv.n || '', sv.itens || [], !!sv.pri, !!sv.ci, sv.fotos || []]); }
+  // a mesma NC, seja qual for a ordem das chaves (o banco devolve em outra ordem)
+  function ncIgual(a, b) { a = a || { st: 'NV' }; b = b || { st: 'NV' }; return oaeSt(a) === oaeSt(b) && ncDet(a) === ncDet(b); }
   function ncDescrita(sv) { return !!((sv.n && String(sv.n).trim()) || (Array.isArray(sv.itens) && sv.itens.length)); }
   // a mudança deste grupo abre rascunho? NC nova, ou NC que continua NC com outra descrição
   function abreRasc(c, svc, f) {
@@ -7067,7 +7493,7 @@
   }
   // tira da lista de alterações o que é rascunho (e abre os rascunhos novos)
   function segurarRasc(ops) {
-    if (!rascDono()) return ops;
+    if (!rascDono() || banco.restaurando) return ops;
     var m = rascLer(), mudou = false;
     var out = ops.filter(function (op) {
       if (op.t !== 'ponto_campos') return true;
@@ -7076,7 +7502,8 @@
         if (k.indexOf('serv.') !== 0) return;
         var svc = k.slice(5), ch = rascChave(op.cid, op.id, svc), f = op.campos[k];
         if (!m[ch]) {
-          if (rascSolta[ch] || !abreRasc(c, svc, f)) return;
+          if (rascSolta[ch]) { if (typeof rascSolta[ch] === 'object') f.a = clone(rascSolta[ch].a); return; }
+          if (!abreRasc(c, svc, f)) return;
           m[ch] = { a: 'a' in f ? clone(f.a) : null };
           mudou = true;
         }
@@ -7091,8 +7518,11 @@
   function rascAtualiza() {
     var m = rascLer(), mudou = false;
     Object.keys(m).forEach(function (ch) {
-      var r = rascPonto(state, ch), sv = r && r.p.serv[r.svc];
-      if (!sv || same(sv, m[ch].a)) { delete m[ch]; mudou = true; return; }
+      var r = rascPonto(state, ch), sv = r && r.p.serv[r.svc], a = m[ch].a;
+      if (!r && !contractById(ch.split('|')[0])) return;   // a lista ainda não veio (saiu e entrou de novo neste aparelho): o rascunho fica
+      if (!sv || same(sv, a)) { delete m[ch]; mudou = true; return; }
+      // nunca foi salva e deixou de ser NC: volta a ser o que está no banco
+      if (!comQtd(oaeSt(sv)) && !(a && comQtd(oaeSt(a)))) { r.p.serv[r.svc] = a ? clone(a) : { st: 'NV' }; delete m[ch]; mudou = true; return; }
       if (!same(sv, m[ch].v)) { m[ch].v = clone(sv); mudou = true; }
     });
     if (mudou) rascGravar(m);
@@ -7107,17 +7537,38 @@
       if (m[ch].a) r.p.serv[r.svc] = clone(m[ch].a); else delete r.p.serv[r.svc];
     });
   }
+  // o item do rascunho saiu da lista lida do banco (excluído, contrato arquivado ou não liberado): o que foi digitado fica em
+  // Dados › Alterações guardadas. banco.base ainda é a lista de antes da leitura: é de lá que vem o nome. Devolve o texto do aviso
+  function rascGuardaSaiu(ch, d) {
+    var x = ch.split('|'), bc = banco.base && banco.base.contracts.find(function (q) { return q.id === x[0]; }), bp = bc && bc.pontos.find(function (q) { return q.id === x[1]; });
+    var nome = (bp && bp.nome) || 'Item', grupo = fieldName('serv.' + x[2], x[0]), campos = {}, a = autorAgora();
+    var tx = String(d.v.n || '').trim() || itensDe(x[2], d.v).map(function (i) { return minus1(i.n); }).join(', ');
+    campos['serv.' + x[2]] = { a: d.a || null, v: clone(d.v) };
+    var gravou = gravarRecusadas(recusadas().concat([{ em: new Date().toISOString(), por: a.por, uid: a.uid, papel: a.papel, tipo: 'rascunho', erro: 'NC em rascunho' + (tx ? ' (' + tx + ')' : '') + ': o item saiu da sua lista', op: { t: 'ponto_campos', cid: x[0], id: x[1], nome: bp ? bp.nome || '' : '', campos: campos } }]));
+    return nome + ' · ' + grupo + (tx ? ': "' + tx.slice(0, 80) + '"' : '') + (gravou ? '' : ' (sem espaço para guardar neste aparelho: anote agora)');
+  }
   // o banco acabou de ser lido (s): o rascunho volta por cima, e o "como está no banco" passa a ser o de agora
   function rascReaplica(s) {
-    var m = rascLer(), mudou = false;
+    var m = rascLer(), mudou = false, alterou = false, saiu = [];
     Object.keys(m).forEach(function (ch) {
       var r = rascPonto(s, ch);
-      if (!r || !m[ch].v) { delete m[ch]; mudou = true; return; }
+      if (!r && m[ch].v && comQtd(oaeSt(m[ch].v))) saiu.push(rascGuardaSaiu(ch, m[ch]));
+      // rascunho sem sentido, de antes (nunca foi salva e não é mais NC): o aparelho fica com o que está no banco
+      if (!r || !m[ch].v || (!comQtd(oaeSt(m[ch].v)) && !(m[ch].a && comQtd(oaeSt(m[ch].a))))) { delete m[ch]; mudou = true; return; }
       var agora = r.p.serv[r.svc];
-      if (!same(agora || null, m[ch].a)) { m[ch].a = agora ? clone(agora) : null; mudou = true; }
+      if (!same(agora || null, m[ch].a)) {
+        // outra pessoa mudou esta NC: a0 é o que havia quando o rascunho abriu. Ao salvar, ele vai como "a" e o banco registra o conflito
+        if (!ncIgual(agora, m[ch].a)) {
+          if (!('a0' in m[ch])) { m[ch].a0 = m[ch].a; alterou = true; } else if (ncIgual(agora, m[ch].a0)) delete m[ch].a0;
+        }
+        m[ch].a = agora ? clone(agora) : null;
+        mudou = true;
+      }
       r.p.serv[r.svc] = clone(m[ch].v);
     });
     if (mudou) rascGravar(m);
+    if (saiu.length) toast('O item saiu da sua lista (excluído ou contrato arquivado), e a NC em rascunho foi para Dados › Alterações guardadas. ' + saiu[0] + (saiu.length > 1 ? ' e mais ' + (saiu.length - 1) : ''), 12000);
+    else if (alterou) toast('Outra pessoa alterou uma NC que está em rascunho aqui. Confira antes de ' + (isFiscal() ? 'enviar' : 'salvar') + '.', 7000);
   }
   function rascTela() {
     var m = rascLer();
@@ -7126,7 +7577,7 @@
   }
   // chamada a cada alteração local (save): o que mudou desde a última vez entra na fila
   function trackChanges() {
-    if (!banco.on || !banco.base) return;
+    if (!banco.on || !banco.base || aba.ro) return;   // outra aba edita: a fila e os rascunhos são dela
     var ops = segurarRasc(diffOps(banco.base, state));
     rascAtualiza();
     banco.base = clone(state);
@@ -7134,6 +7585,7 @@
     rascTela();
     if (!ops.length) return;
     enqueue(ops);
+    momNovo(ops);
     scheduleFlush(1200);
   }
   function scheduleFlush(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms || 0); syncStatus(); }
@@ -7143,7 +7595,7 @@
     if (aba.ro || !aba.pronto) { syncStatus(); return; }   // outra aba edita (ela é que envia), ou ainda não se sabe
     var ops = banco.pend.slice(0, banco.lote || 500), n = ops.length, envL = {}, envio = ++banco.envio;
     // prazos e valores (PI) são um campo só (fica a lista inteira de quem alterou por último): guarda a lista como sai agora,
-    // para o aviso de conflito (a da fila é a mesma da tela e muda se alguém digitar durante o envio)
+    // para o aviso de conflito
     ops.forEach(function (o) {
       if (o.t === 'contrato_campos' && o.campos) ['prazos', 'valores'].forEach(function (k) { if (o.campos[k] && 'v' in o.campos[k]) envL[o.id + '|' + k] = clone(o.campos[k].v); });
     });
@@ -7161,13 +7613,14 @@
       banco.falhas = 0; banco.espera = 0;
       if (!banco.pend.length) banco.lote = 0; else if (banco.lote) banco.lote = Math.min(500, banco.lote * 2);   // separou a recusa: volta a crescer
       if (res && res.propostas != null) {                            // fiscal: vira proposta, o banco não muda
-        if (res.propostas) toast('Enviado para aprovação de um engenheiro.', 4000);
+        if (res.propostas) { if (undoProp) undoFecha(); toast('Enviado para aprovação de um engenheiro.', 4000); }
         keepSync();
         if (banco.pend.length) scheduleFlush(300); else refresh();
         syncStatus();
         return;
       }
       noteMeta(ops, conf);
+      if (!banco.pend.length && !conf.length) momSalvo();
       conf.forEach(function (x) { var en = x.alvo === 'contrato' && envL[x.id + '|' + x.campo]; if (Array.isArray(en)) x.enviado = en; });
       if (conf.length) { showConflicts(conf); refresh(); }          // o banco ficou com outro valor em algum campo
       else if (v === banco.versao + 1) { banco.versao = v; refreshLastLines(); }
@@ -7206,6 +7659,7 @@
       banco.pend = banco.pend.filter(function (o) { return o !== op; });
       if (!banco.pend.length) banco.lote = 0;
       keepSync();
+      momSync();
       toast((code === 'so_status' ? 'Fiscal de campo só altera o status dos serviços.' : code === 'so_admin_arquiva' ? 'Só o Administrador arquiva contratos.' : 'O banco recusou uma alteração (' + ((err && err.message) || 'erro') + ').') +
         ' A alteração "' + opsResumo([op]) + '" ficou guardada em Dados › Alterações guardadas; as outras seguem para o banco.', 9000);
       refresh();
@@ -7302,10 +7756,10 @@
     });
     if (!grupos.length) { toast(todas.length ? 'As alterações guardadas neste aparelho são de outra pessoa: só ela ou o Administrador as veem.' : 'Nenhuma alteração guardada neste aparelho.', 5000); return; }
     var f = modal('<h2 id="modalTitle">Alterações guardadas neste aparelho</h2>' +
-      '<p>Não foram gravadas no banco: ou o banco recusou, ou a sessão terminou antes de elas subirem. As da sessão voltam sozinhas quando a pessoa entra de novo neste aparelho.</p>' +
+      '<p>Não foram gravadas no banco: ou o banco recusou, ou a sessão terminou antes de elas subirem, ou o item de uma NC em rascunho saiu da lista. As da sessão voltam sozinhas quando a pessoa entra de novo neste aparelho.</p>' +
       grupos.map(function (g, gi) {
         return '<h3 class="rec-autor">' + esc(g.autor) + (g.papel ? ' · ' + esc(papelNome(g.papel)) : '') + ' · ' + g.itens.length + '</h3><ul class="rec-lista">' + g.itens.map(function (x) {
-          return '<li><b>' + esc(opsResumo([x.op])) + '</b><small>' + esc(new Date(x.em).toLocaleString('pt-BR')) + ' · ' + (x.tipo === 'sessao' ? 'a sessão terminou antes de enviar' : 'recusada pelo banco: ' + esc(x.erro)) + '</small></li>';
+          return '<li><b>' + esc(opsResumo([x.op])) + '</b><small>' + esc(new Date(x.em).toLocaleString('pt-BR')) + ' · ' + (x.tipo === 'sessao' ? 'a sessão terminou antes de enviar' : x.tipo === 'rascunho' ? esc(x.erro) : 'recusada pelo banco: ' + esc(x.erro)) + '</small></li>';
         }).join('') + '</ul><div class="modal-foot rec-acoes">' +
           '<button type="button" class="btn danger" data-rec="apagar" data-g="' + gi + '">Apagar</button>' +
           '<button type="button" class="btn" data-rec="baixar" data-g="' + gi + '">Baixar (.json)</button>' +
@@ -7418,6 +7872,7 @@
         banco.base = clone(state);
         rascNaBase();
         try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
+        if (undoFica) { if (undoGrupoMudou()) undoFecha(); else undoFica.j = JSON.stringify(state.contracts); }   // o que veio do banco não é a próxima ação da pessoa, a não ser que tenha mudado o grupo que o Desfazer trocaria
         renderAll();
         entradaFiscal();
       }
@@ -7456,14 +7911,18 @@
     else if (banco.at) t = (window.AMBIENTE && AMBIENTE.previa ? 'Banco de teste · ' : 'Banco da equipe · ') + hhmm(banco.at);
     else t = 'Conectando ao banco…';
     if (localFalhou && !aba.ro) { t += ' · não salvou no navegador'; warn = true; }
-    var nRasc = aba.ro ? 0 : Object.keys(rascLer()).length;
-    if (nRasc) { t += ' · ' + nRasc + ' NC em rascunho (' + (isFiscal() ? 'não enviada' : 'não salva') + ')'; warn = true; }
+    var nRasc = rascNaLista().length, tAntes = t, tRasc = nRasc ? nRasc + ' NC em rascunho (' + (isFiscal() ? 'não enviada' : 'não salva') + ')' + (rascSoMem ? ', só na memória' : '') : '';
+    if (nRasc) { t += ' · ' + tRasc; warn = true; }
+    var nAte = t.length;
     var dq = driveQ && driveReady() ? driveQ.info() : null;
     if (dq && dq.n) { t += ' · ' + dq.n + (dq.n === 1 ? ' foto' : ' fotos') + ' para o Drive'; warn = warn || !banco.login || dq.erro === 'codigo' || dq.erro === 'recusado' || dq.erro === 'script'; }
-    el.textContent = t;
+    // com rascunho, o trecho é um botão que abre o item (refeito só se o texto mudou: não perde o foco)
+    if (!nRasc) el.textContent = t;
+    else if (el.textContent !== t || !el.querySelector('button')) el.innerHTML = esc(tAntes) + ' · <button type="button" class="ss-rasc" data-rasc-ir>' + esc(tRasc) + '</button>' + esc(t.slice(nAte));
     el.classList.toggle('warn', warn);
     var me = $('menuEstado');
     if (me) { me.textContent = t; me.hidden = false; }
+    momSync();
   }
 
   // ---------------- acesso: cada pessoa entra com o próprio código (criador, engenheiro ou fiscal de campo).
@@ -7475,6 +7934,7 @@
   function mesmaPessoa(a, b) { return !a && !b || !!(a && b && (a.codigo === b.codigo || (a.uid && a.uid === b.uid)) && a.papel === b.papel); }
   function setLogin(l, inicio) {
     var limpou = banco.on && !inicio && !mesmaPessoa(banco.login, l);
+    if (limpou && undoFica) undoFecha();
     if (limpou) limparDadosAparelho();
     banco.login = l;
     lsPut(LOGIN_KEY, l);
@@ -7748,7 +8208,7 @@
     if (!isFiscal() || !visaoOn || medicoesOn || telaG !== 'geral' || mexeu) return;
     var cs = state.contracts;
     if (!cs.length) { toast('Nenhum contrato liberado para você. Fale com o administrador.', 6000); return; }
-    if (cs.length === 1) { abrirDaVisao(cs[0], null, false); return; }
+    if (cs.length === 1) { abrirDaVisao(cs[0], null, false); listaLimpa(); renderEditor(); return; }   // entrou direto, não escolheu o modo NC: a lista vem inteira
     if (geralAtivo()) irGeral('contratos');
   }
   function entrou(r) {
@@ -8312,7 +8772,7 @@
     var partes;
     if (isContinuo(c)) {
       partes = servicesOf(c).map(function (s) {
-        var sv = p.serv[s.key], k = oaeSt(sv);
+        var sv = svSalvo(p, s.key, c), k = oaeSt(sv);
         if (k === 'NV' || k === 'NA') return '';
         var qt = comQtd(k) ? fmtQtd(s, sv.q) : '';
         return s.short + ': ' + ncNome(s, k) + (qt ? ' ' + qt : '') + (comQtd(k) && sv.n ? ' (' + sv.n + ')' : '') +
@@ -8364,10 +8824,10 @@
     });
   }
   // editor só para consulta enquanto ninguém entrou
-  // os seletores que só mudam o que se vê (data-anmed: "Segmentos/OAEs por medição") continuam livres para quem só lê
+  // os seletores que só mudam o que se vê (data-anmed: "Segmentos/OAEs por medição"; data-lbusca: a busca da lista) continuam livres para quem só lê
   function lockEditor() {
-    if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-anmed')) el.disabled = true; });
-    else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct')) el.disabled = true; });
+    if (readOnly()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-anmed') && !el.hasAttribute('data-lbusca')) el.disabled = true; });
+    else if (isFiscal()) $('editor').querySelectorAll('input,select,textarea').forEach(function (el) { if (!el.hasAttribute('data-svcpct') && !el.hasAttribute('data-lbusca')) el.disabled = true; });
   }
   var EDIT_ACTS = ['set-st', 'set-marca', 'set-item', 'set-desemp', 'add-point', 'dup-point', 'del-point', 'add-dev', 'del-dev', 'add-marco', 'del-marco', 'new-contract', 'del-contract',
     'add-prazo', 'del-prazo', 'set-prazo-sit', 'add-valor', 'del-valor', 'set-valor-sit', 'preencher-trechos', 'gerar-segmentos'];
@@ -8388,6 +8848,7 @@
     banco.propostas = s && Array.isArray(s.propostas) ? s.propostas : [];
     banco.arquivados = s && Array.isArray(s.arquivados) ? s.arquivados : [];
     setLogin(lsGet(LOGIN_KEY), true);
+    rascNaTela();
     fiscalEntrada = visaoOn && isFiscal();
     if (banco.conf.length) showConflicts();
     $('btnLogin').addEventListener('click', openLogin);
@@ -8474,6 +8935,7 @@
       }, 350);
     });
     $('tabs').addEventListener('click', onClick);
+    $('saveState').addEventListener('click', function (e) { if (e.target.closest('[data-rasc-ir]')) rascIr(); });
     ed.addEventListener('click', onClick);
     $('pages').addEventListener('click', onPreviewClick);
     $('btnPdf').addEventListener('click', exportPdf);

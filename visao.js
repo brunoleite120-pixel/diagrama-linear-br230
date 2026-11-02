@@ -37,6 +37,13 @@
   // um formatador por número de casas: toLocaleString cria um Intl.NumberFormat novo a cada chamada (pesa no arrasto)
   var NF = {};
   function nf(n, d) { var f = NF[d] || (NF[d] = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })); return f.format(Number(n)); }
+  // km como no mapa: "794,5", "794.5", "km 794,5", "1.006,9" ou estaca "794+500"; sem km, null
+  function kmBusca(q) {
+    var t = String(q).replace(/\s/g, '').replace(/^(km|estaca)/i, ''), est = /^(\d+)\+(\d{1,3})$/.exec(t);
+    if (!est && t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+    var n = est ? Number(est[1]) + Number(est[2]) / 1000 : Number(t);
+    return t && isFinite(n) && /\d/.test(q) ? n : null;
+  }
   function pc(v) { return (Math.round(v * 1000) / 1000) + '%'; }
   function num(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
   // 731 (c.kmLocal): km próprio do ramal. Só no desenho, a raia começa no c.posEixo (624,70, sob o contorno planejado do 264);
@@ -316,10 +323,13 @@
       if (nT < 2) st.ct = false;
       // Medições | Não conformidades (N): só com pontes ou conservação na tela e para quem vê as medições
       var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
+      var nGr = its.reduce(function (t, x) { return t + (x.nc && x.inf.ncN || 0); }, 0);   // as NC desses locais (a legenda do modo NC diz os dois)
       var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
         '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
         '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '">Não conformidades <b>' + nNC + '</b></button></div>' : '';
+      var nRasc = o.rascunhos ? o.rascunhos() : 0;
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
+        (nRasc ? '<button type="button" class="vg-rasc" data-vg="rasc">' + nRasc + (nRasc === 1 ? ' rascunho' : ' rascunhos') + ' neste aparelho</button>' : '') +
         '<div class="vg-zoom" role="group" aria-label="Zoom"><button type="button" class="lado" data-vg="esq" aria-label="Para a esquerda">‹</button><button type="button" data-vg="menos" aria-label="Afastar">−</button>' +
         '<button type="button" data-vg="mais" aria-label="Aproximar">+</button><button type="button" class="lado" data-vg="dir" aria-label="Para a direita">›</button></div>' +
         '<span class="vg-faixa">km ' + nf(k0, R < 20 ? 1 : 0) + ' – ' + nf(k1, R < 20 ? 1 : 0) + ' · ' + nf(R, R < 20 ? 1 : 0) + ' km na tela</span></div>' +
@@ -447,7 +457,8 @@
           ? '<span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Medido (serviço medido ali)</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem medição</span>' +
             (doisModos() ? '<span>Onde estão as não conformidades: botão Não conformidades, acima</span>' : '')
-          : '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
+          : (nNC ? '<span class="vg-leg-n">' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC</span>' : '') +
+            '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>NC em correção</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '') + '</section>';
 
@@ -686,11 +697,8 @@
       var q = (st.q || '').trim();
       if (!q) return '';
       var d = itens();
-      // km como no mapa: "794,5", "km 794,5", "1.006,9" ou estaca "794+500"
-      var t = q.replace(/\s/g, '').replace(/^km/i, ''), est = /^(\d+)\+(\d{1,3})$/.exec(t);
-      if (!est && t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
-      var out = [], kmB = [], n = est ? Number(est[1]) + Number(est[2]) / 1000 : Number(t);
-      if (t && isFinite(n) && /\d/.test(q)) {
+      var out = [], kmB = [], n = kmBusca(q);
+      if (n != null) {
         // fora do trecho dos contratos escolhidos (sem a folga do desenho; nenhum deles com km conta como fora), mas no
         // trecho dos outros: mostra todos e vai ao km
         var FT = d.ativo ? faixaTotal(d.todos, d.fx, W) : F, U = d.ativo ? envoltoria(d.mostra, d.fx) : F;
@@ -839,6 +847,7 @@
         avisa(todas230(d2, c2) ? 'OAEs 230: mostrando todas, com as do Proarte 424.' : st.m230 === 'todas' ? 'OAEs 230: o Proarte 424 está na tela, então as dele aparecem só na faixa do 424.'
           : 'OAEs 230: mostrando só as não atendidas pelo Proarte.');
       }
+      else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
       else if (a === 'mapa230') { o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onMapa(c, null); }); }
       else if (a === 'fechar') fechar();
       // o grupo no mesmo km passa pelos itens um a um: o foco fica nele
@@ -990,8 +999,10 @@
     if (window.MutationObserver) new window.MutationObserver(function () { if (host.hidden) { avisa(''); st.ct = false; } }).observe(host, { attributes: true, attributeFilter: ['hidden'] });
 
     // sel(): o item do cartão aberto ({ c, p }) ou null; a Foto da barra põe o contrato dele em primeiro (app.js escolheCt)
-    return { render: render, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; } };
+    // modoNc(): a tela inicial está em Não conformidades (também para quem só tem esse modo, como o fiscal): a lista do contrato abre só com as NC
+    return { render: render, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; }, modoNc: function () { return modo() === 'nc'; } };
   }
 
+  VisaoGeral.kmBusca = kmBusca;   // a busca da lista do contrato (app.js) usa as mesmas formas de km
   window.VisaoGeral = VisaoGeral;
 })();
