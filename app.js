@@ -9029,6 +9029,7 @@
       if (modalPula) { modalPula = false; var fm = modalDepois; modalDepois = null; if ($('modal')) modalPoeHist(); if (fm) fm(); return; }
       if (escPula) { escPula = false; var f = escDepois; escDepois = null; if (f) f(); return; }
       if (galeria && galeria.voltar()) return;   // as folhas da galeria no celular
+      if (medicoes && medicoes.voltar()) return;   // a folha de escolher a medição no celular
       if ($('modal')) { modalHist = false; if ($('modal').dataset.ocupado) modalPoeHist(); else if (modalCancela) modalCancela(); return; }
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};

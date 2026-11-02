@@ -1453,7 +1453,20 @@ span.an-chip{cursor:default}
 .md-med-valor{text-align:right}
 .md-med-row .md-zerada{color:var(--ink-3)}
 .md-med-row[aria-pressed="true"]{border-left-color:var(--accent);background:var(--accent-soft)}
-.md-pilulas{display:none}
+.md-sel{display:none}
+.medicoes .esc-x{font-size:26px;color:var(--ink-2)}
+.md-folha .esc-f{padding-left:0;padding-right:0}
+.md-folha .esc-f:focus{outline:0}
+.md-folha .esc-top{position:sticky;top:0;z-index:1;padding:0 calc(16px + env(safe-area-inset-right,0px)) 10px calc(16px + env(safe-area-inset-left,0px));background:var(--panel);border-bottom:1px solid var(--line-2)}
+.md-folha .esc-top h2{font-size:19px;font-weight:700}
+.md-folha .esc-top p{margin-top:3px;font-size:13px}
+.md-folha .md-etapas{display:block;padding:0 env(safe-area-inset-right,0px) 0 env(safe-area-inset-left,0px)}
+.md-folha .md-med-row.btn:focus-visible{outline-offset:-3px}
+.md-folha .md-med-row[aria-pressed="true"].btn{border-left-color:var(--ink);background:var(--ink);color:#fff}
+.md-folha .md-med-row[aria-pressed="true"].btn:focus-visible{outline-color:#fff}
+.md-folha .md-med-row[aria-pressed="true"] .md-bar{background:rgba(255,255,255,.25)}
+.md-folha .md-med-row[aria-pressed="true"] .md-bar i{background:#fff}
+.md-folha .md-med-row[aria-pressed="true"] .md-zerada{color:#fff}
 .md-detalhe{display:flex;flex-direction:column;gap:16px;padding:16px;min-width:0;scroll-margin-top:calc(var(--topbar-h,90px) + 12px)}
 .md-total{font-size:24px}
 .md-local-bar{display:flex;gap:2px;height:12px;border-radius:4px;overflow:hidden}
@@ -1614,9 +1627,13 @@ span.an-chip{cursor:default}
   .md-contrato{display:flex;flex-direction:column;gap:12px}
   .md-lista,.md-detalhe{width:100%}
   .md-etapas{display:none}
-  .md-pilulas{display:flex;gap:6px;overflow-x:auto;padding:10px;position:relative}
-  .md-pilulas .btn{flex:none;border-radius:999px;padding:6px 12px;font-size:13px}
-  .md-pilulas [aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .md-sel{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:center;padding:8px 12px}
+  .md-sel .btn{justify-content:center;width:100%;padding:0}
+  .md-sel-ant.btn,.md-sel-prox.btn{font-size:22px;font-weight:400;line-height:1}
+  .md-sel-ant{grid-column:1}
+  .md-sel-prox{grid-column:3}
+  .md-sel-ir.btn{grid-column:2;gap:8px;padding:4px 8px;font-size:15px;font-weight:650;white-space:normal}
+  .md-sel-rot{grid-column:1/-1;display:flex;align-items:center;justify-content:center;min-height:44px;font-size:15px;font-weight:650;text-align:center}
   .md-detalhe{padding:12px}
   .md-detalhe>.md-top>.md-direita{align-items:flex-start;text-align:left;width:100%}
   .md-total{font-size:22px}

@@ -9,7 +9,7 @@
     var host = op.host, esc = op.esc, fmtN = op.fmtN, dinheiro = op.dinheiro;
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
     var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
-    var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '';
+    var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '', folha = false, folhaHist = false, folhaPula = false;
     var mqCel = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
     var meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -290,6 +290,69 @@
     }
 
     function kpi(t, v, s) { return '<div class="card md-kpi"><span class="md-label">' + esc(t) + '</span><strong>' + v + '</strong><small>' + s + '</small></div>'; }
+    // a lista por etapa: a do computador e a da folha do celular
+    function etapasHtml(d) {
+      var h = '';
+      (d.an.etapas || []).slice().reverse().forEach(function (et) {
+        var key = String(et.etapa), aberto = Object.prototype.hasOwnProperty.call(etapas, key) ? etapas[key] : et.etapa === d.ult.etapa;
+        h += '<div class="md-etapa">' + botao('etapa', '<span><b>' + esc(et.etapa != null ? et.etapa + 'ª etapa' : 'Etapa não informada') + '</b><small>' + esc(et.de + ' a ' + et.ate) + ' · ' + esc(nMed(et.ns.length)) + '</small></span><span>' + moeda(et.total) + (aberto ? ' ▾' : ' ▸') + '</span>', ' data-e="' + esc(key) + '" aria-expanded="' + aberto + '"', 'md-etapa-btn');
+        if (aberto) h += '<div>' + d.ms.slice().reverse().filter(function (x) { return x.etapa === et.etapa && (!zeradas || valor(x.total)); }).map(function (x) {
+          var rotulo = op.medTxt(d.an, x.n) + (x.retificada ? ' · retificada' : '') + ' · ' + (valor(x.total) ? dinheiro(x.total) : 'zerada');
+          return botao('med', '<b>' + esc(x.n + 'ª' + (x.retificada ? '*' : '')) + '</b><span>' + esc(mesTxt(idx(x.ref))) + '</span><span class="md-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(valor(x.total)) / (d.max || 1) * 100) + '%"></i></span><span class="md-med-valor' + (!valor(x.total) ? ' md-zerada' : '') + '">' + esc(valor(x.total) ? dinheiro(x.total) : 'zerada') + '</span>', ' data-n="' + esc(x.n) + '" aria-label="' + esc(rotulo) + '" title="' + esc(rotulo) + '" aria-pressed="' + (String(x.n) === String(med)) + '"', 'md-med-row');
+        }).join('') + '</div>';
+        h += '</div>';
+      });
+      return h;
+    }
+    function aberta(d) { var r = null; d.ms.forEach(function (x) { if (String(x.n) === String(med)) r = x; }); return r; }
+    // a anterior e a próxima à vista ("Esconder as zeradas"); a aberta pode ser uma das escondidas
+    function vizinhas(d, m) {
+      var i = d.ms.indexOf(m), r = {};
+      d.ms.forEach(function (x, j) { if (zeradas && !valor(x.total)) return; if (j < i) r.ant = x; else if (j > i && !r.prox) r.prox = x; });
+      return r;
+    }
+    function medCurta(m) { return m.n + 'ª, ' + mesTxt(idx(m.ref)); }
+    // celular: "‹ 41ª* · mai/26 ▾ ›"; ‹ e › somem nas pontas
+    function seletorHtml(d, m) {
+      var rotulo = m.n + 'ª' + (m.retificada ? '*' : '') + ' · ' + mesTxt(idx(m.ref));
+      if (d.ms.length < 2) return '<div class="md-sel"><span class="md-sel-rot">' + esc(rotulo) + '</span></div>';
+      var v = vizinhas(d, m);
+      return '<nav class="md-sel" aria-label="Trocar de medição">' +
+        (v.ant ? botao('passo', '‹', ' data-v="-1" aria-label="' + esc('Medição anterior: ' + medCurta(v.ant)) + '"', 'md-sel-ant') : '') +
+        botao('folha', '<span>' + esc(rotulo) + '</span><span aria-hidden="true">▾</span>', ' aria-haspopup="dialog" aria-label="' + esc('Escolher a medição. Aberta: ' + medCurta(m) + (m.retificada ? ', retificada' : '')) + '"', 'md-sel-ir') +
+        (v.prox ? botao('passo', '›', ' data-v="1" aria-label="' + esc('Próxima medição: ' + medCurta(v.prox)) + '"', 'md-sel-prox') : '') + '</nav>';
+    }
+    function folhaHtml(c, d) {
+      return '<div class="esc md-folha"><div class="esc-f" role="dialog" aria-modal="true" aria-labelledby="mdFolhaT" tabindex="-1"><div class="esc-top"><div><h2 id="mdFolhaT">Escolher a medição</h2><p>' + esc(nome(c) + ' · ' + nMed(d.ms.length)) + '</p></div><button type="button" class="esc-x" data-md="folha-x" aria-label="Fechar">×</button></div><div class="md-etapas">' + etapasHtml(d) + '</div></div></div>';
+    }
+    function abreFolha() {
+      var c = contrato(cid), d = dado(c), m = d && aberta(d);
+      if (!m || folha) return;
+      // só a etapa da medição aberta vem aberta
+      etapas = {}; etapas[String(d.ult.etapa)] = false; etapas[String(m.etapa)] = true;
+      folha = true;
+      // o Voltar do Android fecha a folha (e não sai da tela)
+      try { history.pushState(Object.assign({}, history.state || {}, { mdFolha: 1 }), ''); folhaHist = true; } catch (e) { folhaHist = false; }
+      host.insertAdjacentHTML('beforeend', folhaHtml(c, d));
+      var f = host.querySelector('.md-folha .esc-f'), s = f.querySelector('.md-med-row[aria-pressed="true"]');
+      f.focus({ preventScroll: true });
+      if (s) f.scrollTop += s.getBoundingClientRect().top - f.getBoundingClientRect().top - (f.clientHeight - s.offsetHeight) / 2;
+    }
+    function focaSeletor() {
+      var v = host.querySelector('[data-md="folha"]'), t = host.querySelector('#mdTituloMed');
+      if (v && v.offsetParent) v.focus({ preventScroll: true }); else if (t) t.focus({ preventScroll: true });
+    }
+    // viaVoltar: o Voltar já tirou a entrada do histórico
+    function fechaFolha(viaVoltar) {
+      if (!folha) return;
+      folha = false;
+      var el = host.querySelector('.md-folha'), d = dado(contrato(cid)), l = host.querySelector('.md-lista .md-etapas');
+      if (el) el.parentNode.removeChild(el);
+      if (d && l) l.innerHTML = etapasHtml(d);
+      if (folhaHist && !viaVoltar) { folhaPula = true; try { history.back(); } catch (e) { folhaPula = false; } }
+      folhaHist = false;
+      focaSeletor();
+    }
     function contratoHtml(c) {
       var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + botao('diagrama', 'Ver no diagrama', ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama') + '</div>';
       if (!d || !d.ms.length) return h + '<section class="card md-card"><h1>' + esc(nome(c)) + '</h1>' + (d && !d.ms.length && op.estado(c) === 'ok' ? vazio('Ainda sem medições carregadas.') : estadoHtml(c)) + '</section>';
@@ -304,19 +367,8 @@
         kpi(e && e.etapa != null ? e.etapa + 'ª etapa · atual' : 'Etapa não informada', e ? dinheiro(e.total) : '—', e ? esc(e.de + ' a ' + e.ate) + ' · ' + nMed(ems.length) + ', ' + ems.filter(function (x) { return !valor(x.total); }).length + ' zeradas' : '') +
         kpi('Última carregada', esc(op.medTxt(d.an, d.ult.n)), esc(falta(d))) + '</section>';
       h += '<div class="md-contrato"><section class="card md-lista" aria-label="Medições do contrato"><div class="md-lista-top"><h2>' + nMed(d.ms.length) + '</h2><label><input type="checkbox" id="mdZeradas"' + (zeradas ? ' checked' : '') + '> Esconder as zeradas</label></div><div class="md-etapas">';
-      (d.an.etapas || []).slice().reverse().forEach(function (et) {
-        var key = String(et.etapa), aberto = Object.prototype.hasOwnProperty.call(etapas, key) ? etapas[key] : et.etapa === d.ult.etapa;
-        h += '<div class="md-etapa">' + botao('etapa', '<span><b>' + esc(et.etapa != null ? et.etapa + 'ª etapa' : 'Etapa não informada') + '</b><small>' + esc(et.de + ' a ' + et.ate) + ' · ' + esc(nMed(et.ns.length)) + '</small></span><span>' + moeda(et.total) + (aberto ? ' ▾' : ' ▸') + '</span>', ' data-e="' + esc(key) + '" aria-expanded="' + aberto + '"', 'md-etapa-btn');
-        if (aberto) h += '<div>' + d.ms.slice().reverse().filter(function (x) { return x.etapa === et.etapa && (!zeradas || valor(x.total)); }).map(function (x) {
-          var rotulo = op.medTxt(d.an, x.n) + (x.retificada ? ' · retificada' : '') + ' · ' + (valor(x.total) ? dinheiro(x.total) : 'zerada');
-          return botao('med', '<b>' + esc(x.n + 'ª' + (x.retificada ? '*' : '')) + '</b><span>' + esc(mesTxt(idx(x.ref))) + '</span><span class="md-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(valor(x.total)) / (d.max || 1) * 100) + '%"></i></span><span class="md-med-valor' + (!valor(x.total) ? ' md-zerada' : '') + '">' + esc(valor(x.total) ? dinheiro(x.total) : 'zerada') + '</span>', ' data-n="' + esc(x.n) + '" aria-label="' + esc(rotulo) + '" title="' + esc(rotulo) + '" aria-pressed="' + (String(x.n) === String(med)) + '"', 'md-med-row');
-        }).join('') + '</div>';
-        h += '</div>';
-      });
-      h += '</div><nav class="md-pilulas" aria-label="Trocar de medição">' + d.ms.filter(function (x) { return !zeradas || valor(x.total); }).map(function (x) {
-        return botao('med', esc(op.medTxt(d.an, x.n)), ' data-n="' + esc(x.n) + '" aria-pressed="' + (String(x.n) === String(med)) + '"');
-      }).join('') + '</nav></section><section class="card md-detalhe" id="mdDetalhe" aria-label="Medição escolhida">' + medicaoHtml(c, d, m) + '</section></div>';
-      return h;
+      h += etapasHtml(d) + '</div>' + seletorHtml(d, m) + '</section><section class="card md-detalhe" id="mdDetalhe" aria-label="Medição escolhida">' + medicaoHtml(c, d, m) + '</section></div>';
+      return h + (folha ? folhaHtml(c, d) : '');
     }
     function medicaoHtml(c, d, m) {
       var sm = d.an.siac && d.an.siac.medicoes && d.an.siac.medicoes[m.n], anterior = d.ms[d.ms.indexOf(m) - 1], v = valor(m.total), als = avisos(d, m.n);
@@ -570,18 +622,18 @@
     function render() {
       var cs = permitidos(), ids = cs.map(function (c) { return c.id; });
       Object.keys(cache).forEach(function (id) { if (ids.indexOf(id) < 0) delete cache[id]; });
-      if (!op.ativa() || !cs.length) { host.innerHTML = ''; return; }
+      if (!op.ativa() || !cs.length) { fechaFolha(); host.innerHTML = ''; return; }
       if (cid && !contrato(cid)) { cid = ''; med = null; }
       // a busca conserva o foco e a seleção quando chega outra análise enquanto a pessoa digita
       var input = document.activeElement, focado = input && host.contains(input) ? input.id : '', ini = input && input.selectionStart, fim = input && input.selectionEnd;
       var matriz = host.querySelector('.md-matriz-scroll');
       if (matriz && matriz.clientWidth) matrizScroll = matriz.scrollLeft + matriz.clientWidth >= matriz.scrollWidth - 1 ? null : matriz.scrollLeft;
+      var folhaEl = host.querySelector('.md-folha .esc-f'), folhaY = folhaEl ? folhaEl.scrollTop : 0;
       host.innerHTML = cid ? contratoHtml(contrato(cid)) : modo === 'mes' ? mensalHtml(cs) : inicioHtml(cs);
       matriz = host.querySelector('.md-matriz-scroll');
       if (matriz) matriz.scrollLeft = matrizScroll == null ? matriz.scrollWidth : matrizScroll;
       if (focado) { var novo = document.getElementById(focado); if (novo) { novo.focus({ preventScroll: true }); if (novo.setSelectionRange && ini != null) novo.setSelectionRange(ini, fim); } }
-      var sel = host.querySelector('.md-pilulas [aria-pressed="true"]');
-      if (sel && sel.parentNode.clientWidth) sel.parentNode.scrollLeft = Math.max(0, sel.offsetLeft - sel.parentNode.offsetLeft - 20);
+      if (folha) { folhaEl = host.querySelector('.md-folha .esc-f'); if (folhaEl) { folhaEl.scrollTop = folhaY; folhaEl.focus({ preventScroll: true }); } else fechaFolha(); }
     }
     function abrir(id, n) {
       if (!contrato(id)) return;
@@ -592,8 +644,11 @@
       var titulo = host.querySelector('#mdTituloMed'); if (titulo) titulo.focus({ preventScroll: true });
     }
     host.addEventListener('click', function (ev) {
+      if (ev.target.classList && ev.target.classList.contains('md-folha')) { fechaFolha(); return; }
       var b = ev.target.closest('[data-md]'); if (!b || !host.contains(b) || !op.ativa()) return;
-      var act = b.dataset.md;
+      var act = b.dataset.md, daFolha = false;
+      if (act === 'folha') { abreFolha(); return; }
+      if (act === 'folha-x') { fechaFolha(); return; }
       if (act === 'diagrama') { var c = contrato(b.dataset.cid); if (c) op.diagrama(c); return; }
       if (act === 'abrir') { abrir(b.dataset.cid, b.dataset.n); return; }
       if (act === 'ponte-diag' || act === 'ponte-fotos') {
@@ -603,8 +658,21 @@
       }
       if (act === 'voltar') { cid = ''; med = null; segAberto = ''; }
       else if (act === 'modo') { modo = b.dataset.v === 'mes' ? 'mes' : 'contrato'; cid = ''; matrizScroll = null; }
-      else if (act === 'med') { med = b.dataset.n; grupo = null; semValor = false; }
-      else if (act === 'etapa') { var d = dado(contrato(cid)), key = b.dataset.e; etapas[key] = !(Object.prototype.hasOwnProperty.call(etapas, key) ? etapas[key] : d && d.ult && String(d.ult.etapa) === key); }
+      else if (act === 'med') { daFolha = folha; fechaFolha(); med = b.dataset.n; grupo = null; semValor = false; }
+      else if (act === 'passo') {
+        var dp = dado(contrato(cid)), mp = dp && aberta(dp), vz = mp ? vizinhas(dp, mp) : {}, alvo = b.dataset.v === '-1' ? vz.ant : vz.prox;
+        if (alvo) { med = alvo.n; grupo = null; semValor = false; }
+      }
+      else if (act === 'etapa') {
+        var d = dado(contrato(cid)), key = b.dataset.e, naFolha = folha && b.closest('.md-folha');
+        etapas[key] = !(Object.prototype.hasOwnProperty.call(etapas, key) ? etapas[key] : d && d.ult && String(d.ult.etapa) === key);
+        if (naFolha) {
+          naFolha.querySelector('.md-etapas').innerHTML = etapasHtml(d);
+          var etF = naFolha.querySelectorAll('[data-md="etapa"]');
+          for (var k = 0; k < etF.length; k++) if (etF[k].dataset.e === key) etF[k].focus({ preventScroll: true });
+          return;
+        }
+      }
       else if (act === 'aba') aba = b.dataset.v;
       else if (act === 'ponte') { segAberto = segAberto === b.dataset.p ? '' : b.dataset.p; segTodas = false; segServ = false; }
       else if (act === 'ponte-todas') segTodas = !segTodas;
@@ -624,6 +692,18 @@
       render();
       var alvos = host.querySelectorAll('[data-md="' + act + '"]');
       for (var i = 0; i < alvos.length; i++) if (alvos[i].dataset.n === b.dataset.n && alvos[i].dataset.g === b.dataset.g && alvos[i].dataset.e === b.dataset.e && alvos[i].dataset.v === b.dataset.v && alvos[i].dataset.p === b.dataset.p && alvos[i].className === b.className) { alvos[i].focus({ preventScroll: true }); break; }
+      if (daFolha || (act === 'passo' && !host.contains(document.activeElement))) focaSeletor();
+    });
+    // a folha do celular: Esc fecha, Tab não sai dela
+    document.addEventListener('keydown', function (ev) {
+      if (!folha) return;
+      if (ev.key === 'Escape') { ev.preventDefault(); fechaFolha(); return; }
+      if (ev.key !== 'Tab') return;
+      var l = [].filter.call(host.querySelectorAll('.md-folha button'), function (x) { return x.offsetParent !== null; });
+      if (!l.length) { ev.preventDefault(); return; }
+      var i = l.indexOf(document.activeElement);
+      if (ev.shiftKey && i <= 0) { ev.preventDefault(); l[l.length - 1].focus(); }
+      else if (!ev.shiftKey && (i < 0 || i === l.length - 1)) { ev.preventDefault(); l[0].focus(); }
     });
     // celular ⇄ computador (girar o tablet, mudar a janela): a matriz troca de 6 para 16 meses
     if (mqCel) { var trocou = function () { if (op.ativa() && modo === 'mes' && !cid) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
@@ -642,7 +722,18 @@
     return {
       render: render,
       carregar: carregar,
-      limpar: function () { geracao++; cache = {}; cid = ''; med = null; busca = ''; grupo = null; etapas = {}; matrizScroll = null; host.innerHTML = ''; }
+      // chamada no popstate do app; true: a folha resolveu
+      voltar: function () {
+        if (folhaPula) { folhaPula = false; return true; }
+        if (document.querySelector('.modal')) return false;
+        if (folha) { fechaFolha(true); return true; }
+        // o Avançar do navegador caiu na entrada de uma folha já fechada: volta sem sair da tela
+        if (!history.state || !history.state.mdFolha) return false;
+        folhaPula = true;
+        try { history.back(); } catch (e) { folhaPula = false; }
+        return true;
+      },
+      limpar: function () { fechaFolha(); geracao++; cache = {}; cid = ''; med = null; busca = ''; grupo = null; etapas = {}; matrizScroll = null; host.innerHTML = ''; }
     };
   };
 })();
