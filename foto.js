@@ -26,6 +26,7 @@
   var OLD_LOGO_KEY = 'diagrama-linear.foto-logo';           // versão 9: uma logo só
   var NUVEM = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 19a5 5 0 0 1-.7-9.95A6.5 6.5 0 0 1 18.6 9 4.5 4.5 0 0 1 17.5 19z"/></svg>';
   function celular() { return /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+  function camAparelho() { return celular() ? 'Câmera do celular' : 'Câmera do aparelho'; }
   var DRIVE_KEY = 'diagrama-linear.foto-drive';             // '0': fotos novas ficam só no aparelho (desmarcadas para o Drive)
   var MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
   var FIELDS = [
@@ -198,6 +199,24 @@
   function bloqueado(oque) {
     return nativo() ? oque + ' está bloqueada para o app. Libere nos Ajustes do aparelho, nas permissões do app VIA-230'
       : oque + ' está bloqueada para este site. Libere nas permissões do navegador';
+  }
+  // o caminho para liberar a localização neste aparelho
+  function liberarPassos() {
+    if (nativo()) return isAndroid()
+      ? ['Abra as Configurações do aparelho e entre em Apps (em alguns aparelhos, Aplicativos).', 'Toque em VIA-230 › Permissões › Localização.', 'Escolha Permitir durante o uso.']
+      : ['Abra os Ajustes do aparelho e toque em VIA-230.', 'Toque em Localização e escolha Durante o Uso do App.'];
+    var ua = navigator.userAgent || '';
+    if (isAndroid()) {
+      // só o Chrome de fato termina assim; Samsung Internet, Edge, Opera e outros acrescentam o próprio nome
+      if (/Gecko\) Chrome\/[\d.]+( Mobile)? Safari\/[\d.]+$/.test(ua)) return ['No Chrome, toque em ⋮ › Configurações › Configurações do site › Localização.', 'Toque no endereço deste site e escolha Permitir.', 'Se continuar bloqueada, abra as Configurações do aparelho › Apps › Chrome › Permissões › Localização.'];
+      return ['No menu do navegador, abra as configurações e procure as permissões dos sites.', 'Em Localização, escolha Permitir para este site.', 'Se continuar bloqueada, abra as Configurações do aparelho › Apps › o seu navegador › Permissões › Localização.'];
+    }
+    if (celular()) {
+      // no iPhone, os outros navegadores têm a permissão no próprio app, não em Sites do Safari
+      if (/CriOS|FxiOS|EdgiOS|OPiOS|OPT\//.test(ua)) return ['Abra os Ajustes › Privacidade e Segurança › Serviços de Localização e confira se está ligado.', 'Nessa lista, toque ' + (/CriOS/.test(ua) ? 'em Chrome' : 'no seu navegador') + ' e escolha Durante o Uso do App.'];
+      return ['Abra os Ajustes › Privacidade e Segurança › Serviços de Localização e confira se está ligado.', 'Nessa lista, toque em Sites do Safari e escolha Durante o Uso do App.', 'Em Ajustes › Safari (ou Ajustes › Apps › Safari) › Localização, escolha Perguntar ou Permitir.'];
+    }
+    return ['Clique no ícone à esquerda do endereço, no alto do navegador.', 'Em Localização, escolha Permitir ou ligue a chave.'];
   }
   function opcao(lista, k) { for (var i = 0; i < lista.length; i++) if (lista[i][0] === k) return lista[i]; return null; }
   function rotulo(lista, k) { var o = opcao(lista, k); return o ? o[1] : ''; }
@@ -390,7 +409,16 @@
     '.ft-start p{margin:0;color:var(--ft-ink-2);line-height:1.5}',
     '.ft-big{display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;border-radius:10px;border:1px solid var(--ft-accent);background:var(--ft-accent);color:var(--ft-accent-ink);font-family:inherit;font-size:16px;font-weight:650;cursor:pointer}',
     '.ft-big.alt{background:var(--ft-panel);color:var(--ft-accent)}',
-    '.ft-big svg{width:22px;height:22px}',
+    '.ft-big svg{width:22px;height:22px;flex:none}',
+    '.ft-big.ft-dl{justify-content:flex-start;min-height:72px;padding:10px 14px;text-align:left}',
+    '.ft-bt{display:flex;flex-direction:column;gap:2px;min-width:0}',
+    '.ft-outras>summary{display:flex;align-items:center;gap:8px;width:max-content;min-height:44px;list-style:none;font-size:13px;font-weight:650;color:var(--ft-accent);cursor:pointer}',
+    '.ft-outras>summary::-webkit-details-marker{display:none}',
+    '.ft-outras>summary::after{content:"\\25B8";font-size:10px}',
+    '.ft-outras[open]>summary::after{content:"\\25BE"}',
+    '.ft-outras>summary:focus-visible{outline:2px solid var(--ft-accent);outline-offset:1px}',
+    '.ft-outras-c{display:flex;flex-direction:column;gap:12px}',
+    '.ft-gps-lib{display:block;min-height:44px;margin:-6px 0 -10px;padding:0;border:0;background:none;color:var(--ft-accent);font:inherit;font-weight:650;text-decoration:underline;cursor:pointer;text-align:left}',
     '.ft-big:focus-within{outline:2px solid var(--ft-accent);outline-offset:2px}',
     '.ft-file{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}',
     '.ft-gps{font-size:13px;padding:10px 12px;border-radius:8px;background:var(--ft-panel);border:1px solid var(--ft-line);font-variant-numeric:tabular-nums}',
@@ -562,7 +590,10 @@
     '.ft-camask-box .ft-btn{justify-content:center;min-height:46px;font-size:15px}',
     '.ft-askdel{border:0;background:none;min-height:40px;color:var(--danger,#B42318);font:inherit;font-size:14px;font-weight:650}',
     '.ft [hidden]{display:none!important}',
-    '.ft-sub{font-size:13px;font-weight:600;opacity:.85}',
+    '.ft-sub{font-size:12px;font-weight:500;line-height:1.3}',
+    '.ft-liberar .ft-camask-box{max-height:100%;overflow-y:auto}',
+    '.ft-liberar ol{margin:0 0 8px;padding-left:20px;font-size:14.5px;line-height:1.4;color:var(--ft-ink-2)}',
+    '.ft-liberar li+li{margin-top:6px}',
     // várias fotos de uma vez
     '.ft:not(.many) .ft-many,.ft.many .ft-one{display:none}',
     '.ft-batch{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}',
@@ -606,6 +637,7 @@
     '@media (min-width:900px){.ft-foot .ft-salvar{flex:2 1 0}.ft-faixa{flex-basis:100%}}',
     '.ft-prog:not(:empty)+.ft-dstat{flex-basis:100%;order:-1}',
     '.ft-src small{display:block;margin-top:4px;color:var(--ft-ink-3);font-variant-numeric:tabular-nums}',
+    '.ft-start .ft-note{font-size:12.5px;line-height:1.4}',
     '.ft-note a{color:var(--ft-accent);font-weight:600}',
     // câmera dentro do app
     '.ft.camming{background:#000}',
@@ -797,14 +829,18 @@
         '<div class="ft-head"><h2 id="ftTitle">Foto com carimbo</h2><span class="ft-ct"></span><button type="button" class="ft-x" data-ft="close" aria-label="Fechar">×</button></div>' +
         '<div class="ft-body">' +
           '<div class="ft-start">' +
-            '<h3>Tire a foto ou escolha uma da galeria</h3>' +
+            '<h3>Tirar ou importar fotos</h3>' +
             '<div class="ft-gps"></div>' +
-            (camSupported() ? '<button type="button" class="ft-big" data-ft="cam-open">' + CAM + 'Câmera com GPS <span class="ft-sub">· várias fotos</span></button>' : '') +
-            '<label class="ft-big' + (camSupported() ? ' alt' : '') + '">' + CAM + (camSupported() ? 'Câmera do celular' : 'Tirar foto') + '<input class="ft-file" type="file" id="ftCam" accept="image/*" capture="environment"></label>' +
-            '<label class="ft-big alt">' + GAL + 'Escolher da galeria<input class="ft-file" type="file" id="ftGal" accept="image/*"></label>' +
-            '<label class="ft-big alt">' + ARQ + 'Arquivos do celular <span class="ft-sub">· uma ou várias</span><input class="ft-file" type="file" id="ftArq" multiple></label>' +
+            (camSupported()
+              ? '<button type="button" class="ft-big ft-dl" data-ft="cam-open">' + CAM + '<span class="ft-bt"><span class="ft-bn">Tirar foto</span><span class="ft-sub"></span></span></button>'
+              : '<label class="ft-big ft-dl">' + CAM + '<span class="ft-bt"><span class="ft-bn">Tirar foto</span><span class="ft-sub">' + (opts.gps ? 'uma por vez · o km sai do GPS ou do local gravado' : 'uma por vez · deixe a câmera salvando o local') + '</span></span><input class="ft-file" type="file" id="ftCam" accept="image/*" capture="environment"></label>') +
+            '<label class="ft-big alt ft-dl">' + ARQ + '<span class="ft-bt"><span class="ft-bn">Importar fotos</span><span class="ft-sub">uma ou várias · o km sai do local gravado</span></span><input class="ft-file" type="file" id="ftArq" multiple></label>' +
             '<p class="ft-msg ft-warn" hidden></p>' +
-            '<p class="ft-note"></p>' +
+            '<p class="ft-note" hidden></p>' +
+            '<details class="ft-outras"><summary>Outras formas</summary><div class="ft-outras-c">' +
+              (camSupported() ? '<label class="ft-big alt">' + CAM + camAparelho() + '<input class="ft-file" type="file" id="ftCam" accept="image/*" capture="environment"></label>' : '') +
+              '<label class="ft-big alt">' + GAL + 'Escolher da galeria<input class="ft-file" type="file" id="ftGal" accept="image/*"></label>' +
+            '</div></details>' +
           '</div>' +
           '<div class="ft-work" hidden>' +
             '<div class="ft-prev"><canvas aria-label="Prévia da foto com carimbo"></canvas></div>' +
@@ -919,6 +955,10 @@
           return;
         }
         if (folha) { teclaFolha(e); return; }
+        if (q('.ft-liberar')) {
+          if (e.key === 'Escape') fechaLiberar(); else if (e.key === 'Tab') e.preventDefault();   // o único botão da janela fica com o foco
+          return;
+        }
         if (e.key === 'Escape' && q('.ft-perda')) { perdaFim('perda-voltar'); return; }
         if (e.key === 'Escape' && q('.ft-camask')) { camAskFim('ask-voltar'); return; }
         if (e.key === 'Escape' && cam && cam.shots.length) { camAsk(); return; }
@@ -1172,34 +1212,70 @@
       q('.ft-batch').hidden = true;
       q('.ft-foot').hidden = true;
       startMsg('');
-      var and = isAndroid(), h;
-      if (camSupported()) {
-        h = esc('"Câmera com GPS" tira várias fotos seguidas sem sair do app: o km, o ponto e o contrato de cada foto vêm do GPS do celular na hora do clique. ' +
-          (and ? 'É o jeito mais seguro no Android, que costuma apagar o local das fotos escolhidas na galeria ou nos arquivos. ' : '') +
-          'Para fotos já tiradas, use "Arquivos do celular" (uma ou várias): o km sai da localização gravada em cada foto.');
-      } else {
-        h = esc((opts.gps
-          ? 'O km sai do GPS do aparelho na hora da foto ou da localização gravada na foto. '
-          : 'Neste link o navegador não informa a localização do aparelho: o km sai da localização gravada na foto. Deixe a câmera do celular salvando o local. ') +
-          'Em "Arquivos do celular" dá para marcar várias fotos de uma vez: cada uma recebe o km, o ponto e o contrato do próprio GPS.');
-        // página online: no Android o sistema apaga o local das fotos; o app (site) tem a câmera com GPS
-        if (and && opts.appUrl) h += ' <b>No Android</b>, o sistema costuma apagar o local das fotos entregues ao navegador. Para não depender disso, use o app ' +
-          '<a href="' + esc(opts.appUrl) + '" target="_blank" rel="noopener">' + esc(opts.appUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')) + '</a> e o botão "Câmera com GPS", que usa o GPS do celular na hora da foto.';
+      var fl = q('.ft-liberar'); if (fl) fl.remove();
+      q('.ft-outras').open = false;
+      var h = '';
+      if (isAndroid()) {
+        if (camSupported()) h = esc('No Android, o sistema costuma apagar o local das fotos escolhidas na galeria ou nos arquivos. Para fotos novas, "Tirar foto" é o jeito mais seguro.');
+        else {
+          h = esc('No Android, o sistema costuma apagar o local das fotos entregues ao navegador.');
+          // página online: o app (site) tem a câmera com GPS
+          if (opts.appUrl) h += ' Para não depender disso, use o app ' +
+            '<a href="' + esc(opts.appUrl) + '" target="_blank" rel="noopener">' + esc(opts.appUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')) + '</a> e o botão "Tirar foto", que usa o GPS do celular na hora da foto.';
+        }
       }
-      q('.ft-note').innerHTML = h + ' Se faltar o local, você digita o km ou escolhe o ponto.';
+      q('.ft-note').innerHTML = h;
+      q('.ft-note').hidden = !h;
       renderGps();
     }
     // os 4 botões de opções (legenda, aparência, logo, arquivo) valem para a foto única e para o lote de fotos: ficam no alto da coluna do lado
     function moveShared(target) { root.querySelectorAll('.ft-shared').forEach(function (s) { target.insertBefore(s, target.firstChild); }); }
+    // sem posição de até 30 s: bloqueada, sem sinal ou a última já velha. Enquanto este GPS ainda não respondeu, está procurando
+    function semGps() { return !camFix() && !!(lastFixErr || (lastFix && lastFix.t >= gpsDesde)); }
+    // a foto sai sem km: sem posição, ou com ela mas fora da rodovia (a mais de 2 km do eixo não preenche o km)
+    function semKm() { var f = camFix(); return f ? locate(f.ll).dist > 2000 : semGps(); }
+    function renderTirar() {
+      var b = q('[data-ft="cam-open"]'), sem = semKm();
+      if (!b) return;
+      b.querySelector('.ft-bn').textContent = sem ? 'Tirar foto e informar o km' : 'Tirar foto';
+      b.querySelector('.ft-sub').textContent = sem ? 'várias seguidas · ponto e contrato no carimbo' : 'várias seguidas · km, ponto e contrato no carimbo';
+    }
     function renderGps() {
       var el = q('.ft-gps');
+      renderTirar();
       if (!opts.gps) { el.hidden = true; return; }
       el.hidden = false;
-      if (!lastFix) { el.innerHTML = lastFixErr || 'Procurando o GPS… permita a localização quando o navegador perguntar.'; return; }
-      var loc = locate(lastFix.ll);
-      el.innerHTML = loc.dist > 2000
-        ? 'GPS ativo · fora da ' + esc(rodovia()) + ' (' + nf(loc.dist / 1000, 1) + ' km do eixo)'
-        : 'GPS ativo · <b>' + esc(kmLine(loc.km, loc.side, loc.dist, true, loc.ramal)) + '</b> · precisão ' + Math.round(lastFix.acc || 0) + ' m' + gpsLot(loc.km, loc.ramal);
+      clearTimeout(gpsVelhaT);
+      var f = camFix(), h;
+      if (!f) {
+        h = lastFixErr || (semGps() ? 'Sem sinal de GPS no momento.' : 'Procurando o GPS… permita a localização quando o navegador perguntar.');
+        if (gpsBloq) h += '<button type="button" class="ft-gps-lib" data-ft="gps-liberar">Como liberar ›</button>';
+      } else {
+        // a posição envelhece sem nenhum aviso do GPS: na hora em que passa dos 30 s, a tela muda sozinha
+        gpsVelhaT = setTimeout(function () { if (root && !q('.ft-start').hidden) renderGps(); }, f.t + 30050 - Date.now());
+        var loc = locate(f.ll);
+        h = loc.dist > 2000
+          ? 'GPS ativo · fora da ' + esc(rodovia()) + ' (' + nf(loc.dist / 1000, 1) + ' km do eixo)'
+          : 'GPS ativo · <b>' + esc(kmLine(loc.km, loc.side, loc.dist, true, loc.ramal)) + '</b> · precisão ' + Math.round(f.acc || 0) + ' m' + gpsLot(loc.km, loc.ramal);
+      }
+      if (h !== gpsHtml) { el.innerHTML = h; gpsHtml = h; }   // o erro do GPS se repete: refazer tiraria o foco de Como liberar
+    }
+    function abreLiberar() {
+      var d = document.createElement('div');
+      d.className = 'ft-camask ft-liberar'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'ftLiberarT');
+      d.innerHTML = '<div class="ft-camask-box"><b id="ftLiberarT">Como liberar a localização</b>' +
+        '<p>' + esc(bloqueado('A localização')) + '.</p>' +
+        '<ol>' + liberarPassos().map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' +
+        '<p>Depois, feche a tela da foto e abra de novo.' + (nativo() ? '' : ' Se ainda aparecer bloqueada, recarregue a página.') + '</p>' +
+        '<button type="button" class="ft-btn primary" data-ft="gps-liberar-fim">Entendi</button></div>';
+      root.appendChild(d);
+      d.querySelector('button').focus();
+    }
+    function fechaLiberar() {
+      var d = q('.ft-liberar');
+      if (d) d.remove();
+      var b = q('[data-ft="gps-liberar"]') || q('.ft-start .ft-big');
+      if (b) b.focus();
     }
     function gpsLot(km, ramal) {
       var here = lotsAt(km, ramal), cur = activeContract();
@@ -1216,16 +1292,18 @@
       }
       q('.ft-ct').textContent = c ? [lotName(c), nomes.numeroCT(c), rodovia()].filter(Boolean).join(' · ') : rodovia();
     }
-    var lastFixErr = '';
+    var lastFixErr = '', gpsBloq = false, gpsDesde = 0, gpsVelhaT = null, gpsHtml = null;
     function startGps() {
       if (!opts.gps || gpsWatch != null || !navigator.geolocation) return;
+      gpsDesde = Date.now(); lastFixErr = ''; gpsBloq = false;
       gpsWatch = navigator.geolocation.watchPosition(function (pos) {
         lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, t: Date.now() };
-        lastFixErr = '';
+        lastFixErr = ''; gpsBloq = false;
         if (root && !q('.ft-start').hidden) renderGps();
         if (cam) renderCamGps();
       }, function (e) {
-        lastFixErr = e && e.code === 1 ? bloqueado('A localização') + ' ou informe o km depois.' : 'Sem sinal de GPS no momento.';
+        gpsBloq = !!(e && e.code === 1);
+        lastFixErr = gpsBloq ? bloqueado('A localização') + ' ou informe o km depois.' : 'Sem sinal de GPS no momento.';
         if (root && !q('.ft-start').hidden) renderGps();
         if (cam) renderCamGps();
       }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 });
@@ -1395,7 +1473,7 @@
           lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, t: Date.now() };
           resolve(lastFix);
         }, function (e) {
-          if (e && e.code === 1) lastFixErr = bloqueado('A localização') + '.';
+          if (e && e.code === 1) { gpsBloq = true; lastFixErr = bloqueado('A localização') + '.'; }
           resolve(null);
         }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
       });
@@ -1462,13 +1540,13 @@
     function noLocTip() {
       var m = st.meta || {}, and = isAndroid(), cam = camSupported(), t;
       if (m.live) t = 'Espere aparecer "GPS ativo" no alto da câmera antes de fotografar.';
-      else if (m.gpsZero && and) t = (st.from === 'galeria' ? 'Às vezes funciona abrir a mesma foto por "Arquivos do celular" > armazenamento interno > DCIM > Camera. ' : '') +
-        (cam ? 'Para as próximas, use "Câmera com GPS": o local vem do GPS do celular na hora da foto, sem depender do Android.'
-          : 'Para as próximas, use o app (site) instalado e o botão "Câmera com GPS": o local vem do GPS do celular na hora da foto.');
+      else if (m.gpsZero && and) t = (st.from === 'galeria' ? 'Às vezes funciona abrir a mesma foto por "Importar fotos" > armazenamento interno > DCIM > Camera. ' : '') +
+        (cam ? 'Para as próximas, use "Tirar foto": o local vem do GPS do celular na hora da foto, sem depender do Android.'
+          : 'Para as próximas, use o app (site) instalado e o botão "Tirar foto": o local vem do GPS do celular na hora da foto.');
       else if ((m.exif && !m.gpsTags) || st.from === 'camera') t = 'Ative o local na câmera (Android: Câmera > Configurações > Tags de local; iPhone: Ajustes > Privacidade > Serviços de Localização > Câmera).' +
-        (cam ? ' Ou use "Câmera com GPS".' : '');
-      else if (st.from === 'galeria') t = and ? 'A galeria do Android costuma apagar o local: abra a mesma foto por "Arquivos do celular" > armazenamento interno > DCIM > Camera.'
-        : 'No iPhone, na tela de escolher as fotos, toque em "Opções" e ligue "Localização"; ou abra a foto por "Arquivos do celular".';
+        (cam ? ' Ou use "Tirar foto".' : '');
+      else if (st.from === 'galeria') t = and ? 'A galeria do Android costuma apagar o local: abra a mesma foto por "Importar fotos" > armazenamento interno > DCIM > Camera.'
+        : 'No iPhone, na tela de escolher as fotos, toque em "Opções" e ligue "Localização"; ou abra a foto por "Importar fotos".';
       else t = 'Use o arquivo original da câmera (pasta DCIM > Camera), não uma cópia enviada por aplicativo.';
       return t + (opts.gps ? ' Se você está no local agora, toque em "Usar o GPS do aparelho agora".' : '') + ' Ou digite o km / escolha o ponto.';
     }
@@ -1675,7 +1753,11 @@
     var guardaT = null, guardaP = Promise.resolve();
     function agendaGuarda() { if (!opts.drive) return; clearTimeout(guardaT); guardaT = setTimeout(function () { guardaT = null; guardarFoto(false); }, st && st.feita == null ? 400 : 1500); }
     // o app foi para o fundo (outra tela, celular travado): guarda já a última mudança
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && guardaT) guardarFoto(false); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden' && guardaT) guardarFoto(false);
+      // de volta do fundo: no fundo o relógio da entrada para, e a posição pode já ter passado dos 30 s
+      if (document.visibilityState === 'visible' && root && root.parentNode && !q('.ft-start').hidden) renderGps();
+    });
     function guardarFoto(final) {
       var a = st;
       clearTimeout(guardaT); guardaT = null;
@@ -2459,8 +2541,8 @@
         renderCam();
       }, function (e) {
         startMsg(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
-          ? bloqueado('A câmera') + ', ou use "Câmera do celular".'
-          : 'Não foi possível abrir a câmera aqui. Use "Câmera do celular".');
+          ? bloqueado('A câmera') + ', ou use "' + camAparelho() + '" em Outras formas.'
+          : 'Não foi possível abrir a câmera aqui. Use "' + camAparelho() + '" em Outras formas.');
       });
     }
     function stopCam() {
@@ -2814,6 +2896,8 @@
       if (b.dataset.ft === 'lv-ant' || b.dataset.ft === 'lv-prox') { passaLoteVer(b.dataset.ft === 'lv-prox' ? 1 : -1); return; }
       if (batch && b.dataset.i != null) { batchClick(b, +b.dataset.i); return; }
       if (b.dataset.ft === 'cam-open') { openCam(); return; }
+      if (b.dataset.ft === 'gps-liberar') { abreLiberar(); return; }
+      if (b.dataset.ft === 'gps-liberar-fim') { fechaLiberar(); return; }
       if (b.dataset.ft === 'cam-shot') { camPop(''); shoot(); return; }
       if (b.dataset.ft === 'cam-giro' || b.dataset.ft === 'cam-car') { var qual = b.dataset.ft === 'cam-giro' ? 'giro' : 'car', ab = q('.ft-campop[data-pop="' + qual + '"]'); camPop(ab.hidden ? qual : ''); return; }
       if (b.dataset.ft === 'cam-giro-v') { camModo = b.dataset.v; lsSet(GIRO_KEY, camModo); camPop(''); camOv(); return; }
