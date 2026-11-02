@@ -4056,13 +4056,13 @@
 
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Não conformidades por serviço' + (vis ? '<span class="sub-vis">atualizado ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
-      // com a análise: a última medição de cada grupo (verde) ou "nunca medido"; o estado continua sendo o da vistoria.
+      // com a análise: a última medição de cada grupo (verde) ou "Sem medição"; o estado continua sendo o da vistoria.
       // O que pede conferência fica no "Para conferir" do alto; os alertas, na aba Medições
       h += servHtml(p, servicesOf(c), function (s) {
         if (!a) return '';
         var gi = a.grupos ? a.grupos[s.key] : null, u = gi && gi.ult, mm = u ? mesMed(an, u) : '';
         return u ? ' <span class="svc-ult" title="Última medição com este serviço nesta OAE">medido ' + esc(u + 'ª' + (mm ? ' · ' + mm : '')) + '</span>'
-          : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço nesta OAE">nunca medido</span>';
+          : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço nesta OAE">Sem medição</span>';
       }, function (s, cur) {
         // medido sem execução: marca interna, gravada à parte (Banco.analiseMarcar), só para quem vê a análise.
         // Aparece com dano observado ou em execução (junto das outras marcas) ou se já estiver marcada
@@ -4140,11 +4140,11 @@
       }
       var vis = vistoriaPonte(c, p);
       h += '<div class="section-title">Não conformidades por serviço' + (vis ? '<span class="sub-vis">atualizado ' + esc(fmtWhen(vis.em)) + (vis.por ? ' · ' + esc(vis.por) : '') + '</span>' : '') + '</div>';
-      // com a análise: a última medição de cada grupo neste segmento (verde) ou "nunca medido"
+      // com a análise: a última medição de cada grupo neste segmento (verde) ou "Sem medição"
       h += servHtml(p, servicesOf(c), a ? function (s) {
         var gi = a.grupos ? a.grupos[s.key] : null, u = gi && gi.ult, mm = u ? mesMed(an, u) : '';
         return u ? ' <span class="svc-ult" title="Última medição com este serviço neste segmento">medido ' + esc(u + 'ª' + (mm ? ' · ' + mm : '')) + '</span>'
-          : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço neste segmento">nunca medido</span>';
+          : ' <span class="svc-ult nunca" title="Nenhuma medição com este serviço neste segmento">Sem medição</span>';
       } : null, null, trafHtml(p));
       if (isPavimentada(c)) h += desempHtml(p, c);
       // o cadastro, recolhido: depois das NC e antes das observações
@@ -4326,7 +4326,7 @@
     ((an && an.medicoes) || []).forEach(function (m) { if (m.n === Number(n) && /^\d{4}-\d{2}/.test(m.ref || '')) r = Number(m.ref.slice(0, 4)) * 12 + Number(m.ref.slice(5, 7)); });
     return r;
   }
-  var ULT_REC = 2, ULT_MED = 6;   // verde até 2 meses antes da última do contrato, amarelo até 6, vermelho depois (ou nunca)
+  var ULT_REC = 2, ULT_MED = 6;   // verde até 2 meses antes da última do contrato; depois, cinza claro até 6 e cinza escuro; amarelo fica só para NC
   function ultMedDe(an, a) {
     var ms = (an && an.medicoes) || [], fim = ms.length ? ms[ms.length - 1] : null, u = null;
     if (!fim) return null;
@@ -4346,7 +4346,7 @@
     if (!u) return '';
     var tip = !u.m ? 'Nenhuma medição com serviço ' + nPt(an) + '' : 'Última medição com serviço ' + nPt(an) + ': ' + medTxt(an, u.m.n) +
       (u.idade ? ', ' + u.idade + (u.idade === 1 ? ' mês' : ' meses') + ' antes da ' + medTxt(an, u.fim.n) + ', a última do contrato' : ', a última do contrato');
-    return ' <span class="pt-ult u-' + u.cls + '" title="' + esc(tip) + '">' + esc(u.m ? 'Última ' + u.m.n + 'ª · ' + u.m.mes : an.tipo === 'conserva' ? 'Nunca medido' : 'Nunca medida') + '</span>';
+    return ' <span class="pt-ult u-' + u.cls + '" title="' + esc(tip) + '">' + esc(u.m ? 'Última ' + u.m.n + 'ª · ' + u.m.mes : 'Sem medição') + '</span>';
   }
   // aba com que o item abre: a última tocada neste contrato; sem toque, Medições com a lista filtrada por uma medição (o gráfico já
   // vem nela; só OAE tem esse filtro) e Não conformidades sem ela. Vindo da tela inicial, Não conformidades (abrirDaVisao). O item aberto guarda a sua: tocar em outro item não vira esta sem aviso
@@ -4412,7 +4412,7 @@
     } else if (fim) {
       h += '<div class="an-line an-ult-leg">Etiqueta de cada' + w1 + ': a última medição com serviço, contando até a ' + esc(medTxt(an, fim.n)) + ', a última do contrato. ' +
         '<span class="pt-ult u-rec">até ' + ULT_REC + ' meses</span> <span class="pt-ult u-med">' + (ULT_REC + 1) + ' a ' + ULT_MED + ' meses</span> ' +
-        '<span class="pt-ult u-ant">mais de ' + ULT_MED + ' meses</span> <span class="pt-ult u-nunca">' + (cons ? 'nunca medido' : 'nunca medida') + '</span></div>';
+        '<span class="pt-ult u-ant">mais de ' + ULT_MED + ' meses</span> <span class="pt-ult u-nunca">Sem medição</span></div>';
     }
     return h + '</div>';
   }
@@ -4446,7 +4446,7 @@
     if (d == null || d < 0 || d > CMP_MESES) return null;
     return { k: 'logo', t: 'não conformidade aberta ' + (d === 0 ? 'no mesmo mês da ' : d + (d === 1 ? ' mês' : ' meses') + ' depois da ') + medTxt(an, gi.ult) + ', que mediu este serviço' };
   }
-  // última medição (nº) do serviço que trata o item nesta ponte, só entre os serviços do mesmo grupo (g); 0 = nunca medido
+  // última medição (nº) do serviço que trata o item nesta ponte, só entre os serviços do mesmo grupo (g); 0 = sem medição
   function ultItem(a, g, it) {
     var u = 0;
     ((a && a.servicos) || []).forEach(function (x) { if (x.v > 0 && x.g === g && it.med && it.med.test(x.nome || '')) medsNums(x.meds).forEach(function (n) { if (n > u) u = n; }); });
@@ -4459,7 +4459,7 @@
     if (!its.length) return '';
     return '<div class="svc-it-med">' + its.map(function (x) {
       var u = ultItem(a, s.key, x);
-      return '<span' + (u ? '' : ' class="nunca"') + '><b>' + esc(x.n) + '</b> ' + esc(u ? 'medido na ' + medTxt(an, u) : 'nunca medido ' + nPt(an) + '') + '</span>';
+      return '<span' + (u ? '' : ' class="nunca"') + '><b>' + esc(x.n) + '</b> ' + esc(u ? 'medido na ' + medTxt(an, u) : 'sem medição ' + nPt(an) + '') + '</span>';
     }).join('') + '</div>';
   }
   // resumo: os grupos com dano observado que pedem conferência com as medições
@@ -4640,7 +4640,7 @@
         var sv = svSalvo(p, g.key, c), st = oaeSt(sv), qt = comQtd(st) ? fmtQtd(g, sv.q) : '';
         est = st === 'NV' || st === 'OK' ? '<span class="mg-e nv">sem NC</span>' : '<span class="mg-e ' + st.toLowerCase() + '">' + esc(ncNome(g, st) + (qt ? ' ' + qt : '')) + '</span>';
       }
-      var ult = gi && gi.ult ? '<span class="mg-u">última ' + gi.ult + 'ª</span>' : '<span class="mg-u nunca">nunca medido</span>';
+      var ult = gi && gi.ult ? '<span class="mg-u">última ' + gi.ult + 'ª</span>' : '<span class="mg-u nunca">Sem medição</span>';
       var vazio = gi && gi.ult && (med || E) ? 'Sem serviço deste grupo ' + (med ? 'na ' + medTxt(an, med) : 'na ' + E + 'ª etapa') + '; a última medição com ele foi a ' + medTxt(an, gi.ult) + '.'
         : 'Nenhuma das ' + ms.length + ' medições pagou serviço deste grupo ' + nPt(an) + '.';
       h += '<div class="mg' + (ac ? ' acesso' : '') + (n ? '' : ' vazio') + '">' +
