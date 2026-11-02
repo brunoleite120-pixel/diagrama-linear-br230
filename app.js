@@ -5622,7 +5622,7 @@
     if (!b) return;
     var act = b.dataset.act, c = active(), p;
     if (act === 'ct-menu') { ctMenu($('ctmPop') && $('ctmPop').hidden); return; }
-    if (b.closest && b.closest('#ctmPop')) ctMenu(false);
+    if (b.closest && b.closest('#ctmPop')) { ctMenu(false); var bCtm = document.querySelector('[data-act="ct-menu"]'); if (bCtm) bCtm.focus({ preventScroll: true }); }   // o item sumiu com a lista: a janela que abrir daqui volta ao botão dos contratos
     if (act === 'visao') { irInicio(); return; }
     if (act === 'medicoes') { abrirMedicoes(); return; }
     if (act === 'dica-fechar') {
@@ -6796,6 +6796,7 @@
     var b = e.target.closest('[data-act]');
     if (!b) return;
     closeMenu();
+    $('btnMenu').focus({ preventScroll: true });   // o item sumiu com o menu: a janela que abrir daqui volta ao botão Dados (no celular, o ≡)
     var act = b.dataset.act;
     if (act === 'medicoes') { abrirMedicoes(); return; }
     if (act === 'login') { openLogin(); return; }
@@ -7316,11 +7317,11 @@
 
   // ---------------- avisos de alterações que se cruzaram (ficam até a pessoa dispensar)
   function fmtValue(campo, v) {
+    // indicador do desempenho do segmento: "atende" / "não atende"; sem marca, como no editor
+    if (campo && campo.indexOf('serv.desemp_') === 0) return DESEMP_ST[v] ? minus1(DESEMP_ST[v]) : 'não avaliado';
     if (v == null || v === '') return '(vazio)';
     // trafegabilidade do segmento: o estado e a nota ("Com restrição (atoleiro no km 790)")
     if (campo === 'serv.' + TRAFEG.key && typeof v === 'object') return TRAF_STATUS[trafSt(v)].name + (v.n ? ' (' + v.n + ')' : '');
-    // indicador do desempenho do segmento: "atende" / "não atende"
-    if (campo && campo.indexOf('serv.desemp_') === 0) return DESEMP_ST[v] ? minus1(DESEMP_ST[v]) : 'não vistoriado';
     if (campo && campo.indexOf('serv.') === 0 && typeof v === 'object') {
       // grupo do serviço contínuo (pontes ou conservação), pela chave, que não se repete entre os tipos
       var so = OAE_SERVICES.concat(CONS_SERVICES, CONS_PAV_SERVICES, SIN_SERVICES).find(function (x) { return x.key === campo.slice(5); });
@@ -7466,8 +7467,8 @@
     if (l.length === 1) { rascAbre(l[0]); return; }
     var f = modal('<h2 id="modalTitle">NC em rascunho</h2><p class="hint">Só neste aparelho, até ' + (isFiscal() ? 'enviar para aprovação' : 'salvar') + '.</p><div class="rasc-l">' + l.map(function (x, i) {
       return '<button type="button" data-i="' + i + '"><b>' + esc(x.p.nome || '?') + ' · ' + esc(x.s.short) + '</b><small>' + esc(ctNome(x.c)) + '</small></button>';
-    }).join('') + '</div><button type="button" class="btn" data-close>Fechar</button>');
-    f.querySelector('.rasc-l').addEventListener('click', function (e) { var b = e.target.closest('[data-i]'); if (b) { closeModal(); rascAbre(l[Number(b.dataset.i)]); } });
+    }).join('') + '</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>');
+    f.querySelector('.rasc-l').addEventListener('click', function (e) { var b = e.target.closest('[data-i]'); if (b) closeModal(function () { rascAbre(l[Number(b.dataset.i)]); }); });
   }
   function rascAbre(x) {
     if (!ui.abaCt || ui.abaCt.cid !== x.c.id) abaZera(x.c);
@@ -8072,9 +8073,44 @@
     }, function () { /* sem sinal: confere depois */ });
   }
 
-  // aoCancelar: chamado quando a pessoa fecha sem confirmar (Cancelar, ×, Esc ou toque fora)
+  // modalVolta: de onde veio a primeira janela (uma janela fecha a anterior ao abrir; quando quem fecha reabre depois, como a lixeira,
+  // o foco já voltou para lá). modalHist: a janela tem uma entrada no histórico, a mesma quando uma abre outra, e o Voltar a fecha
+  var modalVolta = null, modalCancela = null, modalHist = false, modalPula = false, modalDepois = null;
+  function modalPoeHist() {
+    if (modalHist || modalPula) return;
+    try { history.pushState(Object.assign({}, history.state || {}, { modal: 1 }), ''); modalHist = true; } catch (e) { /* segue sem histórico */ }
+  }
+  // tira a entrada da janela que fechou. Espera um instante: quem fechou pode abrir outra em seguida. Outra tela entrou por cima
+  // (history.state sem a marca): a entrada fica e o popstate passa por ela. depois: o que fazer quando o histórico assentar
+  function modalSolta(depois) {
+    setTimeout(function () {
+      var hs = history.state || {};
+      if ($('modal') || !modalHist) { if (depois) depois(); return; }
+      modalHist = false;
+      if (!hs.modal || hs.escolha) { if (depois) depois(); return; }
+      modalPula = true; modalDepois = depois || null;
+      try { history.back(); } catch (e) { modalPula = false; modalDepois = null; if (depois) depois(); }
+    }, 0);
+  }
+  // Esc de qualquer ponto; Tab não sai da janela (como na folha da foto; dos rádios de um grupo marcado, só entra o marcado)
+  function modalTecla(e) {
+    var m = $('modal');
+    if (!m) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (modalCancela) modalCancela(); return; }
+    if (e.key !== 'Tab') return;
+    var l = Array.prototype.filter.call(m.querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])'), function (el) {
+      if (el.type === 'radio' && !el.checked && m.querySelector('input[type=radio][name="' + el.name + '"]:checked')) return false;
+      return !el.disabled && el.offsetParent !== null;
+    });
+    if (!l.length) { e.preventDefault(); return; }
+    var i = l.indexOf(document.activeElement);
+    if (e.shiftKey && i <= 0) { e.preventDefault(); l[l.length - 1].focus(); }
+    else if (!e.shiftKey && (i < 0 || i === l.length - 1)) { e.preventDefault(); l[0].focus(); }
+  }
+  // aoCancelar: chamado quando a pessoa fecha sem confirmar (Cancelar, ×, Esc, toque fora ou Voltar)
   function modal(html, onSubmit, cls, aoCancelar) {
-    closeModal();
+    var ant = $('modal');
+    if (!ant) modalVolta = document.activeElement; else ant.remove();
     var m = document.createElement('div');
     m.className = 'modal';
     m.id = 'modal';
@@ -8084,15 +8120,26 @@
     f.addEventListener('submit', function (e) { e.preventDefault(); if (onSubmit) onSubmit(f); });
     function cancela() { if (m.dataset.ocupado) return; closeModal(); if (aoCancelar) aoCancelar(); }
     m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('[data-close]')) cancela(); });
-    m.addEventListener('keydown', function (e) { if (e.key === 'Escape') cancela(); });
+    modalCancela = cancela;
+    modalPoeHist();
     f.addEventListener('change', function (e) {
       if (e.target.hasAttribute('data-showpw')) f.querySelectorAll('input[data-pw]').forEach(function (i) { i.type = e.target.checked ? 'text' : 'password'; });
     });
-    setTimeout(function () { var x = f.querySelector('input:not([type=checkbox]):not([type=radio]),button[type=submit],button'); if (x) x.focus(); }, 30);
+    // foco no primeiro campo; sem campo, no título
+    setTimeout(function () {
+      if (!f.isConnected) return;
+      var x = Array.prototype.filter.call(f.querySelectorAll('input:not([type=checkbox]):not([type=radio]),select,textarea'), function (el) { return !el.disabled && el.offsetParent !== null; })[0];
+      if (!x) { x = f.querySelector('#modalTitle') || f; x.setAttribute('tabindex', '-1'); }
+      x.focus();
+    }, 30);
     return f;
   }
-  function closeModal() { var m = $('modal'); if (m) m.remove(); }
-  function modalErr(f, t) { var e = f.querySelector('.modal-err'); if (e) { e.textContent = t || ''; e.hidden = !t; } }
+  function closeModal(depois) {
+    var m = $('modal'), v = modalVolta;
+    if (m) { m.remove(); modalCancela = null; modalVolta = null; if (v && v.focus && v !== document.body && v.isConnected) try { v.focus({ preventScroll: true }); } catch (e) { /* navegador antigo */ } }
+    if (modalHist || depois) modalSolta(depois);
+  }
+  function modalErr(f, t) { var e = f.querySelector('.modal-err'); if (e) { e.textContent = t || ''; e.hidden = !t; if (t) e.scrollIntoView({ block: 'nearest' }); } }   // o botão fica sempre à vista e o erro, no fim do conteúdo: rola até ele
   function busyBtn(f, on, label) {
     var b = f.querySelector('button[type=submit]');
     if (!b) return;
@@ -8214,13 +8261,12 @@
   function entrou(r) {
     fiscalEntrada = r.papel === 'fiscal';
     setLogin({ codigo: r.token, nome: r.nome, papel: r.papel, uid: r.uid || null });
-    closeModal();
+    closeModal(function () { if (location.hash === '#configurar') history.replaceState(history.state, '', location.pathname + location.search); });   // na entrada de baixo: é ela que fica
     renderAll();
     toast(r.papel === 'fiscal'
       ? 'Olá, ' + r.nome + '. Como fiscal de campo, você registra as não conformidades e tira as fotos dos seus contratos; um engenheiro aprova as mudanças.'
       : r.papel === 'analista' ? 'Olá, ' + r.nome + '. Como analista, você consulta os contratos liberados para você.'
       : 'Olá, ' + r.nome + ' (' + papelNome(r.papel) + ').', 5000);
-    if (location.hash === '#configurar') history.replaceState(null, '', location.pathname + location.search);
     refresh(true).then(flush);
   }
   // banco novo, sem nenhum acesso: cria a conta do criador
@@ -8546,11 +8592,18 @@
     });
     return o;
   }
+  // o contrato e o ponto da proposta neste aparelho (p: null se saiu da lista)
+  function propItem(x) {
+    var c = contractById(x.contrato_id);
+    return { c: c, p: c ? c.pontos.filter(function (q) { return q.id === x.ponto_id; })[0] || null : null };
+  }
   function propCampos(x) {
+    var it = propItem(x), p = it.p;
     return Object.keys(x.campos || {}).map(function (k) {
-      var a = x.campos[k].a;
+      // o atual vem do ponto na tela (salvo, sem rascunho): o "a" da proposta é o da primeira alteração do fiscal e pode estar velho
+      var a = !p ? x.campos[k].a : k.indexOf('serv.') === 0 ? svSalvo(p, k.slice(5), it.c) : p[k];
       var v = x.campos[k].v, fts = k.indexOf('serv.') === 0 && v && Array.isArray(v.fotos) ? v.fotos : [];
-      return '<li><b>' + esc(fieldName(k, x.contrato_id)) + ':</b> ' + (a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, v)) + '</b>' +
+      return '<li><b>' + esc(fieldName(k, x.contrato_id)) + ':</b> ' + (p || a !== undefined ? esc(fmtValue(k, a)) + ' → ' : '') + '<b>' + esc(fmtValue(k, v)) + '</b>' +
         (fts.length ? '<div class="nc-fotos" data-nome="' + esc('NC · ' + fieldName(k, x.contrato_id)) + '">' + fts.map(function (fid) { return ncFtHtml(fid, null); }).join('') + '</div>' : '') + '</li>';
     }).join('');
   }
@@ -8585,7 +8638,7 @@
   function renderAprov() {
     var b = $('btnAprov');
     if (!b) return;
-    var all = banco.propostas || [], n = all.length, k = 0, minhas = 0;
+    var all = banco.propostas || [], n = all.length, k = 0, minhas = 0, tinhaFoco = document.activeElement === b;
     if (isEng() && n) { k = n; b.hidden = false; b.textContent = 'Aprovar (' + n + ')'; b.title = n + ' mudança(s) de fiscais aguardando aprovação'; }
     else if (isFiscal()) {
       minhas = k = minhasPropostas();
@@ -8593,6 +8646,7 @@
       b.textContent = minhas + ' aguardando aprovação';
       b.title = 'Suas mudanças que ainda não foram aprovadas';
     } else b.hidden = true;
+    if (tinhaFoco && b.hidden) $('btnMenu').focus({ preventScroll: true });   // aprovou a última: o botão que abriu a janela sumiu
     var it = document.querySelector('#menuPop [data-act="aprovar"]');
     if (it) {
       if (isFiscal()) { it.hidden = !minhas; it.textContent = 'Suas mudanças aguardando aprovação' + (minhas ? ' (' + minhas + ')' : ''); }
@@ -8613,23 +8667,35 @@
     var eng = isEng();
     var lote = function (cid) { return loteOf(cid); };
     var h = all.length ? all.map(function (x) {
-      return '<label class="ap-row">' + (eng ? '<input type="checkbox" value="' + x.id + '" checked>' : '') +
+      var it = propItem(x), tg = eng ? 'label' : 'div';   // sem caixa, a linha não é rótulo: um toque nela acionaria o primeiro botão
+      return '<' + tg + ' class="ap-row">' + (eng ? '<input type="checkbox" value="' + x.id + '">' : '') +
         '<span><b>' + esc(lote(x.contrato_id) + ' · ' + (x.ponto_nome || x.ponto_id)) + '</b> · ' + esc(x.autor_nome || 'fiscal') + ' · ' + esc(fmtWhen(x.atualizado_em)) +
-        '<ul>' + propCampos(x) + '</ul></span></label>';
+        '<ul>' + propCampos(x) + '</ul>' +
+        (it.p ? '<button type="button" class="ap-abrir" data-abre="' + x.id + '">' + (isOae(it.c) ? 'Abrir a OAE' : 'Abrir o ' + itemTxt(it.c)) + ' ›</button>' : '') + '</span></' + tg + '>';
     }).join('') : '<p class="empty">Nada aguardando aprovação.</p>';
     var f = modal('<h2 id="modalTitle">' + (eng ? 'Mudanças dos fiscais' : 'Suas mudanças aguardando aprovação') + '</h2>' +
-      (eng && all.length ? '<p>Aprovar aplica a mudança no diagrama de todos, em nome de quem fez. Recusar descarta.</p><label class="show-pw"><input type="checkbox" data-todas checked> Marcar todas</label>' : '') +
+      (eng && all.length ? '<p>Aprovar aplica a mudança no diagrama de todos, em nome de quem fez. Recusar descarta.</p><label class="show-pw"><input type="checkbox" data-todas> Marcar todas</label>' : '') +
       '<div class="ap-list">' + h + '</div>' +
       '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button>' +
-      (eng && all.length ? '<button type="button" class="btn" data-ap="no">Recusar marcadas</button><button type="button" class="btn primary" data-ap="ok">Aprovar marcadas</button>' : '') + '</div>', null, 'wide');
+      (eng && all.length ? '<button type="button" class="btn" data-ap="no" disabled>Recusar (0)</button><button type="button" class="btn primary" data-ap="ok" disabled>Aprovar (0)</button>' : '') + '</div>', null, 'wide');
     f.addEventListener('change', function (e) {
       if (e.target.hasAttribute('data-todas')) f.querySelectorAll('.ap-row input').forEach(function (i) { i.checked = e.target.checked; });
+      var n = f.querySelectorAll('.ap-row input:checked').length, td = f.querySelector('[data-todas]');
+      if (td) td.checked = n === f.querySelectorAll('.ap-row input').length;
+      f.querySelectorAll('[data-ap]').forEach(function (x) { x.disabled = !n; x.textContent = (x.dataset.ap === 'ok' ? 'Aprovar (' : 'Recusar (') + n + ')'; });
     });
     f.addEventListener('click', function (e) {
+      var ab = e.target.closest('[data-abre]');
+      if (ab) {
+        var pr = all.filter(function (x) { return x.id === Number(ab.dataset.abre); })[0], it = pr ? propItem(pr) : null;
+        // abre em Não conformidades, onde fica o bloco Aguardando aprovação, mesmo com a aba Medições tocada antes
+        if (it && it.p) closeModal(function () { if (!ui.abaCt || ui.abaCt.cid !== it.c.id) abaZera(it.c); ui.aba[it.p.id] = 'vist'; delete ui.abaPad[it.p.id]; abrirDaVisao(it.c, it.p, false); });
+        return;
+      }
       var b = e.target.closest('[data-ap]');
       if (!b) return;
       var ids = Array.prototype.map.call(f.querySelectorAll('.ap-row input:checked'), function (i) { return Number(i.value); });
-      if (!ids.length) { toast('Marque pelo menos uma.'); return; }
+      if (!ids.length) return;
       decidirPropostas(ids, b.dataset.ap === 'ok');
     });
   }
@@ -8957,12 +9023,15 @@
     $('pgNav').querySelector('[data-pg="foto"]').hidden = $('btnFoto').hidden;
     $('pgNav').querySelector('[data-pg="mapa"]').hidden = !temMapa();
     try { history.replaceState(visaoOn ? { tela: 'geral', n: 0 } : { pg: pg }, ''); } catch (e) { /* segue sem histórico */ }
-    // Voltar (Android e navegador): a escolha do contrato aberta só fecha; tela inicial e suas partes; páginas do contrato.
+    // Voltar (Android e navegador): a janela aberta e a escolha do contrato aberta só fecham; tela inicial e suas partes; páginas do contrato.
     // Uma página de contrato antiga com a tela inicial na tela (o app abriu dentro do contrato): pula para trás
     window.addEventListener('popstate', function (e) {
+      if (modalPula) { modalPula = false; var fm = modalDepois; modalDepois = null; if ($('modal')) modalPoeHist(); if (fm) fm(); return; }
       if (escPula) { escPula = false; var f = escDepois; escDepois = null; if (f) f(); return; }
+      if ($('modal')) { modalHist = false; if ($('modal').dataset.ocupado) modalPoeHist(); else if (modalCancela) modalCancela(); return; }
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};
+      if (s.modal) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
       if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria') { mostraGeral(s.tela); return; }
       if (visaoOn) { if (!s.tela && s.pg) try { history.back(); } catch (er) { /* segue */ } return; }
       if (s.pg && s.pg !== pg && pgAtivo()) irPg(s.pg, true);
@@ -9025,6 +9094,7 @@
       if (f) abrirCargaMed(f);
       e.target.value = '';
     });
+    document.addEventListener('keydown', modalTecla, true);
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       closeMenu();
