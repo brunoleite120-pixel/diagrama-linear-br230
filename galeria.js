@@ -359,7 +359,39 @@
     '.gl-rec .gl-prg,.gl-rec .gl-off{margin-top:6px}',
     '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-cts,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
     '  .gl-prg,.gl-off{margin-left:12px;margin-right:12px}',
-    '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}'
+    '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}',
+    // celular: barra única (contrato, Filtros, ⋯), resumo em uma linha e as folhas por cima de tudo, também das duas barras do app
+    '@media (max-width:560px){.gl-fil:empty{display:none}',
+    '  .gl-cts{overflow:visible;gap:8px}',
+    '  .gl-cb-ct{flex:1 1 0;min-width:0;gap:4px}',
+    '  .gl-cb-ct>span{min-width:0;overflow:hidden;text-overflow:ellipsis}',
+    '  .gl-cb-ct:disabled{opacity:.6}',
+    '  .gl-cb-f{gap:6px}',
+    '  .gl-cb-m{width:52px;padding:0;font-size:18px}',
+    '  .gl-info{gap:0 8px;padding-top:8px;padding-bottom:0}',
+    '  .gl-info .gl-fora{flex:1 1 100%;min-height:44px;text-align:left}',
+    '  .gl-sh.fo,.gl-sh.cl,.gl-pf{position:fixed}',
+    // a barra do Parar segue na frente da foto aberta (2); as folhas, no mesmo nível e depois dela, ficam por cima
+    '  .gl-bar.gl-ocup{z-index:3}',
+    '  .gl.gl-pag:has(.gl-sh.fo),.gl.gl-pag:has(.gl-sh.cl),.gl.gl-pag:has(.gl-pf){z-index:3000}',
+    '  .gl-sh.cl .gl-sh-top .btn,.gl-pf-top .btn{min-width:44px;min-height:44px;justify-content:center}',
+    '  .gl-fo-box{display:flex;flex-direction:column;gap:0;overflow:hidden;padding:8px 0 0}',
+    '  .gl-fo-box::before{flex:none;align-self:center}',
+    '  .gl-fo-top{flex:none;padding:4px 6px 4px 16px;border-bottom:1px solid var(--line,#D5DAD6)}',
+    '  .gl-fo-x{flex:none;width:44px;height:44px;border:0;background:none;color:var(--ink,#17201C);font-size:24px;line-height:1}',
+    '  .gl-fo-c{flex:1;min-height:0;overflow:auto;display:grid;gap:14px;padding:12px 16px}',
+    '  .gl-fo-l>span{display:block;margin-bottom:6px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3,#5C6661)}',
+    '  .gl-fo-c select{width:100%;min-height:44px;padding:4px 8px;border:1px solid var(--line,#D5DAD6);border-radius:8px;background:var(--panel,#fff);color:var(--ink,#17201C);font-size:14px}',
+    '  .gl-fo-c .gl-chips{flex-wrap:wrap;overflow:visible}',
+    '  .gl-fo-c .gl-chip{min-height:44px}',
+    '  .gl-fo-c .gl-sem{margin-top:8px}',
+    '  .gl-fo-c .gl-sem button{height:44px}',
+    '  .gl-fo-rod{flex:none}',
+    '  .gl-fo-nota{margin:0;padding:10px 16px;border-top:1px solid var(--line,#D5DAD6);font-size:12.5px;color:var(--ink-2,#3B4540)}',
+    '  .gl-fo-ver{padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line,#D5DAD6)}',
+    '  .gl-fo-ver .btn{width:100%;min-height:48px;justify-content:center}',
+    '  .gl-fo-ma{flex:1;min-height:0;overflow:auto;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}',
+    '  .gl-fo-ma .btn.small{display:flex;width:100%;min-height:52px;padding:8px 16px;border:0;border-bottom:1px solid #EEF0EE;border-radius:0;background:none;color:var(--ink,#17201C);font-size:14px;text-align:left;justify-content:flex-start}}'
   ].join('\n');
 
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -432,6 +464,7 @@
     return { modo: 'semana', off: 0, de: '', ate: '' };
   }
   function salvarPer(p) { try { localStorage.setItem(PER_KEY, JSON.stringify(p)); } catch (e) { /* sem armazenamento */ } }
+  var IC_FIL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4"/></svg>';
   var CAL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
   function b64Blob(s, type) {
     var bin = atob(s), u8 = new Uint8Array(bin.length);
@@ -1142,7 +1175,7 @@
           h += '<div class="gl-chips" role="group" aria-label="Pastas">' + botaoIr(base, 'Todas \u00b7 ' + itens.filter(function (it) { return dentro(caminhoDe(it), base); }).length, ' class="gl-chip" aria-pressed="' + (dpath.length === base.length) + '"') +
             fs.map(function (f) { return botaoIr(base.concat([f.nome]), esc(f.nome) + ' \u00b7 ' + f.n, ' class="gl-chip" aria-pressed="' + (dpath[base.length] === f.nome) + '"'); }).join('') + '</div>';
         }
-        h += perHtml();
+        if (!celular()) h += perHtml();
       }
       return h + '</div>';
     }
@@ -1349,12 +1382,16 @@
     // busca; "Todos os contratos"; o do app em destaque; os outros por tipo, com quantas fotos e a data da última
     function semAcento(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
     function abrirCts() {
-      cl = { busca: '' };
+      cl = { busca: '', hist: histPoe() };
       renderCts();
       var i = q('.gl-cl-busca');
       if (i && !(window.matchMedia && matchMedia('(pointer:coarse)').matches)) i.focus();
     }
-    function fecharCts() { var aberta = !!cl; cl = null; var el = root && q('.gl-sh.cl'); if (el) el.remove(); var b = aberta && q('.gl-ct-l'); if (b) b.focus(); }
+    function fecharCts(viaVoltar) {
+      var aberta = !!cl, h = aberta && cl.hist;
+      cl = null; var el = root && q('.gl-sh.cl'); if (el) el.remove(); var b = aberta && q('.gl-ct-l'); if (b) b.focus();
+      if (h) { if (!viaVoltar) histTira(); focoDepois('.gl-ct-l'); }
+    }
     function ctsLinhas() {
       var c = contagem(), at = ctAppId(), cts = contratos(), ult = {}, bu = semAcento(cl.busca.trim());
       itens.forEach(function (it) { var k = it.cid || SEM, e = String(it.em || ''); if (!ult[k] || e > ult[k]) ult[k] = e; });
@@ -1395,8 +1432,18 @@
         '<div class="gl-cl-ls">' + ctsLinhas() + '</div></div>';
       root.appendChild(el);
     }
-    function filtrosHtml() {
-      if (aba === 'drive') return driveFil();
+    // os selos que tiram um filtro vindo de fora (fotos da NC, km)
+    function selosHtml() {
+      var h = '';
+      if (filtro.ids) h += '<button type="button" class="gl-chip" data-g="ids-tirar" aria-pressed="true" aria-label="Tirar o filtro das fotos da NC">' + esc(filtro.idsNome + ' · ' + filtro.ids.length + (filtro.ids.length === 1 ? ' foto' : ' fotos')) + ' ✕</button>';
+      if (filtro.km) h += '<button type="button" class="gl-chip" data-g="km-tirar" aria-pressed="true" aria-label="Tirar o filtro do km">' + esc((filtro.km[2] ? filtro.km[2] + ' · ' : '') + 'km ' + String(filtro.km[0]).replace('.', ',') + ' a ' + String(filtro.km[1]).replace('.', ',')) + ' ✕</button>';
+      return h;
+    }
+    // folha: o conteúdo da folha Filtros do celular, com o nome de cada grupo. No celular a fila mostra só os selos (no Drive, a busca e as pastas)
+    function filtrosHtml(folha) {
+      var rot = function (t, x) { return folha ? '<div class="gl-fo-l"><span>' + t + '</span>' + x + '</div>' : x; };
+      if (aba === 'drive') return !folha ? driveFil() : emCartoes() ? '' : rot('Período', perHtml());
+      if (celular() && !folha) return selosHtml();
       var ps = {}, as = {}, ms = {}, semPonto = 0;
       itens.forEach(function (it) {
         var noCt = !filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid);
@@ -1418,27 +1465,26 @@
         var vis = itens.filter(function (it) { return !escondida(it.id); });   // v119: as cópias de apagadas ficam no quadro, fora das contas
         vis.forEach(function (it) { var lo = locais[it.id]; if (lo && cs[lo.situacao] != null) cs[lo.situacao]++; if (semCar(it)) cs.semcar++; });
         var chipL = function (v, t, k, cls) { return '<button type="button" class="gl-chip' + (cls ? ' ' + cls : '') + '" data-g="fl" data-v="' + v + '" aria-pressed="' + (fLocal === v) + '">' + t + ' · ' + k + '</button>'; };
-        h += '<div class="gl-chips" role="group" aria-label="Situação das fotos">' + chipL('', 'Todas', vis.length) +
+        h += rot('Situação', '<div class="gl-chips" role="group" aria-label="Situação das fotos">' + chipL('', 'Todas', vis.length) +
           (cs.semcar || fLocal === 'semcar' ? chipL('semcar', 'Sem carimbo', cs.semcar, 'warn') : '') +
           [['aparelho', 'Só aqui'], ['fila', 'Na fila'], ['enviada', 'Enviadas']].filter(function (x) { return cs[x[0]] || fLocal === x[0]; })
-            .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>';
+            .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>');
       }
-      if (filtro.ids) h += '<button type="button" class="gl-chip" data-g="ids-tirar" aria-pressed="true" aria-label="Tirar o filtro das fotos da NC">' + esc(filtro.idsNome + ' · ' + filtro.ids.length + (filtro.ids.length === 1 ? ' foto' : ' fotos')) + ' ✕</button>';
-      if (filtro.km) h += '<button type="button" class="gl-chip" data-g="km-tirar" aria-pressed="true" aria-label="Tirar o filtro do km">' + esc((filtro.km[2] ? filtro.km[2] + ' · ' : '') + 'km ' + String(filtro.km[0]).replace('.', ',') + ' a ' + String(filtro.km[1]).replace('.', ',')) + ' ✕</button>';
+      if (!folha) h += selosHtml();
       if ((Object.keys(ps).length || filtro.pid || semPonto) && !ehCons(filtro.cid)) {
-        h += '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>';
+        h += rot('Ponto', '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>');
       }
-      if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>';
+      if (aba !== 'local' && aba !== 'minhas' && (Object.keys(as).length > 1 || filtro.autor)) h += rot('Pessoa', '<select data-f="autor" aria-label="Pessoa">' + opcoes(filtro.autor, 'Todas as pessoas', ordem(as)) + '</select>');
       var iv = intervaloPer(per);
       if (itens.length && (nv() >= 2 || multiCt)) {
         var g = modo();
-        h += '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).filter(function (k) {
+        h += rot('Agrupar', '<select data-f="agrupar" aria-label="Agrupar">' + Object.keys(AGRUPAR).filter(function (k) {
           return k === 'contrato' ? multiCt : k === 'pessoa' ? nv() >= 2 : true;
         }).map(function (k) {
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
-        }).join('') + '</select>';
+        }).join('') + '</select>');
       }
-      return h + perHtml();
+      return h + rot('Período', perHtml());
     }
     // período em fichas; "Escolher…" abre a janela (hoje, semana passada, todas as datas, de… até…) e mostra o escolhido nela
     function perHtml() {
@@ -1592,7 +1638,7 @@
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         b += '<button type="button" class="gl-cfg" data-g="cfg">' + IC_CFG + 'Espaço e envio</button>';
         var apg = selecionando ? [] : apagadasAqui();
-        return (apg.length ? boxApagadas(apg) : '') + aviso + confHtml() + '<span class="gl-txt">' + t + foraHtml() + '</span>' + b + selBtn();
+        return (apg.length ? boxApagadas(apg) : '') + aviso + confHtml() + '<span class="gl-txt">' + t + foraHtml() + '</span>' + foraCel() + b + selBtn();
       }
       if (aba === 'drive') {
         var cartoes = emCartoes(), base = cartoes ? itens.filter(noCaminho) : lista;
@@ -1601,32 +1647,42 @@
         return '<span class="gl-txt">' + (ivD ? esc(faixaTxt(ivD[0], ivD[1])) + ' \u00b7 ' : '') + '<b>' + plural(base.length, 'foto', 'fotos') + '</b>' + (bD ? ' \u00b7 ' + tam(bD) : '') +
           (aquiD ? ' \u00b7 ' + aquiD + ' j\u00e1 neste aparelho' : '') + (cartoes ? '' : foraHtml()) +
           (dlista && dlista.limite ? ' \u00b7 <span class="gl-warn">o Drive tem mais fotos do que a lista mostra (as primeiras 4.000)</span>' : '') +
-          ' \u00b7 <button type="button" class="gl-lk" data-g="dr-atualizar">Atualizar</button></span>' +
+          ' \u00b7 <button type="button" class="gl-lk" data-g="dr-atualizar">Atualizar</button></span>' + (cartoes ? '' : foraCel()) +
           (faltamD && faltamD < lista.length ? '<button type="button" class="btn small" data-g="dr-falta">S\u00f3 as que n\u00e3o tenho (' + faltamD + ')</button>' : '') + (cartoes ? '' : selBtn());
       }
       var txt = {
         minhas: 'Fotos que você enviou, de qualquer aparelho.',
-        todas: 'Fotos de toda a equipe. Marque com ★ as que vão para o relatório fotográfico.',
+        todas: 'Fotos de toda a equipe. ' + NOTA_ESTRELA,
         relatorio: 'Fotos escolhidas para o relatório fotográfico.',
         deletadas: 'Apagadas do Drive por engenheiros. Ficam na pasta Deletados até você restaurar.'
       }[aba];
       var semP = aba === 'relatorio' ? lista.filter(function (x) { return !x.pid && !ehCons(x.cid); }).length : 0;
       if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
+      // no celular: "26 a 31 de out. · 2 fotos"; o tamanho fica nos grupos, o ★ e as ações do Drive nas folhas
+      var ivI = intervaloPer(per), bytesL = lista.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0), cel = celular();
+      return '<span class="gl-txt">' + (ivI ? esc(faixaTxt(ivI[0], ivI[1])) + ' · ' : '') + '<b>' + plural(lista.length, 'foto', 'fotos') + '</b>' +
+        (bytesL && !cel ? ' · ' + tam(bytesL) + ' no tamanho original' : '') + foraHtml() + (cel && aba === 'todas' ? '' : ' · ' + txt) + '</span>' + foraCel() + (cel ? '' : trazerHtml()) +
+        (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
+    }
+    function trazerHtml() {
       var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' +
         '<button type="button" class="btn small" data-g="drive-pastas">Pastas do Drive pelo nº do contrato</button>' : '';
       // Administrador: confere se a galeria e a pasta Deletados do Drive dizem a mesma coisa (só lê; nada muda)
       if (aba === 'deletadas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl()) trazer += '<button type="button" class="btn small" data-g="drive-conferir">Conferir com o Drive</button>';
-      var ivI = intervaloPer(per), bytesL = lista.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0);
-      return '<span class="gl-txt">' + (ivI ? esc(faixaTxt(ivI[0], ivI[1])) + ' · ' : '') + '<b>' + plural(lista.length, 'foto', 'fotos') + '</b>' +
-        (bytesL ? ' · ' + tam(bytesL) + ' no tamanho original' : '') + foraHtml() + ' · ' + txt + '</span>' + trazer +
-        (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
+      return trazer;
     }
     function foraHtml() {
-      var n = foraDoPeriodo();
+      var n = celular() ? 0 : foraDoPeriodo();
       return n ? ' · <button type="button" class="gl-lk" data-g="per-tudo">' + plural(n, 'foto fora do período', 'fotos fora do período') + ': ver todas as datas</button>' : '';
     }
-    function selBtn() {
-      if (!lista.length) return '';
+    // no celular o aviso é um botão próprio, de 44 px: ele explica uma tela quase vazia
+    function foraCel() {
+      var n = celular() ? foraDoPeriodo() : 0;
+      return n ? '<button type="button" class="gl-lk gl-fora" data-g="per-tudo">' + plural(n, 'foto fora do período', 'fotos fora do período') + ': ver todas as datas</button>' : '';
+    }
+    // naFolha: para "Mais ações". No celular, fora da seleção, Selecionar e Baixar ficam só lá
+    function selBtn(naFolha) {
+      if (!lista.length || (celular() && !selecionando && !naFolha)) return '';
       return selecionando ? '<button type="button" class="btn small" data-g="todas">' + (intervaloPer(per) ? 'Tudo do período' : 'Selecionar todas') + ' (' + lista.length + ')</button>'
         : '<button type="button" class="btn small" data-g="selecionar">Selecionar</button>' +
           '<button type="button" class="btn small" data-g="baixar-tudo">Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length) + '</button>';
@@ -1669,11 +1725,15 @@
     function pfAbrir() {
       var off = per.off || 0, r = per.modo === 'semana' ? (off === 0 ? 'semana0' : off === -1 ? 'semana1' : 'semanaX') : per.modo;
       var iv = intervaloPer(per) || [maisDias(hojeIso(), -6), hojeIso()];
-      pf = { r: r, de: iv[0], ate: iv[1] };
+      pf = { r: r, de: iv[0], ate: iv[1], hist: histPoe() };
       renderPf();
       var b = q('.gl-pf-op[aria-pressed="true"]') || q('.gl-pf-op'); if (b) b.focus();
     }
-    function pfFechar() { var aberta = !!pf; pf = null; var el = q('.gl-pf'); if (el) el.remove(); var b = aberta && q('.gl-per'); if (b) b.focus(); }
+    function pfFechar(viaVoltar) {
+      var aberta = !!pf, h = aberta && pf.hist;
+      pf = null; var el = q('.gl-pf'); if (el) el.remove(); var b = aberta && q('.gl-per'); if (b) b.focus();
+      if (h) { if (!viaVoltar) histTira(); focoDepois('.gl-per'); }
+    }
     function pfPer() {
       if (!pf) return per;
       if (pf.r === 'semana0') return { modo: 'semana', off: 0, de: '', ate: '' };
@@ -1774,7 +1834,7 @@
           (a.k === aba && itens.length ? '<small>' + itens.length + '</small>' : '') + '</button>';
       }).join('') : '';
       renderEnv();
-      q('.gl-cts').innerHTML = aba === 'drive' ? '' : contratosHtml();
+      q('.gl-cts').innerHTML = celular() ? barraCel() : aba === 'drive' ? '' : contratosHtml();
       var fil = q('.gl-fil'), bus = fil.querySelector('.gl-dr-busca');
       if (aba === 'drive' && bus && document.activeElement === bus) {   // digitando: só o resto do filtro muda
         var tmp = document.createElement('div'); tmp.innerHTML = filtrosHtml();
@@ -1790,6 +1850,92 @@
       observar();
       if (ver >= 0) renderVer();
       renderMini();   // recolhidos continuam recolhidos, mesmo com poucas fotos: só "Filtros ▾" abre
+      renderFo();
+    }
+    // ---------------------------------------------------------------- celular: barra única e folhas
+    // Até 560 px os filtros e as ações saem da pilha: a barra (contrato, Filtros, ⋯) abre folhas que usam os mesmos seletores e botões
+    var NOTA_ESTRELA = 'Marque com ★ as que vão para o relatório fotográfico.';
+    var mmCel = window.matchMedia ? matchMedia('(max-width:560px)') : null, fo = null, histN = 0, histPula = 0, histDepois = null;
+    function celular() { return !!(mmCel && mmCel.matches); }
+    if (mmCel && mmCel.addEventListener) mmCel.addEventListener('change', function () { if (!root) return; if (fo) fecharFo(); recolher(false); render(); });
+    // o período padrão (esta semana) está dito no resumo e "Todas as datas" não esconde nada: não contam
+    function nFiltros() {
+      var n = per.modo === 'tudo' || (per.modo === 'semana' && !per.off) ? 0 : 1;
+      if (aba === 'drive') return n;
+      return n + (filtro.pid ? 1 : 0) + (filtro.autor ? 1 : 0) + (aba === 'local' && fLocal ? 1 : 0);
+    }
+    function maisHtml() { return selecionando ? '' : (aba === 'drive' && emCartoes() ? '' : selBtn(true)) + trazerHtml(); }
+    function barraCel() {
+      var h = '';
+      if (aba !== 'drive' && (itens.length || filtro.cid)) {
+        var c = contagem(), k = !filtro.cid ? itens.length : filtro.cid === SEM ? c.sem : c.n[filtro.cid] || 0;
+        h += '<button type="button" class="gl-ct gl-ct-l gl-cb-ct" data-g="cts" aria-haspopup="dialog"' + (aba === 'relatorio' && !itens.length ? ' disabled' : '') + '><span>' +
+          esc(filtro.cid ? numCt(filtro.cid) : 'Todos') + '<small> · ' + k + '</small></span> ▾</button>';
+      }
+      if (filtrosHtml(true)) { var n = nFiltros(); h += '<button type="button" class="gl-ct gl-cb-f" data-g="cel-fil" aria-haspopup="dialog">' + IC_FIL + 'Filtros' + (n ? ' (' + n + ')' : '') + '</button>'; }
+      if (maisHtml()) h += '<button type="button" class="gl-ct gl-cb-m" data-g="cel-mais" aria-haspopup="dialog" aria-label="Mais ações">⋯</button>';
+      return h;
+    }
+    function abrirFo(qual) {
+      fo = qual;
+      histPoe();
+      var el = document.createElement('div');
+      el.className = 'gl-sh fo' + (qual === 'mais' ? ' ma' : '');
+      el.innerHTML = '<div class="gl-sh-box gl-fo-box" role="dialog" aria-modal="true" aria-labelledby="glFoT"><div class="gl-sh-top gl-fo-top"><h3 id="glFoT">' + (qual === 'mais' ? 'Mais ações' : 'Filtros') + '</h3>' +
+        '<button type="button" class="gl-fo-x" data-g="fo-fechar" aria-label="Fechar">×</button></div>' +
+        (qual === 'mais' ? '<div class="gl-fo-ma"></div>' : '<div class="gl-fo-c"></div><div class="gl-fo-rod"></div>') + '</div>';
+      root.appendChild(el);
+      renderFo();
+    }
+    // a lista mudou com a folha aberta (filtro trocado, fotos que chegaram): o conteúdo segue e o foco fica no mesmo controle
+    function renderFo() {
+      var el = root && fo && q('.gl-sh.fo');
+      if (!el) return;
+      if (fo === 'mais') { el.querySelector('.gl-fo-ma').innerHTML = maisHtml(); return; }
+      var a = document.activeElement, at = a && el.contains(a) ? ['data-f', 'data-k', 'data-v', 'data-g'].filter(function (x) { return a.hasAttribute(x); })[0] : '';
+      var sel0 = at ? '[' + at + '="' + cssId(a.getAttribute(at)) + '"]' : '';
+      el.querySelector('.gl-fo-c').innerHTML = filtrosHtml(true);
+      el.querySelector('.gl-fo-rod').innerHTML = (aba === 'todas' ? '<p class="gl-fo-nota">' + NOTA_ESTRELA + '</p>' : '') +
+        '<div class="gl-fo-ver"><button type="button" class="btn primary" data-g="fo-fechar">Ver ' + plural(lista.length, 'foto', 'fotos') + '</button></div>';
+      var b = sel0 && !el.contains(document.activeElement) && el.querySelector(sel0);
+      if (b) b.focus({ preventScroll: true });
+    }
+    // depois: o que fazer quando o histórico assentar (a janela que a ação abre entra por cima, sem perder a entrada dela)
+    function fecharFo(viaVoltar, depois) {
+      if (!fo) { if (depois) depois(); return; }
+      var sel0 = fo === 'mais' ? '[data-g="cel-mais"]' : '[data-g="cel-fil"]', el = q('.gl-sh.fo');
+      fo = null;
+      if (el) el.remove();
+      var volta = function () { var b = root && q(sel0); if (b) b.focus({ preventScroll: true }); if (depois) depois(); };
+      if (viaVoltar || !histN) setTimeout(volta, 0); else histTira(volta);
+    }
+    // a tela pode ter sido desenhada de novo: o botão de quem abriu é outro, e ele só sai do inert depois desta volta
+    function focoDepois(sel0) { setTimeout(function () { var b = root && q(sel0); if (b && (!document.activeElement || document.activeElement === document.body)) b.focus({ preventScroll: true }); }, 0); }
+    function prendeTab(e, el) {
+      if (e.key !== 'Tab' || !el || !celular()) return;
+      var l = [].filter.call(el.querySelectorAll('button,input,select,textarea,a[href]'), function (x) { return !x.disabled && x.offsetParent !== null; });
+      if (!l.length) { e.preventDefault(); return; }
+      var i = l.indexOf(document.activeElement);
+      if (e.shiftKey && i <= 0) { e.preventDefault(); l[l.length - 1].focus(); }
+      else if (!e.shiftKey && (i < 0 || i === l.length - 1)) { e.preventDefault(); l[0].focus(); }
+    }
+    // o Voltar do Android fecha só a folha de cima: cada folha aberta no celular tem a sua entrada no histórico (como a escolha do contrato no app.js)
+    function histPoe() {
+      if (!celular()) return false;
+      try { history.pushState(Object.assign({}, history.state || {}, { glFolha: 1 }), ''); histN++; return true; } catch (e) { return false; }
+    }
+    function histTira(depois) {
+      if (histN > 0) histN--;
+      histPula++; histDepois = depois || null;
+      try { history.back(); } catch (e) { histPula--; histDepois = null; if (depois) depois(); }
+    }
+    // chamada no popstate do app; true: a galeria resolveu
+    function voltar() {
+      if (histPula) { histPula--; var f = histDepois; histDepois = null; if (f) f(); return true; }
+      if (!histN || document.querySelector('.modal')) return false;
+      histN--;
+      if (pf) pfFechar(true); else if (cl) fecharCts(true); else if (fo) fecharFo(true);
+      return true;
     }
     // ---------------------------------------------------------------- filtros recolhidos ao rolar
     // Rolou as fotos para baixo (uns 90 px seguidos): abas, contratos, filtros e informações somem e fica uma linha com o resumo.
@@ -1811,7 +1957,7 @@
     function aoRolar() {
       var b = q('.gl-body'), t = b.scrollTop, d = t - recY;
       recY = t;
-      if (rec) return;
+      if (rec || celular()) return;   // no celular a barra já é uma linha só
       if (d < 0) recDesce = 0; else recDesce += d;   // subir zera; evento sem movimento não conta
       if (recDesce >= 90 && filtrosAltos() && t >= someAoRecolher()) {
         // as fotos não pulam: a altura que some em cima sai da rolagem
@@ -1845,7 +1991,7 @@
         '<span><span>' + esc(resumoFiltros()) + '</span><b>' + esc(plural(lista.length, 'foto', 'fotos')) + '</b></span></button>' +
         '<button type="button" class="gl-mini-f" data-g="rec-abrir" aria-expanded="false">Filtros \u25be</button>' : '';
       var info = q('.gl-info'), bt = info && info.querySelector('.gl-recolher');
-      if (!rec && info && !bt && lista.length > 6 && filtrosAltos()) info.insertAdjacentHTML('beforeend', '<div class="gl-recolher"><button type="button" data-g="rec-fechar">\u25b4 Recolher filtros</button></div>');
+      if (!rec && !celular() && info && !bt && lista.length > 6 && filtrosAltos()) info.insertAdjacentHTML('beforeend', '<div class="gl-recolher"><button type="button" data-g="rec-fechar">\u25b4 Recolher filtros</button></div>');
     }
     function renderBar() { if (!root) return; q('.gl-barhost').innerHTML = barHtml(); root.classList.toggle('gl-selon', selecionando && !ocupado); root.classList.toggle('gl-ocupon', !!ocupado); }
     function renderEnv() { if (root) { var e = q('.gl-env'); if (e) e.innerHTML = envioHtml() + baixaHtml() + (semRede && aba !== 'local' ? '<div class="gl-off">Sem conexão: mostrando ' + (semRede === 1 ? 'a foto baixada' : 'as ' + semRede + ' fotos baixadas') + ' neste aparelho.</div>' : ''); } }
@@ -2924,7 +3070,7 @@
 
     function onClick(e) {
       if (pf && e.target.classList && e.target.classList.contains('gl-pf')) { pfFechar(); return; }   // toque no fundo escuro
-      if (e.target.classList && e.target.classList.contains('gl-sh')) { if (ec) fecharEc(); else if (cl) fecharCts(); else if (bs) fecharBaixar(); else fecharCfg(); return; }
+      if (e.target.classList && e.target.classList.contains('gl-sh')) { if (ec) fecharEc(); else if (cl) fecharCts(); else if (fo) fecharFo(); else if (bs) fecharBaixar(); else fecharCfg(); return; }
       var t = e.target.closest('[data-g],[data-aba],[data-ct],.gl-t');
       if (!t || !root.contains(t)) return;
       if (t.hasAttribute('data-ct')) {
@@ -2952,6 +3098,9 @@
       var g = t.getAttribute('data-g');
       if (g === 'per') { pfAbrir(); return; }
       if (g === 'cts') { abrirCts(); return; }
+      if (g === 'cel-fil' || g === 'cel-mais') { abrirFo(g === 'cel-mais' ? 'mais' : 'filtros'); return; }
+      if (g === 'fo-fechar') { fecharFo(); return; }
+      if (t.closest('.gl-sh.ma')) { fecharFo(false, function () { acaoMais(g); }); return; }
       if (g === 'desfazer') { var df = desfazerFn; fecharAviso(); if (df) df(); return; }
       // v119: cópias de fotos apagadas da equipe, conferência com a equipe e o aviso que fica até fechar
       if (g === 'apg-tirar') { tirarCopias(apagadasAqui()); return; }
@@ -2993,7 +3142,7 @@
       if (g === 'cfg-auto') { var on = lsLer(DRIVE_KEY) === '0'; lsPor(DRIVE_KEY, on ? '1' : '0'); renderCfg(); return; }
       if (g === 'cfg-wifi' && o.drive && o.drive.soWifi) { o.drive.soWifi(!o.drive.soWifi()); renderCfg(); setTimeout(renderEnv, 50); return; }
       if (g === 'cfg-cache') { apagarCache(); return; }
-      if (t.closest('.gl-sh') && g !== 'limpar') return;
+      if (t.closest('.gl-sh') && g !== 'limpar' && !t.closest('.gl-sh.fo')) return;
       if (e.target.classList && e.target.classList.contains('gl-sh')) { fecharBaixar(); fecharCfg(); return; }
       if (g === 'per-ant') { mudarPer({ modo: 'semana', off: (per.modo === 'semana' ? per.off || 0 : 0) - 1, de: '', ate: '' }); return; }
       if (g === 'per-prox') { if (per.modo === 'semana' && (per.off || 0) < 0) mudarPer({ modo: 'semana', off: (per.off || 0) + 1, de: '', ate: '' }); return; }
@@ -3005,7 +3154,7 @@
       if (t.closest('.gl-pf')) return;
       if (g === 'fechar') close();
       else if (g === 'entrar') { close(); if (o.entrar) o.entrar(); }
-      else if (g === 'selecionar') { selecionando = true; sel = {}; render(); }
+      else if (acaoMais(g)) { /* feito */ }
       else if (g === 'sair-sel') { selecionando = false; sel = {}; render(); }
       else if (g === 'todas') { var tudo = lista.every(function (x) { return sel[x.id]; }); sel = {}; if (!tudo) lista.forEach(function (x) { sel[x.id] = 1; }); render(); }
       else if (g === 'sel-grupo') {
@@ -3013,7 +3162,6 @@
         idx.forEach(function (i2) { if (cheio) delete sel[lista[i2].id]; else sel[lista[i2].id] = 1; });
         render();
       }
-      else if (g === 'baixar-tudo') baixar(lista.slice());
       else if (g === 'rel-pdf') o.relatorioPdf({ itens: itens.slice(), arquivo: arquivo, cid: filtro.cid });
       else if (g === 'enviar') { if (o.drive) o.drive.pump(true); setTimeout(render, 300); }   // a pessoa pediu: não espera as pausas da fila
       else if (g === 'enviar-ap') enviarDrive(Object.keys(locais).map(function (k) { return locais[k]; }).filter(function (x) { return x.situacao === 'aparelho' && !x.semCar; }), true);
@@ -3032,14 +3180,21 @@
       else if (g === 'ver-sem') { filtro.pid = SEM; render(); }
       else if (g === 'km-tirar') { filtro.km = null; render(); }
       else if (g === 'ids-tirar') { filtro.ids = null; render(); }
-      else if (g === 'drive-trazer') trazerDoDrive();
-      else if (g === 'drive-pastas') pastasDrive();
-      else if (g === 'drive-conferir') conferirDrive();
       else if (g === 'mv-fechar') fecharMover();
       else if (g === 'mv-usar') { var sp = q('#glMvP'); if (sp && mv && mv.sug) { sp.value = mv.sug.id; sugestao(); } }
       else if (g === 'mv-salvar') salvarMover();
       else if (g === 'mv-ct') { var sc = q('#glMvC'); if (sc) { sc.value = t.getAttribute('data-id'); pontosMover(); } }
       else fazer(g, t.hasAttribute('data-um') ? [lista[ver]] : selecionadas());
+    }
+    // as ações que no celular ficam em "Mais ações": os mesmos botões, de um lugar só
+    function acaoMais(g) {
+      if (g === 'selecionar') { selecionando = true; sel = {}; render(); }
+      else if (g === 'baixar-tudo') baixar(lista.slice());
+      else if (g === 'drive-trazer') trazerDoDrive();
+      else if (g === 'drive-pastas') pastasDrive();
+      else if (g === 'drive-conferir') conferirDrive();
+      else return false;
+      return true;
     }
     function onChange(e) {
       if (e.target.id === 'glPfDe' || e.target.id === 'glPfAte') {
@@ -3065,8 +3220,9 @@
     function onKey(e) {
       if (!root || document.querySelector('.modal')) return;
       if (mv && (e.key !== 'Escape' || mv.salvando)) return;   // no painel de contrato e ponto as setas são das listas (e salvando, nada)
-      if (pf) { if (e.key === 'Escape') pfFechar(); return; }
-      if (cl) { if (e.key === 'Escape') fecharCts(); return; }
+      if (pf) { if (e.key === 'Escape') pfFechar(); else prendeTab(e, q('.gl-pf')); return; }
+      if (cl) { if (e.key === 'Escape') fecharCts(); else prendeTab(e, q('.gl-sh.cl')); return; }
+      if (fo) { if (e.key === 'Escape') fecharFo(); else prendeTab(e, q('.gl-sh.fo')); return; }
       if (ec) { if (e.key === 'Escape') fecharEc(); return; }
       if (bs || cfg) { if (e.key === 'Escape') { fecharBaixar(); fecharCfg(); } return; }
       if (e.key === 'Escape') { if (mv) fecharMover(); else if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
@@ -3115,6 +3271,8 @@
       per = f.pid || filtro.km || filtro.ids ? { modo: 'tudo', off: 0, de: '', ate: '' } : lerPer();
       pf = null;
       cl = null; ec = null;
+      var fo0 = q('.gl-sh.fo'); if (fo0) fo0.remove();
+      fo = null; histN = 0; histPula = 0; histDepois = null;
       recolher(false); recY = 0;
       fecharMover();
       var vis = abasVisiveis().map(function (a) { return a.k; });
@@ -3130,7 +3288,7 @@
       if (obs) obs.disconnect();
       soltarGrande(); soltarUrls();
       document.removeEventListener('keydown', onKey);
-      root.remove(); root = null; ver = -1;
+      root.remove(); root = null; ver = -1; fo = null; histN = 0; histPula = 0; histDepois = null;
       document.body.style.overflow = '';
       var cb = aoFechar;
       aoFechar = null;
@@ -3162,7 +3320,7 @@
         });
       }, 400);
     }
-    return { open: open, close: close, changed: changed, isOpen: function () { return !!root; }, baixando: function () { return bx ? bx.ls.length - bx.fim : 0; } };
+    return { open: open, close: close, changed: changed, voltar: voltar, isOpen: function () { return !!root; }, baixando: function () { return bx ? bx.ls.length - bx.fim : 0; } };
   };
   // as contas sem tela, para o teste em ferramentas/teste-galeria.js (node, sem banco)
   window.Galeria.limparEnviadas = limparEnviadas;

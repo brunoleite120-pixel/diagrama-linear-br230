@@ -9028,10 +9028,11 @@
     window.addEventListener('popstate', function (e) {
       if (modalPula) { modalPula = false; var fm = modalDepois; modalDepois = null; if ($('modal')) modalPoeHist(); if (fm) fm(); return; }
       if (escPula) { escPula = false; var f = escDepois; escDepois = null; if (f) f(); return; }
+      if (galeria && galeria.voltar()) return;   // as folhas da galeria no celular
       if ($('modal')) { modalHist = false; if ($('modal').dataset.ocupado) modalPoeHist(); else if (modalCancela) modalCancela(); return; }
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};
-      if (s.modal) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
+      if (s.modal || s.glFolha) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
       if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria') { mostraGeral(s.tela); return; }
       if (visaoOn) { if (!s.tela && s.pg) try { history.back(); } catch (er) { /* segue */ } return; }
       if (s.pg && s.pg !== pg && pgAtivo()) irPg(s.pg, true);
