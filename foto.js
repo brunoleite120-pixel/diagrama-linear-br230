@@ -831,16 +831,19 @@
       root.setAttribute('role', 'dialog');
       root.setAttribute('aria-modal', 'true');
       root.setAttribute('aria-labelledby', 'ftTitle');
+      // no computador quase sempre se importa: o principal é Importar fotos; no celular, Tirar foto
+      var noCel = celular(), clTirar = noCel ? 'ft-big ft-dl' : 'ft-big alt ft-dl', clImportar = noCel ? 'ft-big alt ft-dl' : 'ft-big ft-dl';
+      var btTirar = camSupported()
+        ? '<button type="button" class="' + clTirar + '" data-ft="cam-open">' + CAM + '<span class="ft-bt"><span class="ft-bn">Tirar foto</span><span class="ft-sub"></span></span></button>'
+        : '<label class="' + clTirar + '">' + CAM + '<span class="ft-bt"><span class="ft-bn">Tirar foto</span><span class="ft-sub">' + (opts.gps ? 'uma por vez · o km sai do GPS ou do local gravado' : 'uma por vez · deixe a câmera salvando o local') + '</span></span><input class="ft-file" type="file" id="ftCam" accept="image/*" capture="environment"></label>';
+      var btImportar = '<label class="' + clImportar + '">' + ARQ + '<span class="ft-bt"><span class="ft-bn">Importar fotos</span><span class="ft-sub">uma ou várias · o km sai do local gravado</span></span><input class="ft-file" type="file" id="ftArq" multiple></label>';
       root.innerHTML =
         '<div class="ft-head"><h2 id="ftTitle">Foto com carimbo</h2><span class="ft-ct"></span><button type="button" class="ft-x" data-ft="close" aria-label="Fechar">×</button><p class="ft-ncb" id="ftNcb" hidden></p></div>' +
         '<div class="ft-body">' +
           '<div class="ft-start">' +
             '<h3>Tirar ou importar fotos</h3>' +
             '<div class="ft-gps"></div>' +
-            (camSupported()
-              ? '<button type="button" class="ft-big ft-dl" data-ft="cam-open">' + CAM + '<span class="ft-bt"><span class="ft-bn">Tirar foto</span><span class="ft-sub"></span></span></button>'
-              : '<label class="ft-big ft-dl">' + CAM + '<span class="ft-bt"><span class="ft-bn">Tirar foto</span><span class="ft-sub">' + (opts.gps ? 'uma por vez · o km sai do GPS ou do local gravado' : 'uma por vez · deixe a câmera salvando o local') + '</span></span><input class="ft-file" type="file" id="ftCam" accept="image/*" capture="environment"></label>') +
-            '<label class="ft-big alt ft-dl">' + ARQ + '<span class="ft-bt"><span class="ft-bn">Importar fotos</span><span class="ft-sub">uma ou várias · o km sai do local gravado</span></span><input class="ft-file" type="file" id="ftArq" multiple></label>' +
+            (noCel ? btTirar + btImportar : btImportar + btTirar) +
             '<p class="ft-msg ft-warn" hidden></p>' +
             '<p class="ft-note" hidden></p>' +
             '<details class="ft-outras"><summary>Outras formas</summary><div class="ft-outras-c">' +
