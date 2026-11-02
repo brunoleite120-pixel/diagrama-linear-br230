@@ -152,7 +152,7 @@
       if (!d || !d.ms.length) h += d && !d.ms.length && op.estado(c) === 'ok' ? vazio('Ainda sem medições carregadas.') : estadoHtml(c);
       else {
         h += '<div><div class="md-medido"><span><b>' + moeda(d.total) + '</b> medido</span><span title="' + esc(d.base) + '">' + (d.pi != null ? 'de ' + moeda(d.pi) + ' (' + esc(d.base.replace(/ \(.+\)$/, '')) + ')' : 'falta o PI') + '</span></div>' + reajHtml(d) + barra(d) +
-          '<div class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' executado' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></div></div>';
+          '<div class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' do valor medido (PI)' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></div></div>';
         h += '<dl class="md-dl"><div><dt>Ritmo (últimos 6 meses)</dt><dd title="' + esc(ritmoTxt(d)) + '">' + (d.ritmo == null ? 'Sem base' : moeda(d.ritmo, '/mês')) + '</dd></div><div><dt>No ritmo atual</dt><dd title="' + esc(projTxt(d)) + '">' + esc(projTxt(d, true)) + '</dd></div>' +
           '<div><dt>Medições</dt><dd>' + d.ms.length + ' (' + d.comValor + ' com valor)</dd></div><div><dt>Avisos da leitura</dt><dd>' + avisos(d).length + '</dd></div></dl>' +
           '<div class="md-acoes"><small class="' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</small>' + botao('abrir', 'Abrir medições →', attrs) + '</div>';
@@ -162,7 +162,7 @@
       h += '</article>';
       if (!d || !d.ms.length) return h.replace('md-card-desktop', 'md-card-estado');
       return h + '<button type="button" class="card md-card md-card-cel" data-md="abrir"' + attrs + ' aria-label="' + esc('Abrir medições de ' + nome(c) + '; última: ' + d.ult.n + 'ª · ' + mesTxt(d.ultima) + '; ' + baseTxt(d) + '; saldo: ' + (d.pi != null ? dinheiro(d.pi - d.total) : 'falta o PI') + '; ' + falta(d)) + '"><span class="md-cel-top"><b>' + esc(nome(c)) + '</b><span>Última: <b>' + esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)) + '</b></span></span>' + barra(d) +
-        '<span class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' executado' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></span><span class="md-falta ' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</span></button>';
+        '<span class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' do valor medido (PI)' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></span><span class="md-falta ' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</span></button>';
     }
     function semMedicoes(c) {
       var d = dado(c);

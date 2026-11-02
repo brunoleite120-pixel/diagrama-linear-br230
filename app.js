@@ -5458,6 +5458,7 @@
     var pr = document.querySelector('#menuPop [data-act="print"]');
     if (pr) pr.hidden = semPdf;
     if ($('menuPdf')) $('menuPdf').hidden = semPdf;
+    menuGrupos();
     aplicaPg();
     return on;
   }
@@ -6897,6 +6898,14 @@
 
   // ------------------------------------------------------------------ menu
   function closeMenu() { $('menuPop').hidden = true; $('btnMenu').setAttribute('aria-expanded', 'false'); }
+  // grupo sem nenhum item para este acesso, nesta tela: sai junto com o título
+  function menuGrupos() {
+    var pop = $('menuPop');
+    if (pop.hidden) return;
+    [].forEach.call(pop.querySelectorAll('.menu-grupo'), function (g) {
+      g.hidden = ![].some.call(g.querySelectorAll('button'), function (x) { return !x.hidden && getComputedStyle(x).display !== 'none'; });
+    });
+  }
   function onMenu(e) {
     var b = e.target.closest('[data-act]');
     if (!b) return;
@@ -8061,9 +8070,8 @@
       b.textContent = banco.login ? (banco.login.nome || 'Equipe') + ' · ' + papelNome(banco.login.papel) : 'Entrar';
       b.classList.toggle('primary', !banco.login);
     }
-    var ml = $('menuLogin'), mh = $('menuLoginHr');
+    var ml = $('menuLogin');
     if (ml) { ml.hidden = !banco.on; ml.textContent = b ? b.textContent : 'Entrar'; }
-    if (mh) mh.hidden = !banco.on;
     // itens do menu Dados conforme o papel
     // fiscal e analista: sem backup (o menu fica com a conta, o PDF e a impressão do que veem)
     var equipe = !banco.on || isEng();
@@ -8072,6 +8080,7 @@
       var el = document.querySelector('#menuPop [data-act="' + k + '"]');
       if (el) el.hidden = !show[k];
     });
+    menuGrupos();
   }
   // contratos arquivados (decisão D-2): saem de todas as telas, mas os dados ficam no banco; só o Administrador os recebe e
   // restaura (Dados › Contratos arquivados). Aqui fica só o resumo de cada um
@@ -8758,6 +8767,7 @@
       else it.textContent = 'Aprovar mudanças dos fiscais' + (n ? ' (' + n + ')' : '');
       it.classList.toggle('tem-aprov', !!k);
     }
+    menuGrupos();
     var m = $('btnMenu');
     if (m) {
       var sl = m.querySelector('.menu-selo');
@@ -9183,6 +9193,7 @@
       if (rec) { rec.hidden = !nr; rec.textContent = 'Alterações guardadas (' + nr + ')'; }
       pop.hidden = !pop.hidden;
       $('btnMenu').setAttribute('aria-expanded', String(!pop.hidden));
+      menuGrupos();
       // acesso sem nenhuma opção aqui (fiscal no computador): explica, em vez de abrir um menu vazio
       if (!pop.hidden) {
         var algum = [].some.call(pop.querySelectorAll('button[data-act]'), function (x) { return !x.hidden && x.offsetParent; }), vz = $('menuVazio');
@@ -9191,6 +9202,7 @@
       }
     });
     $('menuPop').addEventListener('click', onMenu);
+    window.addEventListener('resize', menuGrupos);   // girar o aparelho muda o que é só do celular
     $('fileInput').addEventListener('change', function (e) {
       var f = e.target.files && e.target.files[0];
       if (f) openBackup(f);
