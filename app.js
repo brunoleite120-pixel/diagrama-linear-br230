@@ -3106,7 +3106,15 @@
     });
     return h.join('');
   }
+  // sem contrato neste aparelho e a visão geral não abriu (visao.js não carregou ou falhou): avisa, em vez de travar a abertura
+  function semContratos() {
+    $('editor').innerHTML = '<section class="card" role="alert"><div class="card-body"><b>Nenhum contrato neste aparelho</b>' +
+      '<p>A tela inicial não abriu e não há contrato guardado para mostrar. Confira a internet e recarregue a página.</p>' +
+      '<div><button type="button" class="btn primary" style="min-height:44px">Recarregar</button></div></div></section>';
+    $('editor').querySelector('button').addEventListener('click', function () { location.reload(); });
+  }
   function renderEditor() {
+    if (!state.contracts.length) { semContratos(); return; }
     abaArruma();
     var c = active(), cons = isConserva(c);
     var h = [];
@@ -5263,6 +5271,7 @@
     if (medicoesOn) { desenhaMedicoes(); return; }
     if (visaoOn && visao && !$('visaoHost').hidden) { if (!desenhaVisao()) renderAll(); return; }
     if (visaoOn && $('contratosHost') && !$('contratosHost').hidden) { renderContratos(); return; }
+    if (!state.contracts.length) return;
     var c = active(), tot = totals(c);
     if (view === 'mapa' && mapa) {
       mapa.render();
@@ -5296,6 +5305,7 @@
     renderTabs();
     if (mostraVisao()) { if (telaG !== 'geral') return; if (desenhaVisao()) return; }
     if (medicoesOn && desenhaMedicoes()) return;
+    if (!state.contracts.length) { renderEditor(); return; }
     // fiscal (sem o diagrama): a folha ao lado fica no mapa
     var cR = active();
     if (view !== 'mapa' && !podeDiagrama(cR) && podeMapa(cR) && temMapa()) setView('mapa');
