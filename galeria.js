@@ -366,6 +366,7 @@
     // celular: barra única (contrato, Filtros, ⋯), resumo em uma linha e as folhas por cima de tudo, também das duas barras do app
     '@media (pointer:coarse),(max-width:700px){.gl-g button[data-ct]{position:relative;z-index:1;margin-top:-14px;margin-bottom:-8px;padding-top:16px;padding-bottom:10px}}',
     '@media (max-width:560px){.gl-fil:empty{display:none}',
+    '  .gl-fil>.gl-chip{min-height:44px}',
     '  .gl-cts{overflow:visible;gap:8px}',
     '  .gl-cb-ct{flex:1 1 0;min-width:0;gap:4px}',
     '  .gl-cb-ct>span{min-width:0;overflow:hidden;text-overflow:ellipsis}',
@@ -890,8 +891,8 @@
   }
   window.Galeria = function (o) {
     var nomesCt = o.nomes || nomesPadrao();   // funções de nome do contrato (o.nomes do app.js ou a cópia curta)
-    var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, agrupar = '';
-    var per = lerPer(), pf = null;   // período escolhido; pf: rascunho da janela do período (null = fechada)
+    var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, ncIds = {}, agrupar = '';
+    var per = lerPer(), pf = null, perNc = null;   // período escolhido; pf: rascunho da janela do período (null = fechada); perNc: o período para o qual "Fotos de NC" volta
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
     var ver = -1, grande = null, ocupado = null, cancelar = false, mv = null, guardadas = {}, carregando = null;
@@ -1332,7 +1333,7 @@
     function semPeriodo(it) {
       if (aba === 'drive') return (dbusca.trim() ? true : noCaminho(it)) && naBusca(it);   // a busca vale para o Drive todo
       return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
-        (!filtro.ids || filtro.ids.indexOf(it.id) >= 0) &&
+        (!filtro.ids || filtro.ids.indexOf(it.id) >= 0) && (!filtro.nc || ncIds[it.id]) &&
         (!filtro.km || (it.km != null && isFinite(it.km) && Number(it.km) >= filtro.km[0] - FOLGA_KM && Number(it.km) <= filtro.km[1] + FOLGA_KM)) &&
         (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
         (aba !== 'local' || !fLocal || (fLocal === 'semcar' ? semCar(it) : !!locais[it.id] && locais[it.id].situacao === fLocal)) &&
@@ -1344,6 +1345,8 @@
     }
     function noPeriodo(it, iv) { if (!iv) return true; var k = diaDaFoto(it.em); return !!k && k >= iv[0] && k <= iv[1]; }
     function filtrar() {
+      // com a foto aberta a lista não muda sozinha (outra pessoa corrigiu a NC na leitura de 20 s); o Drive não usa
+      if (ver < 0 && aba !== 'drive') ncIds = (o.ncFotos && o.ncFotos()) || {};
       var iv = intervaloPer(per);
       lista = itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); });
       var c0 = null;
@@ -1355,7 +1358,7 @@
       return iv ? itens.filter(function (it) { return semPeriodo(it) && !noPeriodo(it, iv); }).length : 0;
     }
     function contarPeriodo(p) { var iv = intervaloPer(p); return itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); }).length; }
-    function mudarPer(p) { per = p; salvarPer(per); sel = {}; render(); }
+    function mudarPer(p) { per = p; perNc = null; salvarPer(per); sel = {}; render(); }
     function opcoes(sel0, vazio, pares) {
       return '<option value="">' + esc(vazio) + '</option>' + pares.map(function (p) {
         return '<option value="' + esc(p[0]) + '"' + (p[0] === sel0 ? ' selected' : '') + '>' + esc(p[1]) + '</option>';
@@ -1443,8 +1446,18 @@
     function selosHtml() {
       var h = '';
       if (filtro.ids) h += '<button type="button" class="gl-chip" data-g="ids-tirar" aria-pressed="true" aria-label="Tirar o filtro das fotos da NC">' + esc(filtro.idsNome + ' · ' + filtro.ids.length + (filtro.ids.length === 1 ? ' foto' : ' fotos')) + ' ✕</button>';
+      // no celular a ficha fica na folha Filtros; aqui, o selo a um toque
+      if (filtro.nc && celular()) h += '<button type="button" class="gl-chip" data-g="nc-fil" aria-pressed="true" aria-label="Tirar o filtro Fotos de NC">Fotos de NC · ' + lista.length + ' ✕</button>';
       if (filtro.km) h += '<button type="button" class="gl-chip" data-g="km-tirar" aria-pressed="true" aria-label="Tirar o filtro do km">' + esc((filtro.km[2] ? filtro.km[2] + ' · ' : '') + 'km ' + String(filtro.km[0]).replace('.', ',') + ' a ' + String(filtro.km[1]).replace('.', ',')) + ' ✕</button>';
       return h;
+    }
+    // "Fotos de NC": as ligadas a uma NC aberta ou em correção, de qualquer contrato; a quantidade já com os outros filtros (desligada, de
+    // todas as datas, que é o que ela mostra ao ligar; ligada, o período que a pessoa escolher).
+    // Sem nenhuma foto ligada, não aparece; aberta pelo cartão de uma NC, o selo daquela NC já diz
+    function ncChip() {
+      if (filtro.ids || (!filtro.nc && !itens.some(function (it) { return ncIds[it.id]; }))) return '';
+      var iv = filtro.nc ? intervaloPer(per) : null, n = itens.filter(function (it) { return ncIds[it.id] && semPeriodo(it) && noPeriodo(it, iv); }).length;
+      return '<button type="button" class="gl-chip" data-g="nc-fil" aria-pressed="' + !!filtro.nc + '">Fotos de NC · ' + n + '</button>';
     }
     // folha: o conteúdo da folha Filtros do celular, com o nome de cada grupo. No celular a fila mostra só os selos (no Drive, a busca e as pastas)
     function filtrosHtml(folha) {
@@ -1478,6 +1491,8 @@
             .map(function (x) { return chipL(x[0], x[1], cs[x[0]]); }).join('') + '</div>');
       }
       if (!folha) h += selosHtml();
+      var cNc = ncChip();
+      if (cNc) h += rot('Não conformidade', folha ? '<div class="gl-chips">' + cNc + '</div>' : cNc);
       if ((Object.keys(ps).length || filtro.pid || semPonto) && !ehCons(filtro.cid)) {
         h += rot('Ponto', '<select data-f="pid" aria-label="Ponto">' + opcoes(filtro.pid, 'Todos os pontos', ordem(ps).concat(semPonto || filtro.pid === SEM ? [[SEM, 'Sem ponto (' + semPonto + ')']] : [])) + '</select>');
       }
@@ -1869,7 +1884,7 @@
     function nFiltros() {
       var n = per.modo === 'tudo' || (per.modo === 'semana' && !per.off) ? 0 : 1;
       if (aba === 'drive') return n;
-      return n + (filtro.pid ? 1 : 0) + (filtro.autor ? 1 : 0) + (aba === 'local' && fLocal ? 1 : 0);
+      return n + (filtro.pid ? 1 : 0) + (filtro.autor ? 1 : 0) + (filtro.nc ? 1 : 0) + (aba === 'local' && fLocal ? 1 : 0);
     }
     function maisHtml() { return selecionando ? '' : (aba === 'drive' && emCartoes() ? '' : selBtn(true)) + trazerHtml(); }
     function barraCel() {
@@ -1984,7 +1999,7 @@
       });
       Array.prototype.forEach.call(root.querySelectorAll('.gl-fil .gl-chip[aria-pressed="true"]'), function (c) {
         if (c.getAttribute('data-g') === 'dr-modo') return;
-        var s = c.querySelector('span'); ps.push((s ? s.textContent : c.textContent).replace(/\s*·\s*\d+$/, '').trim());
+        var s = c.querySelector('span'); ps.push((s ? s.textContent : c.textContent).replace(/\s*·\s*\d+( ✕)?$/, '').trim());
       });
       if (!tr && !ct && aba !== 'drive') ps.unshift('Todos os contratos');
       if (!q('.gl-per[aria-pressed="true"]') && !q('.gl-pers .gl-chip[aria-pressed="true"]')) ps.push(rotuloPer(per));
@@ -3133,6 +3148,14 @@
       if (g === 'rec-abrir' || g === 'rec-fechar') { recolher(g === 'rec-fechar'); return; }
       if (g === 'per-chip') { var kc = t.getAttribute('data-k'); mudarPer(kc === 'semana0' ? { modo: 'semana', off: 0, de: '', ate: '' } : { modo: kc, off: 0, de: '', ate: '' }); return; }
       if (g === 'fl') { fLocal = t.getAttribute('data-v') || ''; sel = {}; render(); return; }
+      if (g === 'nc-fil') {
+        filtro.nc = !filtro.nc; sel = {};
+        // NC costuma durar mais que o período: ligada, todas as datas, sem trocar a escolha guardada; desligada, volta a ela
+        if (filtro.nc) { perNc = per; per = { modo: 'tudo', off: 0, de: '', ate: '' }; } else if (perNc) { per = perNc; perNc = null; }
+        render();
+        if (!fo) { var bNc = q('.gl-fil [data-g="nc-fil"]') || q('[data-g="cel-fil"]') || q('.gl-fil button, .gl-fil select'); if (bNc) bNc.focus({ preventScroll: true }); }   // o selo some ao tirar: o foco vai para Filtros
+        return;
+      }
       if (g === 'dr-ir') { var pth = []; try { pth = JSON.parse(t.getAttribute('data-p') || '[]'); } catch (e2) { pth = []; } irPasta(Array.isArray(pth) ? pth : []); return; }
       if (g === 'dr-modo') { var mv0 = t.getAttribute('data-v') === 'pessoa' ? 'pessoa' : 'contrato'; if (mv0 !== dmodo) { dmodo = mv0; lsPor(DMODO_KEY, mv0); irPasta([]); } return; }
       if (g === 'dr-atualizar') { dlista = null; semMini = {}; carregar(); return; }
@@ -3276,6 +3299,7 @@
       filtro.km = f.km && isFinite(f.km[0]) && isFinite(f.km[1]) ? [Math.min(f.km[0], f.km[1]), Math.max(f.km[0], f.km[1]), String(f.kmNome || '')] : null;
       // "Fotos deste ponto": todas as datas do ponto (sem trocar a escolha guardada); senão, o período guardado neste aparelho
       per = f.pid || filtro.km || filtro.ids ? { modo: 'tudo', off: 0, de: '', ate: '' } : lerPer();
+      perNc = null;
       pf = null;
       cl = null; ec = null;
       var fo0 = q('.gl-sh.fo'); if (fo0) fo0.remove();

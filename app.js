@@ -5208,6 +5208,15 @@
     if (c === active()) rerenderPoint(p);
     save();
   }
+  // os ids das fotos ligadas a NC aberta ou em correção, para o filtro "Fotos de NC" da galeria: as dos pontos (com o rascunho
+  // desta pessoa) e as da mudança aguardando aprovação. A corrigida já tirou a lista (as fotos ficam só na galeria)
+  function ncFotosIds() {
+    var m = {};
+    function poe(sv) { if (sv && comQtd(oaeSt(sv)) && Array.isArray(sv.fotos)) sv.fotos.forEach(function (id) { m[id] = 1; }); }
+    state.contracts.forEach(function (c) { (c.pontos || []).forEach(function (p) { Object.keys(p.serv || {}).forEach(function (k) { poe(p.serv[k]); }); }); });
+    (banco.propostas || []).forEach(function (x) { Object.keys(x.campos || {}).forEach(function (k) { if (k.indexOf('serv.') === 0) poe((x.campos[k] || {}).v); }); });
+    return m;
+  }
   // miniaturas das fotos da NC (cartão da NC e mudança aguardando aprovação): as do aparelho (fila do Drive) e as do banco
   function ncFtHtml(fid, tira) {
     return '<span class="nc-ft" data-foto="' + esc(fid) + '"><button type="button" class="nc-ft-v" data-act="nc-fotos-ver" aria-label="Ver as fotos da NC"><img alt=""></button>' +
@@ -8931,7 +8940,7 @@
         contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin, carimbar: function (fotos) { openFoto('', fotos); },
         podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, nativo: isNativeApp, onBaixa: renderGaleriaBtn,
-        relatorioPdf: window.RelatorioFoto ? relatorioPdf : null
+        relatorioPdf: window.RelatorioFoto ? relatorioPdf : null, ncFotos: ncFotosIds
       });
     }
     galeria.open(f);
