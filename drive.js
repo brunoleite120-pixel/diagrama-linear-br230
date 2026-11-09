@@ -174,7 +174,8 @@
         bytes = all.reduce(function (a, r) { return a + (r.temArquivo ? r.tamanho || 0 : 0); }, 0);
         contado = true;
         change();
-      }, function () { n = 0; if (contado !== true) contado = 'erro'; });
+      // não leu as fotos do aparelho: fica a última contagem (zerar dizia "tudo enviado" ao aviso de endereço) e a marca de erro
+      }, function () { contado = 'erro'; });
     }
     function later(ms) { clearTimeout(timer); timer = setTimeout(function () { pump(); }, ms); }
     // a pasta antiga do contrato (o Lote) que o script renomeia: só texto não vazio; sem ela, o registro fica sem o campo
@@ -454,7 +455,11 @@
         });
       });
     }
+    // naoForcar: a pessoa pausou (ou pediu só no Wi-Fi) depois de um "Enviar agora". A força acaba ali, também para a foto que
+    // ainda estava subindo (ela chamava a fila de novo com a força de antes, e a pausa não segurava nada)
+    var naoForcar = false;
     function pump(forcar) {
+      if (naoForcar) { forcar = false; forcado = false; }
       forcar = forcar === true || forcado;
       if (forcar) forcado = true;
       var url = opts.getUrl(), login = opts.getLogin(), g = geracao;
@@ -515,9 +520,10 @@
     setInterval(function () { pump(); }, 60000);
     if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener('change', function () { pump(); });
     return {
-      add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, corrigir: corrigir, pump: pump, resetCode: resetCode, post: post,
-      pausar: function (v) { lsPor(PAUSA_KEY, v); if (!v) pump(); else change(); },
-      soWifi: function (v) { if (v != null) { lsPor(WIFI_KEY, v); pump(); } return !!lsLer(WIFI_KEY); },
+      add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, corrigir: corrigir, resetCode: resetCode, post: post,
+      pump: function (forcar) { if (forcar === true) naoForcar = false; return pump(forcar); },   // "Enviar agora" volta a valer
+      pausar: function (v) { lsPor(PAUSA_KEY, v); if (!v) pump(); else { naoForcar = true; forcado = false; change(); } },
+      soWifi: function (v) { if (v != null) { lsPor(WIFI_KEY, v); if (v) { naoForcar = true; forcado = false; } pump(); } return !!lsLer(WIFI_KEY); },
       sabeRede: function () { return !!rede(); },
       info: function () {
         // próxima tentativa: o fim da pausa da fila ou a foto que volta primeiro (parada pelo acesso: só ao entrar de novo)

@@ -6951,6 +6951,7 @@
   var RECUSA_KEY = 'diagrama-linear.recusadas';     // alterações que o banco recusou de vez (guardadas, nunca apagadas sozinhas)
   var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], acesso: null, base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false,
     falhas: 0, espera: 0, lote: 0,   // falhas seguidas do servidor, quando tentar de novo e tamanho do lote ao separar uma recusa
+    bloqueio: 0,   // até quando o banco bloqueou esta rede (muitas tentativas com código errado)
     semEspaco: false, arquivados: [], envio: 0 };   // fila sem cópia no aparelho; contratos arquivados (só o Administrador recebe); nº do envio em andamento
   var flushTimer = null;
 
@@ -7213,7 +7214,10 @@
       var op = clone(op0);   // a fila tem a sua cópia: o que se mexe depois na tela (um rascunho) não entra nela
       var sent = banco.pend.slice(0, banco.sending), rest = banco.pend.slice(banco.sending);
       if (op.t === 'apagar_contrato') rest = rest.filter(function (x) { return x.cid !== op.id; });
-      var k = opKey(op), i = rest.findIndex(function (x) { return opKey(x) === k; });
+      // junta com a ÚLTIMA do mesmo ponto/contrato. Depois de um envio que falhou, a fila pode ter duas (a que ia e a feita
+      // durante o envio): juntando com a primeira, a do meio subia depois e o banco via o valor mais velho por último
+      var k = opKey(op), i = -1;
+      for (var j = rest.length - 1; j >= 0; j--) if (opKey(rest[j]) === k) { i = j; break; }
       if (i < 0) rest.push(op);
       else { var m = mergeOp(rest[i], op); if (m) rest[i] = m; else rest.splice(i, 1); }
       banco.pend = sent.concat(rest);
@@ -7712,6 +7716,9 @@
     momNovo(ops);
     scheduleFlush(1200);
   }
+  // tenta já (o sinal voltou, a pessoa entrou de novo ou mandou de novo), a não ser que a espera seja a do bloqueio do banco:
+  // tentar antes dos 5 minutos só o prolonga
+  function esperaZera() { if (!(banco.bloqueio > Date.now())) banco.espera = 0; }
   function scheduleFlush(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms || 0); syncStatus(); }
   function flush() {
     if (!banco.on || banco.busy || !banco.pend.length || !banco.login) { syncStatus(); return; }
@@ -7734,7 +7741,7 @@
       banco.online = true;
       banco.at = new Date();
       banco.pend = banco.pend.filter(function (o) { return ops.indexOf(o) < 0; });   // só as que foram neste envio
-      banco.falhas = 0; banco.espera = 0;
+      banco.falhas = 0; banco.espera = 0; banco.bloqueio = 0;
       if (!banco.pend.length) banco.lote = 0; else if (banco.lote) banco.lote = Math.min(500, banco.lote * 2);   // separou a recusa: volta a crescer
       if (res && res.propostas != null) {                            // fiscal: vira proposta, o banco não muda
         if (res.propostas) { if (undoProp) undoFecha(); toast('Enviado para aprovação de um engenheiro.', 4000); }
@@ -7759,7 +7766,14 @@
       var code = err && err.code;
       if (code === 'sem_rede') { banco.online = false; syncStatus(); return; }
       if (code === 'codigo_invalido') { logout(true); toast('Seu acesso mudou ou foi desativado. Entre de novo para enviar as alterações deste aparelho.', 7000); return; }
-      if (code === 'muitas_tentativas') { toast('O banco bloqueou esta rede por muitas tentativas com código errado. Tente de novo em 5 minutos.', 7000); syncStatus(); return; }
+      if (code === 'muitas_tentativas') {
+        // espera os 5 minutos do bloqueio (antes tentava de novo a cada leitura de 20 s, repetindo o aviso); avisa uma vez
+        var jaBloq = banco.bloqueio > Date.now();
+        banco.bloqueio = banco.espera = Date.now() + 300000;
+        if (!jaBloq) toast('O banco bloqueou esta rede por muitas tentativas com código errado. As alterações continuam guardadas neste aparelho e sobem sozinhas em 5 minutos.', 7000);
+        scheduleFlush(300000);
+        return;
+      }
       if (!recusaDefinitiva(err)) {
         // falha do servidor (5xx, tempo esgotado, banco reiniciando, função ainda sendo trocada...): nada sai da fila;
         // tenta de novo sozinho, esperando cada vez mais (10 s, 20 s, 40 s... até 5 min)
@@ -7863,7 +7877,7 @@
     if (!minhas.length) return;
     if (!gravarRecusadas(todas.filter(function (x) { return minhas.indexOf(x) < 0; }))) return;
     enqueue(minhas.map(function (x) { return x.op; }));
-    banco.espera = 0;
+    esperaZera();
     scheduleFlush(1500);
     // depois do "Olá" da entrada, que tomaria o lugar deste aviso
     setTimeout(function () { toast(minhas.length + (minhas.length === 1 ? ' alteração sua que estava guardada voltou' : ' alterações suas que estavam guardadas voltaram') + ' para a fila e ' + (minhas.length === 1 ? 'sobe' : 'sobem') + ' agora.', 6000); }, 2500);
@@ -7908,7 +7922,7 @@
         closeModal();
         enqueue(ops);
         keepSync();
-        banco.espera = 0;
+        esperaZera();
         refresh();          // mostra o banco com estas alterações por cima, como as outras da fila
         scheduleFlush(300);
         toast('Mandando de novo ' + ops.length + (ops.length === 1 ? ' alteração.' : ' alterações.'));
@@ -8028,7 +8042,9 @@
     else if (n && banco.semEspaco) { t = 'Aparelho sem espaço · ' + n + (n === 1 ? ' alteração só na memória' : ' alterações só na memória') + ' · salve um backup'; warn = true; }
     else if (banco.busy) t = 'Enviando ao banco…';
     else if (n && !banco.login) { t = n + (n === 1 ? ' alteração não enviada' : ' alterações não enviadas') + ': entre para enviar'; warn = true; }
-    else if (n && banco.falhas) { t = 'Banco com falha · ' + n + (n === 1 ? ' alteração guardada' : ' alterações guardadas') + ' · tenta de novo às ' + hhmm(new Date(banco.espera)); warn = true; }
+    else if (n && banco.bloqueio > Date.now()) { t = 'Banco bloqueou esta rede · ' + n + (n === 1 ? ' alteração guardada' : ' alterações guardadas') + ' · tenta de novo às ' + hhmm(new Date(banco.bloqueio)); warn = true; }
+    // a hora só aparece enquanto há espera marcada (sem ela saía "21:00", a data zero); sem sinal, vale o "Sem sinal" de baixo
+    else if (n && banco.falhas && banco.online !== false) { t = 'Banco com falha · ' + n + (n === 1 ? ' alteração guardada' : ' alterações guardadas') + (banco.espera > Date.now() ? ' · tenta de novo às ' + hhmm(new Date(banco.espera)) : ' · tentando de novo'); warn = true; }
     else if (n && isFiscal()) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' mudança para enviar à aprovação' : ' mudanças para enviar à aprovação'); warn = banco.online === false; }
     else if (n) { t = (banco.online === false ? 'Sem sinal · ' : '') + n + (n === 1 ? ' alteração aguardando' : ' alterações aguardando'); warn = banco.online === false; }
     else if (banco.online === false) { t = 'Sem sinal · cópia deste aparelho'; warn = true; }
@@ -8058,7 +8074,7 @@
   function mesmaPessoa(a, b) { return !a && !b || !!(a && b && (a.codigo === b.codigo || (a.uid && a.uid === b.uid)) && a.papel === b.papel); }
   function setLogin(l, inicio) {
     var limpou = banco.on && !inicio && !mesmaPessoa(banco.login, l);
-    if (limpou && undoFica) undoFecha();
+    if (limpou) undoFecha();   // o Desfazer de quem saiu não fica para quem entra (antes só a barra da Corrigida fechava)
     if (limpou) limparDadosAparelho();
     banco.login = l;
     lsPut(LOGIN_KEY, l);
@@ -8124,7 +8140,7 @@
       enqueue([{ t: 'desarquivar_contrato', id: x.id, nome: x.nome, em: new Date().toISOString() }]);
       banco.arquivados = banco.arquivados.filter(function (y) { return y.id !== x.id; });
       keepSync();
-      banco.espera = 0;
+      esperaZera();
       scheduleFlush(0);
       setTimeout(function () { refresh(true); }, 1500);
       toast('Restaurando ' + x.nome + '. Ele volta para a lista assim que o banco responder.', 6000);
@@ -9047,7 +9063,8 @@
       var el = $(id);
       if (el) el.addEventListener('focusout', function () { setTimeout(function () { if (banco.want && !typing()) refresh(); }, 50); });
     });
-    window.addEventListener('online', function () { banco.online = true; banco.espera = 0; flush(); poll(); });
+    // o sinal voltou: tenta já, a não ser que a espera seja a do bloqueio do banco (tentar antes só o prolonga)
+    window.addEventListener('online', function () { banco.online = true; esperaZera(); flush(); poll(); });
     window.addEventListener('offline', function () { banco.online = false; syncStatus(); });
     // trocar de app ou fechar a aba: o último toque grava já, sem esperar os 300 ms (o sistema pode encerrar o app)
     window.addEventListener('pagehide', flushSave);
@@ -9256,6 +9273,26 @@
     banco: function () { return banco; },
     drive: function () { return driveQ; },
     recusadas: function () { return recusadas().length; },
+    // NC em rascunho guardadas neste aparelho, de qualquer pessoa (aviso-endereco.js): as de quem saiu continuam guardadas aqui
+    rascunhos: function () {
+      var t = rascTodos(), n = 0;
+      Object.keys(t).forEach(function (d) { n += Object.keys(t[d] || {}).length; });
+      return Math.max(n, rascNaLista().length);   // sem espaço no aparelho, o rascunho está só na memória
+    },
+    // retrato só de leitura dos estados do app, para testes e agentes lerem em vez de raspar a tela (ESTADOS.md)
+    estado: function () {
+      var dq = driveQ && driveQ.info ? driveQ.info() : null, ss = $('saveState');
+      return {
+        tela: { visao: !!visaoOn, medicoes: !!medicoesOn, telaG: telaG, pg: pg, view: view, contrato: (state && state.activeId) || null },
+        aba: { soConsulta: !!aba.ro, pronto: !!aba.pronto },
+        login: banco.login ? { papel: banco.login.papel || null } : null,
+        banco: { ligado: !!banco.on, online: banco.online, enviando: !!banco.busy, emEnvio: banco.sending, fila: banco.pend.length, falhas: banco.falhas, espera: banco.espera,
+          bloqueio: banco.bloqueio, lote: banco.lote, versao: banco.versao, semEspaco: !!banco.semEspaco, recusadas: recusadas().length, barra: ss ? ss.textContent : '' },
+        drive: dq ? { contado: dq.contado, fila: dq.n, aparelho: dq.aparelho, outras: dq.outras, enviando: dq.enviando, erro: dq.erro, pausado: dq.pausado, esperaWifi: dq.esperaWifi, proxima: dq.prox } : null,
+        rascunhos: rascNaLista().length,
+        camadas: { janela: !!$('modal'), escolha: !!escolha, foto: !!(foto && ((foto._state && foto._state()) || (foto._batch && foto._batch()))), mapaCheio: !!(mapa && mapa.isFull && mapa.isFull()), desfazer: !!$('undoBar') }
+      };
+    },
     diffOps: diffOps,
     applyOps: applyOps
   };

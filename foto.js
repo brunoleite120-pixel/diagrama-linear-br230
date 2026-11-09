@@ -1785,7 +1785,9 @@
       if (!a || !opts.drive || a.descartada) return guardaP;
       if (!a.autor && opts.drive.quem) a.autor = opts.drive.quem();
       var como = final && a.drive !== false && !semNada(a) ? 'fila' : 'aparelho';
-      if (a.como === 'fila' || (a.feita === a.ver && (a.como === como || !final))) return guardaP;
+      // a.rasc: a cópia guardada é a do meio da edição (leva a marca de rascunho). Ao sair, a final regrava sem a marca mesmo
+      // sem mudança: a varredura da abertura seguinte (app.js) só manda ao Drive o rascunho de um app fechado à força
+      if (a.como === 'fila' || (a.feita === a.ver && (!final || (a.como === como && !a.rasc)))) return guardaP;
       var ver = a.ver;
       a.guardando = true; renderGuarda();
       guardaP = guardaP.then(function () {
@@ -1797,9 +1799,10 @@
           item.enviar = como === 'fila';
           if (a.autor) item.autor = a.autor;
           // guardada no meio da edição: se o app fechar antes de sair da foto, ela vai para a fila ao abrir de novo (app.js)
-          if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1, querEnviar: a.drive !== false });
+          // (a que a tela diz que fica só neste aparelho, por estar sem nada escrito ou com o envio desmarcado, não vai)
+          if (!final) item.meta = Object.assign({}, item.meta, { rascunho: 1, querEnviar: a.drive !== false && !semNada(a) });
           return opts.drive.add([item]).then(function () {
-            a.feita = ver; a.como = como; a.erroG = false; a.guardando = false;
+            a.feita = ver; a.como = como; a.rasc = !final; a.erroG = false; a.guardando = false;
             if (opts.onNc && item.meta && item.meta.nc && !a.descartada) opts.onNc(item.meta.nc, [item.id]);   // foto da NC: entra na lista da NC
             if (como === 'fila') refreshDrive();
           });
@@ -1838,10 +1841,11 @@
       }
       clearTimeout(descT);
       b.classList.remove('conf'); b.textContent = 'Descartar';
-      var a = st, ja = a.feita != null;
+      var a = st;
       a.descartada = true;
       clearTimeout(guardaT); guardaT = null;
-      guardaP.then(function () { return ja && opts.drive && opts.drive.apagar ? opts.drive.apagar([a.uid]) : null; }).then(function () { notify('Foto descartada.'); refreshDrive(); }, function () { notify('Não foi possível tirar a foto do aparelho.'); });
+      // "já guardada" se lê depois da gravação em curso: a primeira podia estar no meio, e a cópia ficava no aparelho
+      guardaP.then(function () { return a.feita != null && opts.drive && opts.drive.apagar ? opts.drive.apagar([a.uid]) : null; }).then(function () { notify('Foto descartada.'); refreshDrive(); }, function () { notify('Não foi possível tirar a foto do aparelho.'); });
       if (opts.nc && opts.onNcTirar) opts.onNcTirar(opts.nc, [a.uid]);   // a foto descartada sai da NC
       startView();
     }
@@ -3084,7 +3088,8 @@
         return;
       }
       if (t.dataset && t.dataset.campo) { set.campos[t.dataset.campo] = t.checked; guarda(); renderOpts(); scheduleDraw(0); return; }
-      if (t.id === 'ftDrive') { if (st) st.drive = t.checked; padraoDrive(t.checked); renderGuarda(); return; }
+      // a cópia guardada leva a escolha nova (querEnviar): conta como mudança da foto
+      if (t.id === 'ftDrive') { if (st) { st.drive = t.checked; st.ver = (st.ver || 0) + 1; agendaGuarda(); } padraoDrive(t.checked); renderGuarda(); return; }
       if (batch && t.dataset && t.dataset.b === 'drive') { var bi = batch.items[+t.dataset.i]; if (bi) { bi.drive = t.checked; renderBatchSum(); if (!t.checked) segurarFila(); } return; }
       if (batch && t.tagName === 'SELECT' && batchInput(t)) return;
       if (!st) return;

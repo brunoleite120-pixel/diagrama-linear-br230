@@ -31,12 +31,17 @@
   function ler(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
   function gravar(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* segue */ } }
 
-  // a última troca deu certo? (o plugin volta para a anterior quando a nova não abre)
+  // K_FALHOU guarda { versao, n } (antes, só o texto da versão). A versão só deixa de ser baixada depois de não abrir 2 vezes:
+  // quem fecha o app logo depois de atualizar também cai aqui, e uma vez só não pode prender a pessoa na versão anterior
+  function falhou() { var f = ler(K_FALHOU); return typeof f === 'string' ? { versao: f, n: 2 } : f && f.versao ? f : null; }
+  function contaFalha(versao) { var f = falhou(); gravar(K_FALHOU, { versao: versao, n: f && f.versao === versao ? (f.n || 1) + 1 : 1 }); }
+  function pulada(versao) { var f = falhou(); return !!f && f.versao === versao && f.n >= 2; }
+
+  // a última troca deu certo? (o plugin volta para a anterior quando a nova não abre). Rodando a versão posta, a marca fica
+  // até ela confirmar que abriu (pronto): apagada já aqui, a versão que travasse depois voltava para a anterior sem deixar
+  // sinal, e a anterior baixava e punha a mesma de novo, a cada abertura
   var t = ler(K_TENTOU);
-  if (t) {
-    if (t.versao !== A.pacote) gravar(K_FALHOU, t.versao);
-    gravar(K_TENTOU, null);
-  }
+  if (t && t.versao !== A.pacote) { contaFalha(t.versao); gravar(K_TENTOU, null); }
 
   // ---------------------------------------------------------------- aviso na tela
   function aviso(html, botao, acao) {
@@ -75,7 +80,7 @@
     return pacotes().then(function (bs) {
       var b = bs.filter(function (x) { return x.id === p.id; })[0];
       if (!b || /error|delet/.test(b.status)) {   // sumiu ou falhou: esquece; a próxima conferência baixa de novo se for o caso
-        if (b && b.status === 'error') gravar(K_FALHOU, p.versao);
+        if (b && b.status === 'error') contaFalha(p.versao);
         gravar(K_PRONTA, null);
         return false;
       }
@@ -116,7 +121,7 @@
     versaoEm(0).then(function (achou) {
       var v = achou && achou.v;
       if (achou) base = achou.base;
-      if (!v || v.ambiente !== A.nome || !(v.ordem > A.ordem) || !v.arquivo || !v.sha256 || v.versao === ler(K_FALHOU)) return;
+      if (!v || v.ambiente !== A.nome || !(v.ordem > A.ordem) || !v.arquivo || !v.sha256 || pulada(v.versao)) return;
       var p = ler(K_PRONTA);
       if (p && p.versao === v.versao) { avisarPronta(p); return; }
       baixando = true;
@@ -139,12 +144,17 @@
   function pronto() {
     if (confirmado) return;
     confirmado = true;
-    U.notifyAppReady().catch(function () { confirmado = false; });
+    U.notifyAppReady().then(function () {
+      // esta versão abriu bem: sai a marca da troca e a falha anotada dela (se tinha travado uma vez)
+      var t2 = ler(K_TENTOU), f = falhou();
+      if (t2 && t2.versao === A.pacote) gravar(K_TENTOU, null);
+      if (f && f.versao === A.pacote) gravar(K_FALHOU, null);
+    }).catch(function () { confirmado = false; });
   }
   // no fim do menu Dados: a versão baixada que não abriu (para saber no aparelho por que ficou na anterior)
   document.addEventListener('DOMContentLoaded', function () {
-    var f = ler(K_FALHOU), v = document.getElementById('versaoSite');
-    if (f && v) v.textContent += ' · a ' + f + ' não abriu';
+    var f = falhou(), v = document.getElementById('versaoSite');
+    if (f && v) v.textContent += ' · a ' + f.versao + ' não abriu' + (f.n < 2 ? ' uma vez (vai tentar de novo)' : '');
   });
   window.addEventListener('load', function () {
     // só confirma quando o app.js chegou ao fim (senão o plugin volta para a anterior)

@@ -35,10 +35,12 @@
     try { i = d && d.info ? d.info() : null; } catch (e) { i = null; }
     var rec = 0;
     try { rec = U && U.recusadas ? U.recusadas() : 0; } catch (e) { rec = 0; }
+    var rasc = 0;   // NC em rascunho: também fica só neste endereço
+    try { rasc = U && U.rascunhos ? U.rascunhos() : 0; } catch (e) { rasc = 0; }
     // as fotos do aparelho: 'sim' (contadas; sem a fila do Drive não há fotos guardadas), 'nao' (ainda contando) ou 'erro' (não leu)
     var cont = !d ? 'sim' : !i ? 'nao' : i.contado === true ? 'sim' : i.contado === 'erro' ? 'erro' : 'nao';
     return { cont: cont, pronto: !!(U && U.pronto), login: !!(b && b.login), alt: b && b.pend ? b.pend.length : 0, fotos: i ? i.n || 0 : 0,
-      aparelho: i ? i.aparelho || 0 : 0, outras: i ? i.outras || 0 : 0, recusadas: rec, enviando: !!(b && b.sending) || !!(i && i.busy) };
+      aparelho: i ? i.aparelho || 0 : 0, outras: i ? i.outras || 0 : 0, recusadas: rec, rasc: rasc, enviando: !!(b && b.sending) || !!(i && i.busy) };
   }
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
   function status() {
@@ -58,6 +60,7 @@
     if (p.aparelho) linhas.push(plural(p.aparelho, 'foto está', 'fotos estão') + ' só neste aparelho (marcadas para não enviar): envie ao Drive ou salve na galeria do celular e apague daqui antes.');
     if (p.outras) linhas.push(plural(p.outras, 'foto', 'fotos') + ' de outra pessoa' + (p.login ? '' : ' (ou de quem saiu)') + ' ainda não ' + (p.outras === 1 ? 'foi enviada' : 'foram enviadas') + ': quem tirou precisa entrar aqui com o código dele e enviar.');
     if (p.recusadas) linhas.push(plural(p.recusadas, 'alteração está guardada', 'alterações estão guardadas') + ' só aqui, sem ter ido para o banco: abra Dados › Alterações guardadas e mande de novo, ou baixe o arquivo e apague.');
+    if (p.rasc) linhas.push(plural(p.rasc, 'não conformidade está', 'não conformidades estão') + ' em rascunho só aqui: quem fez precisa entrar, abrir o item e salvar ou descartar antes.');
     if (!linhas.length) return { ok: true, t: 'Tudo enviado: pode trocar de endereço.' };
     return { ok: false, t: linhas.join(' ') + ' Não apague o atalho antigo antes disso.' };
   }
