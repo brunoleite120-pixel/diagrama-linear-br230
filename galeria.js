@@ -3065,7 +3065,7 @@
           var x = sc[i], dt = data(x.em) || new Date();
           if (b) fotos.push({ file: new File([b], x.nome || 'foto.jpg', { type: 'image/jpeg', lastModified: dt.getTime() }),
             meta: { live: true, date: dt, ll: x.lat != null && x.lng != null ? [Number(x.lat), Number(x.lng)] : null, acc: null, uid: x.id, enviar: !!enviar,
-              cid: x.cid || null, pid: x.pid || null } });
+              cid: x.cid || null, pid: x.pid || null, confirmar: true } });   // confirmar: o carimbo só é gravado com o toque em "Confirmar carimbo" (foto.js, v168)
         });
         if (!fotos.length) { o.toast('Não foi possível abrir ' + (sc.length === 1 ? 'esta foto' : 'estas fotos') + ' neste aparelho.', 5000); return; }
         if (fotos.length < sc.length) o.toast(plural(sc.length - fotos.length, 'foto não abriu', 'fotos não abriram') + ' (o arquivo não está mais neste aparelho).', 6000);

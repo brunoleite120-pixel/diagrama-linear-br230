@@ -476,6 +476,9 @@
     '.ft-gd div div{font-size:12.5px;color:var(--ft-ink-2);line-height:1.4}',
     '.ft-gd.ag{background:var(--ft-bg);border-color:var(--ft-line)}.ft-gd.ag i{background:#9AA39E}.ft-gd.ag b{color:var(--ft-ink-2)}',
     '.ft-gd.er{background:#FCEBE8;border-color:#F3C2BA}.ft-gd.er i{background:var(--danger,#B42318)}.ft-gd.er b{color:var(--danger,#B42318)}',
+    // foto da galeria que voltou para o carimbo (v168): nada é gravado até "Confirmar carimbo"; no lugar de Ver na galeria e Tirar outra, Cancelar e Confirmar
+    '.ft-gd.pd{background:#FFF6E0;border-color:#F2D28B}.ft-gd.pd i{background:#B7791F}.ft-gd.pd b{color:#7A4F00}',
+    '.ft:not(.pend) .ft-pd,.ft.pend .ft-foot [data-ft="ver-gal"],.ft.pend .ft-foot .ft-one[data-ft="new"],.ft.pend [data-ft="descartar"]{display:none}',
     '.ft-dv{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--ft-line)}',
     '.ft-dv>svg{flex:none;width:20px;height:20px;color:var(--ft-accent)}',
     '.ft-dv>div{flex:1;min-width:0}',
@@ -919,7 +922,9 @@
           '<button type="button" class="ft-btn primary ft-many ft-salvar" data-ft="b-save">Salvar todas (.zip)</button>' +
           (opts.share ? '<button type="button" class="ft-btn ft-many ft-meio" data-ft="b-share">Compartilhar todas</button>' : '') +
           '<button type="button" class="ft-btn ft-many ft-meio" data-ft="new">+ Nova seleção</button>' +
-          '<button type="button" class="ft-btn primary ft-one ft-big2" data-ft="new">' + CAM + 'Tirar outra</button></div>' +
+          '<button type="button" class="ft-btn primary ft-one ft-big2" data-ft="new">' + CAM + 'Tirar outra</button>' +
+          '<button type="button" class="ft-btn ft-one ft-big2 ft-pd" data-ft="pd-cancel">Cancelar</button>' +
+          '<button type="button" class="ft-btn primary ft-one ft-big2 ft-pd" data-ft="pd-ok">Confirmar carimbo</button></div>' +
         // folha de opções: um grupo por vez (o do botão tocado)
         '<div class="ft-camada" hidden><div class="ft-fundo" data-ft="folha-fecha" aria-hidden="true"></div>' +
           '<div class="ft-folha" id="ftFolha" role="dialog" aria-modal="true" aria-labelledby="ftFolhaT" tabindex="-1">' +
@@ -1214,7 +1219,7 @@
       clearBatch();
       if (st && st.url) URL.revokeObjectURL(st.url);
       st = null;
-      root.classList.remove('many');
+      root.classList.remove('many'); root.classList.remove('pend');
       renderHead();
       q('.ft-start').hidden = false;
       q('.ft-work').hidden = true;
@@ -1365,7 +1370,9 @@
     function setupPhoto(img, url, file, ex, from) {
       if (st && st.url) URL.revokeObjectURL(st.url);
       // foto da Câmera com GPS: o mesmo id do rascunho guardado no clique, para a versão com carimbo entrar no lugar dele
-      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: (ex && ex.uid) || newUid(), drive: ex && ex.enviar ? true : padraoDrive() };
+      st = { img: img, url: url, w: img.naturalWidth, h: img.naturalHeight, desc: '', uid: (ex && ex.uid) || newUid(), drive: ex && ex.enviar ? true : padraoDrive(),
+        // foto guardada que voltou da galeria para o carimbo: nada é gravado por cima dela até a pessoa confirmar (v168)
+        pend: !!(ex && ex.confirmar) };
       place(st, ex, file, from);
       showWork();
     }
@@ -1772,7 +1779,7 @@
     // (se o envio automático estiver ligado) só ao sair dela: Tirar outra, Ver na galeria ou fechar. Assim o Drive recebe uma
     // vez, já com o carimbo final. Fechado à força no meio, a foto continua no aparelho e dá para enviar pela galeria.
     var guardaT = null, guardaP = Promise.resolve();
-    function agendaGuarda() { if (!opts.drive) return; clearTimeout(guardaT); guardaT = setTimeout(function () { guardaT = null; guardarFoto(false); }, st && st.feita == null ? 400 : 1500); }
+    function agendaGuarda() { if (!opts.drive || (st && st.pend)) return; clearTimeout(guardaT); guardaT = setTimeout(function () { guardaT = null; guardarFoto(false); }, st && st.feita == null ? 400 : 1500); }
     // o app foi para o fundo (outra tela, celular travado): guarda já a última mudança
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden' && guardaT) guardarFoto(false);
@@ -1782,7 +1789,7 @@
     function guardarFoto(final) {
       var a = st;
       clearTimeout(guardaT); guardaT = null;
-      if (!a || !opts.drive || a.descartada) return guardaP;
+      if (!a || !opts.drive || a.descartada || a.pend) return guardaP;   // pend: à espera do "Confirmar carimbo"
       if (!a.autor && opts.drive.quem) a.autor = opts.drive.quem();
       var como = final && a.drive !== false && !semNada(a) ? 'fila' : 'aparelho';
       // a.rasc: a cópia guardada é a do meio da edição (leva a marca de rascunho). Ao sair, a final regrava sem a marca mesmo
@@ -1814,11 +1821,13 @@
       if (!root) return;
       var g = q('.ft-gd'), dv = q('.ft-dvs');
       if (!g || !st) return;
-      var er = !!st.erroG, ok = st.feita != null && !st.guardando;
-      g.className = 'ft-gd' + (er ? ' er' : ok ? '' : ' ag');
-      g.querySelector('i').textContent = er ? '!' : '✓';
-      q('.ft-gdt').textContent = er ? 'Não deu para guardar no app' : ok ? 'Guardada no app' : 'Guardando no app…';
-      q('.ft-gds').textContent = er ? 'O aparelho está sem espaço ou não deixou guardar. Use "Salvar na galeria do celular".'
+      var er = !!st.erroG, ok = st.feita != null && !st.guardando, pd = !!st.pend;
+      root.classList.toggle('pend', pd);
+      g.className = 'ft-gd' + (pd ? ' pd' : er ? ' er' : ok ? '' : ' ag');
+      g.querySelector('i').textContent = pd || er ? '!' : '✓';
+      q('.ft-gdt').textContent = pd ? 'Carimbo ainda não aplicado' : er ? 'Não deu para guardar no app' : ok ? 'Guardada no app' : 'Guardando no app…';
+      q('.ft-gds').textContent = pd ? 'Ajuste o carimbo e toque em Confirmar carimbo. Se fechar antes, a foto continua na galeria como estava, sem carimbo.'
+        : er ? 'O aparelho está sem espaço ou não deixou guardar. Use "Salvar na galeria do celular".'
         : 'Fica em Galeria › No aparelho. Não precisa apertar nada para não perder.';
       if (dv) {
         var on = st.drive !== false;
@@ -1826,6 +1835,7 @@
         dv.classList.toggle('ft-warn', !!vz);
         dv.textContent = vz ? AVISO_VAZIO + ' Sem nada escrito, ela fica só neste aparelho.'
           : !driveOn() ? 'O envio ao Drive começa depois que você entrar com o seu código; a foto espera guardada no app.'
+          : on && pd ? 'Vai para o Drive depois que você confirmar o carimbo.'
           : on ? 'Vai para o Drive quando você tocar em Tirar outra, Ver na galeria ou fechar. Dá para mudar o carimbo até lá.'
           : 'Fica só neste aparelho. Dá para enviar depois em Galeria › No aparelho.';
       }
@@ -1860,6 +1870,7 @@
       }
       if (!st) { depois(); if (aposGuardar) aposGuardar(); return; }
       var a = st;
+      if (a.pend) { depois(); if (aposGuardar) aposGuardar(); return; }   // sem confirmar: a foto da galeria fica como estava
       if (a.feita != null || !opts.drive || a.perdaOk) { sair(aposGuardar); depois(); return; }   // já há uma versão guardada
       guardarFoto(true).then(function () {
         if (st !== a) return;
@@ -2128,7 +2139,7 @@
       if (root) { q('.ft-blist').innerHTML = ''; q('.ft-prog').textContent = ''; travaOpcoes(false); }   // "Nova seleção" no meio da geração
     }
     function showBatch() {
-      root.classList.add('many');
+      root.classList.add('many'); root.classList.remove('pend');
       moveShared(q('.ft-bside'));
       q('.ft-start').hidden = true;
       q('.ft-work').hidden = true;
@@ -3015,6 +3026,11 @@
       if (b.dataset.ft === 'close') antesDeSair(close);
       else if (b.dataset.ft === 'new') antesDeSair(startView);
       else if (b.dataset.ft === 'ver-gal') { var vg = opts.abrirGaleria; antesDeSair(close, function () { if (vg) vg(); }); }
+      // foto da galeria que voltou para o carimbo: Confirmar grava (e volta para a galeria); Cancelar volta sem gravar
+      else if (b.dataset.ft === 'pd-ok' || b.dataset.ft === 'pd-cancel') {
+        if (b.dataset.ft === 'pd-ok' && st && st.pend) { st.pend = false; st.ver = (st.ver || 0) + 1; renderGuarda(); }
+        var vg2 = opts.abrirGaleria; antesDeSair(close, function () { if (vg2) vg2(); });
+      }
       else if (b.dataset.ft === 'descartar') descartar(b);
       else if (b.dataset.ft === 'editar') { var bb = q('.ft-bb[data-folha="leg"]'); if (bb) bb.click(); }
       else if (b.dataset.ft === 'save') save();
