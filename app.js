@@ -2389,10 +2389,29 @@
   // ------------------------------------------------------------------ interface: helpers
   var $ = function (id) { return document.getElementById(id); };
   var toastTimer = null;
+  // O aviso não cobre botões (v167): sobe para cima da barra de Desfazer sem prazo e, na galeria, da folha "Contrato e ponto",
+  // do título e dos botões da foto aberta e da barra das fotos selecionadas. Sem nada disso na tela, fica no rodapé (CSS)
+  var TOAST_ACIMA = ['.gl-mv-box', '.gl-ver .gl-ver-info', '.gl-bar'];
+  function toastAcima() {
+    var ub = undoFica && $('undoBar');
+    if (ub && ub.getClientRects().length) return ub;
+    for (var i = 0; i < TOAST_ACIMA.length; i++) {
+      var e = document.querySelector(TOAST_ACIMA[i]);
+      if (e && e.getClientRects().length) return e;
+    }
+    return null;
+  }
+  // no máximo até 96 px do alto da tela: uma folha que ocupa a tela inteira não empurra o aviso para fora
+  function toastPoe() {
+    var t = $('toast'), ac = toastAcima();
+    if (t) t.style.bottom = ac ? Math.max(0, Math.min(window.innerHeight - ac.getBoundingClientRect().top + 8, window.innerHeight - 96)) + 'px' : '';
+  }
   function toast(msg, ms) {
-    var t = $('toast'), ub = undoFica && $('undoBar');
+    var t = $('toast');
     t.textContent = msg;
-    t.style.bottom = ub && ub.getClientRects().length ? (window.innerHeight - ub.getBoundingClientRect().top + 8) + 'px' : '';   // a barra de Desfazer sem prazo não esconde o aviso
+    toastPoe();
+    // quem avisa costuma fechar a folha logo em seguida ("Foto agora em…" e a folha "Contrato e ponto"): o lugar é conferido de novo
+    setTimeout(toastPoe, 0); setTimeout(toastPoe, 300);
     t.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 3200);
