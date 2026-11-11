@@ -370,13 +370,20 @@
       h += etapasHtml(d) + '</div>' + seletorHtml(d, m) + '</section><section class="card md-detalhe" id="mdDetalhe" aria-label="Medição escolhida">' + medicaoHtml(c, d, m) + '</section></div>';
       return h + (folha ? folhaHtml(c, d) : '');
     }
+    // situação do pagamento lida na consulta da medição no SIAC, com o processo de suporte e a data da consulta
+    function pagamentoHtml(sm) {
+      var p = sm && sm.pagamento;
+      if (!p || !p.situacao) return '';
+      return '<small class="md-pagamento">' + esc('SIAC: ' + p.situacao + (p.data ? ' em ' + dataTxt(p.data) : '') +
+        (sm.processo ? ' · processo ' + sm.processo : '') + (p.consultado ? ' (consultado em ' + dataTxt(p.consultado) + ')' : '')) + '</small>';
+    }
     function medicaoHtml(c, d, m) {
       var sm = d.an.siac && d.an.siac.medicoes && d.an.siac.medicoes[m.n], anterior = d.ms[d.ms.indexOf(m) - 1], v = valor(m.total), als = avisos(d, m.n);
       var processado = sm && sm.processado || m.processado, situacao = sm && sm.situacao || m.situacao, indices = sm && sm.indices || m.indices;
       var semKm = soSiac(d);
       if (semKm && aba === 'segmentos') aba = 'grupos';
       var h = '<div class="md-top"><div><small>' + esc((m.etapa != null ? m.etapa + 'ª etapa · ' : '') + 'Competência ' + (m.mes || mesTxt(idx(m.ref)))) + '</small><h2 id="mdTituloMed" tabindex="-1">' + esc(m.n + 'ª medição' + (m.retificada ? ' · retificada' : '')) + '</h2><small>' + esc('Fonte: ' + (m.fonte || d.an.sobre && d.an.sobre.fonte || 'não informada') + ' · processada no SIAC em ' + (processado ? dataTxt(processado) : 'data não informada')) + '</small>' +
-        (situacao ? '<small>' + esc(situacao + (indices ? ' · índices ' + indices : '')) + '</small>' : '') + '</div><div class="md-direita"><strong class="md-total">' + esc(dinheiro(v)) + '</strong><small>Preços iniciais (PI)</small>';
+        (situacao ? '<small>' + esc(situacao + (indices ? ' · índices ' + indices : '')) + '</small>' : '') + pagamentoHtml(sm) + '</div><div class="md-direita"><strong class="md-total">' + esc(dinheiro(v)) + '</strong><small>Preços iniciais (PI)</small>';
       if (sm && numero(sm.total) != null) h += '<small>Com reajuste ' + dinheiro(sm.total) + '</small>';
       if (sm && numero(sm.reaj) != null) h += '<small>Reajuste da medição: ' + dinheiro(sm.reaj) + '</small>';
       if (anterior) h += '<small>' + esc((valor(anterior.total) ? (v - valor(anterior.total) >= 0 ? '+' : '−') + pctCurto(Math.abs((v - valor(anterior.total)) / valor(anterior.total)) * 100) : 'Variação percentual sem base (anterior zerada)') + ' em relação à ' + anterior.n + 'ª (' + dinheiro(anterior.total) + ')') + '</small>';
