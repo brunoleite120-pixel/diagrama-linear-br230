@@ -2041,6 +2041,7 @@
       }) };
       showBatch();
       if (extra > 0) notify('Abertas as primeiras ' + MAX_FOTOS + ' fotos. Salve estas e depois abra as outras ' + extra + '.');
+      vivo();
       (function next(i) {
         if (batch !== b) return;
         if (i >= b.items.length) { renderBatchSum(); return; }
@@ -2053,6 +2054,39 @@
           next(i + 1);
         });
       })(0);
+    }
+    // iPhone (11/11/2026): com a tela parada, o lote levava uns 20 s por foto e andava na hora ao rolar a lista. O caminho não
+    // espera rolagem nem rede: só o fim da leitura da imagem (onload) e o do canvas.toBlob, que o WebKit demora a entregar
+    // quando a página não está desenhando. Duas defesas:
+    // 1) enquanto o lote lê, faz prévias ou gera as fotos, um pedido de quadro por vez mantém a página desenhando (o que a
+    //    rolagem fazia); para sozinho quando o trabalho acaba;
+    // 2) se o toBlob não responde em 4 s, o JPEG sai pelo toDataURL (na hora, sem esperar aviso nenhum).
+    var vivoRaf = 0, vivoPar = 0, reservas = 0, ultTempos = null;
+    function loteTrabalha() { return !!batch && (batch.busy || drawing || batch.items.some(function (it) { return it.wait && !it.gone; })); }
+    function vivo() {
+      if (vivoRaf || !window.requestAnimationFrame) return;
+      (function passo() {
+        vivoRaf = 0;
+        if (!root || !root.parentNode || !loteTrabalha()) return;
+        var el = q('.ft-prog');
+        if (el) el.style.opacity = (vivoPar = 1 - vivoPar) ? '0.99' : '1';   // uma mudança de verdade, para o quadro ser desenhado
+        vivoRaf = requestAnimationFrame(passo);
+      })();
+    }
+    function dataUrlBlob(u) {
+      var i = u.indexOf(','), bin = atob(u.slice(i + 1)), n = bin.length, a = new Uint8Array(n);
+      for (var k = 0; k < n; k++) a[k] = bin.charCodeAt(k);
+      return new Blob([a], { type: (/^data:([^;,]+)/.exec(u) || [])[1] || 'image/jpeg' });
+    }
+    function blobDe(cv, qy) {
+      return new Promise(function (resolve) {
+        var feito = false, t = setTimeout(function () {
+          if (feito) return;
+          feito = true; reservas++;
+          try { resolve(dataUrlBlob(cv.toDataURL('image/jpeg', qy))); } catch (e) { resolve(null); }
+        }, 4000);
+        cv.toBlob(function (b) { if (feito) return; feito = true; clearTimeout(t); resolve(b); }, 'image/jpeg', qy);
+      });
     }
     function decode(file) {
       return new Promise(function (resolve) {
@@ -2072,7 +2106,7 @@
           cv.width = Math.max(1, Math.round(it.w * sc)); cv.height = Math.max(1, Math.round(it.h * sc));
           cv.getContext('2d').drawImage(d.img, 0, 0, cv.width, cv.height);
           URL.revokeObjectURL(d.url);
-          return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', 0.85); }).then(function (blob) {
+          return blobDe(cv, 0.85).then(function (blob) {
             cv.width = cv.height = 0;
             if (!blob) { it.err = 'Não foi possível abrir esta imagem.'; return; }
             return decode(blob).then(function (t) {
@@ -2383,6 +2417,7 @@
       batch.ver++;
       if (drawQ.indexOf(i) < 0) drawQ.push(i);
       if (!drawing) pump();
+      vivo();
     }
     function pump() {
       var b = batch;
@@ -2392,7 +2427,7 @@
       if (!it || it.gone || !it.img || !img) { pump(); return; }
       prevCv = prevCv || document.createElement('canvas');
       withItem(it, function () { draw(prevCv, 900); });
-      prevCv.toBlob(function (blob) {
+      blobDe(prevCv, 0.85).then(function (blob) {
         if (blob && batch === b && !it.gone) {
           if (it.prevUrl) URL.revokeObjectURL(it.prevUrl);
           it.prevUrl = URL.createObjectURL(blob);
@@ -2400,10 +2435,10 @@
           img.src = it.prevUrl;
         }
         pump();
-      }, 'image/jpeg', 0.85);
+      });
     }
     function prog(t) { q('.ft-prog').textContent = t || ''; }
-    function setBatchBusy(on) { if (!batch) return; batch.busy = on; travaOpcoes(on); if (!on) prog(''); renderBatchSum(); }
+    function setBatchBusy(on) { if (!batch) return; batch.busy = on; travaOpcoes(on); if (!on) prog(''); renderBatchSum(); if (on) vivo(); }
     // enquanto o lote gera as fotos, os 4 botões de opções ficam travados: mudar a legenda ou o tamanho no meio deixava o .zip
     // (e a fila do Drive) com fotos de carimbos e tamanhos diferentes
     function travaOpcoes(on) {
@@ -2417,16 +2452,22 @@
       var b = batch, ver = b.ver;
       if (b.out && b.out.ver === ver) return Promise.resolve(b.out.files);
       var list = readyItems(), out = [], used = {}, cv = document.createElement('canvas'), a = arq();
+      // tempos de cada etapa (ms): abrir a foto inteira, desenhar o carimbo e gravar o JPEG; reservas = vezes que o toBlob não respondeu
+      var T = { n: 0, abrir: 0, desenhar: 0, gravar: 0, reservas: reservas, t0: Date.now() };
       return list.reduce(function (p, it, k) {
         return p.then(function () {
           if (batch !== b) throw new Error('cancel');
           prog('Gerando ' + (k + 1) + ' de ' + list.length + '…');
+          var t1 = Date.now(), t2 = t1, t3 = t1;
           return decode(it.file).then(function (d) {
+            t2 = t3 = Date.now();
             if (!d) return null;
             withItem(it, function () { var keep = it.img; it.img = d.img; try { draw(cv, a[0]); } finally { it.img = keep; } });
             URL.revokeObjectURL(d.url);
-            return new Promise(function (resolve) { cv.toBlob(resolve, 'image/jpeg', a[1]); });
+            t3 = Date.now();
+            return blobDe(cv, a[1]);
           }).then(function (blob) {
+            T.n++; T.abrir += t2 - t1; T.desenhar += t3 - t2; T.gravar += Date.now() - t3;
             if (!blob) return;
             var name = withItem(it, fileName), base = name.replace(/\.jpg$/i, ''), n = 2;
             while (used[name.toLowerCase()]) name = base + ' (' + (n++) + ').jpg';
@@ -2436,6 +2477,10 @@
         });
       }, Promise.resolve()).then(function () {
         cv.width = cv.height = 0;
+        T.reservas = reservas - T.reservas; T.total = Date.now() - T.t0; ultTempos = T;
+        // ainda lento (mais de 6 s por foto): o aviso diz em que etapa, para chegar ao administrador
+        if (T.n && T.total / T.n > 6000) notify('As fotos demoraram para gerar neste aparelho: por foto, ' + nf(T.abrir / T.n / 1000, 1) + ' s para abrir, ' +
+          nf(T.desenhar / T.n / 1000, 1) + ' s no carimbo e ' + nf(T.gravar / T.n / 1000, 1) + ' s para gravar. Mostre este aviso ao administrador.', 15000);
         var fora = list.filter(function (it) { return !out.some(function (f) { return f.it === it; }); });
         if (fora.length && out.length) notify((fora.length === 1 ? '1 foto não pôde ser gerada e ficou de fora: ' : fora.length + ' fotos não puderam ser geradas e ficaram de fora: ') +
           fora.slice(0, 3).map(function (it) { return it.name; }).join(', ') + (fora.length > 3 ? '…' : '') + '. Tente de novo.', 9000);
@@ -2746,7 +2791,7 @@
       last.hidden = !n;
       last.innerHTML = n && cam.lastUrl ? '<img alt="" src="' + cam.lastUrl + '">' : '';
     }
-    function toBlobP(cv, qy) { return new Promise(function (r) { cv.toBlob(r, 'image/jpeg', qy || 0.92); }); }
+    function toBlobP(cv, qy) { return blobDe(cv, qy || 0.92); }
     function frameBlob(v) {
       var cv = document.createElement('canvas');
       cv.width = v.videoWidth; cv.height = v.videoHeight;
@@ -3254,7 +3299,7 @@
       if (st && !batch) sair();
       close();
     }
-    return { open: open, close: close, fechar: fechar, refreshTeam: refreshTeam, refreshDrive: refreshDrive, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; } };
+    return { open: open, close: close, fechar: fechar, refreshTeam: refreshTeam, refreshDrive: refreshDrive, readExif: readExif, _state: function () { return st; }, _batch: function () { return batch; }, _tempos: function () { return ultTempos; }, _vivo: function () { return !!vivoRaf; } };
   }
 
   FotoCarimbo.readExif = readExif;

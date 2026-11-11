@@ -9329,6 +9329,8 @@
           bloqueio: banco.bloqueio, lote: banco.lote, versao: banco.versao, semEspaco: !!banco.semEspaco, recusadas: recusadas().length, barra: ss ? ss.textContent : '' },
         drive: dq ? { contado: dq.contado, fila: dq.n, aparelho: dq.aparelho, outras: dq.outras, enviando: dq.enviando, erro: dq.erro, pausado: dq.pausado, esperaWifi: dq.esperaWifi, proxima: dq.prox } : null,
         rascunhos: rascNaLista().length,
+        // lote de fotos: tempos da última geração e se a página está sendo mantida desenhando (foto.js, vivo)
+        fotoLote: foto && foto._tempos ? { tempos: foto._tempos(), vivo: foto._vivo() } : null,
         camadas: { janela: !!$('modal'), escolha: !!escolha, foto: !!(foto && ((foto._state && foto._state()) || (foto._batch && foto._batch()))), mapaCheio: !!(mapa && mapa.isFull && mapa.isFull()), desfazer: !!$('undoBar') }
       };
     },
