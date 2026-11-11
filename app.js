@@ -8374,6 +8374,7 @@
   var MFOOT = '<p class="modal-err" role="alert" hidden></p><div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button>';
 
   // confirmação dentro da página (o confirm() do sistema some no app e é fácil de tocar sem ler).
+  // o.exigir (v169): texto de uma caixa de marcar que libera o botão (sem teclado; para o que não tem volta, em pouca quantidade).
   // o.digitar: texto que a pessoa precisa digitar para liberar o botão. o.campo: caixa de texto opcional (ex.: motivo).
   // o.marcar: {texto, padrao} caixa de marcar opcional (ex.: "Apagar também deste celular").
   // Devolve null (cancelou) ou {valor, marcado}.
@@ -8383,15 +8384,17 @@
       var f = modal('<h2 id="modalTitle">' + esc(o.titulo) + '</h2>' + (o.html || (o.texto ? '<p>' + esc(o.texto) + '</p>' : '')) +
         (o.campo ? '<div class="field"><label for="cfCampo">' + esc(o.campo) + '</label><input id="cfCampo" maxlength="300" autocomplete="off"></div>' : '') +
         (o.marcar ? '<label class="cf-marca"><input type="checkbox" id="cfMarca"' + (o.marcar.padrao ? ' checked' : '') + '> <span>' + esc(o.marcar.texto) + '</span></label>' : '') +
+        (o.exigir ? '<label class="cf-marca cf-exige"><input type="checkbox" id="cfExige"> <span>' + esc(o.exigir) + '</span></label>' : '') +
         (o.digitar ? '<div class="field cf-dig"><label for="cfDig">Para confirmar, digite <b>' + esc(o.digitar) + '</b></label><input id="cfDig" autocomplete="off" autocorrect="off" spellcheck="false"></div>' : '') +
         // v119: escolhas ({ k, t, d, perigo }): um botão grande para cada saída; responde { escolha: k }
         (o.escolhas ? '<div class="cf-escs">' + o.escolhas.map(function (e) {
           return '<button type="button" class="cf-esc' + (e.perigo ? ' perigo' : '') + '" data-esc="' + esc(e.k) + '"><b>' + esc(e.t) + '</b>' + (e.d ? '<span>' + esc(e.d) + '</span>' : '') + '</button>';
         }).join('') + '</div>' : '') +
         '<div class="modal-foot"><button type="button" class="btn" data-close>' + esc(o.cancelar || 'Cancelar') + '</button>' +
-        (o.escolhas ? '' : '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button>') + '</div>',
+        (o.escolhas ? '' : '<button type="submit" class="btn ' + (o.perigo ? 'danger-solid' : 'primary') + '"' + (o.digitar || o.exigir ? ' disabled' : '') + '>' + esc(o.botao || 'Confirmar') + '</button>') + '</div>',
       function (form) {
         if (o.digitar && semAcento(form.querySelector('#cfDig').value) !== semAcento(o.digitar)) return;
+        if (o.exigir && !form.querySelector('#cfExige').checked) return;
         var c = form.querySelector('#cfCampo');
         var m = form.querySelector('#cfMarca');
         var v = { valor: c ? c.value.trim() : '', marcado: !!(m && m.checked) };
@@ -8406,10 +8409,12 @@
           resolve({ escolha: b.getAttribute('data-esc') });
         });
       }
-      if (o.digitar) {
-        var inp = f.querySelector('#cfDig'), btn = f.querySelector('button[type=submit]');
-        inp.addEventListener('input', function () { btn.disabled = semAcento(inp.value) !== semAcento(o.digitar); });
-        setTimeout(function () { inp.focus(); }, 40);
+      if (o.digitar || o.exigir) {
+        var inp = f.querySelector('#cfDig'), cx = f.querySelector('#cfExige'), btn = f.querySelector('button[type=submit]');
+        var libera = function () { btn.disabled = !!((inp && semAcento(inp.value) !== semAcento(o.digitar)) || (cx && !cx.checked)); };
+        if (inp) inp.addEventListener('input', libera);
+        if (cx) cx.addEventListener('change', libera);
+        if (inp) setTimeout(function () { inp.focus(); }, 40);
       }
     });
   }

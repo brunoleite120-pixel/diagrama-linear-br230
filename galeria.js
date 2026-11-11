@@ -2460,16 +2460,23 @@
       var n = loc.length, sobe = sobemAgora();
       // a que está subindo agora: o envio em curso não para (o arquivo, ou o registro, pode chegar do outro lado)
       var subindo = loc.some(function (x) { return sobe.indexOf(x.id) >= 0 && x.situacao === 'fila'; });
+      // v169: a janela mostra o que vai ser apagado (até 4 miniaturas; com uma foto, contrato, km e hora). Foto que se perde
+      // de vez pede a caixa de marcar; digitar APAGAR só acima de 20 fotos
+      var minisH = loc.slice(0, 4).map(function (x) { var u = miniDe(x); return u ? '<img src="' + esc(u) + '" alt="">' : ''; }).join('');
+      var l1 = loc[0], quem = n === 1 ? [l1.cid ? curto(l1.cid) : l1.lote || 'Sem contrato', kmCurto(l1.km), hora(l1.em)].filter(Boolean).join(' · ') : n > 4 ? 'e mais ' + (n - 4) : '';
+      var fotosH = minisH ? '<div class="cf-fotos">' + minisH + (quem ? '<span>' + esc(quem) + '</span>' : '') + '</div>' : '';
+      var exige = !nao.length || n > 20 ? null : nao.length === n ? (n === 1 ? 'Sei que esta foto não pode ser recuperada' : 'Sei que estas ' + n + ' fotos não podem ser recuperadas')
+        : nao.length === 1 ? 'Sei que a foto não enviada não pode ser recuperada' : 'Sei que as ' + nao.length + ' fotos não enviadas não podem ser recuperadas';
       // já escolhido na janela do "Apagar" e nada se perde: não pergunta de novo
       (escolhido && !nao.length && !subindo && n <= 20 ? Promise.resolve(true) : o.confirmar({
         titulo: 'Apagar do celular ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar do celular',
-        html: (nao.length
+        html: fotosH + (nao.length
           ? '<p class="modal-err">' + (nao.length === n ? (n === 1 ? 'Esta foto ainda não foi enviada' : 'Nenhuma delas foi enviada ainda') : plural(nao.length, 'delas ainda não foi enviada', 'delas ainda não foram enviadas')) +
             ' ao Drive: ' + (nao.length === 1 ? 'ela se perde' : 'elas se perdem') + ' de vez.</p>'
           : '<p>' + (n === 1 ? 'Ela continua' : 'Elas continuam') + ' no Drive e na galeria da equipe. Sai só deste aparelho, para liberar espaço.</p>') +
           (subindo ? '<p class="modal-err">' + (n === 1 ? 'Ela' : 'Uma delas') + ' já está sendo enviada agora: pode chegar mesmo assim ao Drive e à galeria da equipe. ' +
             'Se quiser, espere o envio terminar e apague depois pelo "Apagar do Drive".</p>' : ''),
-        digitar: nao.length ? 'APAGAR' : (n > 20 ? 'APAGAR' : null)
+        exigir: exige, digitar: n > 20 ? 'APAGAR' : null
       })).then(function (ok) {
         if (!ok) return;
         o.drive.apagar(loc.map(function (x) { return x.id; })).then(function () {
@@ -2501,7 +2508,7 @@
       }, function () { o.toast('Não foi possível mudar estas fotos neste aparelho.', 5000); });
     }
     // escolhido (v119): veio da janela do "Apagar" com "Da equipe e deste celular": não pergunta de novo (só digita APAGAR acima
-    // de 20) e as cópias deste celular saem junto. Foto que já estava apagada da equipe ('ja_apagada', migração 26) conta como
+    // de 20, como quem não veio dela, v169) e as cópias deste celular saem junto. Foto que já estava apagada da equipe ('ja_apagada', migração 26) conta como
     // feita: não é falta de permissão
     function moverDrive(ls, apagar, escolhido) {
       var l = login(), url = o.driveUrl ? o.driveUrl() : null;
@@ -2514,7 +2521,7 @@
       (escolhido && apagar && n <= 20 ? Promise.resolve({ marcado: true }) : o.confirmar(apagar ? {
         titulo: 'Apagar da equipe ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', perigo: true, botao: 'Apagar da equipe',
         html: '<p>' + (n === 1 ? 'A foto vai' : 'As fotos vão') + ' para a pasta <b>Deletados</b> do Drive e ' + (n === 1 ? 'sai' : 'saem') + ' da galeria da equipe. ' +
-          'O Administrador pode restaurar.</p>', digitar: escolhido ? 'APAGAR' : n > 1 ? 'APAGAR' : null,
+          'O Administrador pode restaurar.</p>', digitar: n > 20 ? 'APAGAR' : null,   // dá para restaurar: até 20, basta o botão (v169)
         marcar: nLoc && !escolhido ? { texto: 'Apagar também deste celular' + (nLoc < n ? ' (' + plural(nLoc, 'está guardada aqui', 'estão guardadas aqui') + ')' : ''), padrao: true } : null
       } : {
         titulo: 'Restaurar ' + (n === 1 ? 'esta foto' : n + ' fotos') + '?', botao: 'Restaurar',
