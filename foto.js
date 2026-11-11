@@ -2549,6 +2549,7 @@
       navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 4032 }, height: { ideal: 3024 } } }).then(function (stream) {
         if (!root || !root.parentNode || cam) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
         cam = { stream: stream, track: stream.getVideoTracks()[0], shots: [], busy: false, lastUrl: null, sure: 0 };
+        if (opts.fundo) opts.fundo(true);   // o app segura o que usa a internet em segundo plano até a câmera fechar
         try { cam.ic = window.ImageCapture ? new window.ImageCapture(cam.track) : null; } catch (e) { cam.ic = null; }
         var v = q('.ft-cam video');
         v.onloadedmetadata = v.onresize = camAr;
@@ -2571,12 +2572,14 @@
       });
     }
     function stopCam() {
+      var tinha = !!cam;
       if (cam) {
         cam.stream.getTracks().forEach(function (t) { t.stop(); });
         if (cam.lastUrl) URL.revokeObjectURL(cam.lastUrl);
         clearInterval(cam.ov);
       }
       cam = null;
+      if (tinha && opts.fundo) opts.fundo(false);
       var ca = root && root.querySelector('.ft-camask'); if (ca) ca.remove();   // a pergunta de fechar a câmera não fica para depois
       desligaGiro();
       camPop('');

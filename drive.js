@@ -458,6 +458,10 @@
     // naoForcar: a pessoa pausou (ou pediu só no Wi-Fi) depois de um "Enviar agora". A força acaba ali, também para a foto que
     // ainda estava subindo (ela chamava a fila de novo com a força de antes, e a pausa não segurava nada)
     var naoForcar = false;
+    // câmera do app aberta: a fila espera (a foto que já está subindo termina). Com sinal fraco, preparar e mandar a foto
+    // disputa o celular com a câmera. Vale no máximo 20 min, para a fila não ficar presa se a câmera fechar sem avisar
+    var camera = 0;
+    function cameraAberta() { return !!camera && Date.now() - camera < 1200000; }
     function pump(forcar) {
       if (naoForcar) { forcar = false; forcado = false; }
       forcar = forcar === true || forcado;
@@ -465,6 +469,7 @@
       var url = opts.getUrl(), login = opts.getLogin(), g = geracao;
       if (escolhendo || nAtivos >= (erro || recusas ? 1 : POR_VEZ)) return;
       if (opts.podeEnviar && !opts.podeEnviar()) { change(); return; }   // outra aba do app é que envia
+      if (cameraAberta()) { change(); return; }   // volta quando a câmera fechar
       if (!url || !login || navigator.onLine === false) { change(); return; }
       if (!forcar && (lsLer(PAUSA_KEY) || esperaWifi())) { change(); return; }   // pausado, ou só no Wi-Fi e está no 4G
       if (!forcar && erro === 'codigo') { change(); return; }   // acesso que não vale mais: espera entrar de novo
@@ -523,6 +528,8 @@
       add: add, list: list, arquivo: arquivo, apagar: apagar, enviar: enviar, corrigir: corrigir, resetCode: resetCode, post: post,
       pump: function (forcar) { if (forcar === true) naoForcar = false; return pump(forcar); },   // "Enviar agora" volta a valer
       pausar: function (v) { lsPor(PAUSA_KEY, v); if (!v) pump(); else { naoForcar = true; forcado = false; change(); } },
+      // a tela da foto avisa quando a câmera abre (true) e fecha (false)
+      camera: function (v) { camera = v ? Date.now() : 0; if (!v) pump(); else change(); },
       soWifi: function (v) { if (v != null) { lsPor(WIFI_KEY, v); if (v) { naoForcar = true; forcado = false; } pump(); } return !!lsLer(WIFI_KEY); },
       sabeRede: function () { return !!rede(); },
       info: function () {

@@ -5279,6 +5279,7 @@
           state.activeId = id; ui.open = {}; save(); renderAll();
         },
         // no app instalado o compartilhar é o do próprio app (o WebView do Android não tem o da web), como na galeria
+        fundo: fundoCamera,
         gps: true, share: !!navigator.canShare || (isNativeApp() && podeCompartilharFotos()), saveBlob: saveBlob, notify: function (m, ms) { toast(m, ms); },
         compartilhar: isNativeApp() && podeCompartilharFotos() ? function (files, rotulo) { return salvarFotos(files, rotulo); } : null,
         drive: driveQ && {
@@ -8025,8 +8026,18 @@
       syncStatus();
     });
   }
+  // câmera do app aberta (Date.now() de quando abriu, ou 0): a conferência com o banco, a releitura das medições e a busca de
+  // versão nova esperam, para não disputar o celular com a câmera no sinal fraco. No máximo 20 min (se a câmera fechar sem avisar)
+  var camAberta = 0;
+  function camSegura() { return !!camAberta && Date.now() - camAberta < 1200000; }
+  function fundoCamera(on) {
+    camAberta = on ? Date.now() : 0;
+    document.documentElement.classList.toggle('camera-aberta', !!on);   // lida pelo atualizar.js
+    if (driveQ && driveQ.camera) driveQ.camera(!!on);
+    if (!on) setTimeout(poll, 0);   // fechou: confere o banco e manda o que ficou pendente
+  }
   function poll() {
-    if (!banco.on || document.visibilityState === 'hidden') return;
+    if (!banco.on || document.visibilityState === 'hidden' || camSegura()) return;
     if (banco.pend.length && banco.login && !banco.busy) flush();
     conferirMedNovas();
     window.Banco.versao().then(function (v) {
@@ -9083,7 +9094,7 @@
       }
     });
     setInterval(function () {
-      if (document.visibilityState !== 'visible' || (!isEng() && !isAnalista())) return;
+      if (document.visibilityState !== 'visible' || (!isEng() && !isAnalista()) || camSegura()) return;
       conferirAcesso();
       // marcas gravadas em outro aparelho: relê a análise da ponte aberta a cada 10 min (não no meio de uma gravação ou digitação)
       var ca = active();

@@ -114,7 +114,8 @@
       .then(function (v) { return v && v.arquivo ? { v: v, base: BASES[i] } : versaoEm(i + 1); }, function () { return versaoEm(i + 1); });
   }
   function conferir(forcar) {
-    if (baixando || navigator.onLine === false) return;
+    // com a câmera do app aberta não busca versão nova (o app.js marca o html); a próxima conferência pega
+    if (baixando || navigator.onLine === false || document.documentElement.classList.contains('camera-aberta')) return;
     if (!forcar && Date.now() - ultima < INTERVALO) return;
     ultima = Date.now();
     var base = BASES[0];
