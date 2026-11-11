@@ -2055,12 +2055,13 @@
         });
       })(0);
     }
-    // iPhone (11/11/2026): com a tela parada, o lote levava uns 20 s por foto e andava na hora ao rolar a lista. O caminho não
-    // espera rolagem nem rede: só o fim da leitura da imagem (onload) e o do canvas.toBlob, que o WebKit demora a entregar
-    // quando a página não está desenhando. Duas defesas:
+    // Android (relato de 10/11/2026): com a tela parada, o lote levava uns 20 s por foto e andava na hora ao rolar a lista. O
+    // caminho não espera rolagem nem rede: só o fim da leitura da imagem (onload) e o do canvas.toBlob. No motor do Chrome o
+    // toBlob trabalha nos intervalos ociosos entre os quadros da tela; sem quadros, cada gravação espera o tempo limite dele.
+    // Duas defesas (não reproduzido em aparelho; o aviso de lentidão de outputs() diz a etapa, se ainda demorar):
     // 1) enquanto o lote lê, faz prévias ou gera as fotos, um pedido de quadro por vez mantém a página desenhando (o que a
     //    rolagem fazia); para sozinho quando o trabalho acaba;
-    // 2) se o toBlob não responde em 4 s, o JPEG sai pelo toDataURL (na hora, sem esperar aviso nenhum).
+    // 2) se o toBlob não responde em 2 s, o JPEG sai pelo toDataURL (na hora, sem esperar aviso nenhum).
     var vivoRaf = 0, vivoPar = 0, reservas = 0, ultTempos = null;
     function loteTrabalha() { return !!batch && (batch.busy || drawing || batch.items.some(function (it) { return it.wait && !it.gone; })); }
     function vivo() {
@@ -2084,7 +2085,7 @@
           if (feito) return;
           feito = true; reservas++;
           try { resolve(dataUrlBlob(cv.toDataURL('image/jpeg', qy))); } catch (e) { resolve(null); }
-        }, 4000);
+        }, 2000);
         cv.toBlob(function (b) { if (feito) return; feito = true; clearTimeout(t); resolve(b); }, 'image/jpeg', qy);
       });
     }
