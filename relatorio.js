@@ -292,7 +292,10 @@
           (p.kmIni != null ? ' · KM ' + (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : '') +
           (p.kmContrato != null && p.kmContrato !== p.kmIni ? ' (CONTR. ' + fmtKm(p.kmContrato) + ')' : '');
       }
-      return (conserva(c) ? 'SEGMENTO Nº ' : 'PONTO EMERGENCIAL Nº ') + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) + (p.kmFim != null && p.kmFim !== p.kmIni ? ' A ' + fmtKm(p.kmFim) : '') : '');
+      // 267: o km do ponto é o Atualizado; o do contrato (o dos documentos) vai entre parênteses
+      var kc = !conserva(c) && o.kmContr ? o.kmContr(c, p) : '';
+      return (conserva(c) ? 'SEGMENTO Nº ' : 'PONTO EMERGENCIAL Nº ') + num + (p.kmIni != null ? ' · KM ' + fmtKm(p.kmIni) + (p.kmFim != null && p.kmFim !== p.kmIni ? ' A ' + fmtKm(p.kmFim) : '') : '') +
+        (kc ? ' (CONTR. ' + kc + ')' : '');
     }
     // nome curto, para a legenda de cada foto quando a folha junta vários pontos
     function curto(c, p, num) {

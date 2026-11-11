@@ -312,6 +312,15 @@
     var ponta = typeof c.kmIni === 'number' && Math.abs(s - c.kmIni) < 0.001 ? ki : typeof c.kmFim === 'number' && Math.abs(s - c.kmFim) < 0.001 ? kf : null;
     return ponta == null ? { km: geom, ast: false, geom: geom } : { km: ponta, ast: Math.abs(ponta - geom) > 0.01, geom: geom };
   }
+  // pontos críticos com o km dos documentos convertido (267, desde a v163): o km do ponto é o km Atualizado (o do site, o do GPS
+  // da foto) e o do contrato vem pela régua, como na conservação. Só com kmIniContrato e kmFimContrato no cadastro do contrato
+  function pcRegua(c) { return !!c && !isConserva(c) && !isOae(c) && !c.kmLocal && typeof c.kmIniContrato === 'number' && typeof c.kmFimContrato === 'number'; }
+  // "743,40 – 743,95" (km do contrato de a e b), ou '' sem a régua
+  function pcContrTxt(c, a, b) {
+    if (!pcRegua(c) || a == null) return '';
+    var x = kmDoContrato(c, a), y = b != null && Math.abs(b - a) > 0.0005 ? kmDoContrato(c, b) : null;
+    return x ? fmtKm(x.km) + (y ? ' – ' + fmtKm(y.km) : '') : '';
+  }
   var STATUS = {
     OK: { tag: 'OK', name: 'Concluído', btn: 'OK', fill: '#1E9E55' },
     A: { tag: 'ATIVO', name: 'Ativo', btn: 'Ativo', fill: '#2B5797' },
@@ -806,6 +815,8 @@
     if (c.kmIni != null || c.kmFim != null) {
       o.push(T(x, 166, 'TRECHO', { size: 6, bold: true, fill: gray }));
       o.push(T(x, 177, fitText('KM ' + (fmtKm(c.kmIni) || '?') + ' a ' + (fmtKm(c.kmFim) || '?'), w, 7.4), { size: 7.4 }));
+      // 267: o km do trecho é o Atualizado; embaixo, o do contrato (o dos documentos)
+      if (pcRegua(c)) o.push(T(x, 188, fitText('Contr. ' + fmtKm(c.kmIniContrato) + ' a ' + fmtKm(c.kmFimContrato), w, 6.6), { size: 6.6, fill: gray }));
     }
     o.push(T(x, G.yKmBase - 4, 'KM DOS PONTOS', { size: 6, bold: true, fill: gray }));
     o.push(T(x, G.yBand + 26, 'PLATAFORMA', { size: 7, bold: true }));
@@ -958,6 +969,12 @@
     o.push(T(lx + 20, y + 10, 'Trecho sem intervenção', { size: 7 }));
 
     o.push(T(x, y + 28, 'Conclusão do ponto = média das etapas aplicáveis. N/A: serviço não aplicável neste ponto crítico.', { size: 6.6, fill: gray }));
+    // 267: os km da folha são os Atualizados; a nota traz o km do contrato de cada ponto da página
+    if (pcRegua(c)) {
+      var snvA = (window.SNV_BR230 && window.SNV_BR230.versao) || '', pts = sortedPoints(c).map(function (p) { var t = pcContrTxt(c, p.kmIni, p.kmFim); return t ? (p.nome || '?') + ' ' + t : ''; }).filter(Boolean);
+      var nota = 'KM Atualizado' + (snvA ? ' (SNV ' + snvA + ')' : '') + '. KM do contrato' + (c.snvContrato ? ' (' + txtPdf(txtLimpo(c.snvContrato)).replace(/\s*\(([^)]*)\)/, ', $1') + ')' : '') + ', pela régua do SNV: ' + (pts.join(' · ') || '-') + '.';
+      o.push(T(x, y + 40, fitText(nota, 640 - x - 12, 6.6), { size: 6.6, fill: gray }));
+    }
 
     var bx = 640;
     if (pageIdx === pageCount - 1) {
@@ -3175,8 +3192,15 @@
           }).join('') + '</div></div>');
         }
       } else {
-        h.push(field('KM inicial do trecho', 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
-        h.push(field('KM final do trecho', 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
+        // com o km do contrato no cadastro (267), o do trecho é o km Atualizado e o do contrato aparece ao lado, como na conservação
+        var pcV2 = (window.SNV_BR230 && window.SNV_BR230.versao) || '', pcRot2 = pcRegua(c) ? ' · km Atualizado' + (pcV2 ? ' (SNV ' + pcV2 + ')' : '') : '';
+        h.push(field('KM inicial do trecho' + pcRot2, 'data-c="kmIni" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIni)));
+        h.push(field('KM final do trecho' + pcRot2, 'data-c="kmFim" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFim)));
+        if (pcRegua(c)) {
+          h.push(field('KM inicial do contrato', 'data-c="kmIniContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmIniContrato)));
+          h.push(field('KM final do contrato', 'data-c="kmFimContrato" data-num="1" type="text" inputmode="decimal"', fmtKm(c.kmFimContrato)));
+          h.push(field('SNV do contrato', 'data-c="snvContrato" type="text"', c.snvContrato));
+        }
         h.push(field('Largura da plataforma', 'data-c="plataforma" type="text"', c.plataforma));
         h.push(field('Data da última vistoria', 'data-c="dataVistoria" type="date"', c.dataVistoria));
         h.push(field('Pontos por página (máx.)', 'data-c="porPagina" data-int="1" type="number" min="1" max="14"', c.porPagina || 9));
@@ -3351,9 +3375,9 @@
       if (!STATUS[st]) st = 'NA';   // situação desconhecida (backup editado à mão): não derruba a tela
       return '<span class="dot ' + st + '" title="' + esc(s.short + ': ' + STATUS[st].name) + '"></span>';
     }).join('');
-    var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?');
+    var km = (p.kmIni != null ? fmtKm(p.kmIni) : '?') + ' – ' + (p.kmFim != null ? fmtKm(p.kmFim) : '?'), kc = pcContrTxt(c, p.kmIni, p.kmFim);
     var np = banco.on ? propsDo(active().id, p.id).length : 0;
-    return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span><span class="pt-km">KM ' + km + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV + resumoPonto(p, c, np);
+    return '<span class="pt-name">' + esc(p.nome || '?') + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span><span class="pt-km">KM ' + km + (kc ? ' · contr. ' + esc(kc) : '') + '</span><span class="pt-dots">' + dots + '</span><span class="pt-pct">' + fmtPct(pointPct(p)) + '</span>' + ICON_CHEV + resumoPonto(p, c, np);
   }
   // linha escrita do cartão fechado, com o nome curto dos serviços (o nome nos quadrados só está no title, que não aparece no toque).
   // Ponto: Parado primeiro, depois Ativo; "Tudo concluído" só com serviço feito e nada Ativo ou Parado (N/A não conta; todos N/A, nada)
@@ -3466,8 +3490,10 @@
       h += '<details class="pt-dados" data-id="' + id + '"' + (ui.dadosAb[p.id] ? ' open' : '') + '><summary>Dados do ponto <span>· nome, km, volumes</span></summary><div class="grid">';
       h += field('Nome do ponto', 'data-p="nome" data-id="' + id + '" type="text"', p.nome);
       h += field('Extensão (calculada)', 'type="text" readonly tabindex="-1"', len != null ? fmt(len, 2) + ' km' : '');
-      h += field('KM inicial', 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
-      h += field('KM final', 'data-p="kmFim" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmFim));
+      var pcR = pcRegua(ownerOf(p)), pcV = (window.SNV_BR230 && window.SNV_BR230.versao) || '', pcRot = pcR ? ' · km Atualizado' + (pcV ? ' (SNV ' + pcV + ')' : '') : '';
+      h += field('KM inicial' + pcRot, 'data-p="kmIni" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmIni));
+      h += field('KM final' + pcRot, 'data-p="kmFim" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmtKm(p.kmFim));
+      if (pcR) h += field('KM do contrato (pela régua do SNV)', 'type="text" readonly tabindex="-1"', pcContrTxt(ownerOf(p), p.kmIni, p.kmFim) || 'fora da régua');
       h += field('Enrocamento (m³)', 'data-p="enr" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.enr, 2));
       h += field('Solo-brita (m³)', 'data-p="sb" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.sb, 2));
       if (p.bgs != null || (ownerOf(p) || {}).temBgs) h += field('BGS prevista (m³)', 'data-p="bgs" data-num="1" data-id="' + id + '" type="text" inputmode="decimal"', fmt(p.bgs, 2));
@@ -8978,6 +9004,8 @@
     if (!relFoto) {
       relFoto = window.RelatorioFoto({
         contratos: function () { return state.contracts; }, ativo: function () { return visaoOn ? null : active(); }, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae, nomes: NOMES,
+        // 267: o km do contrato do ponto ("743,40 A 743,95"), para o título; '' sem a régua
+        kmContr: function (c, p) { return pcContrTxt(c, p.kmIni, p.kmFim).replace(' – ', ' A '); },
         ensureLibs: ensureLibs, saveBlob: saveBlob, toast: toast, modal: modal, closeModal: closeModal,
         podeEditar: function () { return !readOnly() && !isFiscal(); }, salvarContrato: salvarCamposContrato, logoSupervisora: window.UNIFILAR_LOGO || null
       });

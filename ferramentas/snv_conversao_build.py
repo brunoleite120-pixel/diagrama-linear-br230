@@ -1,7 +1,8 @@
 # Gera site/snv-conversao.js: as réguas que convertem o km dos contratos de conservação (km do contrato) no km do site
 # (SNV 202607A, o eixo de snv-br230.js), e de volta, uma por versão do SNV do contrato:
 #   202104A (SNV 2020-2022; os km e a geometria são os mesmos de 202004A a 202206A): 437 e 438 (750,90 a 1.006,90) e
-#     310, 419 e 264 (308,40 a 649,50, onde o km do site é o do contrato - 7,10);
+#     310, 419 e 264 (308,40 a 704,90, onde o km do site é o do contrato - 7,10) e 267 (P1 nesse trecho; P2 e P3 no
+#     230BPA1520, 704,90 a 750,90, medido de novo pelo DNIT: régua proporcional, conferida vértice a vértice);
 #   202304A (SNV 2023-2025): 558 e 665 (301,10 a 999,60, onde o km do site é o do contrato + 0,20).
 # No trecho do 437/438 Baixa do WFS do DNIT a geometria das duas versões, confere que o traçado é o mesmo,
 # calcula os pontos de quebra (dentro de um segmento do SNV o km é proporcional ao comprimento, como em snv_build.py) e
@@ -144,7 +145,7 @@ if conv(1010.0, 0, 1) is not None or conv(741.6, 1, 0) is not None:
 # 4) trechos de deslocamento fixo: [versão, códigos em ordem, deslocamento esperado (km do site - km do contrato)]
 FIXOS = [
     ('202104A', ['230BPA1400', '230BPA1405', '230BPA1410', '230BPA1420', '230BPA1440', '230BPA1460', '230BPA1470', '230BPA1480',
-                 '230BPA1482', '230BPA1485', '230BPA1495', '230BPA1497'], -7.10),
+                 '230BPA1482', '230BPA1485', '230BPA1495', '230BPA1497', '230BPA1500'], -7.10),
     ('202304A', ['230BPA1400', '230BPA1405', '230BPA1410', '230BPA1420', '230BPA1440', '230BPA1460', '230BPA1470', '230BPA1480',
                  '230BPA1482', '230BPA1485', '230BPA1495', '230BPA1497', '230BPA1500', '230BPA1520', '230BPA1525', '230BPA1530',
                  '230BPA1540', '230BPA1550', '230BPA1580'], 0.20),
@@ -187,6 +188,64 @@ T104 = fixo(*FIXOS[0])
 T304 = fixo(*FIXOS[1])
 
 
+# 4b) 230BPA1520 (Brasil Novo a Medicilândia; P2 e P3 do CT 267): o DNIT mediu de novo (202104A 704,90 a 750,90, 46,0 km;
+# 202607A 697,80 a 741,70, 43,9 km). A régua é proporcional entre as pontas (o km nominal dentro de um segmento é
+# proporcional ao comprimento). Conferência: cada vértice do traçado de agora, achado no traçado de 2021 e convertido pela
+# régua, tem de cair a menos de 0,15 km do km dele no eixo de agora (as fotos de 10/11/2026 no P2: 743,47 -> 734,61)
+def proporcional(c, ini_de, ini_para):
+    gv, gp = baixar(DE, [c]), baixar(PARA, [c])
+    fv = [f for f in gv.get('features', []) if f['properties'].get('Versao_SNV') == DE]
+    fp = [f for f in gp.get('features', []) if f['properties'].get('Versao_SNV') == PARA]
+    if len(fv) != 1 or len(fp) != 1:
+        falha('o segmento %s não veio uma vez só nas versões %s e %s' % (c, DE, PARA))
+    a, b = fv[0]['properties'], fp[0]['properties']
+    ki, kf, si, sf = a['Quilometragem_Inicio'], a['Quilometragem_Fim'], b['Quilometragem_Inicio'], b['Quilometragem_Fim']
+    if (si, sf) != EIXO_KM.get(c):
+        falha('no snv-br230.js, %s vai de %s; o WFS %s diz %s' % (c, EIXO_KM.get(c), PARA, (si, sf)))
+    if abs(ki - ini_de) > 0.0005 or abs(si - ini_para) > 0.0005:
+        falha('%s não começa onde o trecho anterior termina (%s/%s; esperado %s/%s)' % (c, ki, si, ini_de, ini_para))
+    if abs(kf - Q[0][0]) > 0.0005 or abs(sf - Q[0][1]) > 0.0005:
+        falha('%s não termina onde começa o trecho do 437/438 (%s/%s; esperado %s/%s)' % (c, kf, sf, Q[0][0], Q[0][1]))
+    lv = [x for part in fv[0]['geometry']['coordinates'] for x in part]
+    lp = [x for part in fp[0]['geometry']['coordinates'] for x in part]
+
+    def acum(line):
+        s = [0.0]
+        for i in range(1, len(line)):
+            s.append(s[-1] + hav(line[i - 1], line[i]))
+        return s
+    av, ap = acum(lv), acum(lp)
+
+    def km_em(line, ac, k0, k1, pt):   # km nominal do ponto mais perto no traçado (projeção em cada trecho, plano local)
+        best = None
+        for i in range(1, len(line)):
+            p, q = line[i - 1], line[i]
+            cx = math.cos(math.radians(pt[1]))
+            dx, dy = (q[0] - p[0]) * cx, q[1] - p[1]
+            L2 = dx * dx + dy * dy
+            t = 0 if L2 == 0 else max(0, min(1, (((pt[0] - p[0]) * cx) * dx + (pt[1] - p[1]) * dy) / L2))
+            x = (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t)
+            d = hav(x, pt)
+            if best is None or d < best[0]:
+                best = (d, ac[i - 1] + hav(p, x))
+        return best[0], k0 + (k1 - k0) * best[1] / ac[-1]
+    pior, n = 0.0, 0
+    for i in range(0, len(lp), max(1, len(lp) // 400)):
+        d, kold = km_em(lv, av, ki, kf, lp[i])
+        if d > 200:
+            continue   # traçado mudou neste ponto: não dá para comparar
+        knew = si + (sf - si) * ap[i] / ap[-1]
+        conv_ = si + (kold - ki) * (sf - si) / (kf - ki)
+        pior = max(pior, abs(conv_ - knew)); n += 1
+    print('  %s  %s: %7.2f a %7.2f  ->  %7.2f a %7.2f   proporcional; %d vértices conferidos, maior diferença %.3f km' % (c, DE, ki, kf, si, sf, n, pior))
+    if n < 50 or pior > 0.15:
+        falha('a régua proporcional do %s erra até %.3f km (%d vértices conferidos)' % (c, pior, n))
+    return [[ki, si], [kf, sf]]
+
+
+T1520 = proporcional('230BPA1520', T104[-1][0], T104[-1][1])
+
+
 # 5) grava o arquivo (LF, UTF-8). Cada versão: trechos (cada um, uma lista de quebras, linear entre elas; fora de todos, null)
 def versao(de, eq, trechos):
     todas = [q for tr in trechos for q in tr]
@@ -194,10 +253,10 @@ def versao(de, eq, trechos):
             'dominio': {'contrato': [min(q[0] for q in todas), max(q[0] for q in todas)], 'site': [min(q[1] for q in todas), max(q[1] for q in todas)]}}
 
 
-V = {'202104A': versao(DE, '202004A a 202206A', [T104, Q]), '202304A': versao('202304A', '', [T304])}
+V = {'202104A': versao(DE, '202004A a 202206A', [T104, T1520, Q]), '202304A': versao('202304A', '', [T304])}
 D = {'fonte': 'DNIT · SNV, camada vgeo:vw_snv_rod (WFS)', 'baixadoEm': baixado, 'para': PARA, 'versoes': V}
-JS = '''/* Réguas do km dos contratos de conservação: km do contrato para o km do site (SNV %(para)s, o eixo de snv-br230.js), e
-   de volta, uma por versão do SNV do contrato (campo snvVersao; sem ele, 202104A): 202104A (437, 438, 310, 419, 264) e
+JS = '''/* Réguas do km dos contratos de conservação e do 267 (pontos críticos): km do contrato para o km do site (SNV %(para)s, o eixo de snv-br230.js), e
+   de volta, uma por versão do SNV do contrato (campo snvVersao; sem ele, 202104A): 202104A (437, 438, 310, 419, 264, 267) e
    202304A (558, 665). Gerado por ferramentas/snv_conversao_build.py do WFS do DNIT (baixado em %(bx)s). Não editar à mão:
    rodar o script de novo quando o eixo do site mudar de versão.
    Dentro de um trecho, o km é linear entre dois pontos de quebra; fora dos trechos as funções devolvem null (não extrapolam).
