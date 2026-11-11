@@ -494,9 +494,10 @@
       }
       h += '</div>';
 
-      // conservação e pontes: até quando a supervisão conferiu (a última medição carregada); 3 meses ou mais sem medição, em alerta
+      // até quando a supervisão conferiu (a última medição carregada); 3 meses ou mais sem medição, em alerta.
+      // Conservação, pontes e, desde a v166, os pontos críticos
       function medLinha(c, tp) {
-        if (tp !== 'conserva' && tp !== 'oae') return '';
+        if (tp !== 'conserva' && tp !== 'oae' && tp !== 'pc') return '';
         var m = o.medContrato ? o.medContrato(c) : null;
         if (!m) return '';
         return m.atraso >= 3 ? '<div class="vg-ct-m al">Última med.: ' + esc(m.n + 'ª · ' + m.txt) + ' · há ' + m.atraso + ' meses</div>'

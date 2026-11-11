@@ -2763,8 +2763,8 @@
   function renderContratos() {
     var h = $('contratosHost');
     if (!h) return;
-    // as medições das pontes e conservações (a linha da última medição), como na tela inicial
-    if (banco.login) state.contracts.forEach(function (c) { if ((isOae(c) || isConserva(c)) && parte(c, 'med') && !analise.estado[c.id]) carregarAnalise(c); });
+    // as medições de todos os contratos (a linha da última medição), como na tela inicial; os pontos críticos também (v166)
+    if (banco.login) state.contracts.forEach(function (c) { if (!semContrato(c) && parte(c, 'med') && !analise.estado[c.id]) carregarAnalise(c, true); });
     if (!h.querySelector('#ctsBusca')) {
       h.innerHTML = '<div class="cts-h"><h2>' + (isFiscal() || isAnalista() ? 'Meus contratos' : 'Contratos') + '</h2><p id="ctsN"></p></div>' +
         '<label class="cts-busca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>' +
@@ -2795,7 +2795,7 @@
       var xs = mostra.filter(function (c) { return ctGrupo(c) === g[0]; });
       if (!xs.length) return;
       h += '<section class="cts-g"><h3>' + grupoHtml(g[1]) + '</h3><div class="cts-l">' + xs.map(function (c) {
-        var m = (isOae(c) || isConserva(c)) && parte(c, 'med') ? medDoContrato(c) : null, k = ncDoContrato(c), dir = '';
+        var m = parte(c, 'med') ? medDoContrato(c) : null, k = ncDoContrato(c), dir = '';
         if (m) dir += '<span' + (m.atraso >= 3 ? ' class="al"' : '') + '>' + esc(m.n + 'ª med.' + (m.txt ? ' · ' + m.txt : '')) + '</span>' + (m.atraso >= 3 ? '<span class="al">há ' + m.atraso + ' meses</span>' : '');
         if (k) dir += '<span class="nc">' + k + (isOae(c) ? (k === 1 ? ' OAE com NC' : ' OAEs com NC') : (k === 1 ? ' segmento com NC' : ' segmentos com NC')) + '</span>';
         return '<button type="button" class="cts-i" data-cid="' + esc(c.id) + '"><span><b>' + esc(ctNome(c)) + '</b><small>' + esc(ctSub(c)) + '</small></span>' +
@@ -3771,7 +3771,10 @@
       lsPut(AN_KEY, { dados: analise.dados });
       // digitando no cartão: só a folha agora; o cartão é refeito quando a pessoa sair do campo
       if (medicoesOn) desenhaMedicoes();
-      else if (visaoOn && visao) desenhaVisao();
+      else if (visaoOn) {   // a lista Contratos também mostra a última medição: refaz a que estiver na tela
+        if (visao) desenhaVisao();
+        if ($('contratosHost') && !$('contratosHost').hidden) renderContratos();
+      }
       else if (!visaoOn && active() && active().id === cid) { if (!typing()) renderEditor(); else banco.want = true; renderPreview(); }
     }, function (err) {
       if (!banco.login || banco.login.codigo !== cred || !parte(contractById(cid), 'med')) return;
@@ -5472,8 +5475,9 @@
   }
   // um dado estranho não pode impedir a abertura nem travar a tela: se a visão falha, mostra o contrato
   function desenhaVisao() {
-    // na tela inicial, as medições das conservações e pontes vêm junto (pintam o que a supervisão já conferiu); uma vez cada
-    if (banco.login) state.contracts.forEach(function (c) { if ((isOae(c) || isConserva(c)) && !analise.estado[c.id]) carregarAnalise(c); });
+    // na tela inicial, as medições das conservações e pontes vêm junto (pintam o que a supervisão já conferiu); uma vez cada.
+    // As dos pontos críticos também (v166): só a linha da última medição no cartão do contrato
+    if (banco.login) state.contracts.forEach(function (c) { if (!semContrato(c) && !analise.estado[c.id]) carregarAnalise(c, true); });
     try { visao.render(); return true; } catch (e) {
       console.error(e);
       visaoOn = false; mostraVisao(); renderTabs();
