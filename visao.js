@@ -140,7 +140,9 @@
     // da situação. Contrato novo de pontos críticos ou conservação: a próxima cor livre, na ordem do km. A sinalização
     // (709) e as pontes ficam neutras (null): cobrem a rodovia toda
     var COR_CT = { 'ct-267': '#00ACC1', 'ct-314': '#C2185B', 'ct-315': '#F9A825', 'ct-558': '#7E57C2', 'ct-310': '#EF8A00', 'ct-419': '#00897B',
-      'ct-264': '#6D4C41', 'ct-665': '#9E9D24', 'ct-437': '#3949AB', 'ct-438': '#D4572A' };
+      'ct-264': '#6D4C41', 'ct-665': '#9E9D24', 'ct-437': '#3949AB', 'ct-438': '#D4572A',
+      // 731 (travessia urbana de Altamira): rosa claro, longe do roxo do 558 e das OAEs não atendidas (pedido de 12/11/2026)
+      'ct-731': '#F06292' };
     var COR_LIVRE = ['#8E24AA', '#00838F', '#AD1457', '#5D4037', '#E65100', '#283593', '#00695C', '#827717'], CORES = {};
     function grupoCt(c) { return c.oaes230 ? 'oae' : N.grupo ? N.grupo(c) : N.tipo(c); }
     function coresCt(todos) {
