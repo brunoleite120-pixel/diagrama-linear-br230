@@ -165,6 +165,22 @@
       }).join('') + '</div>';
     }
 
+    // v174: Raias | Mapa. No computador o botão no alto da visão escolhe, e o aparelho guarda a escolha; no celular e no tablet
+    // a barra de baixo do app escolhe (o.formaFixa: Geral = raias, Mapa = mapa). Sem o mapa (sem código, ou sem o Leaflet), raias.
+    // O mapa (mapa.js, opts.geral) é criado uma vez, na primeira vez que alguém escolhe Mapa (o.mapa), e fica fora do
+    // host.innerHTML: o render() o põe de volta no lugar a cada desenho, sem recriar o Leaflet
+    var FORMA_KEY = 'diagrama-linear-visao-forma', MG = null, MGfalhou = false;
+    st.forma = (function () { try { return localStorage.getItem(FORMA_KEY) === 'mapa' ? 'mapa' : 'raias'; } catch (e) { return 'raias'; } })();
+    function temMapaG() { return !!o.mapa && !!(typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa); }
+    function formaFixa() { var f = o.formaFixa ? o.formaFixa() : null; return f === 'mapa' || f === 'raias' ? f : null; }
+    function forma() { return !temMapaG() ? 'raias' : formaFixa() || st.forma; }
+    function mapaG() {
+      if (!MG && !MGfalhou && o.mapa) {
+        MG = o.mapa({ onSel: seguro(noMapaSel), onMove: seguro(noMapaMove) }) || null;
+        if (!MG) MGfalhou = true;
+      }
+      return MG;
+    }
     function cel() { return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches); }
     // a lista do último desenho: achar(), a busca e os cliques usam a mesma, sem recalcular a situação de cada ponto.
     // lista: os itens de todos os contratos (a busca procura em todos); on: só os dos contratos mostrados (x.on).
@@ -295,7 +311,13 @@
       // estava em "Tudo" (a janela cobria a faixa anterior): acompanha a faixa nova (dados do banco, cartão aberto, tela girada)
       var ep = (F[1] - F[0]) * 1e-9, eraTudo = st.k0 != null && st.k0 <= F[0] + ep && st.k1 >= F[1] - ep;
       F = faixaMostrada(d);
+      // no mapa, o trecho na tela é o que o mapa mostra (onMove): não passa pelo limite das raias. Mudou por aqui (Ver no mapa,
+      // busca de km, filtro, troca de Raias para Mapa): o mapa enquadra o novo trecho depois do desenho
+      var noMapa = forma() === 'mapa' && !!mapaG();
+      if (noMapa !== !!st.ultMapa) { st.mpK = null; st.ultMapa = noMapa; }
+      var segue = noMapa && !!st.mpK && st.k0 === st.mpK[0] && st.k1 === st.mpK[1], mk0 = st.k0, mk1 = st.k1;
       if (st.k0 == null || eraTudo) { st.k0 = F[0]; st.k1 = F[1]; } else { var r0 = lim(st.k0, st.k1); st.k0 = r0[0]; st.k1 = r0[1]; }
+      if (segue) { st.k0 = mk0; st.k1 = mk1; }
       var k0 = st.k0, k1 = st.k1, R = k1 - k0, FR = F[1] - F[0];
       var X = function (km) { return (km - k0) / R * 100; }, P = function (km) { return (km - k0) / R * W; };
       var vis = its.filter(function (x) { return x.kf >= k0 && x.km <= k1 && !st.off[x.fk]; });
@@ -310,8 +332,11 @@
       // título; o aviso de km fora da rodovia junta pontos (km inicial ou final) e limites de contrato
       var rod = String((d.todos[0] && d.todos[0].rodovia) || 'BR-230/PA'), nT = d.todos.length;
       var ruins = [d.fora ? d.fora + (d.fora === 1 ? ' item' : ' itens') : '', d.foraC ? d.foraC + (d.foraC === 1 ? ' contrato' : ' contratos') : ''].filter(Boolean).join(' e ');
-      h += '<div class="vg-head"><div><h2>' + esc(rod) + ' · ' + (d.ativo ? cs.length + ' de ' + nT + (nT === 1 ? ' contrato' : ' contratos') : 'todos os contratos') + '</h2>' +
-        '<p>Em escala de km. Só na tela: o PDF oficial continua dentro de cada contrato.</p></div>' +
+      var bForma = temMapaG() && !formaFixa() ? '<div class="vg-forma" role="group" aria-label="Forma do desenho">' + [['raias', 'Raias', '<path d="M2 4h12M2 8h12M2 12h12"/>'], ['mapa', 'Mapa', '<path d="M1.5 3.5l4.3-1.5 4.4 1.5 4.3-1.5v10.5l-4.3 1.5-4.4-1.5-4.3 1.5z M5.8 2v10.5 M10.2 3.5V14"/>']].map(function (f) {
+        return '<button type="button" data-vg="forma" data-f="' + f[0] + '" data-fid="fm:' + f[0] + '" aria-pressed="' + (forma() === f[0]) + '"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' + f[2] + '</svg>' + f[1] + '</button>';
+      }).join('') + '</div>' : '';
+      h += '<div class="vg-head' + (bForma ? ' com-forma' : '') + '"><div><h2>' + esc(rod) + ' · ' + (d.ativo ? cs.length + ' de ' + nT + (nT === 1 ? ' contrato' : ' contratos') : 'todos os contratos') + '</h2>' +
+        '<p>' + (noMapa ? 'No mapa, pelo eixo do SNV.' : 'Em escala de km.') + ' Só na tela: o PDF oficial continua dentro de cada contrato.</p></div>' + bForma +
         '<span class="vg-tot">' + its.length + (its.length === 1 ? ' item' : ' itens') + ' no desenho' + (d.semKm ? ' · <b>' + d.semKm + ' sem km</b> (não aparecem)' : ' · nenhum sem km') +
         (ruins ? ' · <b>' + ruins + ' com km fora da rodovia</b> (confira a vírgula)' : '') + '</span></div>';
 
@@ -330,12 +355,15 @@
       var nRasc = o.rascunhos ? o.rascunhos() : 0;
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
         (nRasc ? '<button type="button" class="vg-rasc" data-vg="rasc">' + nRasc + (nRasc === 1 ? ' rascunho' : ' rascunhos') + ' neste aparelho</button>' : '') +
-        '<div class="vg-zoom" role="group" aria-label="Zoom"><button type="button" class="lado" data-vg="esq" aria-label="Para a esquerda">‹</button><button type="button" data-vg="menos" aria-label="Afastar">−</button>' +
-        '<button type="button" data-vg="mais" aria-label="Aproximar">+</button><button type="button" class="lado" data-vg="dir" aria-label="Para a direita">›</button></div>' +
-        '<span class="vg-faixa">km ' + nf(k0, R < 20 ? 1 : 0) + ' – ' + nf(k1, R < 20 ? 1 : 0) + ' · ' + nf(R, R < 20 ? 1 : 0) + ' km na tela</span></div>' +
+        (noMapa ? '' : '<div class="vg-zoom" role="group" aria-label="Zoom"><button type="button" class="lado" data-vg="esq" aria-label="Para a esquerda">‹</button><button type="button" data-vg="menos" aria-label="Afastar">−</button>' +
+        '<button type="button" data-vg="mais" aria-label="Aproximar">+</button><button type="button" class="lado" data-vg="dir" aria-label="Para a direita">›</button></div>') +
+        '<span class="vg-faixa">' + faixaTxt(k0, k1, noMapa) + '</span></div>' +
         (d.aviso ? '<p class="vg-av">Os contratos escolhidos não estão aqui; mostrando todos.</p>' : '') +
         (semFaixa(d) ? '<p class="vg-nokm">' + esc(eLista(cs.map(function (c) { return N.nome(c); }))) + (cs.length === 1 ? ' ainda não tem km' : ' ainda não têm km') +
           ': o desenho mostra o trecho de todos os contratos.</p>' : '');
+      // no mapa: o lugar do mapa (o render() põe o mapa ali depois do innerHTML)
+      if (noMapa) h += '<div class="vg-mapa-slot"></div>';
+      else {
       // a rodovia inteira, com a parte que está na tela
       var XF = function (km) { return (km - F[0]) / FR * 100; };
       // uma linha por contrato com faixa; com muitos contratos as linhas afinam para caber nos 22 px do botão
@@ -444,6 +472,7 @@
       }).join('') + '</div></div>';
       h += '<div class="vg-row vg-esc"><div class="vg-lab vg-lab-s">Escala</div><div class="vg-trk"><i style="width:' + pc(step / R * 100) + '"></i><span>' + nf(step, 0) + ' km</span></div></div>';
       h += '</div>';
+      }
       // legenda dos contratos mostrados: trecho e losango só com pontos críticos ou conservação; "OAE" só com OAEs
       h += '<div class="vg-leg">' + (tem.pc || tem.conserva ? '<span><i style="width:18px;height:10px;border-radius:2px;background:#2B5797"></i>Trecho no tamanho real</span>' +
         '<span><i style="width:9px;height:9px;transform:rotate(45deg);border-radius:1px;background:#3B4540"></i>Ponto curto demais para esta escala</span>' : '') +
@@ -451,7 +480,9 @@
         // faixa "OAEs 230": as cores dela (não atendida e, em "Todas", a do 424)
         leg230() +
         '<span><i style="width:16px;height:16px;border-radius:50%;border:2px solid #D93025;box-sizing:border-box"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
-        '<span>“~” km a conferir</span>' + (mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div>' +
+        '<span>“~” km a conferir</span>' + (noMapa ? (tem.pc && tem.conserva ? '<span>Pontos críticos de um lado da rodovia, conservação do outro</span>' : '') +
+          '<span>' + (mob ? 'Dois dedos movem e aproximam o mapa' : 'Roda do mouse aproxima; arraste para mover') + '</span>'
+          : mob ? '' : '<span>Ctrl + roda do mouse aproxima; arraste para os lados</span>') + '</div>' +
         // conservação e pontes: o que cada cor quer dizer, no modo da tela
         ((tem.conserva || tem.oae) && md ? '<div class="vg-leg vg-leg-c">' + (md === 'med'
           ? '<span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Medido (serviço medido ali)</span>' +
@@ -489,7 +520,7 @@
           (!pub && (servs || x.p.obs) ? '<details class="vg-mais"' + ((st.mais != null ? st.mais : !mob) ? ' open' : '') + '><summary>' + (servs ? 'Serviços' + (x.p.obs ? ' e observações' : '') : 'Observações') + '</summary>' + servs +
             (x.p.obs ? '<p class="vg-obs">' + esc(x.p.obs) + '</p>' : '') + '</details>' : '') +
           '<div class="vg-acoes">' + (c230 && !do424 && !naSp ? '' : '<button type="button" class="btn primary" data-vg="abrir">' + (pub ? 'Entrar para ver' : do424 ? 'Abrir no Proarte 424' : naSp ? 'Abrir em OAEs sem Proarte' : 'Abrir no contrato') + '</button>') +
-          (!x.c.kmLocal && (typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn' + (c230 && !do424 && !naSp ? ' primary' : '') + '" data-vg="mapa">Ver no mapa</button>' : '') +
+          (!x.c.kmLocal && (typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn' + (c230 && !do424 && !naSp ? ' primary' : '') + '" data-vg="mapa">' + (noMapa ? 'Mapa do contrato' : 'Ver no mapa') + '</button>' : '') +
           (o.temFotos && o.temFotos() ? '<button type="button" class="btn" data-vg="fotos">Fotos</button>' : '') + '</div></aside>';
       }
       h += '</div>';
@@ -532,7 +563,7 @@
           NT.filter(function (s) { return nt[s[0]]; }).map(function (s) { return nt[s[0]] + ' ' + s[1]; }).join(', ') + '</div>' +
           (semEixo ? '<div class="vg-ct-s">' + semEixo + ' na travessia de Altamira (km próprio), desenhadas junto da raia do 731</div>' : '') +
           botoes230('m2') +
-          '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
+          '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">' + (noMapa ? 'Ver no mapa' : 'Ver no desenho') + '</button>' : '') +
           ((typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn small ghost" data-vg="mapa230" data-cid="' + esc(c.id) + '">Ver no mapa →</button>' : '') + '</div></article>';
       }
       h += '<section class="vg-cards" aria-label="Resumo dos contratos mostrados">' + cs.map(function (c) {
@@ -547,7 +578,7 @@
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
           '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' OAE' : ' OAEs') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de OAEs' : ' km de atuação') + '</span></div>' +
           '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) + ncLinha(c, tp, xs) +
-          '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">Ver no desenho</button>' : '') +
+          '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">' + (noMapa ? 'Ver no mapa' : 'Ver no desenho') + '</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';
       }).join('') + '</section>';
       var nFora = nT - cs.length;
@@ -569,19 +600,8 @@
           return '<div class="vg-chips"><span class="vg-cap">' + esc(g[1]).replace(/\bOAEs\b/g, '<span class="sigla">OAEs</span>') + '</span><div>' + chips(sitsDe(g[0]), PRE[g[0]], g[0] === 'oae') + '</div></div>';
         }).join('') + '</section>';
 
-      // lista do trecho da tela
-      var visL = vis.filter(function (x) { return !copia230(x, d); });
-      var ord = visL.sort(function (a, b) { return a.km - b.km; }), max = mob ? 8 : 12;
-      h += '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>No trecho da tela</h3><span>' + visL.length + (visL.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
-        (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou OAE</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
-        ord.slice(0, max).map(function (x) {
-          var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local |MP )?/, '');
-          var sit = '<i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (!x.oae && x.inf.pctText ? ' · ' + esc(x.inf.pctText) : '');
-          // celular: "314 · P1"; computador: o nome do contrato na primeira coluna
-          if (mob) return '<button type="button" class="vg-tr m' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span><b>' + esc((N.numeroCurto(x.c) || N.nome(x.c)) + ' · ' + nome) + '</b><small class="s">' + sit + '</small></span><span class="n">km ' + km + '</span></button>';
-          return '<button type="button" class="vg-tr' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span>' + esc(N.nome(x.c)) + '</span><span><b>' + esc(nome) + '</b></span>' +
-            '<span class="n">' + km + '</span><span class="n">' + (x.oae ? (Number(x.p.extensao) ? nf(x.p.extensao, 1) + ' m' : '–') : nf(x.kf - x.km, 2) + ' km') + '</span><span class="s">' + sit + '</span></button>';
-        }).join('') + '</div>' + (ord.length > max ? '<span class="vg-resto">e mais ' + (ord.length - max) + ' no trecho da tela; aproxime para ver menos</span>' : '') + '</section>';
+      // lista do trecho da tela (no mapa, do trecho do mapa)
+      h += listaSec(d, vis, mob, noMapa);
 
       // o redesenho troca tudo: guarda o foco (busca, botão ou marcação da caixa) e a rolagem do cartão do mesmo ponto e da
       // caixa "Contratos" aberta. data-fid é a identidade de controles repetidos (marcações, "Ver no desenho", grupos,
@@ -598,7 +618,14 @@
       }
       var cd0 = host.querySelector('.vg-card'), topo0 = cd0 && sel && cd0.dataset.key === sel.key ? cd0.scrollTop : 0;
       var pl0 = st.ct && host.querySelector('.vg-pnl-l'), rol0 = pl0 ? pl0.scrollTop : 0;
-      host.innerHTML = '<div class="vg' + (sel ? ' com-card' : '') + '">' + h + '</div>';
+      host.innerHTML = '<div class="vg' + (sel ? ' com-card' : '') + (noMapa ? ' vg-com-mapa' : '') + '">' + h + '</div>';
+      if (noMapa) {
+        var slot = host.querySelector('.vg-mapa-slot');
+        if (slot) slot.parentNode.replaceChild(MG.el, slot);
+        MG.geral(dadosMapa(d, its));
+        if (!segue) { MG.janela(st.k0, st.k1); st.mpK = [st.k0, st.k1]; }
+        MG.show();
+      }
       if (!sel) avisa('');   // cartão fechado (×, Esc, ponto que sumiu): o "Cartão aberto." não fica para trás
       if (topo0) { var cd1 = host.querySelector('.vg-card'); if (cd1) cd1.scrollTop = topo0; }
       if (rol0) { var pl1 = host.querySelector('.vg-pnl-l'); if (pl1) pl1.scrollTop = rol0; }
@@ -614,6 +641,76 @@
       var tk = trk(), w = tk ? tk.clientWidth : 0;
       if (w && Math.abs(w - W) > 3 && !medido) { W = w; render(true); return; }
       folga();
+    }
+    // lista "No trecho da tela" (no mapa, "No trecho do mapa": o onMove a refaz sozinha quando o mapa mexe)
+    function listaSec(d, vis, mob, noMapa) {
+      var visL = vis.filter(function (x) { return !copia230(x, d); });
+      var ord = visL.sort(function (a, b) { return a.km - b.km; }), max = mob ? 8 : 12;
+      return '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>' + (noMapa ? 'No trecho do mapa' : 'No trecho da tela') + '</h3><span>' + visL.length + (visL.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
+        (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou OAE</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
+        ord.slice(0, max).map(function (x) {
+          var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local |MP )?/, '');
+          var sit = '<i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (!x.oae && x.inf.pctText ? ' · ' + esc(x.inf.pctText) : '');
+          // celular: "314 · P1"; computador: o nome do contrato na primeira coluna
+          if (mob) return '<button type="button" class="vg-tr m' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span><b>' + esc((N.numeroCurto(x.c) || N.nome(x.c)) + ' · ' + nome) + '</b><small class="s">' + sit + '</small></span><span class="n">km ' + km + '</span></button>';
+          return '<button type="button" class="vg-tr' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span>' + esc(N.nome(x.c)) + '</span><span><b>' + esc(nome) + '</b></span>' +
+            '<span class="n">' + km + '</span><span class="n">' + (x.oae ? (Number(x.p.extensao) ? nf(x.p.extensao, 1) + ' m' : '–') : nf(x.kf - x.km, 2) + ' km') + '</span><span class="s">' + sit + '</span></button>';
+        }).join('') + '</div>' + (ord.length > max ? '<span class="vg-resto">e mais ' + (ord.length - max) + ' no trecho da tela; aproxime para ver menos</span>' : '') + '</section>';
+    }
+    // "km 794 – 840 · 46 km na tela" (no mapa, "no mapa")
+    function faixaTxt(k0, k1, noMapa) {
+      var R = k1 - k0, c = R < 20 ? 1 : 0;
+      return 'km ' + nf(k0, c) + ' – ' + nf(k1, c) + ' · ' + nf(R, c) + ' km ' + (noMapa ? 'no mapa' : 'na tela');
+    }
+    // o que o mapa desenha: os itens dos contratos mostrados, com os filtros de situação (sem a cópia das OAEs 230), e o
+    // trecho de cada contrato. Lado da rodovia: pontos críticos 1, conservação -1, sinalização -2, OAEs no eixo (0)
+    function dadosMapa(d, its) {
+      var ladoDe = {}, cts = [], vistos = {}, leg = [], ordem = SIT_C.concat(SIT_O, SIT_M).map(function (s0) { return s0[0]; });
+      d.mostra.forEach(function (c) {
+        var g = c.oaes230 ? 'oae' : N.grupo ? N.grupo(c) : N.tipo(c), lado = g === 'pc' ? 1 : g === 'conserva' ? -1 : g === 'sinal' ? -2 : 0;
+        ladoDe[c.id] = lado;
+        cts.push({ c: c, f: d.fx[c.id], lado: lado, trilho: lado === 1 || lado === -1, cor: lado > 0 ? '#3B4540' : '#1E7A46',
+          rot: (g === 'pc' ? 'PC ' : g === 'conserva' ? 'Cons. ' : '') + (N.numeroCurto(c) || N.nome(c)) });
+      });
+      var itM = its.filter(function (x) { return !st.off[x.fk] && !copia230(x, d); }).map(function (x) {
+        if (!vistos[x.st]) { vistos[x.st] = true; leg.push({ cor: x.cor, txt: x.st }); }
+        var nome = x.p.nome || x.p.codigo ? String(x.p.nome || x.p.codigo) : '';
+        return { key: x.key, c: x.c, p: x.p, km: x.km, kf: x.kf, cor: x.cor, st: x.st, peso: PESO[x.st] || 0, oae: x.oae, apag: x.apag, lado: ladoDe[x.c.id] || 0,
+          nome: nome, tip: (nome || (x.oae ? 'OAE' : 'Ponto')) + (x.oae && x.p.codigo && x.p.nome ? ' · ' + x.p.codigo : '') + ' · ' + kmTxt(x, x.kf > x.km) + (x.st ? ' · ' + x.st : '') };
+      });
+      leg.sort(function (a, b) { return ordem.indexOf(a.txt) - ordem.indexOf(b.txt); });
+      return { itens: itM, cts: cts, sel: st.sel, leg: modo() ? leg : [] };
+    }
+    // toque num item do mapa: abre (ou fecha) o mesmo cartão das raias, sem mexer no trecho do mapa
+    function noMapaSel(key) {
+      var x = achar(key);
+      if (!x) return;
+      if (st.sel === key) { fechar(); return; }
+      st.mais = null; st.sel = key;
+      render();
+      avisa(String(x.p.nome || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
+      if (cel()) { enquadrar(); focaMapa(key); } else verTopo(host.querySelector('.vg-card'));
+    }
+    // o item do cartão à vista no mapa. Celular: depois da rolagem do enquadrar(), na faixa entre a barra do topo e a folha
+    function focaMapa(key) {
+      if (!st.ultMapa || !MG) return;
+      if (!cel()) { MG.foca(key); return; }
+      setTimeout(function () {
+        if (st.sel !== key || !MG) return;
+        var tb = document.querySelector('.topbar'), cd = host.querySelector('.vg-card');
+        MG.foca(key, { top: tb ? tb.getBoundingClientRect().bottom : 0, bottom: cd ? cd.getBoundingClientRect().top : window.innerHeight });
+      }, 450);
+    }
+    // o mapa mexeu: o trecho dele vira o trecho da visão (volta para as raias no mesmo km) e a lista acompanha, sem redesenhar
+    // o resto (o foco e a caixa "Contratos" ficam como estão)
+    function noMapaMove(f) {
+      if (!st.ultMapa || !f || !(f[1] >= f[0])) return;
+      st.k0 = f[0]; st.k1 = f[1]; st.mpK = [f[0], f[1]];
+      var d = itens(), vis = d.on.filter(function (x) { return x.kf >= f[0] && x.km <= f[1] && !st.off[x.fk]; });
+      var li = host.querySelector('.vg-lista');
+      if (li && !li.contains(document.activeElement)) li.outerHTML = listaSec(d, vis, cel(), true);
+      var fx = host.querySelector('.vg-faixa');
+      if (fx) fx.textContent = faixaTxt(f[0], f[1], true);
     }
     function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'); }
     // leitor de tela: o aviso fica fora do host, que é trocado a cada desenho (index.html #vgAviso); '' limpa
@@ -751,6 +848,7 @@
       render();
       avisa((pre || '') + String(x.p.nome || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
       if (cel()) enquadrar(); else if (baixo) verTopo(host.querySelector('.vg-card'));
+      focaMapa(x.key);
     }
     // fecha o cartão. Com o foco no cartão, solto na página ou no marcador do próprio ponto, ele vai ao marcador do ponto
     // (ou ao grupo que o contém, ou à linha da lista; senão, ao desenho). Num controle de fora do cartão (busca, filtro,
@@ -850,6 +948,17 @@
           : 'OAEs 230: mostrando só as não atendidas pelo Proarte.');
       }
       else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
+      // Raias | Mapa: o trecho na tela continua o mesmo, e o cartão aberto continua aberto
+      else if (a === 'forma') {
+        var fm = b.dataset.f === 'mapa' ? 'mapa' : 'raias';
+        if (fm !== forma()) {
+          st.forma = fm;
+          try { localStorage.setItem(FORMA_KEY, fm); } catch (e2) { /* vale só nesta visita */ }
+          render();
+          avisa(forma() === 'mapa' ? 'Mostrando o mapa de todos os contratos.' : 'Mostrando as raias em escala de km.');
+          if (o.onForma) o.onForma(forma());
+        }
+      }
       else if (a === 'mapa230') { o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onMapa(c, null); }); }
       else if (a === 'fechar') fechar();
       // o grupo no mesmo km passa pelos itens um a um: o foco fica nele
@@ -1002,7 +1111,7 @@
 
     // sel(): o item do cartão aberto ({ c, p }) ou null; a Foto da barra põe o contrato dele em primeiro (app.js escolheCt)
     // modoNc(): a tela inicial está em Não conformidades (também para quem só tem esse modo, como o fiscal): a lista do contrato abre só com as NC
-    return { render: render, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; }, modoNc: function () { return modo() === 'nc'; } };
+    return { render: render, forma: forma, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; }, modoNc: function () { return modo() === 'nc'; } };
   }
 
   VisaoGeral.kmBusca = kmBusca;   // a busca da lista do contrato (app.js) usa as mesmas formas de km

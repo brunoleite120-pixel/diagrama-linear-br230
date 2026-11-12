@@ -308,7 +308,18 @@
     '.mp-fc-f span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;line-height:1.3}.mp-fc-f img+span{margin-top:2px}',
     '.mp-fc-mais{display:flex;align-items:center;justify-content:center;background:var(--mp-accent-soft,#E7EEF7);color:var(--mp-accent);font-weight:700;font-size:15px}',
     '.mp-fc-bt{display:flex;gap:8px}.mp-fc-bt .mp-btn{flex:1;justify-content:center;min-height:44px;box-shadow:none;font-size:13.5px}',
-    '.mp-fc-bt .mp-fc-pri{background:var(--mp-accent);border-color:var(--mp-accent);color:var(--mp-accent-ink)}'
+    '.mp-fc-bt .mp-fc-pri{background:var(--mp-accent);border-color:var(--mp-accent);color:var(--mp-accent-ink)}',
+    /* mapa de todos os contratos (v174, opts.geral): sem título, busca, Trecho, KML e pontos do contrato (a visão geral tem os seus) */
+    '.mp-geral .mp-title,.mp-geral .mp-find,.mp-geral [data-mp="fit"],.mp-geral [data-mp="kml"],.mp-geral .mp-chips,.mp-geral .mp-camadas{display:none!important}',
+    '.mp-gct span{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;padding:1px 8px;border-radius:999px;background:var(--mp-panel);border:1.5px solid var(--c);color:var(--mp-ink);font-size:11.5px;font-weight:700;line-height:18px;box-shadow:0 1px 3px rgba(0,0,0,.22)}',
+    '.mp-ggr b{position:absolute;display:flex;align-items:center;justify-content:center;width:26px;height:26px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;background:var(--mp-panel);border:2.5px solid var(--c);color:var(--mp-ink);font-size:11.5px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}',
+    '.mp-gsm i{position:absolute;display:block;width:12px;height:12px;transform:translate(-50%,-50%) rotate(45deg);box-sizing:border-box;background:var(--c);border:2px solid #FFFFFF;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.45);cursor:pointer}',
+    '.mp-gsm.oae i{width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%)}',
+    '.mp-gsm.apag i{opacity:.35}',
+    '.mp-gsel i{position:absolute;display:block;width:30px;height:30px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;border:3px solid var(--mp-accent);background:rgba(255,255,255,.35);box-shadow:0 0 0 2px #FFFFFF}',
+    '.mp-geral .mp-legend i.tr{height:3px;background:var(--c)}.mp-geral .mp-legend i.tr.tc{background:repeating-linear-gradient(90deg,var(--c) 0 5px,transparent 5px 8px)}',
+    '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
+    '.mp-dica.on{opacity:1}'
   ].join('\n');
 
   function injectStyle() {
@@ -443,8 +454,18 @@
       '</div>';
     var root = host.querySelector('.mp');
     function q(sel) { return root.querySelector(sel); }
+    // v174: mapa de todos os contratos (a tela inicial em Mapa). opts.geral: { onSel(key), onMove([km0, km1]) }
+    var G = opts.geral || null;
+    if (G) {
+      root.classList.add('mp-geral');
+      root.setAttribute('aria-label', 'Mapa de todos os contratos');
+      root.insertAdjacentHTML('beforeend', '<div class="mp-dica" aria-hidden="true">Use dois dedos para mover o mapa</div>');
+    }
 
     var map = Lf.map(q('.mp-map'), { zoomControl: false, zoomSnap: 0.25, zoomDelta: 0.5, minZoom: 6, maxZoom: 19, worldCopyJump: false, tap: true });
+    // criado fora da página (o mapa de todos, v174), o Leaflet não vê o CSS e põe position:relative no elemento, o que
+    // anula o inset:0 (altura zero). O CSS do .mp-map já o posiciona
+    if (q('.mp-map').style.position === 'relative') q('.mp-map').style.position = '';
     // anel do mapa só com o foco vindo do teclado: no clique ou toque o Leaflet foca o mapa por script, e :focus-visible também valeria
     (function (el) {
       el.addEventListener('keyup', function (e) { if (e.key === 'Tab' && e.target === el) el.classList.add('mp-tecl'); });
@@ -785,6 +806,7 @@
     map.on('moveend', pedeArrumar);
 
     function render() {
+      if (G) { gRender(); return; }
       var c = opts.getContract();
       ctLayer.clearLayers(); ptsLayer.clearLayers(); lblLayer.clearLayers();
       pts = [];
@@ -893,6 +915,194 @@
       pts.forEach(function (x) { if (!seenSt[x.info.status]) { seenSt[x.info.status] = true; items.push(x.info); } });
       q('.mp-legend').innerHTML = items.map(function (i) { return '<span style="--c:' + i.color + '"><i></i>' + esc(i.status) + '</span>'; }).join('');
       q('.mp-legend').hidden = !items.length;
+    }
+
+    // ---------------- mapa de todos os contratos (v174, opts.geral: a tela inicial em Mapa). Itens e trechos vêm da visão geral
+    // (visao.js) já filtrados, pelo geral(d); o toque num item chama G.onSel e a visão abre o cartão de sempre. O trecho de cada
+    // contrato fica ao lado da rodovia, deslocado em pixels (refeito a cada zoom): lado 1 os pontos críticos, -1 a conservação,
+    // -2 a sinalização, 0 (no eixo) as OAEs. Itens próximos na tela viram um círculo com a quantidade, como nas raias.
+    // d: { itens: [{ key, c, p, km, kf, cor, st, peso, oae, apag, lado, nome, tip }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg }
+    var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15;
+    function gNum(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
+    // o 731 (km próprio) vai pelo ramal da travessia, com o km local; os outros pelo eixo, com o km do desenho (x.km)
+    function gKm(x) {
+      var r = refDe(x.c);
+      if (r === eixoRef) return { r: r, a: x.km, b: x.kf };
+      var a = gNum(x.p.kmIni), b = gNum(x.p.kmFim);
+      return { r: r, a: a, b: b == null ? a : b };
+    }
+    function gLinha(x) {
+      var p = x.p;
+      if (p.kmIni == null && typeof p.lat === 'number' && typeof p.lon === 'number') return [[p.lat, p.lon]];
+      var k = gKm(x);
+      if (k.a == null || k.a < k.r.kmMin - 0.5 || k.a > k.r.kmMax + 0.5) return null;
+      return k.b == null || Math.abs(k.b - k.a) < 1e-6 ? [k.r.at(k.a)] : k.r.slice(k.a, k.b);
+    }
+    // a linha deslocada d px para o lado (perpendicular, no zoom da tela). Um ponto só: a direção vem da rodovia em volta (viz)
+    function gDesl(lls, d, viz) {
+      if (!d) return lls;
+      var z = map.getZoom(), pp = lls.map(function (ll) { return map.project(ll, z); }), dir = null;
+      if (pp.length < 2 && viz) { var va = map.project(viz[0], z), vb2 = map.project(viz[1], z); dir = [vb2.x - va.x, vb2.y - va.y]; }
+      return pp.map(function (pt, i) {
+        var dx, dy;
+        if (dir) { dx = dir[0]; dy = dir[1]; }
+        else { var a = pp[Math.max(0, i - 1)], b = pp[Math.min(pp.length - 1, i + 1)]; dx = b.x - a.x; dy = b.y - a.y; }
+        var l = Math.sqrt(dx * dx + dy * dy) || 1;
+        return map.unproject([pt.x - dy / l * d, pt.y + dx / l * d], z);
+      });
+    }
+    function gViz(x) { var k = gKm(x), m = k.a == null ? null : (k.a + (k.b == null ? k.a : k.b)) / 2; return m == null ? null : [k.r.at(m - 0.15), k.r.at(m + 0.15)]; }
+    function gPede() { if (!gRaf) gRaf = requestAnimationFrame(gDesenha); }
+    function gDesenha() {
+      gRaf = 0;
+      if (!G) return;
+      if (!gLayer) { gRend = Lf.canvas({ pane: 'mpPts', padding: 0.3, tolerance: 8 }); gLayer = Lf.layerGroup().addTo(map); }
+      gLayer.clearLayers(); lblLayer.clearLayers();
+      if (!map.getSize().x) return;
+      var z = map.getZoom(), enc = 16, vb = map.getBounds().pad(0.25), comNome = z >= 12, juntar = z < 17;
+      // trechos dos contratos (só os que têm trilho: pontos críticos e conservação)
+      gd.cts.forEach(function (k) {
+        if (!k.trilho || !k.f || !k.lado) return;
+        var r = refDe(k.c), a = r === eixoRef ? k.f[0] : gNum(k.c.kmIni), b = r === eixoRef ? k.f[1] : gNum(k.c.kmFim);
+        if (a == null || b == null) return;
+        var raw = r.slice(a, b), line = gDesl(raw, k.lado * GLADO), cor = k.cor || '#3B4540';
+        Lf.polyline(line, { renderer: gRend, color: cor, weight: 3, opacity: 0.8, dashArray: k.lado < 0 ? '7 5' : null, interactive: false }).addTo(gLayer);
+        [line[0], line[line.length - 1]].forEach(function (ll) {
+          Lf.circleMarker(ll, { renderer: gRend, radius: 3.5, weight: 1.5, color: '#FFFFFF', fillColor: cor, fillOpacity: 1, interactive: false }).addTo(gLayer);
+        });
+        // nome do contrato no meio do pedaço que está na tela, por fora do trilho
+        var dentro = [];
+        raw.forEach(function (ll, i) { if (vb.contains(ll)) dentro.push(i); });
+        var i = dentro.length ? dentro[dentro.length >> 1] : raw.length >> 1;
+        var em = gDesl(raw.slice(Math.max(0, i - 1), i + 2), k.lado * (GLADO + 17)), ll = em[Math.min(em.length - 1, i > 0 ? 1 : 0)];
+        Lf.marker(ll, { pane: 'mpPts', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gct', html: '<span style="--c:' + cor + '">' + esc(k.rot) + '</span>', iconSize: [0, 0] }) }).addTo(gLayer);
+      });
+      // itens por lado, em ordem de km; perto demais na tela (enc px) viram um círculo
+      var lados = {}, selIt = null;
+      gd.itens.forEach(function (x) {
+        var ll = gLinha(x);
+        if (!ll) return;
+        var pp = ll.map(function (l) { return map.project(l, z); }), len = 0;
+        for (var i = 1; i < pp.length; i++) len += pp[i].distanceTo(pp[i - 1]);
+        var it = { x: x, ll: ll, len: len, pm: pp[pp.length >> 1], ord: x.km + x.kf };
+        if (x.key === gd.sel) selIt = it;
+        (lados[x.lado || 0] = lados[x.lado || 0] || []).push(it);
+      });
+      function clique(x) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (G.onSel) G.onSel(x.key); }; }
+      function noLado(ll, it, d) { return d ? gDesl(ll, d, ll.length < 2 ? gViz(it.x) : null) : ll; }
+      Object.keys(lados).forEach(function (kl) {
+        var d = Number(kl) * GLADO, arr = lados[kl].sort(function (a, b) { return a.ord - b.ord; }), gs = [];
+        arr.forEach(function (it) {
+          var longo = it.len >= 5;
+          if (longo || !juntar || it.x.key === gd.sel) { gs.push({ t: longo ? 'linha' : 'simb', l: [it], fixo: true }); return; }
+          var u = gs[gs.length - 1];
+          if (u && !u.fixo && it.pm.distanceTo(u.ult) < enc && it.pm.distanceTo(u.ini) < 3 * enc) { u.t = 'grupo'; u.l.push(it); u.ult = it.pm; return; }
+          gs.push({ t: 'simb', l: [it], ini: it.pm, ult: it.pm });
+        });
+        gs.forEach(function (g) {
+          var it = g.l[0], x = it.x;
+          if (g.t === 'grupo') {
+            var pior = null, sx = 0, sy = 0;
+            g.l.forEach(function (y) { sx += y.pm.x; sy += y.pm.y; if (!pior || (y.x.peso || 0) > (pior.x.peso || 0)) pior = y; });
+            var cen = map.unproject([sx / g.l.length, sy / g.l.length], z), ll = noLado([cen], it, d)[0];
+            var tip = g.l.length + ' itens entre km ' + nf(g.l[0].x.km, 1) + ' e ' + nf(g.l[g.l.length - 1].x.kf, 1) + ': toque para aproximar';
+            Lf.marker(ll, { pane: 'mpPts', keyboard: true, title: tip, alt: tip,
+              icon: Lf.divIcon({ className: 'mp-ggr', html: '<b style="--c:' + ((pior.x.peso || 0) >= 2 ? pior.x.cor : '#3B4540') + '">' + g.l.length + '</b>', iconSize: [0, 0] }) })
+              .on('click', function () {
+                var bb = Lf.latLngBounds([]);
+                g.l.forEach(function (y) { y.ll.forEach(function (l) { bb.extend(l); }); });
+                map.fitBounds(bb.pad(0.3), { maxZoom: Math.min(18, Math.max(z + 2, 13)), animate: !reduced(), padding: [40, 40] });
+              }).addTo(gLayer);
+            return;
+          }
+          var tipI = x.tip || x.nome || '';
+          if (g.t === 'linha') {
+            var line = noLado(it.ll, it, d);
+            Lf.polyline(line, { renderer: gRend, color: '#FFFFFF', weight: 10, opacity: x.apag ? 0.4 : 0.95, lineCap: 'round', interactive: false }).addTo(gLayer);
+            Lf.polyline(line, { renderer: gRend, color: x.cor, weight: x.key === gd.sel ? 8 : 6, opacity: x.apag ? 0.3 : 1, lineCap: 'round', bubblingMouseEvents: false })
+              .bindTooltip(esc(tipI), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(gLayer);
+            if (comNome && x.nome) {
+              var mid = line[line.length >> 1];
+              if (vb.contains(mid)) Lf.marker(mid, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
+                .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 8 : -8], className: 'mp-lbl' }).addTo(lblLayer);
+            }
+            return;
+          }
+          var pt = noLado([it.ll[it.ll.length >> 1]], it, d)[0];
+          Lf.marker(pt, { pane: 'mpPts', keyboard: true, title: tipI, alt: tipI,
+            icon: Lf.divIcon({ className: 'mp-gsm' + (x.oae ? ' oae' : '') + (x.apag ? ' apag' : ''), html: '<i style="--c:' + x.cor + '"></i>', iconSize: [0, 0] }) })
+            .on('click', clique(x)).addTo(gLayer);
+          if (comNome && x.nome && vb.contains(pt)) Lf.marker(pt, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
+            .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 9 : -9], className: 'mp-lbl' }).addTo(lblLayer);
+        });
+      });
+      // o item do cartão aberto: um anel em volta (por baixo do toque)
+      if (selIt) {
+        var dS = Number(selIt.x.lado || 0) * GLADO, lS = noLado(selIt.ll, selIt, dS), cS = lS[lS.length >> 1];
+        Lf.marker(cS, { pane: 'mpGsel', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gsel', html: '<i></i>', iconSize: [0, 0] }) }).addTo(gLayer);
+      }
+      // quantos itens e contratos estão no mapa (os roteiros de teste leem daqui; as linhas ficam no canvas, fora do DOM)
+      root.setAttribute('data-itens', String(gd.itens.length));
+      root.setAttribute('data-cts', String(gd.cts.length));
+      toggleLabels();
+      pedeArrumar();
+    }
+    function gLegenda() {
+      var el = q('.mp-legend'), tr = '';
+      gd.cts.forEach(function (k) { if (k.trilho && k.lado && tr.indexOf('data-l="' + k.lado + '"') < 0) tr += '<span data-l="' + k.lado + '" style="--c:' + (k.cor || '#3B4540') + '"><i class="tr' + (k.lado < 0 ? ' tc' : '') + '"></i>' + (k.lado > 0 ? 'Obras (pontos críticos)' : 'Conservação') + '</span>'; });
+      el.innerHTML = tr + (gd.leg || []).map(function (s) { return '<span style="--c:' + s.cor + '"><i></i>' + esc(s.txt) + '</span>'; }).join('');
+      el.hidden = !el.innerHTML;
+    }
+    function gRender() {
+      ref = eixoRef; ramalAtivo = null; range = [eixoRef.kmMin, eixoRef.kmMax]; pts = [];
+      gLegenda();
+      drawKm();
+      gPede();
+      fotosSync(null);
+    }
+    // o trecho do eixo que está na tela, em km (o "km … na tela" e a lista da visão); nenhum pedaço do eixo na tela: null
+    function gFaixa() {
+      if (!map.getSize().x) return null;
+      var b = map.getBounds(), L = snv.linha, a = Infinity, z = -Infinity;
+      for (var i = 0; i < L.length; i++) if (b.contains([L[i][1], L[i][0]])) { if (L[i][2] < a) a = L[i][2]; if (L[i][2] > z) z = L[i][2]; }
+      return isFinite(a) ? [a, z] : null;
+    }
+    // enquadra o km a–b do eixo (das raias para o mapa, "Ver no mapa", busca de km). Escondido: fica para quando aparecer
+    function gAplicaJan() {
+      if (!gJan) return;
+      var s = map.getSize();
+      if (!s.x || !s.y) return;
+      var a = Math.max(eixoRef.kmMin, gJan[0]), b = Math.min(eixoRef.kmMax, gJan[1]);
+      gJan = null;
+      if (!(b > a)) return;
+      map.fitBounds(Lf.latLngBounds(eixoRef.slice(a, b)), { animate: false, paddingTopLeft: [16, 64], paddingBottomRight: [16, 40], maxZoom: 16 });
+    }
+    if (G) {
+      // vista inicial (a rodovia inteira): o Leaflet precisa de centro e zoom antes de desenhar; a visão enquadra o trecho dela
+      // quando o mapa aparece (janela/show)
+      map.setView(eixoRef.at((eixoRef.kmMin + eixoRef.kmMax) / 2), 7, { animate: false });
+      // o anel do item aberto fica por cima das fotos (430), sem segurar o toque
+      map.createPane('mpGsel').style.zIndex = 436;
+      map.getPane('mpGsel').style.pointerEvents = 'none';
+      map.on('zoomend', gPede);
+      // a cada movimento: os círculos e os nomes acompanham a tela (e o primeiro desenho, que espera o mapa ter tamanho)
+      map.on('moveend', function () {
+        gPede();
+        if (G.onMove) { var f = gFaixa(); if (f) G.onMove(f); }
+      });
+      // celular e tablet: um dedo rola a página, dois dedos movem e aproximam o mapa. Em tela cheia, um dedo move
+      var dedos = { t: 0 };
+      var gToque = function () { try { return window.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; } };
+      gArrasto = function () { if (gToque() && !isFull) map.dragging.disable(); else map.dragging.enable(); };
+      gArrasto();
+      q('.mp-map').addEventListener('touchmove', function (e) {
+        if (!gToque() || isFull || e.touches.length !== 1) return;
+        var dc = q('.mp-dica');
+        dc.classList.add('on');
+        clearTimeout(dedos.t);
+        dedos.t = setTimeout(function () { dc.classList.remove('on'); }, 1300);
+      }, { passive: true });
+      q('.mp-map').addEventListener('touchstart', function (e) { if (e.touches.length > 1) { clearTimeout(dedos.t); q('.mp-dica').classList.remove('on'); } }, { passive: true });
     }
 
     // enquadrar com o mapa escondido (tamanho zero) dá zoom 19 no lugar errado: fica pendente até ele aparecer
@@ -1006,6 +1216,7 @@
       root.classList.add('mp-full');
       document.documentElement.style.overflow = 'hidden';
       setFullBtn();
+      if (gArrasto) gArrasto();
       // no app do iPhone a tela cheia do sistema mostra aviso e um X por cima: lá fica só a de página, que já cobre tudo
       var nativo = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if (!nativo) try { var r = root.requestFullscreen && root.requestFullscreen({ navigationUI: 'hide' }); if (r && r.catch) r.catch(function () {}); } catch (e) { /* sem tela cheia do navegador: fica a de página */ }
@@ -1017,6 +1228,7 @@
       root.classList.remove('mp-full');
       document.documentElement.style.overflow = '';
       setFullBtn();
+      if (gArrasto) gArrasto();
       try { if (document.fullscreenElement === root && document.exitFullscreen) { var r = document.exitFullscreen(); if (r && r.catch) r.catch(function () {}); } } catch (e) { /* nada */ }
       setTimeout(function () { map.invalidateSize(); }, 60);
     }
@@ -1863,7 +2075,32 @@
 
     return {
       render: render,
-      show: function () { setTimeout(function () { map.invalidateSize(); if (!bounds || fitPend) fit(); }, 30); },
+      show: function () { setTimeout(function () { map.invalidateSize(); if (G) { gAplicaJan(); gPede(); } else if (!bounds || fitPend) fit(); }, 30); },
+      // v174, mapa de todos os contratos: geral(d) troca os itens e trechos (da visão geral) e redesenha; janela(a, b) enquadra o
+      // km a–b do eixo; faixa() diz o km do eixo na tela; foca(key) traz à vista o item escolhido na lista ou na busca
+      geral: function (d) { gd = d || gd; if (G) render(); },
+      janela: function (a, b) { gJan = [a, b]; gAplicaJan(); },
+      faixa: gFaixa,
+      // area: { top, bottom } da tela que fica à vista (no celular, entre a barra do topo e a folha do cartão): o item vai para lá
+      foca: function (key, area) {
+        var x = null;
+        gd.itens.forEach(function (y) { if (y.key === key) x = y; });
+        var ll = x && gLinha(x);
+        if (!ll || !map.getSize().x) return;
+        var bb = Lf.latLngBounds(ll), vb = map.getBounds().pad(-0.12), dentro = vb.contains(bb);
+        if (area) {
+          if (!dentro) map.setView(bb.getCenter(), Math.max(map.getZoom(), 11), { animate: false });
+          var c = map.getContainer().getBoundingClientRect(), p = map.latLngToContainerPoint(bb.getCenter());
+          var y = c.top + p.y, x0 = c.left + p.x, topo = Math.max(c.top, area.top) + 36, base = Math.min(c.bottom, area.bottom) - 30;
+          if (base - topo < 50) return;
+          var dy = y < topo || y > base ? y - (topo + base) / 2 : 0, dx = x0 < c.left + 30 || x0 > c.right - 70 ? x0 - (c.left + c.right) / 2 : 0;
+          if (dx || dy) map.panBy([dx, dy], { animate: !reduced() });
+          return;
+        }
+        if (dentro) return;
+        if (map.getZoom() < 11) map.fitBounds(bb.pad(0.5), { maxZoom: 13, animate: !reduced(), paddingTopLeft: [16, 64], paddingBottomRight: [16, 40] });
+        else map.panTo(bb.getCenter(), { animate: !reduced() });
+      },
       // saiu do Mapa: desliga o GPS ao vivo e a tela sempre acesa (gastavam bateria sem ninguém ver). true = estava ligado
       pausa: function () { if (live.watch == null && !nav) return false; stopGps(); return true; },
       invalidate: function () { map.invalidateSize(); },

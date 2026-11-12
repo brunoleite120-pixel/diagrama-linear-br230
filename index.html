@@ -228,6 +228,17 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-chip b{font-variant-numeric:tabular-nums}
 .vg-chip[aria-pressed="false"]{background:var(--ground);color:var(--ink-3);border-style:dashed}
 .vg-chip[aria-pressed="false"] i{background:transparent!important;border:2px solid currentColor}
+/* v174: Raias | Mapa no alto da visão (computador; no celular e no tablet a barra de baixo troca) e o mapa de todos os
+   contratos (mapa.js, opts.geral), posto pelo visao.js no lugar do desenho */
+.vg-forma{display:flex;align-self:center;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.vg-forma button{display:flex;align-items:center;gap:7px;min-height:36px;padding:4px 14px;border:0;border-right:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:13.5px;font-weight:600;white-space:nowrap}
+.vg-forma button:last-child{border-right:0}
+.vg-forma button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.vg-forma button:focus-visible{outline-offset:-4px}
+.vg-forma button[aria-pressed="true"]:focus-visible{outline-color:#fff}
+.vg-head.com-forma .vg-tot{flex-basis:100%}
+.vg-mapa{height:min(600px,calc(100vh - var(--topbar-h,61px) - 150px));min-height:380px}
+.vg-mapa .mp{height:100%;min-height:0}
 .vg-meio{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
 .vg-diag{flex:999 1 560px;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:10px}   /* a coluna encolhe (min-width:0): a barra quebra em linhas e o texto de "Contratos" corta com reticências, sem a página rolar para o lado */
 .vg-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
@@ -363,6 +374,8 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg-modo button{min-height:40px;padding:4px 10px}
   .vg-zoom{margin-left:auto}
   .vg-zoom button{width:40px;height:40px}
+  .vg-mapa{height:62vh;height:calc(100dvh - var(--topbar-h,61px) - var(--pgnav-h,0px) - 190px);min-height:300px}
+  .vg-forma button{min-height:40px;padding:4px 12px}
   .vg-zoom .lado{display:none}
   .vg-rod .vg-lab b{font-size:10px;white-space:nowrap}
   .vg-busca{max-width:none}

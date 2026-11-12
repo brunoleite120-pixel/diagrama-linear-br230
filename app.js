@@ -2578,7 +2578,7 @@
     nav.setAttribute('data-modo', g ? 'geral' : 'contrato');
     nav.setAttribute('aria-label', g ? 'Navegação geral' : 'Páginas');
     var nm = nav.querySelector('[data-pg="mapa"]');
-    if (nm) nm.hidden = !temMapa() || (g && !state.contracts.some(function (c) { return podeMapa(c); }));
+    if (nm) nm.hidden = !temMapa() || (g && !mapaNaVisao() && !state.contracts.some(function (c) { return podeMapa(c); }));
     if (g && telaG === 'galeria' && !galeriaOn()) telaG = 'geral';
     if (g) document.body.setAttribute('data-geral', telaG); else document.body.removeAttribute('data-geral');
     if (!on) {
@@ -2696,21 +2696,22 @@
     window.scrollTo(0, pg === 'mapa' || pg === 'galeria' ? 0 : pgRolY[pg] || 0);
     if (!semHist) try { var hs = history.state || {}; history.pushState({ pg: pg, casa: !!hs.casa, n: (hs.n || 0) + 1 }, ''); } catch (e) { /* segue sem histórico */ }
   }
-  // barra geral: Geral, Contratos e Galeria trocam a parte da tela inicial; Mapa abre o último contrato (mapaGeral). Contratos e
-  // Galeria ficam um passo acima da tela inicial no histórico: o Voltar (e o Geral) voltam para ela
+  // barra geral: Geral, Contratos, Mapa (v174: a tela inicial em mapa, com todos os contratos) e Galeria trocam a parte da tela
+  // inicial. Contratos, Mapa e Galeria ficam um passo acima dela no histórico: o Voltar (e o Geral) voltam para ela
   function irGeral(novo, semHist) {
-    if (novo === 'mapa') { mapaGeral(); return; }
-    if ((novo !== 'geral' && novo !== 'contratos' && novo !== 'galeria') || (novo === 'galeria' && !galeriaOn())) return;
+    if (novo === 'mapa' && !mapaNaVisao()) { mapaGeral(); return; }
+    if ((novo !== 'geral' && novo !== 'contratos' && novo !== 'galeria' && novo !== 'mapa') || (novo === 'galeria' && !galeriaOn())) return;
     mexeu = true;
     if (novo === telaG) { if (novo !== 'galeria') window.scrollTo(0, 0); return; }
     var hs = history.state || {};
     if (!semHist) {
       try {
-        if (novo === 'geral') { if (hs.tela === 'contratos' || hs.tela === 'galeria') { history.back(); return; } history.replaceState({ tela: 'geral', n: 0 }, ''); }
+        if (novo === 'geral') { if (hs.tela === 'contratos' || hs.tela === 'galeria' || hs.tela === 'mapa') { history.back(); return; } history.replaceState({ tela: 'geral', n: 0 }, ''); }
         else if (telaG === 'geral') history.pushState({ tela: novo, n: 1 }, '');
         else history.replaceState({ tela: novo, n: 1 }, '');
       } catch (e) { /* segue sem histórico */ }
     }
+    if (telaG === 'mapa' && novo !== 'mapa') pausaMapaG();
     telaG = novo;
     renderAll();
     window.scrollTo(0, 0);
@@ -2718,7 +2719,9 @@
   // volta à tela inicial (Voltar do Android ou do navegador, Geral, ícone do topo) na parte pedida
   function mostraGeral(t) {
     if (!visaoOn) { setVisao(true); pausaMapa(); }
-    telaG = t === 'contratos' || t === 'galeria' ? t : 'geral';
+    var t2 = t === 'contratos' || t === 'galeria' || (t === 'mapa' && mapaNaVisao()) ? t : 'geral';
+    if (telaG === 'mapa' && t2 !== 'mapa') pausaMapaG();
+    telaG = t2;
     renderAll();
     window.scrollTo(0, 0);
   }
@@ -2737,7 +2740,9 @@
     var hs = history.state || {};
     try { history.pushState({ tela: 'contrato', id: c.id, pg: pg, casa: true, n: (hs.tela && hs.tela !== 'contrato' ? hs.n || 0 : 0) + 1 }, ''); } catch (e) { /* segue sem histórico */ }
   }
-  // Mapa da barra geral: o mapa do último contrato aberto (o mapa de todos os contratos ainda não existe); sem último, pergunta
+  // v174: o Mapa da barra geral abre a tela inicial em Mapa, com todos os contratos (irGeral('mapa')). Sem o mapa de todos
+  // (mapaNaVisao falso), fica como antes: o mapa do último contrato aberto; sem último, pergunta
+  function mapaNaVisao() { return temMapa() && !isPublico() && !!window.VisaoGeral && !!$('visaoHost'); }
   function mapaGeral() {
     var cs = state.contracts.filter(function (c) { return podeMapa(c); }), u = lsGet(ULT_KEY);
     if (!temMapa() || !cs.length) return;
@@ -5491,7 +5496,7 @@
     if (soVisao() && window.VisaoGeral && $('visaoHost')) visaoOn = true;
     aplicaPapel();
     renderTabs();
-    if (mostraVisao()) { if (telaG !== 'geral') return; if (desenhaVisao()) return; }
+    if (mostraVisao()) { if (telaG !== 'geral' && telaG !== 'mapa') return; if (desenhaVisao()) return; }
     if (medicoesOn && desenhaMedicoes()) return;
     if (!state.contracts.length) { renderEditor(); return; }
     // fiscal (sem o diagrama): a folha ao lado fica no mapa
@@ -5514,6 +5519,7 @@
   var visaoOn = (function () { try { return sessionStorage.getItem(INICIO_KEY) !== '1'; } catch (e) { return true; } })();
   function setVisao(on) {
     if (medicoesOn) { medicoesOn = false; hashMedicoes(false); }
+    if (!on && visaoOn) pausaMapaG();
     visaoOn = !!on;
     if (on) ui.abaCt = null;
     try { if (on) sessionStorage.removeItem(INICIO_KEY); else sessionStorage.setItem(INICIO_KEY, '1'); } catch (e) { /* sem armazenamento */ }
@@ -5541,11 +5547,35 @@
         var sp = c.oaes230 && !p._at ? ctSemProarte() : null;
         if (c.oaes230) abrirGaleria({ cid: sp ? sp.id : c.de, pid: p._at || p.id }); else abrirGaleria({ cid: c.id, pid: p.id });
       },
+      // v174: o mapa de todos os contratos (Raias | Mapa). No celular e no tablet a barra de baixo escolhe (Geral = raias,
+      // Mapa = mapa); no computador, o botão da própria visão
+      mapa: function (hooks) { return mapaGeralCria(hooks); },
+      formaFixa: function () { return geralAtivo() ? (telaG === 'mapa' ? 'mapa' : 'raias') : null; },
+      onForma: function (f) { if (f !== 'mapa') pausaMapaG(); },
       // erro num evento da visão (clique, busca, arrasto): mostra o contrato
       onErro: function (e) { console.error(e); visaoOn = false; renderAll(); }
     });
     return visao;
   }
+  // v174: o mapa de todos os contratos, criado uma vez (na primeira vez que alguém escolhe Mapa) num elemento fora da página;
+  // a visão o põe no lugar a cada desenho. Mesmo fundo, GPS e fotos da equipe do mapa do contrato; sem trecho nem KML
+  var mapaG = null;
+  function mapaGeralCria(hooks) {
+    if (mapaG || !window.MapaSNV || !window.L || !window.SNV_BR230) return mapaG;
+    var el = document.createElement('div');
+    el.className = 'vg-mapa';
+    var fo = fotosDoMapa();
+    delete fo.trocaCt;   // no mapa de todos, o contrato escolhido nas fotos só filtra e enquadra
+    var api = window.MapaSNV({
+      host: el, snv: window.SNV_BR230, getContract: function () { return null; }, pointInfo: pointInfo, nomes: NOMES,
+      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, fotos: fo, geral: hooks
+    });
+    if (!api) return null;
+    api.el = el;
+    mapaG = api;
+    return api;
+  }
+  function pausaMapaG() { if (mapaG && mapaG.pausa && mapaG.pausa()) toast('Localização ao vivo desligada: você saiu do Mapa.'); }
   // um dado estranho não pode impedir a abertura nem travar a tela: se a visão falha, mostra o contrato
   function desenhaVisao() {
     // na tela inicial, as medições das conservações e pontes vêm junto (pintam o que a supervisão já conferiu); uma vez cada.
@@ -5559,10 +5589,10 @@
   }
   function mostraVisao() {
     var vh = $('visaoHost'), on = visaoOn && !!vh && !!ensureVisao(), g = on && geralAtivo(), ch = $('contratosHost');
-    if (!g || (telaG === 'galeria' && !galeriaOn())) telaG = 'geral';
+    if (!g || (telaG === 'galeria' && !galeriaOn()) || (telaG === 'mapa' && !mapaNaVisao())) telaG = 'geral';
     if (on || medicoesOn) topoMini(false);
     $('layout').hidden = on || medicoesOn;
-    if (vh) vh.hidden = !on || telaG !== 'geral';
+    if (vh) vh.hidden = !on || (telaG !== 'geral' && telaG !== 'mapa');
     if (ch) { ch.hidden = !on || telaG !== 'contratos'; if (!ch.hidden) renderContratos(); }
     if ($('medicoesHost')) $('medicoesHost').hidden = !medicoesOn;
     // na visão não há contrato na tela: imprimir pegaria o contrato escondido. Fiscal e analista sem o acompanhamento: sem diagrama
@@ -9320,12 +9350,13 @@
       if (escPula) { escPula = false; var f = escDepois; escDepois = null; if (f) f(); return; }
       if (galeria && galeria.voltar()) return;   // as folhas da galeria no celular
       if (mapa && mapa.voltar && mapa.voltar()) return;   // o cartão das fotos no mapa (v170)
+      if (mapaG && mapaG.voltar && mapaG.voltar()) return;   // o mesmo cartão no mapa de todos os contratos (v174)
       if (medicoes && medicoes.voltar()) return;   // a folha de escolher a medição no celular
       if ($('modal')) { modalHist = false; if ($('modal').dataset.ocupado) modalPoeHist(); else if (modalCancela) modalCancela(); return; }
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};
       if (s.modal || s.glFolha || s.mpFoto) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
-      if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria') { mostraGeral(s.tela); return; }
+      if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria' || s.tela === 'mapa') { mostraGeral(s.tela); return; }
       if (visaoOn) { if (!s.tela && s.pg) try { history.back(); } catch (er) { /* segue */ } return; }
       if (s.pg && s.pg !== pg && pgAtivo()) irPg(s.pg, true);
     });
