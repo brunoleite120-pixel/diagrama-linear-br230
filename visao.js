@@ -204,7 +204,9 @@
     function mapaG() {
       if (!MG && !MGfalhou && o.mapa) {
         MG = o.mapa({ onSel: seguro(noMapaSel), onMove: seguro(noMapaMove),
-          onCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id) o.onAbrir(c, null); }); }) }) || null;
+          onCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id) o.onAbrir(c, null); }); }),
+          temFotos: function () { return !!(o.onFotosCt && o.temFotos && o.temFotos()); },
+          onFotosCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id && o.onFotosCt) o.onFotosCt(c); }); }) }) || null;
         if (!MG) MGfalhou = true;
       }
       return MG;
@@ -551,7 +553,7 @@
             (x.p.obs ? '<p class="vg-obs">' + esc(x.p.obs) + '</p>' : '') + '</details>' : '') +
           '<div class="vg-acoes">' + (c230 && !do424 && !naSp ? '' : '<button type="button" class="btn primary" data-vg="abrir">' + (pub ? 'Entrar para ver' : do424 ? 'Abrir no Proarte 424' : naSp ? 'Abrir em OAEs sem Proarte' : 'Abrir no contrato') + '</button>') +
           (!x.c.kmLocal && (typeof o.temMapa === 'function' ? o.temMapa() : o.temMapa) ? '<button type="button" class="btn' + (c230 && !do424 && !naSp ? ' primary' : '') + '" data-vg="mapa">' + (noMapa ? 'Mapa do contrato' : 'Ver no mapa') + '</button>' : '') +
-          (o.temFotos && o.temFotos() ? '<button type="button" class="btn" data-vg="fotos">Fotos</button>' : '') + '</div></aside>';
+          (o.temFotos && o.temFotos() ? '<button type="button" class="btn" data-vg="fotos">Ver as fotos</button>' : '') + '</div></aside>';
       }
       h += '</div>';
 

@@ -1322,7 +1322,8 @@
     // ---------------------------------------------------------------- filtros
     function contratos() { return (o.contratos ? o.contratos() : []) || []; }
     // conservação: a foto vai ao relatório só com o contrato e o km (os segmentos são divisão nossa; não se escolhe ponto)
-    function ehCons(cid) { var c = cid && contratos().find(function (x) { return x.id === cid; }); return !!c && c.tipo === 'conserva'; }
+    // contrato sem pontos: a conservação (as fotos vão pelo km) e a Supervisora (CT 393, tipo 'sup', v172). Nelas não há "Sem ponto"
+    function ehCons(cid) { var c = cid && contratos().find(function (x) { return x.id === cid; }); return !!c && (c.tipo === 'conserva' || c.tipo === 'sup'); }
     // nome completo, para a foto aberta ("Pontos Críticos 314 · Lote 01 · CT 02 00314/2026"); contrato que não está neste
     // aparelho: o texto gravado com a foto
     function nomeContrato(cid, it) {
@@ -2655,7 +2656,7 @@
     function pontosMover(primeira) {
       var c = contratos().find(function (x) { return x.id === q('#glMvC').value; }), sp = q('#glMvP');
       q('#glMvPl').textContent = ehOae(c) ? 'OAE' : 'Ponto';
-      sp.closest('label').hidden = !!c && c.tipo === 'conserva';
+      sp.closest('label').hidden = !!c && (c.tipo === 'conserva' || c.tipo === 'sup');
       var ps = pontosDe(c), perto = mv.km != null && !mv.varios ? maisPerto(c, mv.km) : null, vai = '';
       if (primeira && mv.pid0 && ps.some(function (p) { return p.id === mv.pid0; })) vai = mv.pid0;
       else if (perto && perto.d <= raioPonto(c)) vai = perto.p.id;

@@ -5557,8 +5557,13 @@
       onMapa: function (c, p) { if (c.oaes230) abrir230(p, true); else abrirDaVisao(c, p, podeMapa(c)); },
       onFotos: function (c, p) {
         var sp = c.oaes230 && !p._at ? ctSemProarte() : null;
-        if (c.oaes230) abrirGaleria({ cid: sp ? sp.id : c.de, pid: p._at || p.id }); else abrirGaleria({ cid: c.id, pid: p.id });
+        if (c.oaes230) abrirGaleria({ cid: sp ? sp.id : c.de, pid: p._at || p.id });
+        // conservação: as fotos vão pelo km do segmento (não têm ponto), como no editor
+        else if (c.tipo === 'conserva') abrirGaleria({ cid: c.id, km: [Number(p.kmIni), Number(p.kmFim)], kmNome: p.nome || p.codigo || '' });
+        else abrirGaleria({ cid: c.id, pid: p.id });
       },
+      // as fotos de um contrato inteiro (cartão do contrato no mapa de todos)
+      onFotosCt: function (c) { abrirGaleria({ cid: c.id }); },
       // v174: o mapa de todos os contratos (Raias | Mapa). No celular e no tablet a barra de baixo escolhe (Geral = raias,
       // Mapa = mapa); no computador, o botão da própria visão
       mapa: function (hooks) { return mapaGeralCria(hooks); },

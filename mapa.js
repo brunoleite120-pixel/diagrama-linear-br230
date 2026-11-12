@@ -1120,6 +1120,7 @@
         '<p>' + (c.numero ? esc(c.numero) + ' · ' : '') + 'km ' + km2(k.f[0]) + ' a ' + km2(k.f[1]) + ' · ' + nf(k.f[1] - k.f[0], 1) + ' km</p>' +
         '<p>' + n + o2 + (perto() ? '' : ' · a situação de cada um aparece de perto') + '</p>' +
         '<div class="mp-fc-bt">' + (G.onCt ? '<button type="button" class="mp-btn mp-fc-pri" data-mp="gct-abre" data-id="' + id + '">Abrir o contrato</button>' : '') +
+        (G.temFotos && G.temFotos() ? '<button type="button" class="mp-btn" data-mp="gct-fotos" data-id="' + id + '">Ver as fotos</button>' : '') +
         '<button type="button" class="mp-btn" data-mp="gct-enq" data-id="' + id + '">Enquadrar</button></div></div>';
       Lf.popup({ autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 40], maxWidth: 320 }).setLatLng(ll).setContent(html).openOn(map);
       function perto() { return map.getZoom() >= 12; }
@@ -1129,6 +1130,7 @@
       if (!k) return;
       map.closePopup();
       if (act === 'gct-abre') { if (G.onCt) G.onCt(id); return; }
+      if (act === 'gct-fotos') { if (G.onFotosCt) G.onFotosCt(id); return; }
       var r = refDe(k.c), a = r === eixoRef ? k.f[0] : gNum(k.c.kmIni), b = r === eixoRef ? k.f[1] : gNum(k.c.kmFim);
       if (a == null || b == null || !(b > a)) return;
       map.fitBounds(Lf.latLngBounds(r.slice(a, b)), { animate: !reduced(), paddingTopLeft: [16, 64], paddingBottomRight: [16, 40], maxZoom: 16 });
@@ -2142,7 +2144,7 @@
       if (act === 'nav-voz') { if (nav) { nav.voz = !nav.voz; lsSet(VOZ_KEY, nav.voz ? '1' : '0'); if (!nav.voz) try { window.speechSynthesis.cancel(); } catch (e2) { /* nada */ } navUi(); } return; }
       if (act === 'mais') { var tl = q('.mp-tools'), ab = !tl.classList.contains('abertas'); tl.classList.toggle('abertas', ab); b.setAttribute('aria-expanded', String(ab)); pedeArrumar(); return; }
       if (act === 'fotos' || act === 'ff-d' || act.indexOf('fc-') === 0) { fotosAcao(act, b); return; }
-      if (act === 'gct-abre' || act === 'gct-enq') { gCtAcao(act, b.dataset.id || ''); return; }
+      if (act === 'gct-abre' || act === 'gct-enq' || act === 'gct-fotos') { gCtAcao(act, b.dataset.id || ''); return; }
       if (act === 'full') { if (isFull) closeFull(); else openFull(); }
       else if (act === 'fit') fit();
       else if (act === 'kml') exportKml();
