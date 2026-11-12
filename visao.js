@@ -703,10 +703,16 @@
         cts.push({ c: c, f: d.fx[c.id], lado: lado, trilho: lado !== 0, cor: corCt(c) || (lado === -2 ? '#5C6661' : '#3B4540'), nome: N.nome(c),
           rot: (g === 'pc' ? 'PC ' : g === 'conserva' ? 'Cons. ' : g === 'sinal' ? 'Sinal. ' : '') + (N.numeroCurto(c) || N.nome(c)) });
       });
+      // no mapa (não nas raias), as cores da situação das medições só nos pontos críticos (pedido de 12/11/2026): os itens da
+      // conservação e da sinalização ficam na cor do contrato e as OAEs do Proarte num cinza só. As não atendidas pelo Proarte
+      // (categoria, não situação) e o modo Não conformidades continuam como estão
+      var md = modo();
       var itM = its.filter(function (x) { return !st.off[x.fk] && !copia230(x, d); }).map(function (x) {
-        if (!vistos[x.st]) { vistos[x.st] = true; leg.push({ cor: x.cor, txt: x.st }); }
+        var semSit = md !== 'nc' && grupoCt(x.c) !== 'pc' && !x.c.oaes230, lado = ladoDe[x.c.id] || 0;
+        var cor = semSit ? corCt(x.c) || (lado === -2 ? '#5C6661' : '#59615D') : x.cor;
+        if (!semSit && !vistos[x.st]) { vistos[x.st] = true; leg.push({ cor: x.cor, txt: x.st }); }
         var nome = x.p.nome || x.p.codigo ? String(x.p.nome || x.p.codigo) : '';
-        return { key: x.key, c: x.c, p: x.p, km: x.km, kf: x.kf, cor: x.cor, st: x.st, peso: PESO[x.st] || 0, oae: x.oae, apag: x.apag, lado: ladoDe[x.c.id] || 0,
+        return { key: x.key, c: x.c, p: x.p, km: x.km, kf: x.kf, cor: cor, neutro: semSit, st: x.st, peso: semSit ? 0 : PESO[x.st] || 0, oae: x.oae, apag: x.apag, lado: lado,
           nome: nome, tip: (nome || (x.oae ? 'OAE' : 'Ponto')) + (x.oae && x.p.codigo && x.p.nome ? ' · ' + x.p.codigo : '') + ' · ' + kmTxt(x, x.kf > x.km) + (x.st ? ' · ' + x.st : '') };
       });
       leg.sort(function (a, b) { return ordem.indexOf(a.txt) - ordem.indexOf(b.txt); });

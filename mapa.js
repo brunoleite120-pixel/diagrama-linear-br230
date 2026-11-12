@@ -325,6 +325,8 @@
     '.mp-gleg{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border:0;border-radius:6px;background:transparent;font:inherit;font-weight:600;color:var(--mp-ink);cursor:pointer}.mp-gleg:hover,.mp-gleg:focus-visible{background:var(--mp-line)}',
     '.mp-gleg-s{color:var(--mp-ink-3);margin-left:4px}',
     '.mp-gsm.pt i{width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%)}.mp-glonge .mp-gsm.pt i{width:10px;height:10px}',
+    /* item sem a cor da situação (conservação, sinalização, OAE do Proarte): vazado, com a borda na cor do contrato */
+    '.mp-gsm.neu i{background:#FFFFFF;border:2.5px solid var(--c)}',
     '.mp-gpop p{margin:0 0 6px;font-size:13px;color:var(--mp-ink-2)}.mp-gpop h3{border-left:5px solid var(--c);padding-left:8px}.mp-gpop .mp-fc-bt{margin-top:4px}',
     '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
     '.mp-dica.on{opacity:1}'
@@ -954,7 +956,7 @@
     // (visao.js) já filtrados, pelo geral(d); o toque num item chama G.onSel e a visão abre o cartão de sempre. O trecho de cada
     // contrato fica ao lado da rodovia, deslocado em pixels (refeito a cada zoom): lado 1 os pontos críticos, -1 a conservação,
     // -2 a sinalização, 0 (no eixo) as OAEs. Itens próximos na tela viram um círculo com a quantidade, como nas raias.
-    // d: { itens: [{ key, c, p, km, kf, cor, st, peso, oae, apag, lado, nome, tip }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg }
+    // d: { itens: [{ key, c, p, km, kf, cor, neutro, st, peso, oae, apag, lado, nome, tip }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg }
     var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15;
     function gNum(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
     // o 731 (km próprio) vai pelo ramal da travessia, com o km local; os outros pelo eixo, com o km do desenho (x.km)
@@ -1090,7 +1092,7 @@
           }
           var pt = noLado([it.ll[it.ll.length >> 1]], it, d)[0];
           Lf.marker(pt, { pane: 'mpPts', keyboard: true, title: tipI, alt: tipI,
-            icon: Lf.divIcon({ className: 'mp-gsm' + (x.oae ? ' oae' : Number(kl) ? ' pt' : '') + (x.apag ? ' apag' : ''), html: '<i style="--c:' + x.cor + '"></i>', iconSize: [0, 0] }) })
+            icon: Lf.divIcon({ className: 'mp-gsm' + (x.oae ? ' oae' : Number(kl) ? ' pt' : '') + (x.neutro ? ' neu' : '') + (x.apag ? ' apag' : ''), html: '<i style="--c:' + x.cor + '"></i>', iconSize: [0, 0] }) })
             .on('click', clique(x)).addTo(gLayer);
           if (comNome && x.nome && vb.contains(pt)) Lf.marker(pt, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
             .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 9 : -9], className: 'mp-lbl' }).addTo(lblLayer);
