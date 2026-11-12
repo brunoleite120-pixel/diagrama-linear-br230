@@ -324,8 +324,6 @@
     '.mp-geral .mp-legend i.pt{width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid #FFFFFF;box-shadow:0 0 0 1px rgba(0,0,0,.3)}',
     '.mp-gleg{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border:0;border-radius:6px;background:transparent;font:inherit;font-weight:600;color:var(--mp-ink);cursor:pointer}.mp-gleg:hover,.mp-gleg:focus-visible{background:var(--mp-line)}',
     '.mp-gleg-s{color:var(--mp-ink-3);margin-left:4px}',
-    /* a rodovia no mapa de todos: preta com borda branca em qualquer fundo (no satélite também; o amarelo fica no mapa do contrato) */
-    '.mp-geral .mp-road{stroke:#17201C}.mp-geral .mp-road-case{stroke:#FFFFFF}',
     '.mp-gsm.pt i{width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%)}.mp-glonge .mp-gsm.pt i{width:10px;height:10px}',
     '.mp-gpop p{margin:0 0 6px;font-size:13px;color:var(--mp-ink-2)}.mp-gpop h3{border-left:5px solid var(--c);padding-left:8px}.mp-gpop .mp-fc-bt{margin-top:4px}',
     '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
@@ -668,19 +666,14 @@
       if (t && isFinite(t[0]) && isFinite(t[1]) && t[1] > t[0]) { a = Math.max(a, t[0]); b = Math.min(b, t[1]); }
       return b > a ? [a, b] : [eixoRef.kmMin, eixoRef.kmMax];
     }
-    // no mapa do contrato, o eixo do trecho tracejado (contexto); no mapa de todos, em linha cheia, como a rodovia do contrato
-    var ctxLinha = Lf.polyline(full, { pane: 'mpRoad', className: 'mp-ctx', weight: 2, interactive: false }).addTo(map), ctxFeito = '', ctxRod = null;
+    // o eixo do trecho, tracejado fino (contexto), no mapa do contrato e no de todos: branco no satélite, cinza no fundo Mapa.
+    // (v176 e v178 o trocaram por linha cheia no mapa de todos; o usuário preferiu o tracejado de antes, 12/11/2026)
+    var ctxLinha = Lf.polyline(full, { pane: 'mpRoad', className: 'mp-ctx', weight: 2, interactive: false }).addTo(map), ctxFeito = '';
     function ctxAtualiza() {
-      var t = trechoEixo(), chave = t.join(':') + (G ? ':g' : '');
+      var t = trechoEixo(), chave = t.join(':');
       if (chave === ctxFeito) return;
       ctxFeito = chave;
-      var ll = eixoRef.slice(t[0], t[1]);
-      if (G) {
-        if (map.hasLayer(ctxLinha)) map.removeLayer(ctxLinha);
-        if (ctxRod) ctxRod.forEach(function (l) { map.removeLayer(l); });
-        ctxRod = [Lf.polyline(ll, { pane: 'mpRoad', className: 'mp-road-case', weight: 8, interactive: false }).addTo(map),
-          Lf.polyline(ll, { pane: 'mpRoad', className: 'mp-road', weight: 4, interactive: false }).addTo(map)];
-      } else ctxLinha.setLatLngs(ll);
+      ctxLinha.setLatLngs(eixoRef.slice(t[0], t[1]));
       locs.forEach(function (x) {
         var dentro = x.km >= t[0] - 0.05 && x.km <= t[1] + 0.05;
         if (dentro && !locLayer.hasLayer(x.m)) locLayer.addLayer(x.m);
@@ -1011,8 +1004,6 @@
       // segmentos nem nos pontos. A situação de cada item fica num ponto ao lado da linha, só de perto (zoom 12 em diante)
       var wCt = longe ? 3.5 : medio ? 5 : 6, wCtB = longe ? 6 : medio ? 8 : 10, perto = !longe && !medio;
       root.classList.toggle('mp-glonge', longe);
-      // a rodovia (linha cheia no nosso trecho) mais fina de longe, para não pesar mais que as linhas dos contratos
-      if (ctxRod) { var wR = longe ? [5, 2.5] : medio ? [7, 3.5] : [8, 4]; ctxRod[0].setStyle({ weight: wR[0] }); ctxRod[1].setStyle({ weight: wR[1] }); }
       // o canvas desenha na ordem em que as linhas entram no mapa: primeiro as bordas, depois as cores e por fim as pontas
       function fila() { return { l: [], addLayer: function (x) { this.l.push(x); } }; }
       var bordas = fila(), cores = fila(), pontas = fila();
