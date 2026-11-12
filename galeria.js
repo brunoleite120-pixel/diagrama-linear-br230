@@ -242,7 +242,8 @@
     '.gl-mv-sug:empty{display:none}',
     '.gl-mv-sug.fora{background:#FEF0C7;color:#7A2E0E}',
     '.gl-mv-nota{margin:0;font-size:12px;color:var(--ink-3,#5C6661);line-height:1.45}',
-    '.gl-mv-acts{display:flex;gap:8px;justify-content:flex-end}',
+    '.gl-mv-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}',
+    '.gl-mv-mais{margin:0;padding:8px 10px;border-radius:8px;background:#FFF4D6;border:1px solid #E8C77A;color:#5C3D00;font-size:13.5px}',
     // lista das pastas do Drive (janela "Pastas do Drive pelo nº do contrato")
     '.gl-pastas{margin:6px 0 10px;padding-left:18px;max-height:40vh;overflow:auto;font-size:13px;line-height:1.45;overflow-wrap:anywhere}',
     // como página do celular: entre as barras do app (--topbar-h e --pgnav-h vêm do app.js e do index.html), por baixo das listas
@@ -1335,7 +1336,7 @@
     }
     function semPeriodo(it) {
       if (aba === 'drive') return (dbusca.trim() ? true : noCaminho(it)) && naBusca(it);   // a busca vale para o Drive todo
-      return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid : it.pid === filtro.pid)) &&
+      return (!filtro.cid || (filtro.cid === SEM ? !it.cid : it.cid === filtro.cid)) && (!filtro.pid || (filtro.pid === SEM ? !it.pid && !ehCons(it.cid) : it.pid === filtro.pid)) &&
         (!filtro.ids || filtro.ids.indexOf(it.id) >= 0) && (!filtro.nc || ncIds[it.id]) &&
         (!filtro.km || (it.km != null && isFinite(it.km) && Number(it.km) >= filtro.km[0] - FOLGA_KM && Number(it.km) <= filtro.km[1] + FOLGA_KM)) &&
         (!filtro.autor || (it.autor || 'Sem nome') === filtro.autor) && (!filtro.mes || mesKey(it.em) === filtro.mes) &&
@@ -2625,7 +2626,8 @@
       var kms = ls.filter(function (x) { return x.km != null && x.km !== ''; }).map(function (x) { return Number(x.km); });
       var cid = mesmoC && c0 && cs.some(function (c) { return c.id === c0; }) ? c0 : (filtro.cid && filtro.cid !== SEM ? filtro.cid : (o.ativo && o.ativo()) || cs[0].id);
       mv = { ls: ls, km: kms.length ? kms.reduce(function (a, b) { return a + b; }, 0) / kms.length : null, varios: kms.length > 1 && Math.max.apply(null, kms) - Math.min.apply(null, kms) > 0.2,
-        pid0: mesmoP ? p0 : null, sug: null };
+        pid0: mesmoP ? p0 : null, sug: null, mais: ls.length === 1 ? doMesmoLugar(ls[0]) : [] };
+      var mesmoTxt = ls[0].pid ? 'no mesmo ponto, perto deste km' : 'sem ponto, no mesmo contrato e perto deste km';
       var agora = mesmoP ? [c0 ? curto(c0) : 'Sem contrato', ls[0].pnome ? (ls[0].pnome) : 'sem ponto'].join(' · ') : 'contratos ou pontos diferentes';
       var enviadas = ls.filter(function (x) { return x.origem === 'banco' || (locais[x.id] && locais[x.id].situacao === 'enviada'); }).length;
       var el = document.createElement('div');
@@ -2641,7 +2643,10 @@
         '<div class="gl-mv-sug" aria-live="polite"></div>' +
         '<p class="gl-mv-nota">O carimbo gravado na foto não muda. A galeria e o relatório passam a usar o contrato e o ponto escolhidos aqui.' +
         (enviadas ? ' No Drive, o arquivo continua na pasta em que foi guardado.' : '') + '</p>' +
-        '<div class="gl-mv-acts"><button type="button" class="btn" data-g="mv-fechar">Cancelar</button><button type="button" class="btn primary" data-g="mv-salvar">Salvar</button></div></div>';
+        (mv.mais.length ? '<p class="gl-mv-mais" role="note">Mais <b>' + plural(mv.mais.length, 'foto', 'fotos') + '</b> ' + mesmoTxt + ' (' + esc(maisTxt(mv)) + '). Corrigir todas de uma vez?</p>' : '') +
+        '<div class="gl-mv-acts"><button type="button" class="btn" data-g="mv-fechar">Cancelar</button>' +
+        (mv.mais.length ? '<button type="button" class="btn" data-g="mv-salvar">Só esta</button><button type="button" class="btn primary" data-g="mv-todas">Todas as ' + (mv.mais.length + 1) + '</button>'
+          : '<button type="button" class="btn primary" data-g="mv-salvar">Salvar</button>') + '</div></div>';
       root.appendChild(el);
       pontosMover(true);
       var s0 = q('#glMvC'); if (s0) s0.focus();
@@ -2691,6 +2696,23 @@
       var rot = esc(ehOae(c) ? perto.p.nome || perto.p.codigo : 'Ponto ' + perto.p.nome);
       box.innerHTML = 'Pelo ' + kmPre(mv.km) + 'da foto (' + nf(mv.km, 2) + '): ' + (perto.d <= raioPonto(c) ? 'fica no ' + rot : 'o mais perto é ' + rot + ', a ' + metr(perto.d)) +
         (sp.value === perto.p.id ? '' : ' <button type="button" class="btn small" data-g="mv-usar">Usar</button>') + (tambem ? ' ' + tambem : '');
+    }
+    // as outras fotos do mesmo lugar (pedido de 12/11/2026: as 12 do 267 sem ponto, uma por uma): mesmo contrato, mesmo ponto (ou
+    // sem ponto), a até 150 m do km da foto, ativas, que a pessoa pode corrigir. Foto sem km: nenhuma
+    var RAIO_MESMO = 0.15;
+    function doMesmoLugar(it0) {
+      var k0 = it0.km == null || it0.km === '' ? NaN : Number(it0.km);
+      if (!isFinite(k0) || !it0.cid) return [];
+      return itens.filter(function (x) {
+        if (x.id === it0.id || x.cid !== it0.cid || (x.pid || '') !== (it0.pid || '') || !podeMover(x)) return false;
+        if (x.origem === 'banco' && x.situacao !== 'ativa') return false;
+        var k = x.km == null || x.km === '' ? NaN : Number(x.km);
+        return isFinite(k) && Math.abs(k - k0) <= RAIO_MESMO;
+      });
+    }
+    function maisTxt(m) {
+      var ks = m.mais.concat(m.ls).map(function (x) { return Number(x.km); }), a = Math.min.apply(null, ks), b = Math.max.apply(null, ks);
+      return 'km ' + nf(a, 2) + (b - a >= 0.005 ? ' a ' + nf(b, 2) : '');
     }
     function fecharMover() { mv = null; var el = root && q('.gl-mv'); if (el) el.remove(); }
     // o motivo, em poucas palavras, de uma parte que o banco não aceitou
@@ -2787,7 +2809,8 @@
         fecharMover();
         // a foto foi para outro contrato: a fila de contratos acompanha, para ela continuar à vista
         if (filtro.cid && filtro.cid !== cid) filtro.cid = cid;
-        if (filtro.pid && filtro.pid !== (pid || SEM)) filtro.pid = '';
+        // no filtro "Sem ponto", ele continua: as corrigidas saem da lista e as que faltam ficam à vista (pedido de 12/11/2026)
+        if (filtro.pid && filtro.pid !== SEM && filtro.pid !== (pid || SEM)) filtro.pid = '';
         var aberta = ver >= 0 && lista[ver] ? lista[ver].id : null;
         // as que não mudaram continuam selecionadas, para tentar de novo
         var falta = ls.length > 1 && !r.semId ? banIds.filter(function (id) { return !feitos[id]; }) : [];
@@ -3223,6 +3246,7 @@
       else if (g === 'mv-fechar') fecharMover();
       else if (g === 'mv-usar') { var sp = q('#glMvP'); if (sp && mv && mv.sug) { sp.value = mv.sug.id; sugestao(); } }
       else if (g === 'mv-salvar') salvarMover();
+      else if (g === 'mv-todas') { if (mv && !mv.salvando && mv.mais.length) { mv.ls = mv.ls.concat(mv.mais); mv.mais = []; salvarMover(); } }
       else if (g === 'mv-ct') { var sc = q('#glMvC'); if (sc) { sc.value = t.getAttribute('data-id'); pontosMover(); } }
       else fazer(g, t.hasAttribute('data-um') ? [lista[ver]] : selecionadas());
     }
