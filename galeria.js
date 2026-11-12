@@ -889,12 +889,14 @@
     }
     return pag(null, null, 1);
   }
+  // miniaturas do banco por id: uma memória só para a galeria e para as fotos do mapa (v170), que não baixam duas vezes
+  var MINIS = {};
   window.Galeria = function (o) {
     var nomesCt = o.nomes || nomesPadrao();   // funções de nome do contrato (o.nomes do app.js ou a cópia curta)
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, ncIds = {}, agrupar = '';
     var per = lerPer(), pf = null, perNc = null;   // período escolhido; pf: rascunho da janela do período (null = fechada); perNc: o período para o qual "Fotos de NC" volta
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
-    var minis = {}, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
+    var minis = MINIS, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
     var ver = -1, grande = null, ocupado = null, cancelar = false, mv = null, guardadas = {}, carregando = null;
     // fLocal: filtro de No aparelho ('aparelho' só aqui, 'fila', 'enviada' no Drive); lote: as fotos que entraram na fila nesta
     // leva (id -> tamanho), para a barra contar "3 de 7" e os MB até a fila esvaziar; semRede: a aba do banco mostra as guardadas
@@ -3363,5 +3365,8 @@
   window.Galeria.listarTodas = listarFotos;   // a NC lista as fotos do ponto do mesmo jeito (app.js)
   // as contas sem tela, para o teste em ferramentas/teste-galeria.js (node, sem banco)
   window.Galeria.limparEnviadas = limparEnviadas;
+  // para as fotos do mapa (mapa.js, pelo app.js): a mesma lista da aba Equipe e a mesma memória de miniaturas
+  window.Galeria.listarFotos = listarFotos;
+  window.Galeria.minis = MINIS;
   window.Galeria.puras = { linkDrive: linkDrive, ctsDoKm: ctsDoKm, porKm: porKm, partes: partes, resumoMover: resumoMover, FOLGA_KM: FOLGA_KM, POR_MOVER: POR_MOVER };
 })();

@@ -2682,6 +2682,7 @@
       return;
     }
     pgRolY[pg] = window.scrollY || 0;
+    if (novo === 'galeria' && pg !== 'galeria') glVolta = pg;
     pg = novo;
     try { localStorage.setItem(PG_KEY, pg); } catch (e) { /* sem armazenamento */ }
     aplicaPg();
@@ -2743,13 +2744,14 @@
   // a galeria como página: entre as duas barras, do contrato aberto (galeria.js, opção pagina). Sair dela pelo Esc ou pelo
   // "Entrar" volta ao Diagrama
   var glPgCid = null, glPend = null;   // contrato da galeria aberta como página (null = fechada); filtro pedido para a próxima abertura
+  var glVolta = 'diagrama';   // v170: a página de onde se foi para a Galeria; o "← Voltar" dela volta para lá (antes, sempre o Diagrama)
   function abreGaleriaPg() {
     var c = active(), f = glPend || {};
     glPend = null;
     syncTopbar();   // a página fica fixa logo abaixo da barra: mede de novo antes de abrir
     if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba && !f.ids)) return;
     glPgCid = c.id;
-    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, ids: f.ids, idsNome: f.idsNome, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg('diagrama'); } });
+    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, ids: f.ids, idsNome: f.idsNome, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg(glVolta === 'mapa' || glVolta === 'pontos' ? glVolta : 'diagrama'); } });
   }
   function abreGaleriaGeral() {
     syncTopbar();
@@ -5354,7 +5356,7 @@
     if (mapa || !window.MapaSNV) return mapa;
     mapa = window.MapaSNV({
       host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo, nomes: NOMES,
-      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, onPhoto: openFoto,
+      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, onPhoto: openFoto, fotos: fotosDoMapa(),
       onOpen: abrirDoMapa, openLabel: function () { var c = active(); return 'Abrir em ' + (isConserva(c) ? 'Segmentos' : isOae(c) ? 'OAEs' : 'Pontos'); },
       // no 424: as OAEs da BR-230 não atendidas pelo Proarte, que a pessoa liga e desliga no mapa
       extras: function (c) {
@@ -5364,6 +5366,37 @@
       }
     });
     return mapa;
+  }
+  // fotos da equipe no mapa (v170): quem vê a aba Equipe da galeria (nível 2 ou mais). Ligada no computador e desligada no
+  // celular até a pessoa escolher (o mapa guarda a escolha). A lista é a da aba Equipe e as miniaturas, a memória da galeria
+  function fotosDoMapa() {
+    var G = function () { return window.Galeria; };
+    return {
+      pode: function () { return !!(galeriaOn() && G() && G().listarFotos && (isAnalista() && podeFotos() ? 1 : nivel()) >= 2); },
+      padrao: function () { try { return window.matchMedia('(min-width:1101px) and (pointer:fine)').matches; } catch (e) { return false; } },
+      listar: function () {
+        if (!banco.login) return Promise.resolve([]);
+        return G().listarFotos(window.Banco, banco.login.codigo, 'todas').then(function (arr) {
+          return arr.filter(function (f) { return f && f.situacao !== 'deletada'; }).map(function (f) {
+            return { id: f.id, km: f.km, lat: f.lat, lng: f.lng, cid: f.contrato_id || '', pnome: f.ponto_nome || '', em: f.tirada_em || f.enviada_em || '' };
+          });
+        });
+      },
+      mini: function (id) { var M = G() && G().minis; return (M && M[id]) || null; },
+      pedir: function (ids) {
+        var M = G() && G().minis, l = banco.login, ps = [];
+        if (!M || !l || !window.Banco || !window.Banco.fotosMini) return Promise.resolve();
+        for (var i = 0; i < ids.length; i += 40) ps.push(window.Banco.fotosMini(l.codigo, ids.slice(i, i + 40)).then(function (arr) {
+          (arr || []).forEach(function (m) { if (m && m.jpeg) M[m.id] = 'data:image/jpeg;base64,' + m.jpeg; });
+        }));
+        return Promise.all(ps);
+      },
+      nomeCt: function (cid) {
+        var c = state.contracts.filter(function (x) { return x.id === cid; })[0];
+        return c ? NOMES.nome(c) : cid ? String(cid).replace(/^ct-/, 'CT ') : 'Sem contrato';
+      },
+      abrirGaleria: function (ids, nome) { abrirGaleria({ aba: 'todas', ids: ids, idsNome: nome }); }
+    };
   }
   function pausaMapa() { if (mapa && mapa.pausa && mapa.pausa()) toast('Localização ao vivo desligada: você saiu do Mapa.'); }
   function setView(v) {
@@ -9237,11 +9270,12 @@
       if (modalPula) { modalPula = false; var fm = modalDepois; modalDepois = null; if ($('modal')) modalPoeHist(); if (fm) fm(); return; }
       if (escPula) { escPula = false; var f = escDepois; escDepois = null; if (f) f(); return; }
       if (galeria && galeria.voltar()) return;   // as folhas da galeria no celular
+      if (mapa && mapa.voltar && mapa.voltar()) return;   // o cartão das fotos no mapa (v170)
       if (medicoes && medicoes.voltar()) return;   // a folha de escolher a medição no celular
       if ($('modal')) { modalHist = false; if ($('modal').dataset.ocupado) modalPoeHist(); else if (modalCancela) modalCancela(); return; }
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};
-      if (s.modal || s.glFolha) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
+      if (s.modal || s.glFolha || s.mpFoto) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
       if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria') { mostraGeral(s.tela); return; }
       if (visaoOn) { if (!s.tela && s.pg) try { history.back(); } catch (er) { /* segue */ } return; }
       if (s.pg && s.pg !== pg && pgAtivo()) irPg(s.pg, true);
