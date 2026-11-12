@@ -316,6 +316,9 @@
     '.mp-gsm i{position:absolute;display:block;width:12px;height:12px;transform:translate(-50%,-50%) rotate(45deg);box-sizing:border-box;background:var(--c);border:2px solid #FFFFFF;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.45);cursor:pointer}',
     '.mp-gsm.oae i{width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%)}',
     '.mp-gsm.apag i{opacity:.35}',
+    '.mp-glonge .mp-gsm i{width:9px;height:9px;border-width:1.5px}.mp-glonge .mp-gsm.oae i{width:10px;height:10px}',
+    '.mp-glonge .mp-ggr b{width:21px;height:21px;border-width:2px;font-size:10.5px}',
+    '.mp-glonge .mp-gct span{font-size:10.5px;padding:0 6px;line-height:16px;border-width:1px}',
     '.mp-gsel i{position:absolute;display:block;width:30px;height:30px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;border:3px solid var(--mp-accent);background:rgba(255,255,255,.35);box-shadow:0 0 0 2px #FFFFFF}',
     '.mp-geral .mp-legend i.tr{height:3px;background:var(--c)}.mp-geral .mp-legend i.tr.tc{background:repeating-linear-gradient(90deg,var(--c) 0 5px,transparent 5px 8px)}',
     '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
@@ -791,8 +794,10 @@
       arrumaPedido = false;
       var caixas = Array.prototype.map.call(root.querySelectorAll('.mp-left>*:not([hidden]),.mp-tools>*,.mp-chips,.mp-legend:not([hidden]),.mp-card:not([hidden])'), function (el) { return el.getBoundingClientRect(); })
         .filter(function (r) { return r.width && r.height; });
+      // no mapa de todos, os círculos de quantidade ficam por cima dos nomes: o nome que bate num círculo sai
+      if (G) Array.prototype.forEach.call(root.querySelectorAll('.mp-ggr b'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
       var vistos = caixas.slice();
-      ['.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'].forEach(function (sel) {
+      ['.mp-gct span', '.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'].forEach(function (sel) {
         root.querySelectorAll(sel).forEach(function (el) {
           el.style.visibility = '';
           var r = el.getBoundingClientRect();
@@ -942,6 +947,8 @@
     function gDesl(lls, d, viz) {
       if (!d) return lls;
       var z = map.getZoom(), pp = lls.map(function (ll) { return map.project(ll, z); }), dir = null;
+      // de longe a rodovia tem vértices a menos de 1 px: o deslocamento de cada um fazia zigue-zague nas curvas
+      if (pp.length > 2) pp = Lf.LineUtil.simplify(pp, z < 10 ? 2 : 1);
       if (pp.length < 2 && viz) { var va = map.project(viz[0], z), vb2 = map.project(viz[1], z); dir = [vb2.x - va.x, vb2.y - va.y]; }
       return pp.map(function (pt, i) {
         var dx, dy;
@@ -959,22 +966,31 @@
       if (!gLayer) { gRend = Lf.canvas({ pane: 'mpPts', padding: 0.3, tolerance: 8 }); gLayer = Lf.layerGroup().addTo(map); }
       gLayer.clearLayers(); lblLayer.clearLayers();
       if (!map.getSize().x) return;
-      var z = map.getZoom(), enc = 16, vb = map.getBounds().pad(0.25), comNome = z >= 12, juntar = z < 17;
+      var z = map.getZoom(), vb = map.getBounds().pad(0.25), comNome = z >= 12, juntar = z < 17;
+      // de longe (a rodovia inteira) tudo fica mais fino e mais perto da rodovia, sem a borda branca, e junta mais; de perto,
+      // como antes (pedido de 12/11/2026: "muito aberto ficou muito grosseiro")
+      var longe = z < 9.5, medio = !longe && z < 12;
+      GLADO = longe ? 7 : medio ? 11 : 15;
+      var enc = longe ? 22 : 16, cadeia = longe ? 4 : 3, wLin = longe ? 3 : medio ? 4.5 : 6, wBorda = longe ? 0 : medio ? 7 : 10, wTr = longe ? 1.5 : medio ? 2 : 3;
+      root.classList.toggle('mp-glonge', longe);
+      // o canvas desenha na ordem em que as linhas entram no mapa: primeiro trilhos e bordas, depois as cores (no fim)
+      function fila() { return { l: [], addLayer: function (x) { this.l.push(x); } }; }
+      var bordas = fila(), cores = fila();
       // trechos dos contratos (só os que têm trilho: pontos críticos e conservação)
       gd.cts.forEach(function (k) {
         if (!k.trilho || !k.f || !k.lado) return;
         var r = refDe(k.c), a = r === eixoRef ? k.f[0] : gNum(k.c.kmIni), b = r === eixoRef ? k.f[1] : gNum(k.c.kmFim);
         if (a == null || b == null) return;
         var raw = r.slice(a, b), line = gDesl(raw, k.lado * GLADO), cor = k.cor || '#3B4540';
-        Lf.polyline(line, { renderer: gRend, color: cor, weight: 3, opacity: 0.8, dashArray: k.lado < 0 ? '7 5' : null, interactive: false }).addTo(gLayer);
+        Lf.polyline(line, { renderer: gRend, color: cor, weight: wTr, opacity: longe ? 0.6 : 0.8, dashArray: k.lado < 0 ? (longe ? '4 4' : '7 5') : null, interactive: false }).addTo(bordas);
         [line[0], line[line.length - 1]].forEach(function (ll) {
-          Lf.circleMarker(ll, { renderer: gRend, radius: 3.5, weight: 1.5, color: '#FFFFFF', fillColor: cor, fillOpacity: 1, interactive: false }).addTo(gLayer);
+          Lf.circleMarker(ll, { renderer: gRend, radius: longe ? 2.5 : 3.5, weight: longe ? 1 : 1.5, color: '#FFFFFF', fillColor: cor, fillOpacity: 1, interactive: false }).addTo(bordas);
         });
         // nome do contrato no meio do pedaço que está na tela, por fora do trilho
         var dentro = [];
         raw.forEach(function (ll, i) { if (vb.contains(ll)) dentro.push(i); });
         var i = dentro.length ? dentro[dentro.length >> 1] : raw.length >> 1;
-        var em = gDesl(raw.slice(Math.max(0, i - 1), i + 2), k.lado * (GLADO + 17)), ll = em[Math.min(em.length - 1, i > 0 ? 1 : 0)];
+        var em = gDesl(raw.slice(Math.max(0, i - 1), i + 2), k.lado * (GLADO + (longe ? 13 : 17))), ll = em[Math.min(em.length - 1, i > 0 ? 1 : 0)];
         Lf.marker(ll, { pane: 'mpPts', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gct', html: '<span style="--c:' + cor + '">' + esc(k.rot) + '</span>', iconSize: [0, 0] }) }).addTo(gLayer);
       });
       // itens por lado, em ordem de km; perto demais na tela (enc px) viram um círculo
@@ -993,10 +1009,12 @@
       Object.keys(lados).forEach(function (kl) {
         var d = Number(kl) * GLADO, arr = lados[kl].sort(function (a, b) { return a.ord - b.ord; }), gs = [];
         arr.forEach(function (it) {
-          var longo = it.len >= 5;
+          // segmentos da conservação e da sinalização (lado negativo) são uma faixa contínua: sempre linha, mesmo curtos
+          // (viravam uma fila de círculos "2" de longe); os círculos ficam para pontos e OAEs
+          var longo = it.len >= 5 || (it.ll.length > 1 && Number(kl) < 0);
           if (longo || !juntar || it.x.key === gd.sel) { gs.push({ t: longo ? 'linha' : 'simb', l: [it], fixo: true }); return; }
           var u = gs[gs.length - 1];
-          if (u && !u.fixo && it.pm.distanceTo(u.ult) < enc && it.pm.distanceTo(u.ini) < 3 * enc) { u.t = 'grupo'; u.l.push(it); u.ult = it.pm; return; }
+          if (u && !u.fixo && it.pm.distanceTo(u.ult) < enc && it.pm.distanceTo(u.ini) < cadeia * enc) { u.t = 'grupo'; u.l.push(it); u.ult = it.pm; return; }
           gs.push({ t: 'simb', l: [it], ini: it.pm, ult: it.pm });
         });
         gs.forEach(function (g) {
@@ -1018,9 +1036,9 @@
           var tipI = x.tip || x.nome || '';
           if (g.t === 'linha') {
             var line = noLado(it.ll, it, d);
-            Lf.polyline(line, { renderer: gRend, color: '#FFFFFF', weight: 10, opacity: x.apag ? 0.4 : 0.95, lineCap: 'round', interactive: false }).addTo(gLayer);
-            Lf.polyline(line, { renderer: gRend, color: x.cor, weight: x.key === gd.sel ? 8 : 6, opacity: x.apag ? 0.3 : 1, lineCap: 'round', bubblingMouseEvents: false })
-              .bindTooltip(esc(tipI), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(gLayer);
+            if (wBorda) Lf.polyline(line, { renderer: gRend, color: '#FFFFFF', weight: wBorda, opacity: x.apag ? 0.4 : 0.95, lineCap: 'round', interactive: false }).addTo(bordas);
+            Lf.polyline(line, { renderer: gRend, color: x.cor, weight: x.key === gd.sel ? wLin + 2 : wLin, opacity: x.apag ? 0.3 : 1, lineCap: longe ? 'butt' : 'round', bubblingMouseEvents: false })
+              .bindTooltip(esc(tipI), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(cores);
             if (comNome && x.nome) {
               var mid = line[line.length >> 1];
               if (vb.contains(mid)) Lf.marker(mid, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
@@ -1036,6 +1054,8 @@
             .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 9 : -9], className: 'mp-lbl' }).addTo(lblLayer);
         });
       });
+      bordas.l.forEach(function (x) { x.addTo(gLayer); });
+      cores.l.forEach(function (x) { x.addTo(gLayer); });
       // o item do cartão aberto: um anel em volta (por baixo do toque)
       if (selIt) {
         var dS = Number(selIt.x.lado || 0) * GLADO, lS = noLado(selIt.ll, selIt, dS), cS = lS[lS.length >> 1];
