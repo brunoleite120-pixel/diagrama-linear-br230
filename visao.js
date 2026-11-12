@@ -135,6 +135,31 @@
     // os mesmos ids como mapa, para o "está no filtro?" ser uma consulta por id
     var N = nomesPadrao();
     if (o.nomes) Object.keys(o.nomes).forEach(function (k) { N[k] = o.nomes[k]; });
+    // cor de cada contrato (pedido de 12/11/2026), a mesma no mapa de todos, nas raias, na caixa "Contratos" e nos cartões.
+    // Fixas para os contratos de hoje; vizinhos do mesmo lado da rodovia nunca parecidos; sem o verde, o azul e o vermelho
+    // da situação. Contrato novo de pontos críticos ou conservação: a próxima cor livre, na ordem do km. A sinalização
+    // (709) e as pontes ficam neutras (null): cobrem a rodovia toda
+    var COR_CT = { 'ct-267': '#00ACC1', 'ct-314': '#C2185B', 'ct-315': '#F9A825', 'ct-558': '#7E57C2', 'ct-310': '#EF8A00', 'ct-419': '#00897B',
+      'ct-264': '#6D4C41', 'ct-665': '#9E9D24', 'ct-437': '#3949AB', 'ct-438': '#D4572A' };
+    var COR_LIVRE = ['#8E24AA', '#00838F', '#AD1457', '#5D4037', '#E65100', '#283593', '#00695C', '#827717'], CORES = {};
+    function grupoCt(c) { return c.oaes230 ? 'oae' : N.grupo ? N.grupo(c) : N.tipo(c); }
+    function coresCt(todos) {
+      var m = {}, usadas = {};
+      todos.forEach(function (c) { if (COR_CT[c.id]) { m[c.id] = COR_CT[c.id]; usadas[COR_CT[c.id]] = true; } });
+      var livres = COR_LIVRE.filter(function (h) { return !usadas[h]; }), i = 0;
+      todos.filter(function (c) { var g = grupoCt(c); return !m[c.id] && (g === 'pc' || g === 'conserva'); })
+        .sort(function (a, b) { return (num(a.kmIni) || 0) - (num(b.kmIni) || 0) || String(a.id).localeCompare(String(b.id)); })
+        .forEach(function (c) { m[c.id] = livres.length ? livres[i++ % livres.length] : '#3B4540'; });
+      return m;
+    }
+    function corCt(c) { return (c && CORES[c.id]) || null; }
+    // a cor bem clara (faixa do contrato na raia): mistura com o branco
+    function clara(h, t) {
+      var n = parseInt(String(h).slice(1), 16);
+      if (!isFinite(n)) return '';
+      var r = n >> 16, g = (n >> 8) & 255, b = n & 255, f = function (v) { return Math.round(v + (255 - v) * t); };
+      return 'rgb(' + f(r) + ',' + f(g) + ',' + f(b) + ')';
+    }
     kmMpFn = typeof o.kmMp === 'function' ? o.kmMp : null;
     var FILTRO_KEY = 'diagrama-linear-visao-contratos-' + ((window.AMBIENTE && window.AMBIENTE.nome) || 'oficial');
     var filtro = lerFiltro(FILTRO_KEY), selM = mapaDe(filtro.sel), vistosM = mapaDe(filtro.vistos);
@@ -176,7 +201,8 @@
     function forma() { return !temMapaG() ? 'raias' : formaFixa() || st.forma; }
     function mapaG() {
       if (!MG && !MGfalhou && o.mapa) {
-        MG = o.mapa({ onSel: seguro(noMapaSel), onMove: seguro(noMapaMove) }) || null;
+        MG = o.mapa({ onSel: seguro(noMapaSel), onMove: seguro(noMapaMove),
+          onCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id) o.onAbrir(c, null); }); }) }) || null;
         if (!MG) MGfalhou = true;
       }
       return MG;
@@ -190,6 +216,7 @@
       if (cacheIt) return cacheIt;
       var out = [], dentro = [], semKm = 0, fora = 0, foraC = 0, fx = {}, por = {}, on = {}, novos = {};
       var todos = N.ordem(o.contratos()), mostra = selM ? todos.filter(function (c) { return selM[c.id]; }) : todos, md = modo();
+      CORES = coresCt(todos);
       // escolha: há contratos marcados aqui (todos marcados continuam marcados: mostra tudo, sem "fora do filtro");
       // ativo: a escolha deixa algum de fora. Nenhum dos escolhidos está aqui (excluído, ou ainda não chegou do banco):
       // mostra todos, com aviso, e a escolha continua guardada (uma carga parcial não a apaga). Com um contrato só não há
@@ -456,13 +483,14 @@
         });
         rot = rotulos(cand);
         var f = d.fx[c.id], a = f ? Math.max(f[0], k0) : 0, b = f ? Math.min(f[1], k1) : 0;
-        var banda = f && b > a ? '<i class="vg-banda' + (oae ? ' oae' : '') + '" style="left:' + pc(X(a)) + ';width:' + pc((b - a) / R * 100) + '"></i>' : '';
+        // a faixa do contrato na raia, num tom bem claro da cor dele (as pontes ficam no cinza)
+        var corC = corCt(c), banda = f && b > a ? '<i class="vg-banda' + (oae ? ' oae' : '') + '" style="left:' + pc(X(a)) + ';width:' + pc((b - a) / R * 100) + (corC && !oae ? ';background:' + clara(corC, 0.78) : '') + '"></i>' : '';
         // computador: "Pontos Críticos 314" e "p. críticos · 18 na tela"; celular (coluna estreita): "314" e "p. críticos"
         var rotT = !mob && tp === 'conserva' ? N.palavra(c).toLowerCase() : N.curto(c);   // pelo contrato: a sinalização (709) tem nome próprio
         // "OAEs 230": no celular "OAEs" e "BR-230"; no computador, o que está mostrando (só as não atendidas ou todas)
         var lb = c.oaes230 ? (mob ? 'OAEs' : 'OAEs 230') : mob ? N.numeroCurto(c) || N.nome(c) : N.nome(c);
         if (c.oaes230) rotT = mob ? 'BR-230' : todas230(d, c) ? 'todas da BR-230' : 'não atendidas';
-        h += '<div class="vg-row vg-lane"><div class="vg-lab" title="' + esc(c.oaes230 ? 'OAEs da BR-230 ' + (todas230(d, c) ? '(todas)' : 'não atendidas pelo Proarte') : N.completo(c)) + '"><b>' + esc(lb) + '</b><small>' +
+        h += '<div class="vg-row vg-lane"><div class="vg-lab" title="' + esc(c.oaes230 ? 'OAEs da BR-230 ' + (todas230(d, c) ? '(todas)' : 'não atendidas pelo Proarte') : N.completo(c)) + '"><b>' + (corC ? '<i class="vg-cor" style="--c:' + corC + '" aria-hidden="true"></i>' : '') + esc(lb) + '</b><small>' +
           esc(rotT) + (c.kmLocal ? ' · km próprio' : '') + (mob ? '' : ' · ' + xs.length + ' na tela') + '</small></div>' +
           '<div class="vg-trk">' + grade + banda + rot + mk + '</div></div>';
       });
@@ -574,7 +602,7 @@
         var segs = sits.filter(function (s) { return n[s[0]]; }).map(function (s) { return '<i style="flex:' + n[s[0]] + ' 1 0;background:' + s[1] + '"></i>'; }).join('');
         var txt = sits.filter(function (s) { return n[s[0]]; }).map(function (s) { return n[s[0]] + ' ' + (n[s[0]] === 1 ? s[2] : s[3]); }).join(' · ');
         var pad = f ? Math.max((f[1] - f[0]) * 0.03, 0.5) : 0, nome = N.nome(c) || 'Contrato', formal = N.formal(c);
-        return '<article class="vg-box vg-ct ' + tp + '"><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
+        return '<article class="vg-box vg-ct ' + tp + '"' + (corCt(c) ? ' style="--vg-t:' + corCt(c) + '"' : '') + '><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
           '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' OAE' : ' OAEs') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de OAEs' : ' km de atuação') + '</span></div>' +
           '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) + ncLinha(c, tp, xs) +
@@ -667,10 +695,11 @@
     function dadosMapa(d, its) {
       var ladoDe = {}, cts = [], vistos = {}, leg = [], ordem = SIT_C.concat(SIT_O, SIT_M).map(function (s0) { return s0[0]; });
       d.mostra.forEach(function (c) {
-        var g = c.oaes230 ? 'oae' : N.grupo ? N.grupo(c) : N.tipo(c), lado = g === 'pc' ? 1 : g === 'conserva' ? -1 : g === 'sinal' ? -2 : 0;
+        var g = grupoCt(c), lado = g === 'pc' ? 1 : g === 'conserva' ? -1 : g === 'sinal' ? -2 : 0;
         ladoDe[c.id] = lado;
-        cts.push({ c: c, f: d.fx[c.id], lado: lado, trilho: lado === 1 || lado === -1, cor: lado > 0 ? '#3B4540' : '#1E7A46',
-          rot: (g === 'pc' ? 'PC ' : g === 'conserva' ? 'Cons. ' : '') + (N.numeroCurto(c) || N.nome(c)) });
+        // cada contrato com linha na cor dele; a sinalização em cinza (fino e tracejado no mapa)
+        cts.push({ c: c, f: d.fx[c.id], lado: lado, trilho: lado !== 0, cor: corCt(c) || (lado === -2 ? '#5C6661' : '#3B4540'), nome: N.nome(c),
+          rot: (g === 'pc' ? 'PC ' : g === 'conserva' ? 'Cons. ' : g === 'sinal' ? 'Sinal. ' : '') + (N.numeroCurto(c) || N.nome(c)) });
       });
       var itM = its.filter(function (x) { return !st.off[x.fk] && !copia230(x, d); }).map(function (x) {
         if (!vistos[x.st]) { vistos[x.st] = true; leg.push({ cor: x.cor, txt: x.st }); }
@@ -749,7 +778,7 @@
         s += '<fieldset class="vg-pg ' + tc + '"><legend class="vg-cap">' + esc(N.palavra(t)) + '</legend>' + cs.map(function (c) {
           var on = d.escolha && !!d.dentro[c.id], f = d.fx[c.id];
           return '<label class="vg-op' + (on ? ' on' : '') + '" title="' + esc(N.completo(c)) + '"><input type="checkbox" data-ck="' + esc(c.id) + '" data-fid="ck:' + esc(c.id) + '"' + (on ? ' checked' : '') + '>' +
-            '<span class="vg-op-s" aria-hidden="true"><i class="vg-sb ' + tc + '"></i></span><span class="vg-op-t"><b>' + esc(N.nome(c) || 'Contrato') + '</b><small>' + (c.kmLocal ? 'km local ' + nf(c.kmIni, 1) + ' – ' + nf(c.kmFim, 1) + ' (km próprio)' : f ? kmFaixaTxt(c, f) : 'sem km') + '</small></span>' +
+            '<span class="vg-op-s" aria-hidden="true"><i class="vg-sb ' + tc + '"' + (corCt(c) ? ' style="--vg-t:' + corCt(c) + '"' : '') + '></i></span><span class="vg-op-t"><b>' + esc(N.nome(c) || 'Contrato') + '</b><small>' + (c.kmLocal ? 'km local ' + nf(c.kmIni, 1) + ' – ' + nf(c.kmFim, 1) + ' (km próprio)' : f ? kmFaixaTxt(c, f) : 'sem km') + '</small></span>' +
             (d.novos[c.id] ? '<small class="vg-novo">novo</small>' : '') + '</label>' +
             // "OAEs 230" marcada: logo abaixo, só as não atendidas ou todas
             (c.oaes230 && (on || !d.escolha) ? botoes230('m1') : '');

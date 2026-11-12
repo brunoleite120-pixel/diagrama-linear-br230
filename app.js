@@ -5367,11 +5367,23 @@
     }
     if (foto) foto.open({ pointId: pid || '', fotos: fotos || null, nc: nc || null });
   }
+  // o nosso trecho da rodovia, para o mapa esconder o resto do eixo do SNV (o arquivo começa no km 280,2, na ponte do Rio
+  // Pucuruí): do menor km inicial ao maior km final dos contratos no eixo (os de km próprio, como o 731, ficam de fora)
+  function trechoRodovia() {
+    var a = Infinity, b = -Infinity;
+    state.contracts.forEach(function (c) {
+      if (!c || c.kmLocal) return;
+      var i = c.kmIni == null || c.kmIni === '' ? NaN : Number(c.kmIni), f = c.kmFim == null || c.kmFim === '' ? NaN : Number(c.kmFim);
+      if (isFinite(i)) a = Math.min(a, i);
+      if (isFinite(f)) b = Math.max(b, f);
+    });
+    return isFinite(a) && isFinite(b) && b > a ? [a, b] : null;
+  }
   function ensureMap() {
     if (mapa || !window.MapaSNV) return mapa;
     mapa = window.MapaSNV({
       host: $('mapHost'), snv: window.SNV_BR230, getContract: active, pointInfo: pointInfo, nomes: NOMES,
-      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, onPhoto: openFoto, fotos: fotosDoMapa(),
+      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, onPhoto: openFoto, fotos: fotosDoMapa(), trecho: trechoRodovia,
       onOpen: abrirDoMapa, openLabel: function () { var c = active(); return 'Abrir em ' + (isConserva(c) ? 'Segmentos' : isOae(c) ? 'OAEs' : 'Pontos'); },
       // no 424: as OAEs da BR-230 não atendidas pelo Proarte, que a pessoa liga e desliga no mapa
       extras: function (c) {
@@ -5568,7 +5580,7 @@
     delete fo.trocaCt;   // no mapa de todos, o contrato escolhido nas fotos só filtra e enquadra
     var api = window.MapaSNV({
       host: el, snv: window.SNV_BR230, getContract: function () { return null; }, pointInfo: pointInfo, nomes: NOMES,
-      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, fotos: fo, geral: hooks
+      saveText: saveText, tiles: true, gps: true, notify: function (m, ms) { toast(m, ms); }, fotos: fo, geral: hooks, trecho: trechoRodovia
     });
     if (!api) return null;
     api.el = el;
