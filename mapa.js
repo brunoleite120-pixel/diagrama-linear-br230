@@ -1812,6 +1812,10 @@
       fot.ct = v; fot.z = null; fotosFecha();
       if (v && v !== fot.ctDe && fo.trocaCt && fo.trocaCt(v)) return;   // o render do contrato novo chama fotosSync
       fotosAtualiza();
+      // o mapa ficou no contrato aberto (a Supervisora, que vale no trecho todo, ou um contrato sem mapa para a pessoa):
+      // a vista vai até as fotos do filtro
+      var ls = v && v !== fot.ctDe ? fotosFiltradas() : [];
+      if (ls.length) map.fitBounds(Lf.latLngBounds(ls.map(function (f) { return f.ll; })).pad(0.1), { maxZoom: 16, animate: !reduced(), paddingTopLeft: [20, 120], paddingBottomRight: [20, 60] });
     });
     root.addEventListener('keydown', function (e) { if (e.key === 'Escape' && fot.sel) { e.stopPropagation(); fotosFecha(); } });
 

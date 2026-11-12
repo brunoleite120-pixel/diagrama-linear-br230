@@ -3,7 +3,7 @@
  * Leitura pública com a chave publicável (feita para ficar no site). Gravar só pelas funções do banco
  * (salvar, definir_codigos), que conferem o código da equipe; as tabelas não aceitam gravação direta.
  *
- *   Banco.carregar(cred)                  -> {contratos, pontos, config, versao, propostas, novo, publico, acesso, sessaoInvalida}
+ *   Banco.carregar(cred)                  -> {contratos, pontos, config, versao, propostas, novo, publico, acesso, sessaoInvalida, fotosEquipe}
  *     (migração 11: dados_ler, já filtrado pelo papel e pelos contratos da pessoa; sem código, só a visão geral.
  *      Sem a função no banco, lê as tabelas como antes)
  *   Banco.versao()                        -> número que muda a cada gravação
@@ -90,7 +90,8 @@
       var antigo = this.carregarAntigo;
       return rpc('dados_ler', { p_cred: cred || null }).then(function (r) {
         return { contratos: r.contratos || [], pontos: r.pontos || [], config: r.config || [], versao: Number(r.versao) || 0, propostas: r.propostas || [],
-          novo: true, publico: !!r.publico, acesso: r.acesso || null, sessaoInvalida: !!r.sessao_invalida };
+          novo: true, publico: !!r.publico, acesso: r.acesso || null, sessaoInvalida: !!r.sessao_invalida,
+          fotosEquipe: r.fotos_equipe == null ? null : !!r.fotos_equipe };   // analista: vê as fotos da equipe (migração 29)
       }, function (e) {
         // banco ainda sem a migração 11 (função não encontrada): lê as tabelas
         if (e && (e.pg === 'PGRST202' || e.status === 404)) return antigo();
@@ -133,7 +134,8 @@
     usuarios: function (cred) { return rpc('usuarios_listar', { p_cred: cred }); },
     usuarioSalvar: function (cred, u) {
       return rpc('usuario_salvar', { p_cred: cred, p_id: u.id || null, p_nome: u.nome, p_papel: u.papel, p_codigo: u.codigo || null, p_ativo: u.ativo !== false,
-        p_acesso: u.acesso || null });   // contratos do fiscal e do analista (migração 11)
+        p_acesso: u.acesso || null,   // contratos do fiscal e do analista (migração 11)
+        p_fotos_equipe: u.fotosEquipe == null ? null : !!u.fotosEquipe });   // analista: vê as fotos da equipe (migração 29)
     },
     codigoGeralDesativar: function (cred, papel) { return rpc('codigo_geral_desativar', { p_cred: cred, p_papel: papel }); },
     decidir: function (cred, ids, aprovar, motivo) { return rpc('decidir_propostas', { p_cred: cred, p_ids: ids, p_aprovar: !!aprovar, p_motivo: motivo || null }); },

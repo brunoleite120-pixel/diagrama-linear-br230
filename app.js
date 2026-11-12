@@ -195,9 +195,11 @@
   // 'sinal' não é tipo: é o grupo da conservação com rotuloTipo 'sinal' (CT 709), com nome e lugar próprios na lista (ctGrupo)
   // oaesp: as OAEs da BR-230 sem contrato (não atendidas pelo Proarte; tipo 'oae' com semProarte, 29/10/2026): o acompanhamento
   // das NC sem número, executora nem medição, com nome e grupo próprios na lista (ctGrupo)
-  var NOME_PALAVRA = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização', oaesp: 'OAEs sem Proarte' };
-  var NOME_CURTO = { pc: 'p. críticos', conserva: 'conserv.', oae: 'OAEs', sinal: 'sinaliz.', oaesp: 'OAEs' };   // rótulo pequeno da raia no celular
-  var CT_CURTO = { pc: 'PC', conserva: 'Cons.', oae: 'Proarte', sinal: 'Sinal.', oaesp: 'OAEs' };   // botão do contrato na barra encolhida do celular ("PC 314")
+  // sup: o contrato da própria Supervisora (CT 393, tipo 'sup', v172): sem construtora e sem pontos, vale no trecho todo. Fica
+  // fora de state.contracts (banco.sup, separarSup): só entra na Foto, na galeria, nas fotos do mapa e nas Medições
+  var NOME_PALAVRA = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização', oaesp: 'OAEs sem Proarte', sup: 'Supervisora' };
+  var NOME_CURTO = { pc: 'p. críticos', conserva: 'conserv.', oae: 'OAEs', sinal: 'sinaliz.', oaesp: 'OAEs', sup: 'superv.' };   // rótulo pequeno da raia no celular
+  var CT_CURTO = { pc: 'PC', conserva: 'Cons.', oae: 'Proarte', sinal: 'Sinal.', oaesp: 'OAEs', sup: 'Superv.' };   // botão do contrato na barra encolhida do celular ("PC 314")
   var TIPO_ORDEM = ['pc', 'conserva', 'oae'];
   // ordem dos grupos na Visão geral (raias e caixa "Contratos"): a sinalização logo antes das pontes (decisão N-6)
   var GRUPO_ORDEM = ['pc', 'conserva', 'sinal', 'oae', 'oaesp'];
@@ -205,8 +207,9 @@
   function ctTipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
   // grupo da lista e nome do contrato: o tipo ou, na conservação com rotuloTipo 'sinal' (709), "Sinalização" (por baixo, conservação:
   // todo isConserva continua valendo)
-  function ctGrupo(c) { return c && c.rotuloTipo === 'sinal' && ctTipo(c) === 'conserva' ? 'sinal' : c && c.semProarte && ctTipo(c) === 'oae' ? 'oaesp' : ctTipo(c); }
+  function ctGrupo(c) { return c && c.tipo === 'sup' ? 'sup' : c && c.rotuloTipo === 'sinal' && ctTipo(c) === 'conserva' ? 'sinal' : c && c.semProarte && ctTipo(c) === 'oae' ? 'oaesp' : ctTipo(c); }
   function semContrato(c) { return ctGrupo(c) === 'oaesp'; }
+  function ehSup(c) { return !!(c && c.tipo === 'sup'); }
   // km da OAE na tela: o do eixo ou, nas da travessia de Altamira (só o km local, p.kmLocal no segmento p.snv), "local 3,71"
   function kmPtTxt(p) { return p.kmIni != null ? (p.kmConferir ? '~' : '') + fmtKm(p.kmIni) : p.kmLocal != null ? 'local ' + fmtKm(p.kmLocal) : '-'; }
   function tipoDe(x) { return typeof x === 'string' ? (NOME_PALAVRA[x] ? x : 'pc') : ctGrupo(x); }   // o grupo pelo nome ou pelo próprio contrato
@@ -220,6 +223,7 @@
   function ctNome(c) {
     if (!c) return '';
     var n = ctNumeroCurto(c), w = NOME_PALAVRA[ctGrupo(c)];
+    if (ehSup(c)) return w;   // só "Supervisora": há uma só
     return n ? w + ' ' + n : txtLimpo(c.lote) || w;
   }
   // só "Lote NN" é lote da licitação: o "CT 424 · OAEs" do 424 não é
@@ -231,6 +235,7 @@
   function ctPasta(c) {
     if (!c) return '';
     var n = txtLimpo(c.numero);
+    if (ehSup(c) && n) return 'Supervisora - CT ' + n.replace(/\s*\/\s*/g, '-');   // "Supervisora - CT 02 00393-2022"
     return n ? 'CT ' + n.replace(/\s*\/\s*/g, '-') : txtLimpo(c.lote) || ctNome(c) + (c.id ? ' (' + c.id + ')' : '');
   }
   // pastas que existiam no Drive até a versão 51, pelo nº do contrato: o nome antigo não depende do Lote de hoje, que pode ser
@@ -249,8 +254,8 @@
   function posEixo(c) { return typeof c.posEixo === 'number' ? c.posEixo : typeof c.kmIni === 'number' ? c.kmIni : null; }
   function ctOrdem(lista) {
     return (lista || []).map(function (c, i) {
-      var t = ctGrupo(c);
-      return { c: c, i: i, t: GRUPO_ORDEM.indexOf(t), k: t === 'conserva' ? posEixo(c) : null, n: Number(ctNumeroCurto(c)) || Infinity };
+      var t = ctGrupo(c), o = GRUPO_ORDEM.indexOf(t);
+      return { c: c, i: i, t: o < 0 ? GRUPO_ORDEM.length : o, k: t === 'conserva' ? posEixo(c) : null, n: Number(ctNumeroCurto(c)) || Infinity };
     })
       .sort(function (a, b) {
         return a.t - b.t || (a.k == null) - (b.k == null) || (a.k != null && a.k !== b.k ? a.k - b.k : 0) || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) || a.i - b.i;
@@ -2883,17 +2888,20 @@
   function desenhaEsc() {
     if (!escolha) return;
     var o = escolha.o, f = escolha.fix, rod = window.SNV_BR230 && window.SNV_BR230.rodovia, fc = window.FotoCarimbo && window.FotoCarimbo.km;
-    var perto = escolha.gpsOk && f && f.dist <= 2000 && fc ? fc.contratosAqui(o.cs, f.km, rod, f.ramal || '') : [];
+    // a Supervisora (v172) vale no trecho todo: nunca entra no "perto" nem na lista dos contratos; fica numa seção própria no fim
+    var sups = o.cs.filter(ehSup), cs = o.cs.filter(function (c) { return !ehSup(c); });
+    var perto = escolha.gpsOk && f && f.dist <= 2000 && fc ? fc.contratosAqui(cs, f.km, rod, f.ramal || '') : [];
     var sug = o.sugerir && o.cs.indexOf(o.sugerir.c) >= 0 ? o.sugerir.c : null;
     function linha(c, tag) {
       tag = tag || (c.id === o.ultimo ? 'Último usado' : '');
-      return '<button type="button" class="esc-i" data-e="ct" data-cid="' + esc(c.id) + '"><span><b>' + esc(ctNome(c)) + '</b><small>' + esc(ctSub(c)) + '</small></span>' +
+      var sub = ehSup(c) ? [ctNumeroCT(c), 'sem construtora'].filter(Boolean).join(' · ') : ctSub(c);
+      return '<button type="button" class="esc-i" data-e="ct" data-cid="' + esc(c.id) + '"><span><b>' + esc(ctNome(c)) + '</b><small>' + esc(sub) + '</small></span>' +
         (tag ? '<span class="esc-t">' + esc(tag) + '</span>' : '<span class="esc-s" aria-hidden="true">›</span>') + '</button>';
     }
     var h = '<div class="esc-top"><div><h2 id="escT">' + esc(o.titulo) + '</h2>' + (o.sub ? '<p>' + esc(o.sub) + '</p>' : '') + '</div>' +
       '<button type="button" class="esc-x" data-e="x" aria-label="Fechar">×</button></div>';
     if (sug) h += '<h3>Do item aberto</h3><div class="esc-l">' + linha(sug, o.sugerir.rot ? 'Item ' + o.sugerir.rot : 'Item aberto') + '</div>';
-    var resto = o.cs.filter(function (c) { return c !== sug && perto.indexOf(c) < 0; }), pertoS = perto.filter(function (c) { return c !== sug; });
+    var resto = cs.filter(function (c) { return c !== sug && perto.indexOf(c) < 0; }), pertoS = perto.filter(function (c) { return c !== sug; });
     var fraco = f && f.acc > 100;
     if (escolha.gpsOk && f && f.dist <= 2000) {
       h += '<div class="esc-gps' + (perto.length ? ' ok' : '') + '"><i aria-hidden="true"></i>' + (fraco ? 'Talvez perto de você' : 'Perto de você') + ' · km ' + (f.ramal ? 'local ' : '') + fmt(f.km, 1) +
@@ -2911,11 +2919,12 @@
         : escolha.err === 'sem' && !f ? 'Sem GPS: escolha na lista.' : f ? 'GPS pronto.' : 'Procurando o GPS… enquanto isso, escolha na lista.';
       h += '<div class="esc-gps"><i aria-hidden="true"></i>' + esc(st) + '</div>';
       if (escolha.aviso && f && f.dist <= 2000 && fc) {
-        var n = fc.contratosAqui(o.cs, f.km, rod, f.ramal || '').length;
+        var n = fc.contratosAqui(cs, f.km, rod, f.ramal || '').length;
         if (n) h += '<button type="button" class="esc-aviso" data-e="gps">GPS pronto: ' + n + (n === 1 ? ' contrato' : ' contratos') + ' no km ' + (f.ramal ? 'local ' : '') + fmt(f.km, 1) + ' · mostrar</button>';
       }
       h += '<div class="esc-l">' + resto.concat(pertoS).map(function (c) { return linha(c); }).join('') + '</div>';
     }
+    if (sups.length) h += '<h3>Sem construtora · vale em todo o trecho</h3><div class="esc-l">' + sups.map(function (c) { return linha(c); }).join('') + '</div>';
     var fo = escolha.el.querySelector('.esc-f'), y = fo.scrollTop, foco = document.activeElement && fo.contains(document.activeElement) ? document.activeElement.getAttribute('data-cid') || document.activeElement.getAttribute('data-e') : null;
     fo.innerHTML = h;
     fo.scrollTop = y;
@@ -5372,7 +5381,7 @@
   function fotosDoMapa() {
     var G = function () { return window.Galeria; };
     return {
-      pode: function () { return !!(galeriaOn() && G() && G().listarFotos && (isAnalista() && podeFotos() ? 1 : nivel()) >= 2); },
+      pode: function () { return !!(galeriaOn() && G() && G().listarFotos && (isAnalista() ? anVeEquipe() : nivel() >= 2)); },
       padrao: function () { try { return window.matchMedia('(min-width:1101px) and (pointer:fine)').matches; } catch (e) { return false; } },
       listar: function () {
         if (!banco.login) return Promise.resolve([]);
@@ -5392,12 +5401,14 @@
         return Promise.all(ps);
       },
       nomeCt: function (cid) {
-        var c = state.contracts.filter(function (x) { return x.id === cid; })[0];
+        var c = contractById(cid);
         return c ? NOMES.nome(c) : cid ? String(cid).replace(/^ct-/, 'CT ') : 'Sem contrato';
       },
       // v171: o contrato escolhido no filtro das fotos passa a ser o do mapa; false quando a pessoa não tem o mapa dele
       trocaCt: function (cid) {
         var c = state.contracts.filter(function (x) { return x.id === cid; })[0];
+        // a Supervisora não tem mapa próprio: o mapa fica no contrato aberto e mostra as fotos dela no trecho todo
+        if (!c && supsFoto().some(function (x) { return x.id === cid; })) return false;
         if (!c || !podeMapa(c)) { toast('O mapa continua em ' + ctNome(active()) + ': ' + (c ? ctNome(c) : String(cid).replace(/^ct-/, 'CT ')) + ' não tem mapa para você. As fotos ficam filtradas.', 5000); return false; }
         if (state.activeId === cid) return false;
         if (analise.estado[cid] === 'erro') delete analise.estado[cid];
@@ -6358,7 +6369,7 @@
       });
     });
   }
-  function contractById(id) { return state.contracts.find(function (x) { return x.id === id; }) || null; }
+  function contractById(id) { return state.contracts.find(function (x) { return x.id === id; }) || (banco.sup || []).find(function (x) { return x.id === id; }) || null; }
 
   // ---------------- "+ Contrato": a janela pede o tipo (não muda depois), o nº e o lote. Do contrato aberto (ref) vêm só o órgão,
   // a rodovia, a supervisora e o contrato dela, que são os mesmos, e a largura da plataforma, só de um contrato do mesmo tipo;
@@ -7044,7 +7055,8 @@
   var banco = { on: !!window.Banco, versao: 0, pend: [], cfg: {}, meta: {}, conf: [], propostas: [], acesso: null, base: null, login: null, online: null, busy: false, sending: 0, at: null, want: false,
     falhas: 0, espera: 0, lote: 0,   // falhas seguidas do servidor, quando tentar de novo e tamanho do lote ao separar uma recusa
     bloqueio: 0,   // até quando o banco bloqueou esta rede (muitas tentativas com código errado)
-    semEspaco: false, arquivados: [], envio: 0 };   // fila sem cópia no aparelho; contratos arquivados (só o Administrador recebe); nº do envio em andamento
+    semEspaco: false, arquivados: [], envio: 0,   // fila sem cópia no aparelho; contratos arquivados (só o Administrador recebe); nº do envio em andamento
+    sup: [], fotosEquipe: null };   // contrato da Supervisora (separarSup); analista: vê as fotos da equipe (null = não informado)
   var flushTimer = null;
 
   // ---------------- uma aba por vez edita (decisão D-3 de 21/10/2026). Duas abas (ou o app instalado e uma aba do navegador)
@@ -7121,7 +7133,7 @@
   // a fila guardada no aparelho; sem espaço, as alterações ficam só na memória: a barra avisa até voltar a gravar
   function keepSync() {
     if (aba.ro) return true;   // outra aba edita: esta não grava a fila por cima da dela
-    var ok = lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas, acesso: banco.acesso, arquivados: banco.arquivados });
+    var ok = lsPut(SYNC_KEY, { versao: banco.versao, pend: banco.pend, cfg: banco.cfg, meta: banco.meta, conf: banco.conf, propostas: banco.propostas, acesso: banco.acesso, arquivados: banco.arquivados, sup: banco.sup, fotosEquipe: banco.fotosEquipe });
     if (!ok && !banco.semEspaco && banco.pend.length) toast('Este aparelho está sem espaço: ' + banco.pend.length + (banco.pend.length === 1 ? ' alteração está' : ' alterações estão') + ' só na memória. Deixe o app aberto com internet ou salve um backup (menu Dados).', 9000);
     banco.semEspaco = !ok;
     return ok;
@@ -7149,6 +7161,8 @@
   function parte(c, k) {
     if (!banco.on) return true;
     if (!banco.login || !c) return false;
+    // Supervisora: as medições só para engenheiro, Administrador e todos os analistas; as fotos para todos com código
+    if (ehSup(c)) return k === 'med' ? isResp() || isAnalista() : true;
     if (isAnalista()) {
       var a = banco.acesso && banco.acesso[c.id];
       return !!(a && (a.med || a.acomp));
@@ -7159,13 +7173,18 @@
   function anMed(c) { return isAnalista() && parte(c, 'med'); }
   function podeDiagrama(c) { return !isFiscal() && (parte(c, 'acomp') || anMed(c)); }
   function podeMapa(c) { return parte(c, 'acomp') || anMed(c); }
-  // Foto e Galeria: do fiscal ao Administrador, e o analista nos contratos liberados para ele (só as fotos dele)
+  // Foto e Galeria: do fiscal ao Administrador, e o analista nos contratos liberados para ele e na Supervisora
+  // (v172: o analista também tira foto como Supervisora; o banco confere em _faz_fotos)
   function podeFotos(c) {
     if (!banco.on || nivel() >= 1) return true;
     if (!isAnalista()) return false;
-    return c ? parte(c, 'med') : state.contracts.some(function (x) { return parte(x, 'med'); });
+    return c ? ehSup(c) || parte(c, 'med') : supsFoto().length > 0 || state.contracts.some(function (x) { return parte(x, 'med'); });
   }
-  function ctsFoto() { return state.contracts.filter(function (x) { return !isAnalista() || parte(x, 'med'); }); }
+  // a Supervisora vem sempre no fim da lista (nunca é a primeira sugestão)
+  function supsFoto() { return banco.on && banco.login ? banco.sup || [] : []; }
+  function ctsFoto() { return state.contracts.filter(function (x) { return !isAnalista() || parte(x, 'med'); }).concat(supsFoto()); }
+  // analista com as fotos de toda a equipe (aba Equipe e fotos no mapa): o padrão; o Administrador desliga no cadastro
+  function anVeEquipe() { return isAnalista() && banco.fotosEquipe !== false; }
   // a folha só da vistoria: só para quem tem o acompanhamento (o analista só das medições vê sempre a folha com a análise)
   function folhaSoVist(c) { return folhaVistoria && parte(c, 'acomp'); }
 
@@ -8083,7 +8102,7 @@
       if ((banco.login && banco.login.codigo) !== credR) return;
       // sessão vencida ou desativada em outro aparelho: o banco mandou só a visão pública; confere o acesso (sai)
       if (r.sessaoInvalida && banco.login) { conferirAcesso(); return; }
-      if (r.novo) { banco.acesso = r.acesso || null; podarAnalise(); }
+      if (r.novo) { banco.acesso = r.acesso || null; banco.fotosEquipe = r.fotosEquipe; podarAnalise(); }
       banco.online = true;
       banco.at = new Date();
       banco.versao = r.versao;
@@ -8099,6 +8118,7 @@
         state = normalize(applyOps(fromServer(r), banco.pend));
         rascReaplica(state);
         separarArquivados(state);
+        separarSup(state);
         banco.base = clone(state);
         rascNaBase();
         try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* sem armazenamento */ }
@@ -8223,6 +8243,13 @@
     banco.propostas = (banco.propostas || []).filter(function (x) { return !ids[x.contrato_id]; });
     if (!s.contracts.some(function (c) { return c.id === s.activeId; })) s.activeId = s.contracts[0] ? s.contracts[0].id : null;
   }
+  // o contrato da Supervisora sai da lista (Diagrama, mapa, Visão geral, Contratos e NC não o mostram) e fica em banco.sup
+  function separarSup(s) {
+    var sup = [];
+    s.contracts = s.contracts.filter(function (c) { if (!ehSup(c)) return true; sup.push(c); return false; });
+    banco.sup = sup;
+    if (!s.contracts.some(function (c) { return c.id === s.activeId; })) s.activeId = s.contracts[0] ? s.contracts[0].id : null;
+  }
   function openArquivados() {
     if (!isAdmin()) { toast('Só o Administrador vê os contratos arquivados.'); return; }
     var l = banco.arquivados || [];
@@ -8257,7 +8284,7 @@
     // nome dela e voltam quando ela entrar de novo (guardarDaSessao)
     if (banco.pend.length) guardarDaSessao(banco.pend, banco.busy ? banco.envio : 0, banco.sending);
     banco.envio++;   // a resposta de um envio a caminho não mexe mais na fila
-    banco.pend = []; banco.sending = 0; banco.cfg = {}; banco.conf = []; banco.arquivados = [];
+    banco.pend = []; banco.sending = 0; banco.cfg = {}; banco.conf = []; banco.arquivados = []; banco.sup = []; banco.fotosEquipe = null;
     banco.base = clone(state); banco.meta = {}; banco.propostas = []; banco.acesso = null;
     lsPut(AN_KEY, null);
     if (window.GaleriaLimparCache) window.GaleriaLimparCache();
@@ -8591,8 +8618,8 @@
   var PAPEIS = [
     { k: 'engenheiro', nome: 'Engenheiro', desc: 'O mesmo que o Administrador: edita tudo, aprova, vê as medições e as fotos de todos, cadastra pessoas e volta os dados para uma cópia. Só não mexe na conta de um Administrador.' },
     { k: 'auxiliar', nome: 'Auxiliar de engenharia', desc: 'Edita tudo, aprova as mudanças dos fiscais, restaura da lixeira, vê as medições e as fotos de todos. Não cadastra pessoas.' },
-    { k: 'analista', nome: 'Analista', desc: 'Só consulta, nos contratos marcados abaixo: tudo do contrato (medições, não conformidades, diagrama e PDF, mapa). Também tira fotos e vê as que tirou.', ct: 'analista' },
-    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Nos contratos marcados abaixo: registra as não conformidades e muda o estado dos serviços (fica aguardando aprovação), tira e envia fotos e vê só as que tirou. Sem diagrama e sem PDF.', ct: 'fiscal' },
+    { k: 'analista', nome: 'Analista', desc: 'Só consulta, nos contratos marcados abaixo: tudo do contrato (medições, não conformidades, diagrama e PDF, mapa). Também tira fotos (inclusive como Supervisora) e vê as fotos da equipe, se a caixa abaixo estiver marcada.', ct: 'analista' },
+    { k: 'fiscal', nome: 'Fiscal de campo', desc: 'Nos contratos marcados abaixo: registra as não conformidades e muda o estado dos serviços (fica aguardando aprovação), tira e envia fotos (também como Supervisora) e vê só as que tirou. Sem diagrama e sem PDF.', ct: 'fiscal' },
     { k: 'criador', nome: 'Administrador', desc: 'Tudo, inclusive cadastrar pessoas, outros Administradores e voltar os dados para uma cópia.' }
   ];
   function gerarCodigo() {
@@ -8667,7 +8694,9 @@
     }).join('');
     return '<fieldset class="us-cts" id="usCts" hidden><legend>Contratos liberados</legend>' +
       '<p class="hint" data-ctx="fiscal">Marque os contratos em que esta pessoa registra as não conformidades e tira as fotos. Ela só vê esses.</p>' +
-      '<p class="hint" data-ctx="analista">Marque os contratos do analista. Em cada um ele vê tudo, só para consulta: as medições, as não conformidades, o diagrama e o PDF, o mapa, e as fotos dele. Os outros não aparecem para ele.</p>' +
+      '<p class="hint" data-ctx="analista">Marque os contratos do analista. Em cada um ele vê tudo, só para consulta: as medições, as não conformidades, o diagrama e o PDF e o mapa. Os outros não aparecem para ele. Ele também tira fotos nesses contratos e como Supervisora, e vê as medições da Supervisora.</p>' +
+      // v172: por padrão o analista vê as fotos de toda a equipe; o Administrador desliga aqui (usuarios.fotos_equipe)
+      '<label class="show-pw" data-ctx="analista"><input type="checkbox" id="usEquipe"' + (!u || u.fotos_equipe !== false ? ' checked' : '') + '> Ver as fotos de toda a equipe, em todos os contratos (aba Equipe da galeria e fotos no mapa)</label>' +
       '<div class="us-ct-todos"><button type="button" class="btn small" data-cts="todos">Marcar todos</button><button type="button" class="btn small" data-cts="nenhum">Desmarcar todos</button></div>' +
       (linhas || '<p class="empty">Nenhum contrato cadastrado.</p>') + '</fieldset>';
   }
@@ -8703,7 +8732,8 @@
       modalErr(form, '');
       busyBtn(form, true, 'Salvando…');
       var semCt = acesso && !Object.keys(acesso).length;
-      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo, acesso: acesso }).then(function (id) {
+      var eq = form.querySelector('#usEquipe'), fotosEquipe = papel === 'analista' && eq ? eq.checked : null;
+      window.Banco.usuarioSalvar(banco.login.codigo, { id: u ? u.id : null, nome: nome, papel: papel, codigo: cod || null, ativo: ativo, acesso: acesso, fotosEquipe: fotosEquipe }).then(function (id) {
         if (!id && cod) { busyBtn(form, false); modalErr(form, errText({ code: 'codigo_em_uso' })); return; }
         if (semCt) toast(nome + ' ficou sem nenhum contrato liberado: só vai ver a visão geral até você marcar algum.', 7000);
         busyBtn(form, false);
@@ -9057,6 +9087,8 @@
       galeria = window.Galeria({
         // o analista que tira fotos fica como o fiscal na galeria: Neste aparelho e Minhas
         drive: driveQ, Banco: window.Banco, nivel: function () { return isAnalista() && podeFotos() ? 1 : nivel(); }, getLogin: function () { return banco.login; }, nomes: NOMES,
+        // v172: o analista vê também a aba Equipe (todas as fotos), sem as ações de quem é da equipe (relatório, mover, apagar)
+        verEquipe: anVeEquipe,
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
@@ -9073,7 +9105,7 @@
   function relatorioPdf(a) {
     if (!relFoto) {
       relFoto = window.RelatorioFoto({
-        contratos: function () { return state.contracts; }, ativo: function () { return visaoOn ? null : active(); }, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae, nomes: NOMES,
+        contratos: function () { return state.contracts.concat(supsFoto()); }, ativo: function () { return visaoOn ? null : active(); }, ordem: sortedPoints, descricao: descRelatorio, ehOae: isOae, nomes: NOMES,
         // 267: o km do contrato do ponto ("743,40 A 743,95"), para o título; '' sem a régua
         kmContr: function (c, p) { return pcContrTxt(c, p.kmIni, p.kmFim).replace(' – ', ' A '); },
         ensureLibs: ensureLibs, saveBlob: saveBlob, toast: toast, modal: modal, closeModal: closeModal,
@@ -9156,12 +9188,17 @@
       banco.meta = s.meta && typeof s.meta === 'object' ? s.meta : {}; banco.conf = Array.isArray(s.conf) ? s.conf : [];
       banco.acesso = s.acesso && typeof s.acesso === 'object' ? s.acesso : null;
     }
+    banco.sup = s && Array.isArray(s.sup) ? s.sup : [];
+    // aparelho que guardou o contrato da Supervisora numa versão antiga (antes da v172): sai da lista antes do retrato-base, para
+    // a falta dele não virar alteração na fila
+    if (state.contracts.some(ehSup)) separarSup(state);
     banco.base = clone(state);   // o estado guardado aqui já inclui o que está na fila
     initDrive();
     renderGaleriaBtn();
     $('btnGaleria').addEventListener('click', function () { abrirGaleria(); });
     banco.propostas = s && Array.isArray(s.propostas) ? s.propostas : [];
     banco.arquivados = s && Array.isArray(s.arquivados) ? s.arquivados : [];
+    banco.fotosEquipe = s && typeof s.fotosEquipe === 'boolean' ? s.fotosEquipe : null;
     setLogin(lsGet(LOGIN_KEY), true);
     rascNaTela();
     fiscalEntrada = visaoOn && isFiscal();

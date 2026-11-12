@@ -757,19 +757,22 @@
   // nomes do contrato: o app.js passa os seus em opts.nomes. Esta cópia curta, com a mesma regra, vale na página online,
   // que embute este arquivo sem o app.js: nome de tela pelo tipo e número ("Pontos Críticos 314"), nome formal com o Lote
   // da licitação e o nº do CT, pasta do Drive pelo número ("CT 02 00314-2026") e a pasta usada até a versão 51 (o Lote)
+  // o contrato da própria Supervisora (CT 393, tipo 'sup', v172): sem construtora, sem pontos e sem lote; vale no trecho todo e
+  // nunca é sugerido pelo km
+  function ehSup(c) { return !!(c && c.tipo === 'sup'); }
   function nomesPadrao() {
     // sinal: a conservação com rotuloTipo 'sinal' (709) tem o nome "Sinalização" (por baixo, conservação)
     var PAL = { pc: 'Pontos Críticos', conserva: 'Conservação', oae: 'Proarte', sinal: 'Sinalização' };
     function lp(v) { return v == null ? '' : String(v).trim().replace(/\s+/g, ' '); }
     function tipo(c) { return c && c.tipo === 'oae' ? 'oae' : c && c.tipo === 'conserva' ? 'conserva' : 'pc'; }
     function numeroCurto(c) { var m = /(\d{3,})\s*\/\s*\d{4}/.exec(lp(c && c.numero)); return m ? String(Number(m[1])) : ''; }
-    function nome(c) { if (!c) return ''; var n = numeroCurto(c), w = PAL[c.rotuloTipo === 'sinal' && tipo(c) === 'conserva' ? 'sinal' : tipo(c)]; return n ? w + ' ' + n : lp(c.lote) || w; }
+    function nome(c) { if (!c) return ''; if (ehSup(c)) return 'Supervisora'; var n = numeroCurto(c), w = PAL[c.rotuloTipo === 'sinal' && tipo(c) === 'conserva' ? 'sinal' : tipo(c)]; return n ? w + ' ' + n : lp(c.lote) || w; }
     function loteReal(c) { var l = lp(c && c.lote); return /^lote\b/i.test(l) ? l : ''; }
     function numeroCT(c) { var n = lp(c && c.numero); return n ? 'CT ' + n : ''; }
     function formal(c) { return c ? [loteReal(c), numeroCT(c)].filter(Boolean).join(' · ') || nome(c) : ''; }
     function completo(c) { var out = []; [nome(c), loteReal(c), numeroCT(c)].forEach(function (x) { if (x && out.indexOf(x) < 0) out.push(x); }); return out.join(' · '); }
     // sem número e sem Lote, o id entra no nome (dois contratos novos não dividem a pasta)
-    function pasta(c) { if (!c) return ''; var n = lp(c.numero); return n ? 'CT ' + n.replace(/\s*\/\s*/g, '-') : lp(c.lote) || nome(c) + (c.id ? ' (' + c.id + ')' : ''); }
+    function pasta(c) { if (!c) return ''; var n = lp(c.numero); if (ehSup(c) && n) return 'Supervisora - CT ' + n.replace(/\s*\/\s*/g, '-'); return n ? 'CT ' + n.replace(/\s*\/\s*/g, '-') : lp(c.lote) || nome(c) + (c.id ? ' (' + c.id + ')' : ''); }
     // as pastas que existiam até a versão 51, pelo nº (não dependem do Lote de hoje); dos outros, o Lote ou "CT nº", letra por letra
     var ANTES = { '0200314/2026': 'Lote 01', '0200315/2026': 'Lote 02', '0200424/2024': 'CT 424 · OAEs' };
     function pastaAntes(c) { var k = lp(c && c.numero).replace(/\s+/g, ''); return Object.prototype.hasOwnProperty.call(ANTES, k) ? ANTES[k] : ''; }
@@ -799,7 +802,7 @@
     // nome de tela do contrato ("Pontos Críticos 314"); o Lote da licitação fica no carimbo e no texto do Drive
     function lotName(c) { return c ? nomes.nome(c) || 'Contrato' : ''; }
     function sameRoad(c) { return mesmaRodovia(c, snv.rodovia); }
-    function lotsAt(km, ramal) { return contratosAqui(contracts(), km, snv.rodovia, ramal || ''); }
+    function lotsAt(km, ramal) { return contratosAqui(contracts().filter(function (c) { return !ehSup(c); }), km, snv.rodovia, ramal || ''); }
     // régua da foto (st.ramal): '' = eixo do SNV; senão o km local da travessia de Altamira (ver localiza)
     function refR(ramal) { var r = ramal ? ramais()[ramal] : null; return r ? r.ref : ref; }
     function locate(ll) { return localiza(ref, ll[0], ll[1]); }
@@ -814,7 +817,7 @@
     function has(list, c) { return !!c && list.some(function (x) { return x.id === c.id; }); }
     // no Proarte (CT 424) a ponte é "OAE", nunca "ponto" (legenda, texto do Drive e campos)
     function oaeCt(c) { return !!c && c.tipo === 'oae'; }
-    function rangeTxt(c) { var r = lotRange(c); return r ? (c.kmLocal ? 'km local ' : 'km ') + nf(r[0], 2) + ' a ' + nf(r[1], 2) : ''; }
+    function rangeTxt(c) { if (ehSup(c)) return 'todo o trecho'; var r = lotRange(c); return r ? (c.kmLocal ? 'km local ' : 'km ') + nf(r[0], 2) + ' a ' + nf(r[1], 2) : ''; }
     function rodovia() { var c = contract(); return (c && c.rodovia) || snv.rodovia || 'BR-230/PA'; }
 
     function loadLogo(src) {
@@ -1044,6 +1047,7 @@
       var c = contract();
       if (k === 'lado' && !st.side) return 'sem lado nesta foto';
       if (k === 'coord' && !st.ll && st.km == null) return 'sem local nesta foto';
+      if (ehSup(c) && (k === 'ponto' || k === 'executora')) return k === 'ponto' ? 'a Supervisora não tem' : 'sem construtora';
       if (k === 'ponto' && !findPoint(st.pid)) return semPontos() ? 'conservação: sem ponto' : 'nenhum ponto nesta foto';
       if (k === 'desc' && !(st.desc || '').trim()) return 'vazia nesta foto';
       if ((k === 'contrato' || k === 'executora') && ((findPoint(st.pid) || {})._na || (c && c.semProarte))) return 'OAE não atendida pelo Proarte';
@@ -1293,7 +1297,7 @@
     }
     function gpsLot(km, ramal) {
       var here = lotsAt(km, ramal), cur = activeContract();
-      if (!here.length || !cur || has(here, cur)) return '';
+      if (!here.length || !cur || ehSup(cur) || has(here, cur)) return '';
       return ' · <span class="ft-warn">' + (here.length === 1 ? 'este km é do contrato ' + esc(lotName(here[0])) : 'este km está nos contratos ' + esc(lotNames(here))) + '</span>';
     }
     // a faixa da foto da NC. A foto levada para outro contrato não entra na NC (driveItem), e a faixa sai junto
@@ -1468,7 +1472,7 @@
       scheduleDraw(0);
     }
     // conservação: só contrato e km; o campo Ponto some (os segmentos são divisão nossa)
-    function semPontos() { var c = contract(); return !!c && c.tipo === 'conserva'; }
+    function semPontos() { var c = contract(); return !!c && (c.tipo === 'conserva' || ehSup(c)); }   // a Supervisora também não escolhe ponto
     function renderPontos() {
       var sp = q('#ftPonto'), lb = sp.closest('label');
       sp.innerHTML = pontoOptions(); lb.hidden = semPontos(); lb.firstChild.textContent = oaeCt(contract()) ? 'OAE' : 'Ponto';
@@ -1600,7 +1604,8 @@
         esc(lg.p.nome || (oae ? 'OAE' : 'ponto')) + ', a ' + (lg.d < 10 ? nf(lg.d, 1) : nf(lg.d, 0)) + ' km)';
     }
     function lotHtml() {
-      var list = contracts(), cur = contract(), here = st.km != null ? lotsAt(st.km, st.ramal) : [], h = '';
+      var list = contracts().filter(function (c) { return !ehSup(c); }), cur = contract(), here = st.km != null ? lotsAt(st.km, st.ramal) : [], h = '';
+      if (ehSup(cur)) return '';   // a Supervisora vale no trecho todo: nenhum km é "de outro contrato"
       var di = st.bi != null ? ' data-i="' + st.bi + '"' : '';   // foto do lote de fotos
       if (st.km != null && cur && !has(here, cur)) {
         if (here.length) {
@@ -1666,9 +1671,11 @@
       var na = !!(p && p._na) || !!(c && c.semProarte);   // o item "OAEs sem Proarte" (sem contrato) também
       if (C.ponto && p) out.push(na ? p.nome + ' - ' + kmPTxt(p, c)
         : (oaeCt(c) ? 'OAE ' : 'Ponto ') + p.nome + ' - ' + kmPTxt(p, c) + (p.kmFim != null && p.kmIni != null ? ' a ' + nf(p.kmFim, 2) : ''));
-      if (C.contrato && c && !na) out.push([c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
-      if (C.executora && c && c.executora && !na) out.push('Executora: ' + c.executora);
-      if (C.supervisora && c && c.supervisora) out.push('Supervisão: ' + c.supervisora);
+      // Supervisora (v172): "CT 02 00393/2022" sem lote, sem executora e "Supervisora: …" no lugar de "Supervisão: …"
+      var sup = ehSup(c);
+      if (C.contrato && c && !na) out.push([sup ? '' : c.lote, c.numero ? 'CT ' + c.numero : ''].filter(Boolean).join(' - '));
+      if (C.executora && c && c.executora && !na && !sup) out.push('Executora: ' + c.executora);
+      if (C.supervisora && c && c.supervisora) out.push((sup ? 'Supervisora: ' : 'Supervisão: ') + c.supervisora);
       var desc = (st.desc || '').trim() || (st.bi != null && batch ? batch.common.trim() : '');
       if (C.desc && desc) out.push({ wrap: desc });
       if (C.snv) out.push(snvTxt(snv.versao));
@@ -2206,7 +2213,7 @@
       if (it.km == null) return null;
       return withItem(it, function () {
         var cur = contract(), here = lotsAt(it.km, it.ramal);
-        if (!cur || !here.length || has(here, cur) || it.keepLot === cur.id + '@' + nf(it.km, 2)) return null;
+        if (!cur || ehSup(cur) || !here.length || has(here, cur) || it.keepLot === cur.id + '@' + nf(it.km, 2)) return null;
         return here;
       });
     }

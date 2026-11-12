@@ -24,7 +24,7 @@
  * trecho de mais de um contrato mostra todos, cada um com o seu "Passar para…" (folga de 50 m, a mesma da tela Foto); em
  * Deletados, o Administrador confere a galeria com a pasta do Drive ("Conferir com o Drive", script versão 6).
  *
- *   var g = Galeria({ drive, Banco, getLogin, nivel, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar, nomes });
+ *   var g = Galeria({ drive, Banco, getLogin, nivel, verEquipe, driveUrl, ambiente, contratos, ativo, toast, confirmar, saveBlob, entrar, nomes });
  *   g.open({ cid, pid })   abre (opcional: já filtrada num ponto)      g.changed()   a fila do aparelho mudou
  *   g.open({ cid, pagina: true, aoFechar })   celular: a galeria vira uma página entre a barra do topo e a das páginas (app.js),
  *                          sem o "Voltar" e sem a fila de contratos (vale o contrato aberto no app); aoFechar avisa quando ela
@@ -1000,7 +1000,8 @@
     // o contrato do app: o da página do celular, ou o aberto na tela (na visão geral, nenhum)
     function ctAppId() { return ctApp || (o.ativo ? o.ativo() : '') || ''; }
     function abasVisiveis() {
-      return ABAS.filter(function (a) { return ((a.nivel === 0 && !a.login) || (login() && nv() >= a.nivel)) && (!a.drive || !!(o.driveUrl && o.driveUrl() && o.drive && o.drive.post)); });
+      // o.verEquipe (v172): o analista vê a aba Equipe com o nível de quem só tira foto (sem relatório, mover nem apagar)
+      return ABAS.filter(function (a) { return ((a.nivel === 0 && !a.login) || (login() && (nv() >= a.nivel || (a.k === 'todas' && !!(o.verEquipe && o.verEquipe()))))) && (!a.drive || !!(o.driveUrl && o.driveUrl() && o.drive && o.drive.post)); });
     }
     function q(s) { return root.querySelector(s); }
     function msgErro(e) {
@@ -1919,7 +1920,7 @@
       var a = document.activeElement, at = a && el.contains(a) ? ['data-f', 'data-k', 'data-v', 'data-g'].filter(function (x) { return a.hasAttribute(x); })[0] : '';
       var sel0 = at ? '[' + at + '="' + cssId(a.getAttribute(at)) + '"]' : '';
       el.querySelector('.gl-fo-c').innerHTML = filtrosHtml(true);
-      el.querySelector('.gl-fo-rod').innerHTML = (aba === 'todas' ? '<p class="gl-fo-nota">' + NOTA_ESTRELA + '</p>' : '') +
+      el.querySelector('.gl-fo-rod').innerHTML = (aba === 'todas' && nv() >= 2 ? '<p class="gl-fo-nota">' + NOTA_ESTRELA + '</p>' : '') +
         '<div class="gl-fo-ver"><button type="button" class="btn primary" data-g="fo-fechar">Ver ' + plural(lista.length, 'foto', 'fotos') + '</button></div>';
       var b = sel0 && !el.contains(document.activeElement) && el.querySelector(sel0);
       if (b) b.focus({ preventScroll: true });
