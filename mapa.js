@@ -8,7 +8,7 @@
  *   var m = MapaSNV({ host, snv, getContract, pointInfo, saveText, tiles, gps, notify, nomes });
  *   m.show(); m.render(); m.openFull(); m.closeFull(); m.isFull(); m.exportKml();
  * nomes: funções de nome do contrato do app.js; sem elas (página online), vale a cópia curta daqui.
- * fotos (v170, só no app): { pode, padrao, listar, mini, pedir, nomeCt, abrirGaleria }: as fotos da equipe no mapa.
+ * fotos (v170, só no app): { pode, padrao, listar, mini, pedir, nomeCt, trocaCt, abrirGaleria }: as fotos da equipe no mapa.
  */
 (function () {
   'use strict';
@@ -1806,7 +1806,13 @@
         fotosFecha(false, function () { fo.abrirGaleria(ids, nome); });
       }
     }
-    q('.mp-ff-ct').addEventListener('change', function (e) { fot.ct = e.target.value; fot.z = null; fotosFecha(); fotosAtualiza(); });
+    // um contrato escolhido aqui vira o contrato do mapa (trecho, km, pontos e o nome no alto); "Todos" só tira o filtro
+    q('.mp-ff-ct').addEventListener('change', function (e) {
+      var v = e.target.value;
+      fot.ct = v; fot.z = null; fotosFecha();
+      if (v && v !== fot.ctDe && fo.trocaCt && fo.trocaCt(v)) return;   // o render do contrato novo chama fotosSync
+      fotosAtualiza();
+    });
     root.addEventListener('keydown', function (e) { if (e.key === 'Escape' && fot.sel) { e.stopPropagation(); fotosFecha(); } });
 
     // ---------------- eventos
