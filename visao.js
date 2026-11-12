@@ -203,7 +203,7 @@
     function forma() { return !temMapaG() ? 'raias' : formaFixa() || st.forma; }
     function mapaG() {
       if (!MG && !MGfalhou && o.mapa) {
-        MG = o.mapa({ onSel: seguro(noMapaSel), onMove: seguro(noMapaMove),
+        MG = o.mapa({ legendaFora: true, onSel: seguro(noMapaSel), onMove: seguro(noMapaMove),
           onCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id) o.onAbrir(c, null); }); }),
           temFotos: function () { return !!(o.onFotosCt && o.temFotos && o.temFotos()); },
           onFotosCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id && o.onFotosCt) o.onFotosCt(c); }); }) }) || null;
@@ -211,6 +211,7 @@
       }
       return MG;
     }
+    var CAM_S = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 5h3l1.5-2h3L11 5h3v8H2z"/><circle cx="8" cy="9" r="2.3"/></svg>';
     function cel() { return !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches); }
     // a lista do último desenho: achar(), a busca e os cliques usam a mesma, sem recalcular a situação de cada ponto.
     // lista: os itens de todos os contratos (a busca procura em todos); on: só os dos contratos mostrados (x.on).
@@ -378,6 +379,7 @@
       // barra: [Tudo] [Contratos ▾] (com um contrato só não há o que escolher), o zoom e o trecho na tela
       if (nT < 2) st.ct = false;
       // Medições | Não conformidades (N): só com pontes ou conservação na tela e para quem vê as medições
+      var dm = noMapa ? dadosMapa(d, its) : null;
       var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
       var nGr = its.reduce(function (t, x) { return t + (x.nc && x.inf.ncN || 0); }, 0);   // as NC desses locais (a legenda do modo NC diz os dois)
       var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
@@ -506,7 +508,7 @@
       h += '</div>';
       }
       // legenda dos contratos mostrados: trecho e losango só com pontos críticos ou conservação; "OAE" só com OAEs
-      h += '<div class="vg-leg">' + (tem.pc || tem.conserva ? '<span><i style="width:18px;height:10px;border-radius:2px;background:#2B5797"></i>Trecho no tamanho real</span>' +
+      h += (noMapa ? legMapa() : '<div class="vg-leg">' + (tem.pc || tem.conserva ? '<span><i style="width:18px;height:10px;border-radius:2px;background:#2B5797"></i>Trecho no tamanho real</span>' +
         '<span><i style="width:9px;height:9px;transform:rotate(45deg);border-radius:1px;background:#3B4540"></i>Ponto curto demais para esta escala</span>' : '') +
         (tem.oae ?'<span><i style="width:11px;height:11px;border-radius:50%;background:#7A8580"></i>OAE</span>' : '') +
         // faixa "OAEs 230": as cores dela (não atendida e, em "Todas", a do 424)
@@ -523,7 +525,30 @@
           : (nNC ? '<span class="vg-leg-n">' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC</span>' : '') +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>NC em correção</span>' +
-            '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '') + '</section>';
+            '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '')) + '</section>';
+      // no Mapa (v183), a legenda é a do mapa: os contratos na cor de cada um (tocar enquadra), a situação dos pontos de perto,
+      // o ponto vazado, os grupos e as fotos. A das raias (trecho no tamanho real, losango, medido) não vale para o mapa
+      function legMapa() {
+        var grupos = [['pc', 'Pontos críticos', 'acima da rodovia'], ['conserva', 'Conservação', 'abaixo da rodovia'], ['sinal', 'Sinalização', 'mais afastada, abaixo']], out = '', pri = true;
+        grupos.forEach(function (g) {
+          var cs = dm.cts.filter(function (k) { return k.trilho && k.f && grupoCt(k.c) === g[0]; });
+          if (!cs.length) return;
+          out += '<div class="vg-lgg"><span class="vg-lgh"><b>' + g[1] + '</b> · ' + g[2] + (pri ? ' · toque para enquadrar' : '') + '</span><div class="vg-lgc">' +
+            cs.map(function (k) {
+              return '<button type="button" class="vg-lch" data-vg="leg-ct" data-cid="' + esc(k.c.id) + '" style="--c:' + esc(k.cor) + '" title="Enquadrar ' + esc(k.nome) + '"><i' + (k.lado === -2 ? ' class="ts"' : '') + '></i>' + esc(k.rot) + '</button>';
+            }).join('') + '</div></div>';
+          pri = false;
+        });
+        var neu = dm.itens.some(function (x) { return x.neutro; }), mob = cel();
+        var sts = dm.legT.map(function (s0) { return '<span><i class="vg-lpt" style="--c:' + esc(s0.cor) + '"></i>' + esc(s0.txt) + '</span>'; }).join('');
+        return '<div class="vg-leg vg-leg-m">' + out +
+          '<div class="vg-lgg vg-lgp"><span class="vg-lgh"><b>De perto, nos pontos</b>' + (md === 'nc' && nNC ? ' · ' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC' : '') + '</span>' +
+          (sts ? '<div class="vg-lgs">' + (md !== 'nc' && neu ? '<small>Pontos críticos: a cor é a situação</small>' : '') + sts + '</div>' : '') +
+          (neu ? '<span><i class="vg-lpt oco" style="--c:#3949AB"></i>Conservação, sinalização e OAEs: ponto vazado, na cor do contrato</span>' : '') +
+          '<span><i class="vg-lgr"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
+          (o.temFotos && o.temFotos() ? '<span><i class="vg-lft">' + CAM_S + '12</i>Fotos (botão no mapa): de longe o número, de perto a miniatura</span>' : '') +
+          '<span>“~” km a conferir · ' + (mob ? 'Dois dedos movem e aproximam o mapa' : 'Roda do mouse aproxima; arraste para mover') + '</span></div></div>';
+      }
 
       function leg230() {
         var vistos = {}, out = '';
@@ -654,7 +679,7 @@
       if (noMapa) {
         var slot = host.querySelector('.vg-mapa-slot');
         if (slot) slot.parentNode.replaceChild(MG.el, slot);
-        MG.geral(dadosMapa(d, its));
+        MG.geral(dm);
         if (!segue) { MG.janela(st.k0, st.k1); st.mpK = [st.k0, st.k1]; }
         MG.show();
       }
@@ -718,7 +743,7 @@
           nome: nome, tip: (nome || (x.oae ? 'OAE' : 'Ponto')) + (x.oae && x.p.codigo && x.p.nome ? ' · ' + x.p.codigo : '') + ' · ' + kmTxt(x, x.kf > x.km) + (x.st ? ' · ' + x.st : '') };
       });
       leg.sort(function (a, b) { return ordem.indexOf(a.txt) - ordem.indexOf(b.txt); });
-      return { itens: itM, cts: cts, sel: st.sel, leg: modo() ? leg : [] };
+      return { itens: itM, cts: cts, sel: st.sel, leg: modo() ? leg : [], legT: leg };
     }
     // toque num item do mapa: abre (ou fecha) o mesmo cartão das raias, sem mexer no trecho do mapa
     function noMapaSel(key) {
@@ -1000,6 +1025,8 @@
       }
       else if (a === 'mapa230') { o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onMapa(c, null); }); }
       else if (a === 'fechar') fechar();
+      // legenda do mapa: enquadra o contrato e traz o mapa à vista (no celular, a legenda fica abaixo dele)
+      else if (a === 'leg-ct') { if (MG && MG.enquadra) { MG.enquadra(b.dataset.cid); if (MG.el && MG.el.scrollIntoView) MG.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }
       // o grupo no mesmo km passa pelos itens um a um: o foco fica nele
       else if (a === 'sel') { x = achar(b.dataset.key); if (x) { if (st.sel === x.key && b.classList.contains('vg-mk')) fechar(); else { mostrar(x, '', baixo); if (!b.classList.contains('grupo')) focoX(); } } }
       else if (a === 'km' || a === 'kmtodos') {

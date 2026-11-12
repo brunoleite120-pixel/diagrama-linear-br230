@@ -288,15 +288,22 @@
     '@media (prefers-reduced-motion:reduce){.mp-car svg,.mp-navcar svg,.mp-map.mp-gira,.mp-navon .mp-tools>[data-mp="nav-norte"] svg{transition:none}}',
     /* fotos da equipe no mapa (v170): quadrado com a miniatura da foto mais nova do grupo e a contagem */
     '.mp-ph{border:0;background:none;cursor:pointer}',
-    '.mp-ph i{position:absolute;inset:0;border-radius:10px;border:2.5px solid #FFFFFF;background:#CFD6D1 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%235C6661%27 stroke-width=%272%27 stroke-linejoin=%27round%27%3E%3Crect x=%273%27 y=%275%27 width=%2718%27 height=%2714%27 rx=%272%27/%3E%3Cpath d=%27m3 16 5-5 4 4 3-3 6 5%27/%3E%3C/svg%3E") center/22px no-repeat;box-shadow:0 2px 8px rgba(23,32,28,.38);box-sizing:border-box}',
-    '.mp-ph.um i{border-radius:8px;border-width:2px}',
+    '.mp-ph i{position:absolute;left:0;right:0;top:0;height:50px;border-radius:10px;border:2.5px solid #FFFFFF;background:#CFD6D1 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%235C6661%27 stroke-width=%272%27 stroke-linejoin=%27round%27%3E%3Crect x=%273%27 y=%275%27 width=%2718%27 height=%2714%27 rx=%272%27/%3E%3Cpath d=%27m3 16 5-5 4 4 3-3 6 5%27/%3E%3C/svg%3E") center/22px no-repeat;box-shadow:0 2px 8px rgba(23,32,28,.38);box-sizing:border-box}',
+    '.mp-ph.um i{height:40px;border-radius:8px;border-width:2px}',
+    // de perto (v183), a miniatura fica levantada, presa por uma haste ao lugar da foto: o ponto e a linha embaixo ficam à vista
+    '.mp-ph:not(.mp-phb)::after{content:"";position:absolute;left:50%;bottom:0;width:2px;height:30px;margin-left:-1px;background:#FFFFFF;box-shadow:0 0 0 1px rgba(23,32,28,.35)}',
+    '.mp-ph:not(.mp-phb)::before{content:"";position:absolute;left:50%;bottom:-4px;width:8px;height:8px;margin-left:-4px;box-sizing:border-box;border-radius:50%;background:var(--mp-accent);border:2px solid #FFFFFF;z-index:1}',
+    // de longe, uma bolinha com o número de fotos, acima do lugar e com a ponta nele (a miniatura cobria as linhas)
+    '.mp-phb span{position:absolute;left:50%;bottom:9px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;height:26px;padding:0 9px 0 7px;box-sizing:border-box;border:2px solid #FFFFFF;border-radius:13px;background:var(--mp-accent);color:var(--mp-accent-ink);font-size:12.5px;font-weight:700;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(23,32,28,.35)}',
+    '.mp-phb span::after{content:"";position:absolute;left:50%;bottom:-6px;width:8px;height:8px;margin-left:-4px;box-sizing:border-box;background:var(--mp-accent);border-right:2px solid #FFFFFF;border-bottom:2px solid #FFFFFF;transform:rotate(45deg)}',
+    '.mp-phb svg{flex:none}',
+    '.mp-phb:focus-visible span,.mp-phb.sel span{outline:3px solid var(--mp-accent);outline-offset:2px}',
     '.mp-ph b{position:absolute;right:-8px;top:-8px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--mp-accent);color:var(--mp-accent-ink);font-size:12px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;border:2px solid #FFFFFF;box-sizing:border-box;font-variant-numeric:tabular-nums}',
     '.mp-ph:focus-visible{outline:0}.mp-ph:focus-visible i,.mp-ph.sel i{outline:3px solid var(--mp-accent);outline-offset:2px}',
-    '.mp-ffil{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--mp-panel);border:1.5px solid var(--mp-accent);border-radius:8px;padding:5px 6px;box-shadow:0 1px 3px rgba(0,0,0,.12);max-width:100%}',
+    '.mp-ffil{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;background:var(--mp-panel);border:1.5px solid var(--mp-accent);border-radius:8px;padding:5px 6px;box-shadow:0 1px 3px rgba(0,0,0,.12);max-width:100%}',
     '.mp-ff-n{font-size:12px;font-weight:700;color:var(--mp-accent);padding:0 4px;white-space:nowrap;font-variant-numeric:tabular-nums}',
-    '.mp-ff-d{min-height:32px;padding:0 11px;border:1px solid var(--mp-line);border-radius:999px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}',
-    '.mp-ff-d[aria-pressed="true"]{background:var(--mp-accent);border-color:var(--mp-accent);color:var(--mp-accent-ink)}',
-    '.mp-ff-ct{min-height:32px;max-width:200px;border:1px solid var(--mp-line);border-radius:999px;padding:0 8px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600}',
+    '.mp-ff-p{min-height:32px;border:1px solid var(--mp-line);border-radius:999px;padding:0 6px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600}',
+    '.mp-ff-ct{min-height:32px;min-width:0;max-width:170px;text-overflow:ellipsis;border:1px solid var(--mp-line);border-radius:999px;padding:0 8px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600}',
     '.mp-fcard{position:absolute;z-index:1003;left:10px;right:10px;bottom:10px;max-width:420px;background:var(--mp-panel);color:var(--mp-ink);border:1px solid var(--mp-line);border-radius:14px;box-shadow:0 -2px 24px rgba(23,32,28,.22);padding:12px;display:flex;flex-direction:column;gap:10px}',
     '.mp-full .mp-fcard{bottom:calc(10px + env(safe-area-inset-bottom,0px))}',
     '.mp-fc-top{display:flex;gap:10px;align-items:flex-start}.mp-fc-top>div{flex:1;min-width:0;display:flex;flex-direction:column}',
@@ -321,6 +328,7 @@
     '.mp-glonge .mp-gct span{font-size:10.5px;padding:0 6px;line-height:16px;border-width:1px}',
     '.mp-gsel i{position:absolute;display:block;width:30px;height:30px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;border:3px solid var(--mp-accent);background:rgba(255,255,255,.35);box-shadow:0 0 0 2px #FFFFFF}',
     '.mp-geral .mp-legend i.tr{height:4px;background:var(--c);box-shadow:0 0 0 1px #FFFFFF}.mp-geral .mp-legend i.tr.ts{height:2px;box-shadow:none;background:repeating-linear-gradient(90deg,var(--c) 0 3px,transparent 3px 6px)}',
+    '.mp-gleg-fora:not(.mp-full) .mp-legend{display:none!important}',
     '.mp-geral .mp-legend i.pt{width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid #FFFFFF;box-shadow:0 0 0 1px rgba(0,0,0,.3)}',
     '.mp-gleg{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border:0;border-radius:6px;background:transparent;font:inherit;font-weight:600;color:var(--mp-ink);cursor:pointer}.mp-gleg:hover,.mp-gleg:focus-visible{background:var(--mp-line)}',
     '.mp-gleg-s{color:var(--mp-ink-3);margin-left:4px}',
@@ -434,7 +442,7 @@
             '<div class="mp-title"><b class="mp-t1"></b><span class="mp-t2"></span></div>' +
             '<form class="mp-find" novalidate><label for="mpFindKm">Ir para km</label><input id="mpFindKm" inputmode="decimal" autocomplete="off" placeholder="km 812,40"><button class="mp-btn mp-ir" type="submit">' + ICON.busca + 'Ir</button></form>' +
             '<div class="mp-ffil" role="group" aria-label="Fotos no mapa" hidden><span class="mp-ff-n" aria-live="polite"></span>' +
-              '<button class="mp-ff-d" type="button" data-mp="ff-d" data-d="0" aria-pressed="true">Tudo</button><button class="mp-ff-d" type="button" data-mp="ff-d" data-d="15" aria-pressed="false">15 dias</button><button class="mp-ff-d" type="button" data-mp="ff-d" data-d="7" aria-pressed="false">7 dias</button>' +
+              '<select class="mp-ff-p" aria-label="Período das fotos"><option value="0">Tudo</option><option value="15">15 dias</option><option value="7">7 dias</option></select>' +
               '<select class="mp-ff-ct" aria-label="Contrato das fotos"></select></div>' +
           '</div>' +
           '<div class="mp-tools">' +
@@ -825,6 +833,8 @@
         .filter(function (r) { return r.width && r.height; });
       // no mapa de todos, os círculos de quantidade ficam por cima dos nomes: o nome que bate num círculo sai
       if (G) Array.prototype.forEach.call(root.querySelectorAll('.mp-ggr b'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
+      // as fotos também (v183): a bolinha ou a miniatura, sem a haste
+      Array.prototype.forEach.call(root.querySelectorAll('.mp-phb span,.mp-ph i'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
       var vistos = caixas.slice();
       ['.mp-gct span', '.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'].forEach(function (sel) {
         root.querySelectorAll(sel).forEach(function (el) {
@@ -1145,6 +1155,7 @@
       var st2 = (gd.leg || []).map(function (s) { return '<span style="--c:' + s.cor + '"><i class="pt"></i>' + esc(s.txt) + '</span>'; }).join('');
       el.innerHTML = tr + (st2 ? '<span class="mp-gleg-s">De perto:</span>' + st2 : '');
       el.hidden = !el.innerHTML;
+      root.classList.toggle('mp-gleg-fora', !!G.legendaFora);
     }
     function gRender() {
       ref = eixoRef; ramalAtivo = null; range = trechoEixo(); pts = [];
@@ -1879,6 +1890,8 @@
     var FOTOS_KEY = 'diagrama-linear.mapa-fotos', fo = opts.fotos || null;
     var fot = { ini: false, on: false, lista: null, em: 0, carregando: null, dias: 0, ct: '', ctDe: null, z: null, proj: null, grupos: [], sel: null, hist: false, pula: false, depois: null, pedindo: {}, sem: {}, pedido: 0 };
     var fotosLayer = Lf.layerGroup().addTo(map);
+    // abaixo deste zoom (de longe), as fotos são bolinhas com o número; a partir dele, a miniatura (v183)
+    var FOTO_PERTO = 12, CAM = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 5h3l1.5-2h3L11 5h3v8H2z"/><circle cx="8" cy="9" r="2.3"/></svg>';
     map.createPane('mpFotos').style.zIndex = 430;
     function fotosPode() { return !!(fo && fo.pode && fo.pode()); }
     function fotosLigada0() { var v = lsGet(FOTOS_KEY); return v === '1' ? true : v === '0' ? false : !!(fo && fo.padrao && fo.padrao()); }
@@ -1925,7 +1938,8 @@
       if (fot.ctDe && ks.indexOf(fot.ctDe) < 0) ks.unshift(fot.ctDe);
       else if (fot.ctDe) { ks.splice(ks.indexOf(fot.ctDe), 1); ks.unshift(fot.ctDe); }
       if (fot.ct && ks.indexOf(fot.ct) < 0) fot.ct = '';
-      sel.innerHTML = '<option value="">Todos os contratos (' + nf(tot, 0) + ')</option>' + ks.map(function (k) {
+      // "Todos", sem o total: ele já está no número ao lado (o seletor cabe no celular)
+      sel.innerHTML = '<option value="">Todos</option>' + ks.map(function (k) {
         return '<option value="' + esc(k) + '"' + (k === fot.ct ? ' selected' : '') + '>' + esc((fo.nomeCt ? fo.nomeCt(k) : k) || 'Sem contrato') + ' (' + nf(n[k] || 0, 0) + ')</option>';
       }).join('');
       sel.value = fot.ct;
@@ -1936,7 +1950,7 @@
     function fotosDesenha() {
       fot.grupos = [];
       if (!fot.on || !fot.lista) { fotosLimpa(); return; }
-      var z = map.getZoom();
+      var z = map.getZoom(), longe = z < FOTO_PERTO;
       if (fot.z !== z || !fot.proj) {
         fot.z = z;
         fot.proj = fotosFiltradas().map(function (f) { var p = map.project(f.ll, z); return { f: f, x: p.x, y: p.y }; });
@@ -1952,17 +1966,20 @@
         gs.push({ x0: o.x, y0: o.y, sx: o.x, sy: o.y, l: [o.f], capa: o.f });
       });
       var selId = fot.sel ? fot.sel.capa.id : '';   // o grupo aberto continua marcado se o mapa se mexer (pela foto da capa)
-      var novos = {};
+      var novos = {}, mudou = false;
       gs.forEach(function (g) {
         var n = g.l.length, um = n === 1, cx = g.sx / n, cy = g.sy / n;
         var key = z + '|' + g.capa.id + '|' + n + '|' + Math.round(cx) + ',' + Math.round(cy), mk = fotMks[key];
+        var w = longe ? 64 : um ? 40 : 50, h = longe ? 36 : w + 30;
         g.ll = map.unproject([cx, cy], z);
         if (!mk) {
+          mudou = true;
           var m = fo.mini(g.capa.id), r = fotosResumo(g);
           mk = Lf.marker(g.ll, {
             pane: 'mpFotos', keyboard: true, riseOnHover: true, title: r.tit + ' · ' + r.l1,
-            icon: Lf.divIcon({ className: 'mp-ph' + (um ? ' um' : ''), iconSize: um ? [40, 40] : [50, 50],
-              html: '<i' + (m ? ' style="background-image:url(&quot;' + m + '&quot;);background-size:cover"' : '') + '></i>' + (um ? '' : '<b>' + nf(n, 0) + '</b>') })
+            icon: Lf.divIcon({ className: 'mp-ph' + (longe ? ' mp-phb' : um ? ' um' : ''), iconSize: [w, h], iconAnchor: [w / 2, h],
+              html: longe ? '<span>' + CAM + nf(n, 0) + '</span>'
+                : '<i' + (m ? ' style="background-image:url(&quot;' + m + '&quot;);background-size:cover"' : '') + '></i>' + (um ? '' : '<b>' + nf(n, 0) + '</b>') })
           }).addTo(fotosLayer);
           mk.on('click', function () { fotosAbre(mk._mpG); });
           var el0 = mk.getElement();
@@ -1976,9 +1993,11 @@
         g.mk = mk;
         fot.grupos.push(g);
       });
-      Object.keys(fotMks).forEach(function (k) { fotosLayer.removeLayer(fotMks[k]); });
+      Object.keys(fotMks).forEach(function (k) { mudou = true; fotosLayer.removeLayer(fotMks[k]); });
       fotMks = novos;
-      fotosPedeMinis(fot.grupos.map(function (g) { return g.capa.id; }));
+      // de longe não há miniatura: nada é baixado até aproximar
+      if (!longe) fotosPedeMinis(fot.grupos.map(function (g) { return g.capa.id; }));
+      if (mudou) pedeArrumar();   // os nomes e os km que caem embaixo de uma foto saem (arrumaRotulos)
     }
     function fotosPedeMinis(ids) {
       var falta = ids.filter(function (id) { return !fo.mini(id) && !fot.pedindo[id] && !fot.sem[id]; });
@@ -2093,18 +2112,15 @@
     }
     function fotosAcao(act, b) {
       if (act === 'fotos') { fotosLiga(!fot.on); return; }
-      if (act === 'ff-d') {
-        fot.dias = Number(b.dataset.d) || 0; fot.z = null;
-        Array.prototype.forEach.call(root.querySelectorAll('.mp-ff-d'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
-        fotosFecha(); fotosAtualiza(); return;
-      }
       if (act === 'fc-fecha') { fotosFecha(); return; }
       var g = fot.sel;
       if (!g) return;
       if (act === 'fc-perto') {
         var bb = Lf.latLngBounds(g.l.map(function (f) { return f.ll; }));
         fotosFecha();
-        map.fitBounds(bb.pad(0.15), { maxZoom: 18, animate: !reduced(), paddingTopLeft: [20, 120], paddingBottomRight: [20, 60] });
+        // aproximar sempre chega às miniaturas (v183): um grupo longo, que caberia de longe, fica centrado no zoom delas
+        if (map.getBoundsZoom(bb.pad(0.15), false, Lf.point(40, 180)) < FOTO_PERTO) map.setView(g.l[Math.floor(g.l.length / 2)].ll, FOTO_PERTO, { animate: !reduced() });   // a foto do meio (pelo km): o centro do grupo pode cair fora da rodovia
+        else map.fitBounds(bb.pad(0.15), { maxZoom: 18, animate: !reduced(), paddingTopLeft: [20, 120], paddingBottomRight: [20, 60] });
         return;
       }
       if (act === 'fc-gal' && fo.abrirGaleria) {
@@ -2114,6 +2130,7 @@
       }
     }
     // um contrato escolhido aqui vira o contrato do mapa (trecho, km, pontos e o nome no alto); "Todos" só tira o filtro
+    q('.mp-ff-p').addEventListener('change', function (e) { fot.dias = Number(e.target.value) || 0; fot.z = null; fotosFecha(); fotosAtualiza(); });
     q('.mp-ff-ct').addEventListener('change', function (e) {
       var v = e.target.value;
       fot.ct = v; fot.z = null; fotosFecha();
@@ -2143,7 +2160,7 @@
       if (act === 'nav-norte') { norteCima = !norteCima; lsSet(NORTE_KEY, norteCima ? '1' : '0'); live.follow = true; navUi(); segue(); return; }
       if (act === 'nav-voz') { if (nav) { nav.voz = !nav.voz; lsSet(VOZ_KEY, nav.voz ? '1' : '0'); if (!nav.voz) try { window.speechSynthesis.cancel(); } catch (e2) { /* nada */ } navUi(); } return; }
       if (act === 'mais') { var tl = q('.mp-tools'), ab = !tl.classList.contains('abertas'); tl.classList.toggle('abertas', ab); b.setAttribute('aria-expanded', String(ab)); pedeArrumar(); return; }
-      if (act === 'fotos' || act === 'ff-d' || act.indexOf('fc-') === 0) { fotosAcao(act, b); return; }
+      if (act === 'fotos' || act.indexOf('fc-') === 0) { fotosAcao(act, b); return; }
       if (act === 'gct-abre' || act === 'gct-enq' || act === 'gct-fotos') { gCtAcao(act, b.dataset.id || ''); return; }
       if (act === 'full') { if (isFull) closeFull(); else openFull(); }
       else if (act === 'fit') fit();
@@ -2176,6 +2193,8 @@
       // km a–b do eixo; faixa() diz o km do eixo na tela; foca(key) traz à vista o item escolhido na lista ou na busca
       geral: function (d) { gd = d || gd; if (G) render(); },
       janela: function (a, b) { gJan = [a, b]; gAplicaJan(); },
+      // a legenda da visão geral (debaixo do mapa): tocar num contrato enquadra o trecho dele
+      enquadra: function (id) { gCtAcao('gct-enq', id); },
       faixa: gFaixa,
       // area: { top, bottom } da tela que fica à vista (no celular, entre a barra do topo e a folha do cartão): o item vai para lá
       foca: function (key, area) {
