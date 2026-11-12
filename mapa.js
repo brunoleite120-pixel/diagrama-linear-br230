@@ -324,6 +324,8 @@
     '.mp-geral .mp-legend i.pt{width:10px;height:10px;box-sizing:border-box;border-radius:50%;border:2px solid #FFFFFF;box-shadow:0 0 0 1px rgba(0,0,0,.3)}',
     '.mp-gleg{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 6px;border:0;border-radius:6px;background:transparent;font:inherit;font-weight:600;color:var(--mp-ink);cursor:pointer}.mp-gleg:hover,.mp-gleg:focus-visible{background:var(--mp-line)}',
     '.mp-gleg-s{color:var(--mp-ink-3);margin-left:4px}',
+    /* a rodovia no mapa de todos: preta com borda branca em qualquer fundo (no satélite também; o amarelo fica no mapa do contrato) */
+    '.mp-geral .mp-road{stroke:#17201C}.mp-geral .mp-road-case{stroke:#FFFFFF}',
     '.mp-gsm.pt i{width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%)}.mp-glonge .mp-gsm.pt i{width:10px;height:10px}',
     '.mp-gpop p{margin:0 0 6px;font-size:13px;color:var(--mp-ink-2)}.mp-gpop h3{border-left:5px solid var(--c);padding-left:8px}.mp-gpop .mp-fc-bt{margin-top:4px}',
     '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
