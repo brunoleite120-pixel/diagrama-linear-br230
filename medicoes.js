@@ -40,9 +40,12 @@
     // sinalização (709): conservação por baixo, com nome próprio (op.grupoNome, do app.js) e o km das MPs (op.kmMp; nos outros, null)
     function sinal(c) { return !!(op.grupoNome && op.grupoNome(c) === 'Sinalização'); }
     function kmMp(c, k) { var v = op.kmMp && k != null ? op.kmMp(c, k) : null; return typeof v === 'number' && isFinite(v) ? v : null; }
-    function tipoCurto(c) { return c.tipo === 'oae' ? 'OAEs' : sinal(c) ? 'sinalização' : c.tipo === 'conserva' ? 'conservação' : 'pontos críticos'; }
-    function tipo(c) { return c.tipo === 'oae' ? 'OAEs' : sinal(c) ? 'Sinalização · todo o eixo' : c.tipo === 'conserva' ? 'Conservação' + (c.superficie === 'pavimentada' ? ' · pista pavimentada' : ' · revestimento primário') : 'Pontos críticos'; }
+    // Supervisora (CT 393, tipo 'sup', v173): mede por produtos, sem km; vem numa seção própria no fim, sem diagrama
+    function ehSup(c) { return !!(c && c.tipo === 'sup'); }
+    function tipoCurto(c) { return ehSup(c) ? 'supervisão' : c.tipo === 'oae' ? 'OAEs' : sinal(c) ? 'sinalização' : c.tipo === 'conserva' ? 'conservação' : 'pontos críticos'; }
+    function tipo(c) { return ehSup(c) ? 'Supervisão · todo o trecho' : c.tipo === 'oae' ? 'OAEs' : sinal(c) ? 'Sinalização · todo o eixo' : c.tipo === 'conserva' ? 'Conservação' + (c.superficie === 'pavimentada' ? ' · pista pavimentada' : ' · revestimento primário') : 'Pontos críticos'; }
     function faixa(c) {
+      if (ehSup(c)) return c.supervisora || '';
       var a = kmMp(c, c.kmIni), b = kmMp(c, c.kmFim);
       return [c.lote, a != null && b != null ? op.kmRotulo(c) + ' ' + fmtN(a) + ' a ' + fmtN(b) : c.kmIni != null && c.kmFim != null ? 'km ' + fmtN(c.kmIni) + ' a ' + fmtN(c.kmFim) : ''].filter(Boolean).join(' · ');
     }
@@ -175,7 +178,7 @@
     function inicioHtml(cs) {
       var soma = 0, n = 0, al = 0, ultTipos = {};
       cs.forEach(function (c) { var d = dado(c), t = tipoCurto(c); if (d && d.ms.length) { soma += d.total; n++; al += avisos(d).length; if (d.ultima != null && (ultTipos[t] == null || d.ultima > ultTipos[t])) ultTipos[t] = d.ultima; } });
-      var ult = ['OAEs', 'conservação', 'sinalização', 'pontos críticos'].filter(function (t) { return ultTipos[t] != null; }).map(function (t) { return mesTxt(ultTipos[t]) + ' ' + t; }).join(' · ');
+      var ult = ['OAEs', 'conservação', 'sinalização', 'pontos críticos', 'supervisão'].filter(function (t) { return ultTipos[t] != null; }).map(function (t) { return mesTxt(ultTipos[t]) + ' ' + t; }).join(' · ');
       var h = cabecalho(cs) + '<div class="md-filtros"><label class="md-busca">Buscar serviço<input type="search" id="mdBusca" placeholder="Nome ou código: roçada, 50821…" value="' + esc(busca) + '"></label>' +
         '<label class="md-ordenar">Ordenar<select id="mdOrdem">' + [['km', 'pelo km'], ['saldo', 'menor saldo'], ['antiga', 'medição mais antiga'], ['avisos', 'mais avisos']].map(function (x) { return '<option value="' + x[0] + '"' + (ordem === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>' +
         '<div id="mdBuscaRes" aria-live="polite">' + buscaHtml(cs) + '</div><div class="md-resumo card"><div><span class="md-label">Medido nos ' + n + ' contratos carregados (PI)</span><strong>' + moeda(soma) + '</strong></div><div><span class="md-label">Última competência</span><strong>' + esc(ult || '—') + '</strong></div><div><span class="md-label">Avisos para conferir</span><strong>' + al + '</strong></div></div>';
@@ -187,7 +190,9 @@
         else { va = a.kmIni == null ? Infinity : valor(a.kmIni); vb = b.kmIni == null ? Infinity : valor(b.kmIni); }
         return va - vb || nome(a).localeCompare(nome(b));
       });
-      h += '<section class="md-cards" aria-label="Contratos">' + list.filter(function (c) { return !semMedicoes(c); }).map(cartao).join('') + '</section>' + semMedicoesHtml(cs, true);
+      var obras = list.filter(function (c) { return !ehSup(c); }), sups = list.filter(ehSup);
+      h += '<section class="md-cards" aria-label="Contratos">' + obras.filter(function (c) { return !semMedicoes(c); }).map(cartao).join('') + '</section>' + semMedicoesHtml(obras, true);
+      if (sups.length) h += '<h2 class="md-sec">Supervisão</h2><section class="md-cards" aria-label="Supervisão">' + sups.filter(function (c) { return !semMedicoes(c); }).map(cartao).join('') + '</section>' + semMedicoesHtml(sups, true);
       return h + '<p class="md-legenda"><i class="md-swatch medido"></i>Medido (acumulado PI ÷ base do contrato) <i class="md-swatch proj"></i>Projeção até o fim da execução. Ritmo: média das últimas 6 competências registradas; zeradas contam, lacunas não contam.</p>';
     }
 
@@ -354,7 +359,7 @@
       focaSeletor();
     }
     function contratoHtml(c) {
-      var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + botao('diagrama', 'Ver no diagrama', ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama') + '</div>';
+      var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + (ehSup(c) ? '' : botao('diagrama', 'Ver no diagrama', ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama')) + '</div>';
       if (!d || !d.ms.length) return h + '<section class="card md-card"><h1>' + esc(nome(c)) + '</h1>' + (d && !d.ms.length && op.estado(c) === 'ok' ? vazio('Ainda sem medições carregadas.') : estadoHtml(c)) + '</section>';
       var m = null;
       d.ms.forEach(function (x) { if (String(x.n) === String(med)) m = x; });
@@ -392,7 +397,7 @@
       // O total PI da medição é a base em ambos os casos; nunca se soma uma segunda vez o que já é total.
       var cob = d.an.cobertura && d.an.cobertura[m.n], local = cob ? numero(cob[0]) : null;
       if (local == null) { local = 0; Object.keys(d.an.pontes || {}).forEach(function (pid) { local += valor(d.an.pontes[pid].meses && d.an.pontes[pid].meses[m.n]); }); }
-      if (semKm) h += '<p class="md-sem-local">Sem localização: esta análise vem só do Resumo da Medição do SIAC (sem km).</p>';
+      if (semKm) h += '<p class="md-sem-local">' + (ehSup(c) ? 'A Supervisão mede por produtos, sem km: os valores vêm do Resumo da Medição do SIAC.' : 'Sem localização: esta análise vem só do Resumo da Medição do SIAC (sem km).') + '</p>';
       else h += '<div class="md-local"><div class="md-local-bar" role="img" aria-label="' + esc(dinheiro(local) + ' com local; ' + dinheiro(v - local) + ' sem local; base ' + dinheiro(v) + ' PI') + '"><span class="md-com-local" style="width:' + largura(v > 0 ? local / v * 100 : 0) + '%"></span><span class="md-sem-local-cor" style="width:' + largura(v > 0 ? (v - local) / v * 100 : 100) + '%"></span></div><div class="md-local-legenda"><span><i class="md-swatch md-com-local"></i>' + esc('Com local n' + (c.tipo === 'oae' ? 'as OAEs' : c.tipo === 'conserva' ? 'os segmentos' : 'os pontos') + ': ' + dinheiro(local) + ' (' + (v > 0 ? pctCurto(local / v * 100) : 'sem base percentual') + ')') + '</span><span><i class="md-swatch md-sem-local-cor"></i>' + esc('Sem local: ' + dinheiro(v - local)) + '</span></div></div>';
       h += '<div class="md-abas" role="group" aria-label="Ver a medição">' + [['grupos', 'Grupos e serviços'], ['segmentos', c.tipo === 'oae' ? 'Por OAE' : c.tipo === 'conserva' ? 'Por segmento' : 'Por ponto'], ['avisos', 'Avisos (' + als.length + ')']].filter(function (a) { return !semKm || a[0] !== 'segmentos'; }).map(function (a) { return botao('aba', esc(a[1]), ' data-v="' + a[0] + '" aria-pressed="' + (aba === a[0]) + '"'); }).join('') + '</div>';
       if (aba === 'avisos') return h + avisosHtml(als);
@@ -528,8 +533,8 @@
     function tom(v) { return v > 2000000 ? 5 : v > 1000000 ? 4 : v > 500000 ? 3 : v > 250000 ? 2 : 1; }
     function mil(v) { return v === 0 ? '0' : fmtN(Math.round(v / 1000)); }
     // Por mês: no celular (até 700 px) 6 meses com o contrato parado à esquerda; no computador 16 meses, barra do total, "12 meses" e "Última"
-    var TIPOS = [['conserva', 'Conservação', 'Cons.'], ['pc', 'Pontos críticos', 'PC'], ['oae', 'OAEs', 'OAE'], ['sinal', 'Sinalização', 'Sinal.']];
-    function tipoChave(c) { return c.tipo === 'oae' ? 'oae' : sinal(c) ? 'sinal' : c.tipo === 'conserva' ? 'conserva' : 'pc'; }
+    var TIPOS = [['conserva', 'Conservação', 'Cons.'], ['pc', 'Pontos críticos', 'PC'], ['oae', 'OAEs', 'OAE'], ['sinal', 'Sinalização', 'Sinal.'], ['sup', 'Supervisão', 'Superv.']];
+    function tipoChave(c) { return ehSup(c) ? 'sup' : c.tipo === 'oae' ? 'oae' : sinal(c) ? 'sinal' : c.tipo === 'conserva' ? 'conserva' : 'pc'; }
     function tipoNome(c, i) { var k = tipoChave(c); return TIPOS.filter(function (t) { return t[0] === k; })[0][i]; }
     function loteCurto(c) { var m = /lote\s*(\d+|único|unico)/i.exec(String(c.lote || '')); return !m ? '' : /^\d/.test(m[1]) ? 'L' + m[1] : 'Único'; }
     function curto(c) { return nome(c).replace(/\/\d{4}$/, ''); }

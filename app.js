@@ -3613,6 +3613,7 @@
     var tirou = false;
     Object.keys(analise.dados).forEach(function (cid) {
       var a = banco.acesso && banco.acesso[cid];
+      if ((banco.sup || []).some(function (x) { return x.id === cid; })) return;   // as medições da Supervisora valem para todo analista (v173)
       if (!(a && (a.med || a.acomp))) { delete analise.dados[cid]; tirou = true; }   // a mesma regra de parte() (v126)
     });
     if (tirou) lsPut(AN_KEY, { dados: analise.dados });
@@ -5576,20 +5577,22 @@
   }
   // ------------------------------------------------------------------ medições (medicoes.js); só na tela, sem alterar as folhas
   var medicoes = null, medicoesOn = false;
-  function temMedicoes() { return !!window.Medicoes && state.contracts.some(function (c) { return parte(c, 'med'); }); }
+  // (v173: a Supervisora entra nas Medições, numa seção própria, para quem tem parte(c, 'med') nela)
+  function ctsMedicoes() { return state.contracts.concat(banco.sup || []); }
+  function temMedicoes() { return !!window.Medicoes && ctsMedicoes().some(function (c) { return parte(c, 'med'); }); }
   function hashMedicoes(on) {
     try { history.replaceState(history.state, '', location.pathname + location.search + (on ? '#medicoes' : location.hash === '#medicoes' ? '' : location.hash)); } catch (e) { /* segue sem link */ }
   }
   function abrirMedicoes() {
     if (!temMedicoes()) return;
-    state.contracts.forEach(function (c) { if (parte(c, 'med') && analise.estado[c.id] === 'erro') delete analise.estado[c.id]; });
+    ctsMedicoes().forEach(function (c) { if (parte(c, 'med') && analise.estado[c.id] === 'erro') delete analise.estado[c.id]; });
     setVisao(false); medicoesOn = true; hashMedicoes(true);
     closeMenu(); renderAll(); syncTopbar(); window.scrollTo(0, 0);
   }
   function desenhaMedicoes() {
     if (!medicoesOn || !temMedicoes() || !$('medicoesHost')) return false;
     if (!medicoes) medicoes = window.Medicoes({
-      host: $('medicoesHost'), contratos: function () { return state.contracts; }, pode: function (c) { return parte(c, 'med'); },
+      host: $('medicoesHost'), contratos: ctsMedicoes, pode: function (c) { return parte(c, 'med'); },
       ativa: function () { return medicoesOn && temMedicoes(); },
       base: function (c) { return parte(c, 'med') ? analise.dados[c.id] : null; }, analise: function (c) { return anOf(c, true); },
       estado: function (c) { return analise.estado[c.id]; },
@@ -5602,7 +5605,7 @@
       kmRotulo: function (c) { return kmSoContrato(c) ? txtLimpo(c.rotuloKmContrato) : ''; }, pontos: sortedPoints, grupos: function (c) { return servicesOf(c).concat([MED_OUTROS, MED_ACESSO]); },
       esc: esc, fmtN: fmtN, dinheiro: function (v) { return v == null || !isFinite(v) ? '—' : 'R$ ' + fmt(v, 2); },
       medTxt: medTxt, etapaInfo: etapaInfo, unTxt: unTxt, semLocal: MED_SEMLOCAL, data: fmtIsoDate,
-      diagrama: function (c) { if (parte(c, 'med')) abrirDaVisao(c, null, false); },
+      diagrama: function (c) { if (parte(c, 'med') && !ehSup(c)) abrirDaVisao(c, null, false); },
       // painel da ponte/segmento: o ponto no diagrama e as fotos dele (conservação: pelo km do segmento, as fotos não têm ponto)
       diagramaPonto: function (c, p) { if (parte(c, 'med')) abrirDaVisao(c, p, false); },
       fotos: function (c, p) {
@@ -6933,7 +6936,7 @@
     var c = cid ? contractById(cid) : null;
     if (!c || !parte(c, 'med')) {
       // fora de um contrato com medições (visão geral, aba Medições): escolhe o contrato
-      var cs = state.contracts.filter(function (k) { return parte(k, 'med'); });
+      var cs = ctsMedicoes().filter(function (k) { return parte(k, 'med'); });
       var f0 = modal('<h2 id="modalTitle">Medições carregadas</h2><p class="hint">Escolha o contrato.</p><div class="lx">' + cs.map(function (k) {
         return '<div class="lx-row"><div class="lx-txt"><b>' + esc(ctNumeroCT(k) || ctNome(k)) + '</b></div><button type="button" class="btn small" data-mpct="' + esc(k.id) + '">Abrir</button></div>';
       }).join('') + '</div><div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', null, 'mpv-box');
