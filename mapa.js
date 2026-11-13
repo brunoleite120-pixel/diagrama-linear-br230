@@ -327,6 +327,7 @@
     '.mp-glonge .mp-gsm i{width:9px;height:9px;border-width:1.5px}.mp-glonge .mp-gsm.oae i{width:10px;height:10px}',
     '.mp-glonge .mp-ggr b{width:21px;height:21px;border-width:2px;font-size:10.5px}',
     '.mp-glonge .mp-gct span{font-size:10.5px;padding:0 6px;line-height:16px;border-width:1px}',
+    '.mp-gsel-tr i{visibility:hidden}',
     '.mp-gsel i{position:absolute;display:block;width:30px;height:30px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;border:3px solid var(--mp-accent);background:rgba(255,255,255,.35);box-shadow:0 0 0 2px #FFFFFF}',
     '.mp-geral .mp-legend i.tr{height:4px;background:var(--c);box-shadow:0 0 0 1px #FFFFFF}.mp-geral .mp-legend i.tr.ts{height:2px;box-shadow:none;background:repeating-linear-gradient(90deg,var(--c) 0 3px,transparent 3px 6px)}',
     '.mp-gleg-fora:not(.mp-full) .mp-legend{display:none!important}',
@@ -1123,17 +1124,27 @@
       bordas.l.forEach(function (x) { x.addTo(gLayer); });
       cores.l.forEach(function (x) { x.addTo(gLayer); });
       pontas.l.forEach(function (x) { x.addTo(gLayer); });
-      // o item do cartão aberto: um anel em volta (por baixo do toque)
-      if (selIt && selIt.x.neutro && selIt.x.lado < 0 && selIt.ll.length > 1) {
-        // o segmento do cartão aberto: o trecho dele na linha do contrato, com contorno
-        var lSg = gDesl(selIt.ll, selIt.x.lado * GLADO);
-        Lf.polyline(lSg, { renderer: gRend, color: '#FFFFFF', weight: wCtB + 9, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
-        Lf.polyline(lSg, { renderer: gRend, color: '#1D4F91', weight: wCtB + 5, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
-        Lf.polyline(lSg, { renderer: gRend, color: selIt.x.cor, weight: wCt + 1, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
-      } else if (selIt) {
-        var dS = dItem(selIt.x.lado || 0), lS = noLado(selIt.ll, selIt, dS), cS = selIt.x.lado ? noLado([selIt.ll[selIt.ll.length >> 1]], selIt, dS)[0] : lS[lS.length >> 1];
-        Lf.marker(cS, { pane: 'mpGsel', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gsel', html: '<i></i>', iconSize: [0, 0] }) }).addTo(gLayer);
-      }
+      // o item do cartão aberto (v187, pedido de 13/11/2026): o trecho dele contornado em azul. Ponto crítico, conservação e
+      // sinalização na linha do contrato; OAE no eixo. Trecho curto demais na tela (menos de 12 px) ou sem km final: o anel
+      if (selIt) {
+        var xs = selIt.x, ladoS = xs.lado || 0;
+        if (selIt.ll.length > 1 && selIt.len >= 12) {
+          var kS = ladoS ? gd.cts.filter(function (k) { return k.c === xs.c || k.c.id === xs.c.id; })[0] : null;
+          var lSg = ladoS ? gDesl(selIt.ll, ladoS * GLADO) : selIt.ll, corS = ladoS && kS && kS.cor ? kS.cor : xs.cor;
+          var wS = ladoS ? wCt : wLin;
+          Lf.polyline(lSg, { renderer: gRend, color: '#FFFFFF', weight: wS + 13, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
+          Lf.polyline(lSg, { renderer: gRend, color: '#1D4F91', weight: wS + 8, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
+          Lf.polyline(lSg, { renderer: gRend, color: corS, weight: wS + 1, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
+          // o meio do trecho, sem desenho: o enquadrar do celular e os roteiros acham o item por ele
+          Lf.marker(lSg[lSg.length >> 1], { pane: 'mpGsel', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gsel mp-gsel-tr', html: '<i></i>', iconSize: [0, 0] }) }).addTo(gLayer);
+          root.setAttribute('data-sel', 'trecho');
+        } else {
+          // sem ponto (conservação e sinalização): o anel fica na própria linha do contrato
+          var dS = xs.neutro && ladoS < 0 ? ladoS * GLADO : dItem(ladoS), lS = noLado(selIt.ll, selIt, dS), cS = ladoS ? noLado([selIt.ll[selIt.ll.length >> 1]], selIt, dS)[0] : lS[lS.length >> 1];
+          Lf.marker(cS, { pane: 'mpGsel', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gsel', html: '<i></i>', iconSize: [0, 0] }) }).addTo(gLayer);
+          root.setAttribute('data-sel', 'anel');
+        }
+      } else root.removeAttribute('data-sel');
       // quantos itens e contratos estão no mapa (os roteiros de teste leem daqui; as linhas ficam no canvas, fora do DOM)
       root.setAttribute('data-itens', String(gd.itens.length));
       root.setAttribute('data-cts', String(gd.cts.length));
