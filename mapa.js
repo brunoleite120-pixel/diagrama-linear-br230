@@ -328,6 +328,7 @@
     '.mp-glonge .mp-ggr b{width:21px;height:21px;border-width:2px;font-size:10.5px}',
     '.mp-glonge .mp-gct span{font-size:10.5px;padding:0 6px;line-height:16px;border-width:1px}',
     '.mp-gsel-tr i{visibility:hidden}',
+    '.mp-gct.leaflet-interactive span{cursor:pointer}',
     '.mp-gsel i{position:absolute;display:block;width:30px;height:30px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;border:3px solid var(--mp-accent);background:rgba(255,255,255,.35);box-shadow:0 0 0 2px #FFFFFF}',
     '.mp-geral .mp-legend i.tr{height:4px;background:var(--c);box-shadow:0 0 0 1px #FFFFFF}.mp-geral .mp-legend i.tr.ts{height:2px;box-shadow:none;background:repeating-linear-gradient(90deg,var(--c) 0 3px,transparent 3px 6px)}',
     '.mp-gleg-fora:not(.mp-full) .mp-legend{display:none!important}',
@@ -972,7 +973,7 @@
     // contrato fica ao lado da rodovia, deslocado em pixels (refeito a cada zoom): lado 1 os pontos críticos, -1 a conservação,
     // -2 a sinalização, 0 (no eixo) as OAEs. Itens próximos na tela viram um círculo com a quantidade, como nas raias.
     // d: { itens: [{ key, c, p, km, kf, cor, neutro, st, peso, oae, apag, lado, nome, tip }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg }
-    var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15, gAlvos = [];
+    var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15, gAlvos = [], gCtSel = null;
     function gNum(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
     // o 731 (km próprio) vai pelo ramal da travessia, com o km local; os outros pelo eixo, com o km do desenho (x.km)
     function gKm(x) {
@@ -1025,14 +1026,17 @@
       function fila() { return { l: [], addLayer: function (x) { this.l.push(x); } }; }
       var bordas = fila(), cores = fila(), pontas = fila();
       // o toque na linha que cai perto de um ponto (o ponto fica a uns 14 px dela) é do ponto
-      // v186: de perto, o toque na linha da conservação ou da sinalização abre o segmento daquele km (eles não têm mais ponto)
-      function ctClique(k) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (gAlvoToque(e)) return; if (k.lado < 0 && perto && gSegToque(k, e)) return; gCtCartao(k, e.latlng); }; }
+      // v188 (pedido de 13/11/2026): o toque na linha ou no nome do contrato seleciona o contrato inteiro (contornado) e abre o
+      // cartão dele. Os segmentos da conservação e da sinalização são divisão nossa, não do contrato: o toque não abre mais um só
+      function ctClique(k) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (gAlvoToque(e)) return; gCtCartao(k, e.latlng); }; }
+      var ctSelLinha = null, ctSelK = null;
       // trechos dos contratos: pontos críticos (1), conservação (-1) e a sinalização (-2, cinza fino tracejado)
       gd.cts.forEach(function (k) {
         if (!k.trilho || !k.f || !k.lado) return;
         var r = refDe(k.c), a = r === eixoRef ? k.f[0] : gNum(k.c.kmIni), b = r === eixoRef ? k.f[1] : gNum(k.c.kmFim);
         if (a == null || b == null) return;
         var raw = r.slice(a, b), line = gDesl(raw, k.lado * GLADO), cor = k.cor || '#3B4540', tipC = k.nome || k.rot;
+        if (gCtSel && k.c.id === gCtSel) { ctSelLinha = line; ctSelK = k; }
         if (k.lado === -2) {
           Lf.polyline(line, { renderer: gRend, color: cor, weight: longe ? 1.5 : 2, opacity: 0.85, dashArray: longe ? '3 3' : '5 4', bubblingMouseEvents: false })
             .bindTooltip(esc(tipC), { sticky: true, className: 'mp-lbl' }).on('click', ctClique(k)).addTo(bordas);
@@ -1049,7 +1053,10 @@
         raw.forEach(function (ll, i) { if (vb.contains(ll)) dentro.push(i); });
         var i = dentro.length ? dentro[dentro.length >> 1] : raw.length >> 1;
         var em = gDesl(raw.slice(Math.max(0, i - 1), i + 2), k.lado * GLADO + (k.lado > 0 ? 1 : -1) * (longe ? 13 : perto ? 30 : 17)), ll = em[Math.min(em.length - 1, i > 0 ? 1 : 0)];
-        Lf.marker(ll, { pane: 'mpPts', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gct', html: '<span style="--c:' + cor + '">' + esc(k.rot) + '</span>', iconSize: [0, 0] }) }).addTo(gLayer);
+        // zIndexOffset: o Leaflet dá aos marcadores o z-index da posição na tela, negativo no alto do mapa, e aí o canvas das
+        // linhas ficava por cima do nome e pegava o toque
+        Lf.marker(ll, { pane: 'mpPts', keyboard: false, title: tipC, zIndexOffset: 100000, icon: Lf.divIcon({ className: 'mp-gct', html: '<span style="--c:' + cor + '" data-ct="' + esc(k.c.id) + '">' + esc(k.rot) + '</span>', iconSize: [0, 0] }) })
+          .on('click', (function (ll2) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); gCtCartao(k, ll2); }; })(ll)).addTo(gLayer);
       });
       // itens por lado, em ordem de km; perto demais na tela (enc px) viram um círculo
       var lados = {}, selIt = null;
@@ -1063,11 +1070,11 @@
         var it = { x: x, ll: ll, len: len, pm: pp[pp.length >> 1], ord: x.km + x.kf };
         if (x.key === gd.sel) selIt = it;
         // v186 (pedido de 13/11/2026): conservação e sinalização sem ponto. O ponto vazado no meio do segmento não dizia nada
-        // que a linha não diga; o segmento é o trecho da linha, e o toque nela abre o do km tocado (gSegToque)
+        // que a linha não diga; o toque na linha seleciona o contrato inteiro (v188)
         if (x.neutro && x.lado < 0) return;
         (lados[x.lado || 0] = lados[x.lado || 0] || []).push(it);
       });
-      function clique(x) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (G.onSel) G.onSel(x.key); }; }
+      function clique(x) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (gCtSel) { gCtSel = null; map.closePopup(); } if (G.onSel) G.onSel(x.key); }; }
       function noLado(ll, it, d) { return d ? gDesl(ll, d, ll.length < 2 ? gViz(it.x) : null) : ll; }
       // o ponto do item fica ao lado da linha do contrato, por fora (sem tocar no traço)
       function dItem(kl) { var n = Number(kl); return n ? n * GLADO + (n > 0 ? 1 : -1) * (wCtB / 2 + 9) : 0; }
@@ -1124,6 +1131,14 @@
       bordas.l.forEach(function (x) { x.addTo(gLayer); });
       cores.l.forEach(function (x) { x.addTo(gLayer); });
       pontas.l.forEach(function (x) { x.addTo(gLayer); });
+      // v188: o contrato selecionado (toque na linha ou no nome) fica contornado inteiro, como o trecho do item aberto
+      if (ctSelLinha) {
+        var wK = ctSelK.lado === -2 ? 2 : wCt;
+        Lf.polyline(ctSelLinha, { renderer: gRend, color: '#FFFFFF', weight: wK + 13, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
+        Lf.polyline(ctSelLinha, { renderer: gRend, color: '#1D4F91', weight: wK + 8, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
+        Lf.polyline(ctSelLinha, { renderer: gRend, color: ctSelK.cor || '#3B4540', weight: wK + 1, opacity: 1, lineCap: 'round', interactive: false }).addTo(gLayer);
+        root.setAttribute('data-sel-ct', gCtSel);
+      } else root.removeAttribute('data-sel-ct');
       // o item do cartão aberto (v187, pedido de 13/11/2026): o trecho dele contornado em azul. Ponto crítico, conservação e
       // sinalização na linha do contrato; OAE no eixo. Trecho curto demais na tela (menos de 12 px) ou sem km final: o anel
       if (selIt) {
@@ -1161,40 +1176,29 @@
       m.f(e);
       return true;
     }
-    // v186: o segmento do contrato k no km tocado (o que contém o km; senão o mais perto, até 300 m; empate: o mais curto)
-    function gSegToque(k, e) {
-      if (!e || !e.latlng || !G.onSel) return false;
-      var loc = refDe(k.c).locate(e.latlng.lat, e.latlng.lng);
-      if (!loc) return false;
-      var km = loc.km, m = null, dm = 0.3;
-      gd.itens.forEach(function (x) {
-        if (x.c !== k.c && x.c.id !== k.c.id) return;
-        var g = gKm(x);
-        if (g.a == null) return;
-        var a = Math.min(g.a, g.b), b = Math.max(g.a, g.b), d = km < a ? a - km : km > b ? km - b : 0;
-        if (d < dm - 1e-9 || (m && Math.abs(d - dm) < 1e-9 && b - a < m.len)) { dm = d; m = { x: x, len: b - a }; }
-      });
-      if (!m) return false;
-      G.onSel(m.x.key);
-      return true;
-    }
     // toque na linha de um contrato: o cartão dele, com Abrir o contrato (G.onCt) e Enquadrar
     function gCtCartao(k, ll) {
       var c = k.c, n = (c.pontos || []).length, cor = k.cor || '#3B4540', id = esc(c.id), nome = (nomes.nome && nomes.nome(c)) || k.rot;
-      var o2 = k.lado > 0 ? (n === 1 ? ' ponto' : ' pontos') : (n === 1 ? ' segmento' : ' segmentos');
+      var o2 = n === 1 ? ' ponto' : ' pontos';
       var html = '<div class="mp-pop mp-gpop" style="--c:' + cor + '"><h3>' + esc(nome) + '</h3>' +
         '<p>' + (c.numero ? esc(c.numero) + ' · ' : '') + 'km ' + km2(k.f[0]) + ' a ' + km2(k.f[1]) + ' · ' + nf(k.f[1] - k.f[0], 1) + ' km</p>' +
-        '<p>' + n + o2 + (perto() ? '' : k.lado > 0 ? ' · a situação de cada um aparece de perto' : ' · de perto, tocar na linha abre o segmento daquele km') + '</p>' +
+        (k.lado > 0 ? '<p>' + n + o2 + (perto() ? '' : ' · a situação de cada um aparece de perto') + '</p>' : '') +
         '<div class="mp-fc-bt">' + (G.onCt ? '<button type="button" class="mp-btn mp-fc-pri" data-mp="gct-abre" data-id="' + id + '">Abrir o contrato</button>' : '') +
         (G.temFotos && G.temFotos() ? '<button type="button" class="mp-btn" data-mp="gct-fotos" data-id="' + id + '">Ver as fotos</button>' : '') +
         '<button type="button" class="mp-btn" data-mp="gct-enq" data-id="' + id + '">Enquadrar</button></div></div>';
-      Lf.popup({ autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 40], maxWidth: 320 }).setLatLng(ll).setContent(html).openOn(map);
+      var pop = Lf.popup({ autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 40], maxWidth: 320 }).setLatLng(ll).setContent(html).openOn(map);
+      // o contorno do contrato vale enquanto o cartão está aberto (Enquadrar mantém, ver gCtAcao)
+      gCtSel = c.id; gPede();
+      pop.on('remove', function () { if (gCtSel === c.id && !gCtFica) { gCtSel = null; gPede(); } });
       function perto() { return map.getZoom() >= 12; }
     }
+    var gCtFica = false;
     function gCtAcao(act, id) {
       var k = gd.cts.filter(function (y) { return y.c.id === id; })[0];
       if (!k) return;
-      map.closePopup();
+      // Enquadrar (do cartão ou da legenda) deixa o contrato contornado; o toque fora do mapa tira
+      gCtFica = act === 'gct-enq'; map.closePopup(); gCtFica = false;
+      if (act === 'gct-enq') { gCtSel = id; gPede(); }
       if (act === 'gct-abre') { if (G.onCt) G.onCt(id); return; }
       if (act === 'gct-fotos') { if (G.onFotosCt) G.onFotosCt(id); return; }
       var r = refDe(k.c), a = r === eixoRef ? k.f[0] : gNum(k.c.kmIni), b = r === eixoRef ? k.f[1] : gNum(k.c.kmFim);
@@ -2244,7 +2248,7 @@
       else if (act === 'close-live') { live.err = ''; liveCard(''); setGpsBtn(); }
       else if (act === 'follow') { live.follow = !live.follow; if (live.follow && live.ll) { if (nav) { navUi(); segue(); } else map.panTo(live.ll, { animate: !reduced() }); } updateLive(); }
     });
-    map.on('click', function (e) { basesMenu(false); if (fot.sel) { fotosFecha(); return; } gAlvoToque(e); });
+    map.on('click', function (e) { basesMenu(false); if (fot.sel) { fotosFecha(); return; } if (gAlvoToque(e)) return; if (gCtSel) { gCtSel = null; gPede(); } });
     q('.mp-find').addEventListener('submit', function (e) { e.preventDefault(); goKm(q('#mpFindKm').value); });
 
     return {
