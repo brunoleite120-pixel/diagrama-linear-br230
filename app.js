@@ -5071,7 +5071,8 @@
     var P = window.Capacitor && window.Capacitor.Plugins;
     if (isNativeApp() && P && P.Filesystem && P.Share) {
       var partes = [];
-      for (var i = 0; i < files.length; i += 30) partes.push(files.slice(i, i + 30));
+      // v190: 200 fotos por compartilhar (eram 30; as fotos ficaram menores)
+      for (var i = 0; i < files.length; i += 200) partes.push(files.slice(i, i + 200));
       return partes.reduce(function (pr, parte, k) {
         return pr.then(function () {
           var paths = parte.map(function (f) { return 'fotos/' + f.name; });
@@ -9139,6 +9140,7 @@
       galeria = window.Galeria({
         // o analista que tira fotos fica como o fiscal na galeria: Neste aparelho e Minhas
         drive: driveQ, Banco: window.Banco, nivel: function () { return isAnalista() && podeFotos() ? 1 : nivel(); }, getLogin: function () { return banco.login; }, nomes: NOMES,
+        rotCt: function (cid) { var c = contractById(cid); return c ? ctCurto(c) : ''; },   // v190: "Cons. 437" na barra da galeria do celular
         // v172: o analista vê também a aba Equipe (todas as fotos), sem as ações de quem é da equipe (relatório, mover, apagar)
         verEquipe: anVeEquipe,
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },

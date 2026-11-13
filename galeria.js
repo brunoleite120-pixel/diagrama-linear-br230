@@ -44,8 +44,9 @@
     '.gl-top h2{margin:0;font-size:17px;font-weight:650;flex:1;min-width:0}',
     '.gl-tabs{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;scrollbar-width:none}',
     '.gl-tabs::-webkit-scrollbar{display:none}',
-    '.gl-tab{flex:none;border:1px solid var(--line,#D5DAD6);background:var(--panel,#fff);border-radius:999px;padding:6px 14px;font-size:13px;white-space:nowrap}',
-    '.gl-tab small{margin-left:6px;font-size:12px;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
+    '.gl-tab{flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line,#D5DAD6);background:var(--panel,#fff);border-radius:999px;padding:6px 14px 6px 11px;font-size:13px;white-space:nowrap}',
+    '.gl-tab svg{flex:none}.gl-tab .gl-tab-c{display:none}',
+    '.gl-tab small{font-size:12px;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
     '.gl-tab[aria-selected="true"]{background:var(--ink,#17201C);border-color:var(--ink,#17201C);color:#fff}',
     '.gl-tab[aria-selected="true"] small{color:#C9D0CC}',
     '.gl-cts{display:flex;gap:6px;padding:10px 16px 0;overflow-x:auto;scrollbar-width:none}',
@@ -317,7 +318,8 @@
     '.gl-op[aria-pressed="true"]{border:2px solid var(--accent,#1D4F91);background:var(--accent-soft,#E7EEF7);padding:9px 11px}',
     '.gl-op[aria-pressed="true"] i{border-color:var(--accent,#1D4F91)}',
     '.gl-op[aria-pressed="true"] i::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--accent,#1D4F91)}',
-    '.gl-op b{display:block;font-size:14px}',
+    '.gl-op>span>b{display:block;font-size:14px}',
+    '.gl-op small b{display:inline;font-size:inherit;color:var(--ink,#17201C)}',
     '.gl-op small{display:block;font-size:12px;color:var(--ink-3,#5C6661);line-height:1.35}',
     '.gl-ckl{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2,#3B4540)}',
     '.gl-ckl input{width:18px;height:18px;margin:0;flex:none}',
@@ -360,19 +362,41 @@
     '.gl-prg:not(.pausa) .gl-prg-b{position:absolute;left:10px;right:10px;bottom:4px;height:3px;margin:0}',
     '.gl-prg:not(.pausa) .gl-prg-r{flex:none;flex-wrap:nowrap}',
     '.gl-prg:not(.pausa) .gl-prg-r span{display:none}',
+    '.gl-prg:not(.pausa) .gl-prg-o{display:none}',
+    '.gl-prg-r .gl-prg-ib{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:1px solid #B9CBE3;border-radius:8px;background:var(--panel,#fff)}',
     '.gl-rec .gl-prg,.gl-rec .gl-off{margin-top:6px}',
     '@media (max-width:560px){.gl-top{padding:8px 12px}.gl-tabs,.gl-cts,.gl-fil,.gl-info{padding-left:12px;padding-right:12px}.gl-body{padding-left:12px;padding-right:12px}',
     '  .gl-prg,.gl-off{margin-left:12px;margin-right:12px}',
     '  .gl-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}}',
     // celular: barra única (contrato, Filtros, ⋯), resumo em uma linha e as folhas por cima de tudo, também das duas barras do app
     '@media (pointer:coarse),(max-width:700px){.gl-g button[data-ct]{position:relative;z-index:1;margin-top:-14px;margin-bottom:-8px;padding-top:16px;padding-bottom:10px}}',
+    '@media (max-width:560px){.gl-tabs{display:grid;grid-template-columns:repeat(var(--n,5),minmax(0,1fr));gap:4px;margin:10px 12px 0;padding:4px;border:1px solid var(--line,#D5DAD6);border-radius:14px;background:var(--panel,#fff)}',
+    '  .gl-tabs:empty{display:none}',
+    '  .gl-tab{position:relative;flex-direction:column;justify-content:center;gap:2px;min-width:0;min-height:52px;padding:6px 0 5px;border:0;border-radius:10px;background:none;color:var(--ink-2,#3B4540);font-size:11px;font-weight:600;line-height:1.2}',
+    '  .gl-tab svg{width:22px;height:22px}',
+    '  .gl-tab .gl-tab-t{display:none}.gl-tab .gl-tab-c{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
+    '  .gl-tab[aria-selected="true"]{font-weight:700}',
+    '  .gl-tab small{position:absolute;top:2px;left:calc(50% + 6px);padding:0 4px;border-radius:999px;background:var(--ink,#17201C);color:#fff;font-size:9.5px;font-weight:700;line-height:14px}',
+    '  .gl-tab[aria-selected="true"] small{background:#fff;color:var(--ink,#17201C)}}',
     '@media (max-width:560px){.gl-fil:empty{display:none}',
     '  .gl-fil>.gl-chip{min-height:44px}',
     '  .gl-cts{overflow:visible;gap:8px}',
-    '  .gl-cb-ct{flex:1 1 0;min-width:0;gap:4px}',
-    '  .gl-cb-ct>span{min-width:0;overflow:hidden;text-overflow:ellipsis}',
     '  .gl-cb-ct:disabled{opacity:.6}',
-    '  .gl-cb-f{gap:6px}',
+    '  .gl-cb-f{gap:6px;padding:0 10px}',
+    '  .gl-cb-ct,.gl-cb-p{flex:1 1 auto;min-width:0;gap:6px;padding:0 10px}',
+    '  .gl-cb-fi{min-width:52px;padding:0 8px}',
+    '  .gl-info .gl-txt.gl-txt-n{flex:1 1 0;min-width:110px}.gl-info .gl-txt-n b{white-space:nowrap}',
+    '  .gl-cb-p{font-weight:600}',
+    '  .gl-cb-p>svg:first-child{flex:none}',
+    '  .gl-cb-ct>span,.gl-cb-p>span{min-width:0;overflow:hidden;text-overflow:ellipsis}',
+    '  .gl-cb-s{flex:none}',
+    '  .gl-cb-n{display:inline-block;min-width:20px;border-radius:999px;background:#E9A23B;color:#3D2A00;font-size:12px;line-height:20px;text-align:center}',
+    '  .gl-selo{gap:6px;padding:0 6px 0 11px;border-radius:999px;background:var(--accent-soft,#E7EEF7);border-color:#B9CBE3;color:var(--accent,#1D4F91);font-weight:600}',
+    '  .gl-selo i{font-style:normal;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--panel,#fff);font-size:11px}',
+    '  .gl-info .gl-txt{flex:1 1 auto;min-width:0}',
+    '  .gl-acts{display:flex;gap:6px;margin-left:auto}',
+    '  .gl-acts .btn{display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:0 10px}',
+    '  .gl-acts .gl-bx{border-color:var(--accent,#1D4F91);color:var(--accent,#1D4F91)}',
     '  .gl-cb-m{width:52px;padding:0;font-size:18px}',
     '  .gl-info{gap:0 8px;padding-top:8px;padding-bottom:0}',
     '  .gl-info .gl-fora{flex:1 1 100%;min-height:44px;text-align:left}',
@@ -404,7 +428,8 @@
 
   var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
   var SEM = '__sem';   // filtro "Sem contrato" / "Sem ponto"
-  var POR_ZIP = 40;
+  // v190: 200 fotos por .zip (as fotos ficaram menores); no navegador do celular o compartilhar leva até POR_WEB de uma vez
+  var POR_WEB = 40, POR_ZIP = 200;
   // o script do Drive (versão 6) não abriu a pasta principal das fotos e não criou outra: as fotos esperam no celular
   var PASTA_FORA = 'pasta_principal_indisponivel';
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -472,6 +497,10 @@
     return { modo: 'semana', off: 0, de: '', ate: '' };
   }
   function salvarPer(p) { try { localStorage.setItem(PER_KEY, JSON.stringify(p)); } catch (e) { /* sem armazenamento */ } }
+  var IC_SEL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12l3 3 5-6"/></svg>';
+  var IC_PAUSA = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  var IC_CONT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  var IC_X = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
   var IC_FIL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4"/></svg>';
   var CAL = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
   function b64Blob(s, type) {
@@ -489,10 +518,13 @@
   function cacheTx(mode, fn) {
     return new Promise(function (ok, no) {
       if (!window.indexedDB) { no(new Error('sem_indexeddb')); return; }
-      var r = indexedDB.open(CDB, 2);
+      var r = indexedDB.open(CDB, 3);
       r.onupgradeneeded = function () {
         var db = r.result;
         [CINFO, CARQ, CITEM].forEach(function (n) { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, { keyPath: 'id' }); });
+        // versão 3 (v190): índice das miniaturas guardadas sozinhas (campo aem: quando foi vista), para tirar as mais antigas
+        var st = r.transaction.objectStore(CITEM);
+        if (!st.indexNames.contains('aem')) st.createIndex('aem', 'aem');
       };
       r.onerror = function () { no(r.error); };
       r.onsuccess = function () {
@@ -568,6 +600,39 @@
       };
     }).catch(function () { /* sem cópia: nada a fazer */ });
   }
+  // v190 (pedido de 13/11/2026): cada miniatura que chega fica guardada com os dados da foto, para a galeria abrir sem sinal
+  // mesmo depois de fechar o app. Só as 3.000 vistas por último (cerca de 75 MB); as baixadas pela pessoa ("No app") não contam
+  // nem saem por aqui (não têm o campo aem)
+  var MINI_AUTO_MAX = 3000, miniFila = [], miniT = 0;
+  function minisGuardar(it, m) {
+    if (!it || !m || (it.origem !== 'banco' && it.origem !== 'drive')) return;
+    miniFila.push({ it: it, m: m });
+    clearTimeout(miniT); miniT = setTimeout(minisGravarFila, 800);
+  }
+  function minisGravarFila() {
+    var l = miniFila.splice(0), g0 = cacheGer;
+    if (!l.length) return;
+    cacheTx('readwrite', function (i, a, s) {
+      l.forEach(function (x) {
+        var g = s.get(x.it.id);
+        g.onsuccess = function () {
+          if (g0 !== cacheGer || (g.result && !g.result.aem)) return;   // baixada pela pessoa: fica como está
+          var d = {}; Object.keys(x.it).forEach(function (k) { if (k !== 'mini') d[k] = x.it[k]; });
+          s.put({ id: x.it.id, dados: d, mini: x.m, em: Date.now(), aem: Date.now() });
+        };
+      });
+    }).then(function () {
+      return cacheTx('readwrite', function (i, a, s) {
+        var ix = s.index('aem'), c = ix.count();
+        c.onsuccess = function () {
+          var sobra = c.result - MINI_AUTO_MAX;
+          if (sobra <= 0) return;
+          var cur = ix.openKeyCursor();
+          cur.onsuccess = function () { var k = cur.result; if (!k || sobra <= 0) return; s.delete(k.primaryKey); sobra--; k.continue(); };
+        };
+      });
+    }).catch(function () { /* sem espaço ou sem IndexedDB: só não guarda */ });
+  }
   function itensLer() { return cacheTx('readonly', function (i, a, s) { return s.getAll(); }).then(function (l) { return l || []; }, function () { return []; }); }
   function cacheIds() { return cacheTx('readonly', function (i) { return i.getAll(); }).then(function (l) { var m = {}; (l || []).forEach(function (x) { if (x.fixa) m[x.id] = 1; }); return m; }, function () { return {}; }); }
 
@@ -610,13 +675,14 @@
     });
   }
 
+  // v190 (pedido de 13/11/2026): cada aba com um ícone; c é o nome curto, embaixo do ícone no celular
   var ABAS = [
-    { k: 'local', t: 'No aparelho', nivel: 0 },
-    { k: 'minhas', t: 'Minhas', nivel: 0, login: true },   // também o analista (o banco lista as dele: _faz_fotos)
-    { k: 'todas', t: 'Equipe', nivel: 2 },
-    { k: 'drive', t: 'Drive', nivel: 0, login: true, drive: true },   // a pasta do Drive como ela é (script versão 7)
-    { k: 'relatorio', t: 'Relatório ★', nivel: 2 },
-    { k: 'deletadas', t: 'Lixeira', nivel: 3 }   // a pasta "Deletados" do Drive
+    { k: 'local', t: 'No aparelho', c: 'Aparelho', ic: '<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/>', nivel: 0 },
+    { k: 'minhas', t: 'Minhas', ic: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c1.4-4 4.4-5.8 7.5-5.8s6.1 1.8 7.5 5.8"/>', nivel: 0, login: true },   // também o analista (o banco lista as dele: _faz_fotos)
+    { k: 'todas', t: 'Equipe', ic: '<circle cx="9" cy="8.2" r="3.1"/><circle cx="17.2" cy="9.4" r="2.5"/><path d="M2.8 19.5c1-3.6 3.5-5.3 6.2-5.3s5.2 1.7 6.2 5.3"/><path d="M15.6 14.4c2.6-.4 4.8 1 5.8 4.3"/>', nivel: 2 },
+    { k: 'drive', t: 'Drive', ic: '<path d="M7 18.5a4.3 4.3 0 0 1-.6-8.55A5.6 5.6 0 0 1 17.2 9a3.9 3.9 0 0 1 .3 9.5z"/>', nivel: 0, login: true, drive: true },   // a pasta do Drive como ela é (script versão 7)
+    { k: 'relatorio', t: 'Relatório ★', c: 'Relatório', ic: '<path d="M6 2.8h8.5l4 4v14.4H6z"/><path d="M14.5 2.8v4h4"/><path d="M12.2 10.3l1.15 2.35 2.6.38-1.88 1.83.44 2.58-2.31-1.22-2.31 1.22.44-2.58-1.88-1.83 2.6-.38z" fill="currentColor" stroke-width="1"/>', nivel: 2 },
+    { k: 'deletadas', t: 'Lixeira', ic: '<path d="M4.5 6.5h15M9.5 6.5V4h5v2.5M6.5 6.5l1 14h9l1-14M10.2 10.5v6.5M13.8 10.5v6.5"/>', nivel: 3 }   // a pasta "Deletados" do Drive
   ];
   var DRIVE_KEY = 'diagrama-linear.foto-drive', MANTER_KEY = 'diagrama-linear.manter-enviadas';
   // aba Drive: por contrato ou por pessoa, e quando cada pasta foi aberta (para contar as novas)
@@ -1235,7 +1301,8 @@
       for (var i = 0; i < ids.length; i += 40) (function (lote) {
         lote.forEach(function (id) { pedindo[id] = 1; });
         o.Banco.fotosMini(l.codigo, lote).then(function (arr) {
-          arr.forEach(function (m) { minis[m.id] = 'data:image/jpeg;base64,' + m.jpeg; mostrarMini(m.id); });
+          var porId = {}; itens.forEach(function (x) { porId[x.id] = x; });
+          arr.forEach(function (m) { minis[m.id] = 'data:image/jpeg;base64,' + m.jpeg; mostrarMini(m.id); minisGuardar(porId[m.id], minis[m.id]); });
           lote.forEach(function (id) { delete pedindo[id]; });
         }, function () { lote.forEach(function (id) { delete pedindo[id]; }); });
       })(ids.slice(i, i + 40));
@@ -1253,7 +1320,7 @@
               var id = 'drv:' + m.id;
               if (!m.jpeg) { semMini[id] = 1; return; }
               cad = cad.then(function () { return m.leve ? m.jpeg : reduzir(b64Blob(m.jpeg, 'image/jpeg')); }).then(function (j) {
-                if (j) { minis[id] = 'data:image/jpeg;base64,' + j; mostrarMini(id); } else semMini[id] = 1;
+                if (j) { minis[id] = 'data:image/jpeg;base64,' + j; mostrarMini(id); minisGuardar(itens.filter(function (x) { return x.id === id; })[0], minis[id]); } else semMini[id] = 1;
               });
             });
             return cad;
@@ -1370,6 +1437,7 @@
       }).join('');
     }
     // o nº do contrato, para as fichas e as miniaturas ("314"); sem número, o nome de tela
+    function ctCel(cid) { return cid === SEM ? 'Sem contrato' : (o.rotCt && o.rotCt(cid)) || curto(cid); }
     function numCt(cid) { return cid === SEM ? 'Sem contrato' : (/(\d+)\s*$/.exec(curto(cid)) || [])[1] || curto(cid); }
     function contagem() {
       var n = {}, sem = 0;
@@ -1453,6 +1521,12 @@
       if (filtro.ids) h += '<button type="button" class="gl-chip" data-g="ids-tirar" aria-pressed="true" aria-label="Tirar o filtro das fotos da NC">' + esc(filtro.idsNome + ' · ' + filtro.ids.length + (filtro.ids.length === 1 ? ' foto' : ' fotos')) + ' ✕</button>';
       // no celular a ficha fica na folha Filtros; aqui, o selo a um toque
       if (filtro.nc && celular()) h += '<button type="button" class="gl-chip" data-g="nc-fil" aria-pressed="true" aria-label="Tirar o filtro Fotos de NC">Fotos de NC · ' + lista.length + ' ✕</button>';
+      if (celular()) {
+        var selo = function (f, t) { return '<button type="button" class="gl-chip gl-selo" data-g="f-tirar" data-f="' + f + '" aria-label="Tirar o filtro ' + esc(t) + '">' + esc(t) + '<i aria-hidden="true">✕</i></button>'; };
+        if (aba === 'local' && fLocal) h += selo('fl', { semcar: 'Sem carimbo', aparelho: 'Só aqui', fila: 'Na fila', enviada: 'Enviadas' }[fLocal] || fLocal);
+        if (filtro.autor) h += selo('autor', filtro.autor);
+        if (filtro.pid) { var ip = itens.filter(function (x) { return x.pid === filtro.pid; })[0]; h += selo('pid', filtro.pid === SEM ? 'Sem ponto' : (ip && ip.pnome) || 'Ponto'); }
+      }
       if (filtro.km) h += '<button type="button" class="gl-chip" data-g="km-tirar" aria-pressed="true" aria-label="Tirar o filtro do km">' + esc((filtro.km[2] ? filtro.km[2] + ' · ' : '') + 'km ' + String(filtro.km[0]).replace('.', ',') + ' a ' + String(filtro.km[1]).replace('.', ',')) + ' ✕</button>';
       return h;
     }
@@ -1467,7 +1541,7 @@
     // folha: o conteúdo da folha Filtros do celular, com o nome de cada grupo. No celular a fila mostra só os selos (no Drive, a busca e as pastas)
     function filtrosHtml(folha) {
       var rot = function (t, x) { return folha ? '<div class="gl-fo-l"><span>' + t + '</span>' + x + '</div>' : x; };
-      if (aba === 'drive') return !folha ? driveFil() : emCartoes() ? '' : rot('Período', perHtml());
+      if (aba === 'drive') return !folha ? driveFil() : emCartoes() || celular() ? '' : rot('Período', perHtml());
       if (celular() && !folha) return selosHtml();
       var ps = {}, as = {}, ms = {}, semPonto = 0;
       itens.forEach(function (it) {
@@ -1511,7 +1585,7 @@
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>');
       }
-      return h + rot('Período', perHtml());
+      return h + (folha && celular() ? '' : rot('Período', perHtml()));
     }
     // período em fichas; "Escolher…" abre a janela (hoje, semana passada, todas as datas, de… até…) e mostra o escolhido nela
     function perHtml() {
@@ -1665,7 +1739,8 @@
         if (pend && !login() && o.entrar) b += '<button type="button" class="btn small primary" data-g="entrar">Entrar para enviar</button>';
         b += '<button type="button" class="gl-cfg" data-g="cfg">' + IC_CFG + 'Espaço e envio</button>';
         var apg = selecionando ? [] : apagadasAqui();
-        return (apg.length ? boxApagadas(apg) : '') + aviso + confHtml() + '<span class="gl-txt">' + t + foraHtml() + '</span>' + foraCel() + b + selBtn();
+        var cel0 = celular();
+        return (apg.length ? boxApagadas(apg) : '') + aviso + confHtml() + '<span class="gl-txt">' + t + foraHtml() + '</span>' + (cel0 ? selBtn() : '') + foraCel() + b + (cel0 ? '' : selBtn());
       }
       if (aba === 'drive') {
         var cartoes = emCartoes(), base = cartoes ? itens.filter(noCaminho) : lista;
@@ -1687,9 +1762,9 @@
       if (semP && filtro.pid !== SEM) txt += ' <span class="gl-warn">' + plural(semP, 'está sem ponto e não entra', 'estão sem ponto e não entram') + ' no PDF.</span> <button type="button" class="gl-lk" data-g="ver-sem">Ver ' + (semP === 1 ? 'a foto' : 'as ' + semP) + '</button>';
       // no celular: "26 a 31 de out. · 2 fotos"; o tamanho fica nos grupos, o ★ e as ações do Drive nas folhas
       var ivI = intervaloPer(per), bytesL = lista.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0), cel = celular();
-      return '<span class="gl-txt">' + (ivI ? esc(faixaTxt(ivI[0], ivI[1])) + ' · ' : '') + '<b>' + plural(lista.length, 'foto', 'fotos') + '</b>' +
-        (bytesL && !cel ? ' · ' + tam(bytesL) + ' no tamanho original' : '') + foraHtml() + (cel && aba === 'todas' ? '' : ' · ' + txt) + '</span>' + foraCel() + (cel ? '' : trazerHtml()) +
-        (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + selBtn();
+      return '<span class="gl-txt gl-txt-n">' + (ivI ? esc(faixaTxt(ivI[0], ivI[1])) + ' · ' : '') + '<b>' + plural(lista.length, 'foto', 'fotos') + '</b>' +
+        (bytesL && !cel ? ' · ' + tam(bytesL) + ' no tamanho original' : '') + foraHtml() + (cel ? '' : ' · ' + txt) + '</span>' + (cel ? selBtn() : '') + foraCel() + (cel ? '' : trazerHtml()) +
+        (aba === 'relatorio' && o.relatorioPdf && itens.length && !selecionando ? '<button type="button" class="btn small primary" data-g="rel-pdf">Gerar o relatório em PDF</button>' : '') + (cel ? '' : selBtn());
     }
     function trazerHtml() {
       var trazer = aba === 'todas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl() ? '<button type="button" class="btn small" data-g="drive-trazer">Trazer fotos do Drive</button>' +
@@ -1708,8 +1783,10 @@
       return n ? '<button type="button" class="gl-lk gl-fora" data-g="per-tudo">' + plural(n, 'foto fora do período', 'fotos fora do período') + ': ver todas as datas</button>' : '';
     }
     // naFolha: para "Mais ações". No celular, fora da seleção, Selecionar e Baixar ficam só lá
-    function selBtn(naFolha) {
-      if (!lista.length || (celular() && !selecionando && !naFolha)) return '';
+    function selBtn() {
+      if (!lista.length) return '';
+      if (celular() && !selecionando) return '<span class="gl-acts"><button type="button" class="btn small" data-g="selecionar">' + IC_SEL + 'Selecionar</button>' +
+        '<button type="button" class="btn small gl-bx" data-g="baixar-tudo" aria-label="Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length + ' fotos') + '">' + IC_BAIXA.replace('aria-hidden', 'width="15" height="15" aria-hidden') + 'Baixar</button></span>';
       return selecionando ? '<button type="button" class="btn small" data-g="todas">' + (intervaloPer(per) ? 'Tudo do período' : 'Selecionar todas') + ' (' + lista.length + ')</button>'
         : '<button type="button" class="btn small" data-g="selecionar">Selecionar</button>' +
           '<button type="button" class="btn small" data-g="baixar-tudo">Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length) + '</button>';
@@ -1856,9 +1933,14 @@
       if (!root) return;
       filtrar();
       var abas = abasVisiveis(), corpo = q('.gl-body'), top = corpo ? corpo.scrollTop : 0;
-      q('.gl-tabs').innerHTML = abas.length > 1 ? abas.map(function (a) {
-        return '<button type="button" class="gl-tab" role="tab" data-aba="' + a.k + '" aria-selected="' + (a.k === aba) + '">' + esc(a.t) +
-          (a.k === aba && itens.length ? '<small>' + itens.length + '</small>' : '') + '</button>';
+      var tabs = q('.gl-tabs');
+      tabs.style.setProperty('--n', abas.length);
+      tabs.innerHTML = abas.length > 1 ? abas.map(function (a) {
+        var n = a.k === aba && itens.length ? itens.length : 0;
+        return '<button type="button" class="gl-tab" role="tab" data-aba="' + a.k + '" aria-selected="' + (a.k === aba) + '" title="' + esc(a.t) + '"' +
+          (n ? ' aria-label="' + esc(a.t + ', ' + plural(n, 'foto', 'fotos')) + '"' : '') + '>' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + a.ic + '</svg>' +
+          '<span class="gl-tab-t">' + esc(a.t) + '</span><span class="gl-tab-c" aria-hidden="true">' + esc(a.c || a.t) + '</span>' + (n ? '<small>' + n + '</small>' : '') + '</button>';
       }).join('') : '';
       renderEnv();
       q('.gl-cts').innerHTML = celular() ? barraCel() : aba === 'drive' ? '' : contratosHtml();
@@ -1886,21 +1968,28 @@
     function celular() { return !!(mmCel && mmCel.matches); }
     if (mmCel && mmCel.addEventListener) mmCel.addEventListener('change', function () { if (!root) return; if (fo) fecharFo(); recolher(false); render(); });
     // o período padrão (esta semana) está dito no resumo e "Todas as datas" não esconde nada: não contam
+    // v190 (seção 13, A): o período tem botão próprio na barra e não conta em Filtros
     function nFiltros() {
-      var n = per.modo === 'tudo' || (per.modo === 'semana' && !per.off) ? 0 : 1;
-      if (aba === 'drive') return n;
-      return n + (filtro.pid ? 1 : 0) + (filtro.autor ? 1 : 0) + (filtro.nc ? 1 : 0) + (aba === 'local' && fLocal ? 1 : 0);
+      if (aba === 'drive') return 0;
+      return (filtro.pid ? 1 : 0) + (filtro.autor ? 1 : 0) + (filtro.nc ? 1 : 0) + (aba === 'local' && fLocal ? 1 : 0);
     }
-    function maisHtml() { return selecionando ? '' : (aba === 'drive' && emCartoes() ? '' : selBtn(true)) + trazerHtml(); }
+    // Selecionar e Baixar ficam ao lado do total (selBtn); no ⋯ ficam só as ações do Drive do Administrador
+    function maisHtml() { return selecionando ? '' : trazerHtml(); }
+    var SETA = '<svg class="gl-cb-s" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
     function barraCel() {
       var h = '';
       if (aba !== 'drive' && (itens.length || filtro.cid)) {
         var c = contagem(), k = !filtro.cid ? itens.length : filtro.cid === SEM ? c.sem : c.n[filtro.cid] || 0;
-        h += '<button type="button" class="gl-ct gl-ct-l gl-cb-ct" data-g="cts" aria-haspopup="dialog"' + (aba === 'relatorio' && !itens.length ? ' disabled' : '') + '><span>' +
-          esc(filtro.cid ? numCt(filtro.cid) : 'Todos') + '<small> · ' + k + '</small></span> ▾</button>';
+        h += '<button type="button" class="gl-ct gl-ct-l gl-cb-ct" data-g="cts" aria-haspopup="dialog" aria-label="Contrato: ' + esc((filtro.cid ? curto(filtro.cid) : 'todos') + ', ' + plural(k, 'foto', 'fotos')) + '"' +
+          (aba === 'relatorio' && !itens.length ? ' disabled' : '') + '><span>' + esc(filtro.cid ? ctCel(filtro.cid) : 'Contratos') + '</span>' + SETA + '</button>';
       }
-      if (filtrosHtml(true)) { var n = nFiltros(); h += '<button type="button" class="gl-ct gl-cb-f" data-g="cel-fil" aria-haspopup="dialog">' + IC_FIL + 'Filtros' + (n ? ' (' + n + ')' : '') + '</button>'; }
-      if (maisHtml()) h += '<button type="button" class="gl-ct gl-cb-m" data-g="cel-mais" aria-haspopup="dialog" aria-label="Mais ações">⋯</button>';
+      if (aba !== 'drive' || !emCartoes()) {
+        h += '<button type="button" class="gl-ct gl-cb-p" data-g="cel-per" aria-haspopup="dialog" aria-label="Período: ' + esc(rotuloPer(per)) + '">' + CAL + '<span>' + esc(rotuloPer(per)) + '</span>' + SETA + '</button>';
+      }
+      // com o ⋯ (ações do Drive do Administrador) não cabe tudo: Filtros fica só com o ícone
+      var mais = !!maisHtml();
+      if (filtrosHtml(true)) { var n = nFiltros(); h += '<button type="button" class="gl-ct gl-cb-f' + (mais ? ' gl-cb-fi' : '') + '" data-g="cel-fil" aria-haspopup="dialog"' + (n || mais ? ' aria-label="Filtros' + (n ? ', ' + n + (n === 1 ? ' ligado' : ' ligados') : '') + '"' : '') + '>' + IC_FIL + (mais ? '' : 'Filtros') + (n ? '<b class="gl-cb-n">' + n + '</b>' : '') + '</button>'; }
+      if (mais) h += '<button type="button" class="gl-ct gl-cb-m" data-g="cel-mais" aria-haspopup="dialog" aria-label="Mais ações">⋯</button>';
       return h;
     }
     function abrirFo(qual) {
@@ -1908,7 +1997,7 @@
       histPoe();
       var el = document.createElement('div');
       el.className = 'gl-sh fo' + (qual === 'mais' ? ' ma' : '');
-      el.innerHTML = '<div class="gl-sh-box gl-fo-box" role="dialog" aria-modal="true" aria-labelledby="glFoT"><div class="gl-sh-top gl-fo-top"><h3 id="glFoT">' + (qual === 'mais' ? 'Mais ações' : 'Filtros') + '</h3>' +
+      el.innerHTML = '<div class="gl-sh-box gl-fo-box" role="dialog" aria-modal="true" aria-labelledby="glFoT"><div class="gl-sh-top gl-fo-top"><h3 id="glFoT">' + (qual === 'mais' ? 'Mais ações' : qual === 'per' ? 'Período' : 'Filtros') + '</h3>' +
         '<button type="button" class="gl-fo-x" data-g="fo-fechar" aria-label="Fechar">×</button></div>' +
         (qual === 'mais' ? '<div class="gl-fo-ma"></div>' : '<div class="gl-fo-c"></div><div class="gl-fo-rod"></div>') + '</div>';
       root.appendChild(el);
@@ -1921,7 +2010,7 @@
       if (fo === 'mais') { el.querySelector('.gl-fo-ma').innerHTML = maisHtml(); return; }
       var a = document.activeElement, at = a && el.contains(a) ? ['data-f', 'data-k', 'data-v', 'data-g'].filter(function (x) { return a.hasAttribute(x); })[0] : '';
       var sel0 = at ? '[' + at + '="' + cssId(a.getAttribute(at)) + '"]' : '';
-      el.querySelector('.gl-fo-c').innerHTML = filtrosHtml(true);
+      el.querySelector('.gl-fo-c').innerHTML = fo === 'per' ? perHtml() : filtrosHtml(true);
       el.querySelector('.gl-fo-rod').innerHTML = (aba === 'todas' && nv() >= 2 ? '<p class="gl-fo-nota">' + NOTA_ESTRELA + '</p>' : '') +
         '<div class="gl-fo-ver"><button type="button" class="btn primary" data-g="fo-fechar">Ver ' + plural(lista.length, 'foto', 'fotos') + '</button></div>';
       var b = sel0 && !el.contains(document.activeElement) && el.querySelector(sel0);
@@ -1930,7 +2019,7 @@
     // depois: o que fazer quando o histórico assentar (a janela que a ação abre entra por cima, sem perder a entrada dela)
     function fecharFo(viaVoltar, depois) {
       if (!fo) { if (depois) depois(); return; }
-      var sel0 = fo === 'mais' ? '[data-g="cel-mais"]' : '[data-g="cel-fil"]', el = q('.gl-sh.fo');
+      var sel0 = fo === 'mais' ? '[data-g="cel-mais"]' : fo === 'per' ? '[data-g="cel-per"]' : '[data-g="cel-fil"]', el = q('.gl-sh.fo');
       fo = null;
       if (el) el.remove();
       var volta = function () { var b = root && q(sel0); if (b) b.focus({ preventScroll: true }); if (depois) depois(); };
@@ -2014,7 +2103,7 @@
       if (!root) return;
       var m = q('.gl-mini'), tab = q('.gl-tab[aria-selected="true"]');
       // uma linha: a aba, o resumo (cortado com "…" se não couber) e o número de fotos inteiro; "Filtros ▾" de 44 px
-      if (m) m.innerHTML = rec ? '<button type="button" class="gl-mini-t" data-g="rec-abrir" aria-label="Mostrar os filtros">' + (tab ? '<i>' + esc(tab.firstChild.textContent) + '</i>' : '') +
+      if (m) m.innerHTML = rec ? '<button type="button" class="gl-mini-t" data-g="rec-abrir" aria-label="Mostrar os filtros">' + (tab ? '<i>' + esc((tab.querySelector('.gl-tab-t') || tab).textContent) + '</i>' : '') +
         '<span><span>' + esc(resumoFiltros()) + '</span><b>' + esc(plural(lista.length, 'foto', 'fotos')) + '</b></span></button>' +
         '<button type="button" class="gl-mini-f" data-g="rec-abrir" aria-expanded="false">Filtros \u25be</button>' : '';
       var info = q('.gl-info'), bt = info && info.querySelector('.gl-recolher');
@@ -2064,12 +2153,21 @@
       var h = '<div class="gl-sh-box" role="dialog" aria-modal="true" aria-labelledby="glBxT"><div class="gl-sh-top"><h3 id="glBxT">Baixar ' + plural(n, 'foto', 'fotos') + (bTot ? ' · ' + tam(bTot) : '') + '</h3>' +
         '<button type="button" class="btn small" data-g="bx-fechar" aria-label="Fechar">✕</button></div>';
       if (aba !== 'local') h += op('app', 'No app (abrir sem internet)', faltam.length ? 'Ficam nesta galeria para abrir sem sinal. Ocupa ' + mb(bFal) + ' neste aparelho' + (faltam.length < n ? ' (' + (n - faltam.length) + ' já estão aqui)' : '') + '.' : 'Todas já estão neste aparelho.');
-      h += comp ? op('galeria', 'Na galeria de fotos do celular', 'Abre o compartilhar do celular: no iPhone, toque em <b>Salvar ' + (n === 1 ? 'imagem' : n + ' imagens') + '</b>; no Android, escolha Galeria, Fotos ou Arquivos.')
-        : op('galeria', 'No computador (.zip)', 'Vai para a pasta de downloads' + (n > POR_ZIP ? ', em ' + Math.ceil(n / POR_ZIP) + ' arquivos .zip de até ' + POR_ZIP + ' fotos' : ', num arquivo .zip') + '.');
-      if (aba !== 'local') h += op('mini', 'Só as miniaturas', 'Para ver sem sinal sem ocupar espaço: cerca de ' + mb(n * 25000) + '.');
+      // v190 (pedido de 13/11/2026): no app, o compartilhar leva até 200 fotos de cada vez (eram 30); "Só as miniaturas" saiu (as
+      // miniaturas vistas ficam guardadas sozinhas, minisGuardar) e no lugar entrou o .zip
+      var nat = o.nativo && o.nativo(), k200 = Math.ceil(n / POR_ZIP);
+      var vezes = function () { var l = []; for (var i = 0; i < k200; i++) l.push(Math.min(POR_ZIP, n - i * POR_ZIP)); return l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1]; };
+      var andr = '; no Android, escolha Galeria, Fotos ou Arquivos.';
+      var dGal = !nat && n > POR_WEB ? 'No navegador, mais de ' + POR_WEB + ' fotos vêm em .zip; para mandar direto à galeria, use o app.'
+        : k200 <= 1 ? 'Abre o compartilhar uma vez, com ' + (n === 1 ? 'a foto' : 'as ' + n + ' fotos') + '. No iPhone, toque em <b>Salvar ' + (n === 1 ? 'imagem' : n + ' imagens') + '</b>' + andr
+        : 'Abre o compartilhar ' + k200 + ' vezes, de ' + POR_ZIP + ' em ' + POR_ZIP + ' (' + vezes() + '). Em cada uma, no iPhone, toque em <b>Salvar imagens</b>' + andr;
+      var dZip = (k200 <= 1 ? 'Um arquivo só, com ' + (n === 1 ? 'a foto' : 'as ' + n + ' fotos') : 'Em ' + k200 + ' arquivos .zip, de até ' + POR_ZIP + ' fotos cada') +
+        '. Abre o compartilhar: mande por WhatsApp ou e-mail, ou guarde em Arquivos ou no Drive.' + (k200 <= 1 ? ' No iPhone, o .zip vai para Arquivos, não para o app Fotos.' : '');
+      h += comp ? op('galeria', 'Na galeria de fotos do celular', dGal) + op('zip', 'Arquivo .zip (para enviar ou guardar)', dZip)
+        : op('galeria', 'No computador (.zip)', 'Vai para a pasta de downloads' + (n > POR_ZIP ? ', em ' + k200 + ' arquivos .zip de até ' + POR_ZIP + ' fotos' : ', num arquivo .zip') + '.');
       if (o.drive && o.drive.sabeRede && o.drive.sabeRede()) h += '<label class="gl-ckl"><input type="checkbox" id="glBxWifi"' + (bs.wifi ? ' checked' : '') + '> Só no Wi-Fi' + (rede() === 'cellular' ? ' (você está nos dados móveis: começa quando conectar)' : '') + '</label>';
       h += '<p class="gl-mv-nota">O download segue enquanto o app estiver aberto, mesmo com a galeria fechada; a barra mostra quantas faltam e os MB.</p>';
-      var bt = bs.alvo === 'app' ? (faltam.length ? 'Baixar ' + mb(bFal) : 'Já estão aqui') : bs.alvo === 'mini' ? 'Guardar miniaturas' : 'Baixar' + (bTot ? ' ' + tam(bTot) : '');
+      var bt = bs.alvo === 'app' ? (faltam.length ? 'Baixar ' + mb(bFal) : 'Já estão aqui') : bs.alvo === 'zip' ? 'Gerar o .zip' + (bTot ? ' · ' + tam(bTot) : '') : 'Baixar' + (bTot ? ' ' + tam(bTot) : '');
       h += '<div class="gl-sh-acts"><button type="button" class="btn" data-g="bx-fechar">Cancelar</button><button type="button" class="btn primary" data-g="bx-ir"' + (bs.alvo === 'app' && !faltam.length ? ' disabled' : '') + '>' + IC_BAIXA.replace('aria-hidden', 'width="15" height="15" aria-hidden') + ' ' + bt + '</button></div></div>';
       var el = q('.gl-sh.bx');
       if (!el) { el = document.createElement('div'); el.className = 'gl-sh bx'; root.appendChild(el); }
@@ -2078,12 +2176,14 @@
     function baixaHtml() {
       if (!bx) return '';
       var n = bx.ls.length, pct = bx.total ? Math.round(100 * bx.feitos / bx.total) : Math.round(100 * bx.fim / n), parado = bx.pausa || bx.esperaWifi;
-      var oque = bx.alvo === 'mini' ? 'Guardando miniaturas' : bx.alvo === 'app' ? 'Baixando para o app' : 'Baixando';
+      var oque = bx.alvo === 'mini' ? 'Guardando miniaturas' : bx.alvo === 'app' ? 'Baixando para o app' : bx.alvo === 'zip' ? 'Gerando o .zip' : 'Baixando';
       var motivo = bx.pausa ? 'Pausado.' : bx.esperaWifi ? 'Esperando o Wi-Fi.' : bx.montando ? 'Preparando os arquivos…' : 'Segue enquanto o app estiver aberto, mesmo com a galeria fechada.';
-      return '<div class="gl-prg' + (parado ? ' pausa' : '') + '" role="status"><div class="gl-prg-l"><b>' + IC_BAIXA.replace('aria-hidden', 'width="14" height="14" aria-hidden') + ' ' + oque + ' · ' + Math.min(n, Math.max(1, bx.fim + bx.ativos)) + ' de ' + n + '</b>' +
+      // v190: a contagem e os MB cabem numa linha (o "Baixando ·" some na barra fina); Pausar e Cancelar viram ícones
+      return '<div class="gl-prg' + (parado ? ' pausa' : '') + '" role="status"><div class="gl-prg-l"><b>' + IC_BAIXA.replace('aria-hidden', 'width="14" height="14" aria-hidden') + ' <span class="gl-prg-o">' + oque + ' · </span>' + Math.min(n, Math.max(1, bx.fim + bx.ativos)) + ' de ' + n + '</b>' +
         (bx.total ? '<span>' + mb(bx.feitos) + ' de ' + mb(bx.total) + '</span>' : '') + '</div><div class="gl-prg-b"><i style="width:' + pct + '%"></i></div>' +
         '<div class="gl-prg-r"><span>' + esc(motivo) + (bx.falhas ? ' ' + plural(bx.falhas, 'não veio', 'não vieram') + '.' : '') + '</span>' +
-        (bx.montando ? '' : (bx.pausa ? '<button type="button" data-g="bx-cont">Continuar</button>' : '<button type="button" data-g="bx-pausa">Pausar</button>') + '<button type="button" data-g="bx-parar">Cancelar</button>') + '</div></div>';
+        (bx.montando ? '' : (bx.pausa ? '<button type="button" class="gl-prg-ib" data-g="bx-cont" aria-label="Continuar" title="Continuar">' + IC_CONT + '</button>' : '<button type="button" class="gl-prg-ib" data-g="bx-pausa" aria-label="Pausar" title="Pausar">' + IC_PAUSA + '</button>') +
+          '<button type="button" class="gl-prg-ib" data-g="bx-parar" aria-label="Cancelar o download" title="Cancelar">' + IC_X + '</button>') + '</div></div>';
     }
     function avisaBaixa() { renderEnv(); if (o.onBaixa) o.onBaixa(); }
     function iniciarBaixa() {
@@ -2096,12 +2196,12 @@
       bx = { ls: ls, nomes: nomes, alvo: alvo, wifi: wifi, i: 0, ativos: 0, fim: 0, vindo: {}, entCadeia: Promise.resolve(), ok: 0, falhas: 0, feitos: 0, arquivos: [], rotulo: ({ local: 'Fotos deste aparelho', minhas: 'Minhas fotos', todas: 'Fotos da equipe', relatorio: 'Relatório fotográfico', deletadas: 'Fotos apagadas', drive: 'Fotos do Drive' }[aba]) + ' ' + new Date().toISOString().slice(0, 10),
         total: alvo === 'mini' ? 0 : ls.reduce(function (a, x) { return a + (x.tamanho || 0); }, 0) };
       bx.pos = {}; ls.forEach(function (x, k) { bx.pos[x.id] = k; });
-      if (alvo === 'galeria') {
-        // no app: o compartilhar do sistema, 30 por vez, entregue enquanto baixa; no navegador do celular, o compartilhar (um
-        // toque, todas juntas) só até 40 fotos, acima disso .zip; no computador, .zip de 40 em 40
+      if (alvo === 'galeria' || alvo === 'zip') {
+        // no app: o compartilhar do sistema, 200 por vez (v190; eram 30), entregue enquanto baixa; no navegador do celular, o
+        // compartilhar (um toque, todas juntas) só até POR_WEB fotos, acima disso .zip; no computador e no .zip, de 200 em 200
         var podeF = o.salvarFotos && o.podeCompartilharFotos && o.podeCompartilharFotos(), nat = podeF && o.nativo && o.nativo();
-        bx.entrega = !podeF ? 'zip' : nat ? 'app' : ls.length <= POR_ZIP ? 'share' : 'zip';
-        bx.grupo = bx.entrega === 'app' ? 30 : POR_ZIP;
+        bx.entrega = alvo === 'zip' || !podeF ? 'zip' : nat ? 'app' : ls.length <= POR_WEB ? 'share' : 'zip';
+        bx.grupo = bx.entrega === 'app' ? 200 : POR_ZIP;
         bx.partes = Math.ceil(ls.length / bx.grupo); bx.parte = 0; bx.entregues = 0; bx.falhaEntrega = false;
       }
       selecionando = false; sel = {};
@@ -2140,7 +2240,7 @@
       retile(it.id);
       var passo = b.alvo === 'mini' ? miniPara(it).then(function (m) { if (!m) throw { code: 'sem_mini' }; return gravar(m); })
         : arquivo(it, b.alvo === 'app').then(function (bl) {
-          if (b.alvo === 'galeria') {
+          if (b.alvo === 'galeria' || b.alvo === 'zip') {
             b.arquivos.push({ name: b.nomes[k], blob: bl, date: data(it.em) || new Date() });
             // a parte completou: entrega já e solta da memória (uma entrega de cada vez: o compartilhar do celular abre um só)
             if (b.entrega !== 'share' && b.arquivos.length >= b.grupo) {
@@ -2190,7 +2290,7 @@
         });
         return;
       }
-      if (b.alvo !== 'galeria') { fim(plural(b.ok, 'miniatura guardada', 'miniaturas guardadas') + ' para ver sem sinal.'); return; }
+      if (b.alvo !== 'galeria' && b.alvo !== 'zip') { fim(plural(b.ok, 'miniatura guardada', 'miniaturas guardadas') + ' para ver sem sinal.'); return; }
       if (!b.arquivos.length && !b.entregues) { fim('Nenhuma foto veio.'); return; }
       b.montando = true; avisaBaixa();
       b.entCadeia.then(function () { return entregar(b, b.arquivos.splice(0)); }).then(function () { fim(b.falhaEntrega ? 'Parte das fotos não foi entregue. Tente de novo com menos fotos.' : ''); });
@@ -3154,7 +3254,9 @@
       var g = t.getAttribute('data-g');
       if (g === 'per') { pfAbrir(); return; }
       if (g === 'cts') { abrirCts(); return; }
-      if (g === 'cel-fil' || g === 'cel-mais') { abrirFo(g === 'cel-mais' ? 'mais' : 'filtros'); return; }
+      if (g === 'cel-fil' || g === 'cel-mais' || g === 'cel-per') { abrirFo(g === 'cel-mais' ? 'mais' : g === 'cel-per' ? 'per' : 'filtros'); return; }
+      // v190: o selo de um filtro ligado (pessoa, ponto, situação) tira o filtro
+      if (g === 'f-tirar') { var fk = t.getAttribute('data-f'); if (fk === 'fl') fLocal = ''; else filtro[fk] = ''; sel = {}; render(); return; }
       if (g === 'fo-fechar') { fecharFo(); return; }
       if (t.closest('.gl-sh.ma')) { fecharFo(false, function () { acaoMais(g); }); return; }
       if (g === 'desfazer') { var df = desfazerFn; fecharAviso(); if (df) df(); return; }
