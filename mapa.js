@@ -335,6 +335,14 @@
     '.mp-glonge .mp-ggr b{width:21px;height:21px;border-width:2px;font-size:10.5px}',
     '.mp-glonge .mp-gct span{font-size:10.5px;padding:0 6px;line-height:16px;border-width:1px}',
     '.mp-gsel-tr i{visibility:hidden}',
+    // v192 (opção C, pedido de 13/11/2026): com poucos contratos de pontos na tela, cada OAE ou ponto crítico ganha o número (ou o
+    // nome curto, P1) num círculo; os que encostam viram um só ("15–18"); o nome ao lado quando cabe
+    '.mp-gnum b{position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:11px;background:var(--c);border:2px solid #FFFFFF;color:#FFFFFF;font-size:11.5px;font-weight:700;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer}',
+    '.mp-gnum b.cl{color:#17201C}.mp-gnum.apag b{opacity:.45}',
+    '.mp-gnum b.sel{box-shadow:0 0 0 2px #FFFFFF,0 0 0 5px var(--mp-accent),0 1px 4px rgba(0,0,0,.4)}',
+    '.mp-glonge .mp-gnum b{min-width:20px;height:20px;padding:0 5px;font-size:10.5px}',
+    '.mp-gnm span{position:absolute;top:0;transform:translateY(-50%);white-space:nowrap;padding:1px 6px;border-radius:5px;background:var(--mp-panel);color:var(--mp-ink);font-size:11.5px;font-weight:600;line-height:17px;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer}',
+    '.mp-glonge .mp-gnm span{font-size:10.5px;line-height:15px;padding:0 5px}',
     '.mp-gct.leaflet-interactive span{cursor:pointer}',
     '.mp-gsel i{position:absolute;display:block;width:30px;height:30px;transform:translate(-50%,-50%);box-sizing:border-box;border-radius:50%;border:3px solid var(--mp-accent);background:rgba(255,255,255,.35);box-shadow:0 0 0 2px #FFFFFF}',
     '.mp-geral .mp-legend i.tr{height:4px;background:var(--c);box-shadow:0 0 0 1px #FFFFFF}.mp-geral .mp-legend i.tr.ts{height:2px;box-shadow:none;background:repeating-linear-gradient(90deg,var(--c) 0 3px,transparent 3px 6px)}',
@@ -844,12 +852,12 @@
     // rótulos que se encostam: fica o mais importante (nome do ponto, depois localidade, km, cidade e rio) e os que caem
     // embaixo das caixas do mapa (título, busca, botões, pontos de baixo) somem até o mapa mexer de novo
     var arrumaPedido = false;
-    var ROT_SEL = ['.mp-gct span', '.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'];
+    var ROT_SEL = ['.mp-gct span', '.mp-gnm span', '.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'];
     function caixasFixas() {
-      var caixas = Array.prototype.map.call(root.querySelectorAll('.mp-left>*:not([hidden]),.mp-tools>*,.mp-chips,.mp-legend:not([hidden]),.mp-card:not([hidden])'), function (el) { return el.getBoundingClientRect(); })
+      var caixas = Array.prototype.map.call(root.querySelectorAll('.mp-left>*:not([hidden]),.mp-tools>*,.mp-chips,.mp-legend:not([hidden]),.mp-card:not([hidden])' + (G ? ',.leaflet-control-scale,.leaflet-control-zoom' : '')), function (el) { return el.getBoundingClientRect(); })
         .filter(function (r) { return r.width && r.height; });
       // no mapa de todos, os círculos de quantidade ficam por cima dos nomes: o nome que bate num círculo sai
-      if (G) Array.prototype.forEach.call(root.querySelectorAll('.mp-ggr b'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
+      if (G) Array.prototype.forEach.call(root.querySelectorAll('.mp-ggr b,.mp-gnum b'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
       // as fotos também (v183): a bolinha ou a miniatura, sem a haste
       Array.prototype.forEach.call(root.querySelectorAll('.mp-phb span,.mp-ph i'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
       return caixas;
@@ -858,12 +866,20 @@
     function arrumaRotulos() {
       arrumaPedido = false;
       // v189: primeiro mede tudo, depois esconde (antes, mostrar e medir um a um recalculava a página a cada nome)
-      var els = [];
+      var els = [], bx = G ? map.getContainer().getBoundingClientRect() : null;
+      // v192: o nome ao lado do número que passaria da borda direita do mapa vai para a esquerda do número
+      if (G) {
+        var nms = root.querySelectorAll('.mp-gnm span'), vira = [];
+        nms.forEach(function (el) { el.style.left = el.getAttribute('data-l') + 'px'; });
+        nms.forEach(function (el) { var r = el.getBoundingClientRect(); if (r.width && r.right > bx.right - 6) vira.push([el, r.width]); });
+        vira.forEach(function (a) { a[0].style.left = -(a[1] + Number(a[0].getAttribute('data-l'))) + 'px'; });
+      }
       ROT_SEL.forEach(function (sel) { root.querySelectorAll(sel).forEach(function (el) { el.style.visibility = ''; els.push(el); }); });
       var vistos = caixasFixas(), some = [];
       els.forEach(function (el) {
         var r = el.getBoundingClientRect();
         if (!r.width) return;
+        if (bx && el.parentNode.classList.contains('mp-gnm') && (r.left < bx.left + 2 || r.right > bx.right - 2)) { some.push(el); return; }
         if (bateEm(r, vistos)) some.push(el); else vistos.push(r);
       });
       some.forEach(function (el) { el.style.visibility = 'hidden'; });
@@ -1005,7 +1021,8 @@
     // (visao.js) já filtrados, pelo geral(d); o toque num item chama G.onSel e a visão abre o cartão de sempre. O trecho de cada
     // contrato fica ao lado da rodovia, deslocado em pixels (refeito a cada zoom): lado 1 os pontos críticos, -1 a conservação,
     // -2 a sinalização, 0 (no eixo) as OAEs. Itens próximos na tela viram um círculo com a quantidade, como nas raias.
-    // d: { itens: [{ key, c, p, km, kf, cor, neutro, st, peso, oae, apag, lado, nome, tip }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg }
+    // d: { itens: [{ key, c, p, km, kf, cor, neutro, st, peso, oae, apag, lado, nome, tip, num, nomeN }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg, ident }
+    // v192: ident (poucos contratos de pontos escolhidos): os itens com num ganham o número, em qualquer régua (gNumeros)
     var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15, gAlvos = [], gCtSel = null;
     function gNum(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
     // o 731 (km próprio) vai pelo ramal da travessia, com o km local; os outros pelo eixo, com o km do desenho (x.km)
@@ -1057,7 +1074,8 @@
       root.classList.toggle('mp-glonge', longe);
       // o canvas desenha na ordem em que as linhas entram no mapa: primeiro as bordas, depois as cores e por fim as pontas
       function fila() { return { l: [], addLayer: function (x) { this.l.push(x); } }; }
-      var bordas = fila(), cores = fila(), pontas = fila();
+      var bordas = fila(), cores = fila(), barras = fila(), pontas = fila(), corCt = {};
+      gd.cts.forEach(function (k) { corCt[k.c.id] = k.cor; });
       // o toque na linha que cai perto de um ponto (o ponto fica a uns 14 px dela) é do ponto
       // v188 (pedido de 13/11/2026): o toque na linha ou no nome do contrato seleciona o contrato inteiro (contornado) e abre o
       // cartão dele. Os segmentos da conservação e da sinalização são divisão nossa, não do contrato: o toque não abre mais um só
@@ -1074,8 +1092,11 @@
           Lf.polyline(line, { renderer: gRend, color: cor, weight: longe ? 1.5 : 2, opacity: 0.85, dashArray: longe ? '3 3' : '5 4', bubblingMouseEvents: false })
             .bindTooltip(esc(tipC), { sticky: true, className: 'mp-lbl' }).on('click', ctClique(k)).addTo(bordas);
         } else {
-          Lf.polyline(line, { renderer: gRend, color: '#FFFFFF', weight: wCtB, opacity: k.apag ? 0.4 : 0.9, lineCap: 'butt', interactive: false }).addTo(bordas);
-          Lf.polyline(line, { renderer: gRend, color: cor, weight: wCt, opacity: k.apag ? 0.35 : 1, lineCap: 'butt', bubblingMouseEvents: false })
+          // v192: no modo de identificação a linha dos pontos críticos fica fina e clara (o 267 tem 130 km de linha para 3 pontos);
+          // o trecho de cada ponto vai por cima, na cor da situação
+          var fraca = gd.ident && k.lado > 0;
+          Lf.polyline(line, { renderer: gRend, color: '#FFFFFF', weight: fraca ? wCt : wCtB, opacity: k.apag ? 0.4 : fraca ? 0.6 : 0.9, lineCap: 'butt', interactive: false }).addTo(bordas);
+          Lf.polyline(line, { renderer: gRend, color: cor, weight: fraca ? Math.max(2, wCt - 2.5) : wCt, opacity: k.apag ? 0.35 : fraca ? 0.5 : 1, lineCap: 'butt', bubblingMouseEvents: false })
             .bindTooltip(esc(tipC), { sticky: true, className: 'mp-lbl' }).on('click', ctClique(k)).addTo(cores);
           [line[0], line[line.length - 1]].forEach(function (ll) {
             Lf.circleMarker(ll, { renderer: gRend, radius: longe ? 3 : medio ? 4 : 5, weight: 2, color: cor, fillColor: '#FFFFFF', fillOpacity: 1, interactive: false }).addTo(pontas);
@@ -1095,7 +1116,7 @@
       var lados = {}, selIt = null;
       gd.itens.forEach(function (x) {
         // itens dos contratos com linha: de longe não aparecem (a linha é o contrato); o do cartão aberto aparece sempre
-        if (x.lado && !perto && x.key !== gd.sel) return;
+        if (x.lado && !perto && x.key !== gd.sel && x.num == null) return;
         var ll = gLinha(x);
         if (!ll) return;
         var pp = ll.map(function (l) { return map.project(l, z); }), len = 0;
@@ -1124,10 +1145,71 @@
         Lf.marker(pt, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
           .bindTooltip(esc(txt), { permanent: true, direction: abaixo ? 'bottom' : 'top', offset: [0, off], className: cls }).addTo(lblLayer);
       }
+      // v192: largura do círculo do número (para juntar os que encostam) e o texto escuro nas cores claras
+      function numW(t) { return Math.max(22, 12 + String(t).length * (longe ? 6 : 6.6)); }
+      function corClara(c) {
+        var m = /^#?([0-9a-f]{6})$/i.exec(String(c || ''));
+        if (!m) return false;
+        var n = parseInt(m[1], 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+        return 0.299 * r + 0.587 * g + 0.114 * b > 165;
+      }
+      // os itens numerados de um lado: os que se encostam na tela viram um círculo só ("15–18"), com os nomes ao lado
+      function gNumeros(kl, arr, d) {
+        var lado = Number(kl), dN = lado ? d + (lado > 0 ? 5 : -5) : 0, gs = [];
+        arr.forEach(function (it) {
+          var x = it.x, w = numW(x.num), u = gs[gs.length - 1], s = x.key === gd.sel;
+          // o trecho de cada ponto crítico, por cima da linha clara do contrato
+          if (lado > 0 && it.ll.length > 1) {
+            var lb = gDesl(it.ll, lado * GLADO);
+            Lf.polyline(lb, { renderer: gRend, color: '#FFFFFF', weight: wCt + 6, opacity: x.apag ? 0.4 : 1, lineCap: 'butt', interactive: false }).addTo(barras);
+            Lf.polyline(lb, { renderer: gRend, color: x.cor, weight: wCt + 2, opacity: x.apag ? 0.35 : 1, lineCap: 'butt', bubblingMouseEvents: false })
+              .bindTooltip(esc(x.tip || x.nome || ''), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(barras);
+          }
+          // OAE comprida (mais de 5 px na tela): a linha dela no eixo, como antes
+          if (!lado && it.len >= 5) {
+            if (wBorda) Lf.polyline(it.ll, { renderer: gRend, color: '#FFFFFF', weight: wBorda, opacity: 0.95, lineCap: 'round', interactive: false }).addTo(bordas);
+            Lf.polyline(it.ll, { renderer: gRend, color: x.neutro ? corCt[x.c.id] || x.cor : x.cor, weight: s ? wLin + 2 : wLin, opacity: x.apag ? 0.3 : 1, lineCap: 'round', bubblingMouseEvents: false })
+              .bindTooltip(esc(x.tip || x.nome || ''), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(cores);
+          }
+          if (u && !s && !u.sel && juntar && it.pm.distanceTo(u.ult) < (u.w + w) / 2 + 4 && it.pm.distanceTo(u.ini) < 75) {
+            u.l.push(it); u.ult = it.pm; u.w = numW(u.l[0].x.num + '–' + x.num); return;
+          }
+          gs.push({ l: [it], ini: it.pm, ult: it.pm, w: w, sel: s });
+        });
+        gs.forEach(function (g) {
+          var it = g.l[0], x = it.x, n = g.l.length, ult = g.l[n - 1].x, sx = 0, sy = 0, pior = null;
+          g.l.forEach(function (y) { sx += y.pm.x; sy += y.pm.y; if (!pior || (y.x.peso || 0) > (pior.x.peso || 0)) pior = y; });
+          var cen = n > 1 ? map.unproject([sx / n, sy / n], z) : it.ll[it.ll.length >> 1], pt = noLado([cen], it, dN)[0];
+          if (!vb.contains(pt)) return;
+          // OAE: a cor do contrato (no modo NC, a da situação); ponto crítico: a situação (a pior do grupo)
+          var cor = pior.x.neutro ? corCt[pior.x.c.id] || pior.x.cor : pior.x.cor;
+          var txt = n > 1 ? x.num + '–' + ult.num : String(x.num);
+          var nomes = g.l.map(function (y) { return y.x.nomeN; }).filter(Boolean);
+          var tip = n > 1 ? n + ' itens: ' + g.l.map(function (y) { return y.x.num + (y.x.nomeN ? ' ' + y.x.nomeN : ''); }).join(', ') + '. Toque para aproximar' : (x.num + ' · ' + (x.tip || x.nome || ''));
+          var f = n > 1 ? function (e) {
+            if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent);
+            var bb = Lf.latLngBounds([]);
+            g.l.forEach(function (y) { y.ll.forEach(function (l) { bb.extend(l); }); });
+            map.fitBounds(bb.pad(0.3), { maxZoom: Math.min(18, Math.max(z + 2, 14)), animate: !reduced(), padding: [40, 40] });
+          } : clique(x);
+          gAlvos.push({ ll: pt, f: f });
+          Lf.marker(pt, { pane: 'mpPts', keyboard: true, title: tip, alt: tip, zIndexOffset: g.sel ? 200000 : 150000,
+            icon: Lf.divIcon({ className: 'mp-gnum' + (x.apag && n === 1 ? ' apag' : ''), html: '<b class="' + (corClara(cor) ? 'cl' : '') + (g.sel ? ' sel' : '') + '" style="--c:' + cor + '" data-key="' + esc(x.key) + '" data-n="' + n + '">' + esc(txt) + '</b>', iconSize: [0, 0] }) })
+            .on('click', f).addTo(gLayer);
+          // o nome ao lado, quando não bate em outro número nem em outro nome (arrumaRotulos); até 4 nomes no grupo
+          if (!nomes.length) return;
+          var tN = nomes.length <= 4 ? nomes.join(' · ') : nomes[0] + ' … ' + nomes[nomes.length - 1];
+          Lf.marker(pt, { pane: 'mpPts', keyboard: false, zIndexOffset: 120000,
+            icon: Lf.divIcon({ className: 'mp-gnm', html: '<span data-l="' + Math.round(numW(txt) / 2 + 4) + '" style="left:' + Math.round(numW(txt) / 2 + 4) + 'px">' + esc(tN) + '</span>', iconSize: [0, 0] }) })
+            .on('click', f).addTo(gLayer);
+        });
+      }
       // o ponto do item fica ao lado da linha do contrato, por fora (sem tocar no traço)
       function dItem(kl) { var n = Number(kl); return n ? n * GLADO + (n > 0 ? 1 : -1) * (wCtB / 2 + 9) : 0; }
       Object.keys(lados).forEach(function (kl) {
         var d = dItem(kl), arr = lados[kl].sort(function (a, b) { return a.ord - b.ord; }), gs = [];
+        var arrN = arr.filter(function (it) { return it.x.num != null; });
+        if (arrN.length) { gNumeros(kl, arrN, d); arr = arr.filter(function (it) { return it.x.num == null; }); }
         arr.forEach(function (it) {
           // itens de contrato com linha são sempre um ponto (no meio do item); só as OAEs (no eixo) longas viram linha
           var longo = !Number(kl) && it.len >= 5;
@@ -1173,6 +1255,7 @@
       });
       bordas.l.forEach(function (x) { x.addTo(gLayer); });
       cores.l.forEach(function (x) { x.addTo(gLayer); });
+      barras.l.forEach(function (x) { x.addTo(gLayer); });
       pontas.l.forEach(function (x) { x.addTo(gLayer); });
       // v188: o contrato selecionado (toque na linha ou no nome) fica contornado inteiro, como o trecho do item aberto
       if (ctSelLinha) {
@@ -1198,7 +1281,7 @@
           root.setAttribute('data-sel', 'trecho');
         } else {
           // sem ponto (conservação e sinalização): o anel fica na própria linha do contrato
-          var dS = xs.neutro && ladoS < 0 ? ladoS * GLADO : dItem(ladoS), lS = noLado(selIt.ll, selIt, dS), cS = ladoS ? noLado([selIt.ll[selIt.ll.length >> 1]], selIt, dS)[0] : lS[lS.length >> 1];
+          var dS = xs.neutro && ladoS < 0 ? ladoS * GLADO : dItem(ladoS) + (xs.num != null && ladoS ? (ladoS > 0 ? 5 : -5) : 0), lS = noLado(selIt.ll, selIt, dS), cS = ladoS ? noLado([selIt.ll[selIt.ll.length >> 1]], selIt, dS)[0] : lS[lS.length >> 1];
           Lf.marker(cS, { pane: 'mpGsel', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gsel', html: '<i></i>', iconSize: [0, 0] }) }).addTo(gLayer);
           root.setAttribute('data-sel', 'anel');
         }
@@ -1257,7 +1340,7 @@
         tr += '<button type="button" class="mp-gleg" data-mp="gct-enq" data-id="' + esc(k.c.id) + '" style="--c:' + (k.cor || '#3B4540') + '" title="Enquadrar ' + esc(k.nome || k.rot) + '"><i class="tr' + (k.lado === -2 ? ' ts' : '') + '"></i>' + esc(k.rot) + '</button>';
       });
       var st2 = (gd.leg || []).map(function (s) { return '<span style="--c:' + s.cor + '"><i class="pt"></i>' + esc(s.txt) + '</span>'; }).join('');
-      el.innerHTML = tr + (st2 ? '<span class="mp-gleg-s">De perto:</span>' + st2 : '');
+      el.innerHTML = tr + (st2 ? '<span class="mp-gleg-s">' + (gd.ident ? 'Situação:' : 'De perto:') + '</span>' + st2 : '');
       el.hidden = !el.innerHTML;
       root.classList.toggle('mp-gleg-fora', !!G.legendaFora);
     }
@@ -2337,8 +2420,11 @@
         var ll = x && gLinha(x);
         if (!ll || !map.getSize().x) return;
         var bb = Lf.latLngBounds(ll), vb = map.getBounds().pad(-0.12), dentro = vb.contains(bb);
+        // v192: com os números (poucos contratos de pontos), aproxima até o nome aparecer (régua de 1 km ou menos)
+        var zI = gd.ident && x.num != null ? Math.max(map.getZoom(), Math.min(15, map.getBoundsZoom(bb.pad(0.6)))) : 0;
         if (area) {
-          if (!dentro) map.setView(bb.getCenter(), Math.max(map.getZoom(), 11), { animate: false });
+          if (zI && map.getZoom() < zI) map.setView(bb.getCenter(), zI, { animate: false });
+          else if (!dentro) map.setView(bb.getCenter(), Math.max(map.getZoom(), 11), { animate: false });
           var c = map.getContainer().getBoundingClientRect(), p = map.latLngToContainerPoint(bb.getCenter());
           var y = c.top + p.y, x0 = c.left + p.x, topo = Math.max(c.top, area.top) + 36, base = Math.min(c.bottom, area.bottom) - 30;
           if (base - topo < 50) return;
@@ -2346,6 +2432,7 @@
           if (dx || dy) map.panBy([dx, dy], { animate: !reduced() });
           return;
         }
+        if (zI && (map.getZoom() < zI || !dentro)) { map.setView(bb.getCenter(), zI, { animate: !reduced() }); return; }
         if (dentro) return;
         if (map.getZoom() < 11) map.fitBounds(bb.pad(0.5), { maxZoom: 13, animate: !reduced(), paddingTopLeft: [16, 64], paddingBottomRight: [16, 40] });
         else map.panTo(bb.getCenter(), { animate: !reduced() });
