@@ -290,6 +290,7 @@
     '.mp-ph{border:0;background:none;cursor:pointer}',
     '.mp-ph i{position:absolute;left:0;right:0;top:0;height:50px;border-radius:10px;border:2.5px solid #FFFFFF;background:#CFD6D1 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%235C6661%27 stroke-width=%272%27 stroke-linejoin=%27round%27%3E%3Crect x=%273%27 y=%275%27 width=%2718%27 height=%2714%27 rx=%272%27/%3E%3Cpath d=%27m3 16 5-5 4 4 3-3 6 5%27/%3E%3C/svg%3E") center/22px no-repeat;box-shadow:0 2px 8px rgba(23,32,28,.38);box-sizing:border-box}',
     '.mp-ph.um i{height:40px;border-radius:8px;border-width:2px}',
+    '.mp-ph.md i{height:40px;border-radius:8px;border-width:2px}.mp-ph.md:not(.mp-phb)::after{height:14px}.mp-ph.md b{right:-9px;top:-9px;min-width:20px;height:20px;padding:0 5px;font-size:11px}',
     // de perto (v183), a miniatura fica levantada, presa por uma haste ao lugar da foto: o ponto e a linha embaixo ficam à vista
     '.mp-ph:not(.mp-phb)::after{content:"";position:absolute;left:50%;bottom:0;width:2px;height:30px;margin-left:-1px;background:#FFFFFF;box-shadow:0 0 0 1px rgba(23,32,28,.35)}',
     '.mp-ph:not(.mp-phb)::before{content:"";position:absolute;left:50%;bottom:-4px;width:8px;height:8px;margin-left:-4px;box-sizing:border-box;border-radius:50%;background:var(--mp-accent);border:2px solid #FFFFFF;z-index:1}',
@@ -335,6 +336,9 @@
     '.mp-gsm.pt i{width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%)}.mp-glonge .mp-gsm.pt i{width:10px;height:10px}',
     /* item sem a cor da situação (conservação, sinalização, OAE do Proarte): vazado, com a borda na cor do contrato */
     '.mp-gsm.neu i{background:#FFFFFF;border:2.5px solid var(--c)}',
+    // v185: a área de toque é um círculo maior que o desenho (24 px no ponto, 34 px no grupo), com o desenho no centro; o toque
+    // que ainda assim cai fora de qualquer ponto vai para o mais perto, até 24 px no dedo (gAlvoPerto)
+    '.mp-gsm.leaflet-marker-icon,.mp-ggr.leaflet-marker-icon{border-radius:50%}.mp-gsm i,.mp-ggr b{left:50%;top:50%}',
     '.mp-gpop p{margin:0 0 6px;font-size:13px;color:var(--mp-ink-2)}.mp-gpop h3{border-left:5px solid var(--c);padding-left:8px}.mp-gpop .mp-fc-bt{margin-top:4px}',
     '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
     '.mp-dica.on{opacity:1}'
@@ -967,7 +971,7 @@
     // contrato fica ao lado da rodovia, deslocado em pixels (refeito a cada zoom): lado 1 os pontos críticos, -1 a conservação,
     // -2 a sinalização, 0 (no eixo) as OAEs. Itens próximos na tela viram um círculo com a quantidade, como nas raias.
     // d: { itens: [{ key, c, p, km, kf, cor, neutro, st, peso, oae, apag, lado, nome, tip }], cts: [{ c, f, lado, trilho, rot, cor }], sel, leg }
-    var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15;
+    var gd = { itens: [], cts: [], sel: null, leg: [] }, gLayer = null, gRend = null, gJan = null, gRaf = 0, gArrasto = null, GLADO = 15, gAlvos = [];
     function gNum(v) { var n = Number(v); return v != null && v !== '' && isFinite(n) ? n : null; }
     // o 731 (km próprio) vai pelo ramal da travessia, com o km local; os outros pelo eixo, com o km do desenho (x.km)
     function gKm(x) {
@@ -1004,7 +1008,7 @@
       gRaf = 0;
       if (!G) return;
       if (!gLayer) { gRend = Lf.canvas({ pane: 'mpPts', padding: 0.3, tolerance: 8 }); gLayer = Lf.layerGroup().addTo(map); }
-      gLayer.clearLayers(); lblLayer.clearLayers();
+      gLayer.clearLayers(); lblLayer.clearLayers(); gAlvos = [];
       if (!map.getSize().x) return;
       var z = map.getZoom(), vb = map.getBounds().pad(0.25), comNome = z >= 12, juntar = z < 17;
       // de longe (a rodovia inteira) tudo fica mais fino e mais perto da rodovia, sem a borda branca, e junta mais; de perto,
@@ -1019,7 +1023,8 @@
       // o canvas desenha na ordem em que as linhas entram no mapa: primeiro as bordas, depois as cores e por fim as pontas
       function fila() { return { l: [], addLayer: function (x) { this.l.push(x); } }; }
       var bordas = fila(), cores = fila(), pontas = fila();
-      function ctClique(k) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); gCtCartao(k, e.latlng); }; }
+      // o toque na linha que cai perto de um ponto (o ponto fica a uns 14 px dela) é do ponto
+      function ctClique(k) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (gAlvoToque(e)) return; gCtCartao(k, e.latlng); }; }
       // trechos dos contratos: pontos críticos (1), conservação (-1) e a sinalização (-2, cinza fino tracejado)
       gd.cts.forEach(function (k) {
         if (!k.trilho || !k.f || !k.lado) return;
@@ -1078,13 +1083,15 @@
             g.l.forEach(function (y) { sx += y.pm.x; sy += y.pm.y; if (!pior || (y.x.peso || 0) > (pior.x.peso || 0)) pior = y; });
             var cen = map.unproject([sx / g.l.length, sy / g.l.length], z), ll = noLado([cen], it, d)[0];
             var tip = g.l.length + ' itens entre km ' + nf(g.l[0].x.km, 1) + ' e ' + nf(g.l[g.l.length - 1].x.kf, 1) + ': toque para aproximar';
+            var abreG = function () {
+              var bb = Lf.latLngBounds([]);
+              g.l.forEach(function (y) { y.ll.forEach(function (l) { bb.extend(l); }); });
+              map.fitBounds(bb.pad(0.3), { maxZoom: Math.min(18, Math.max(z + 2, 13)), animate: !reduced(), padding: [40, 40] });
+            };
+            gAlvos.push({ ll: ll, f: abreG });
             Lf.marker(ll, { pane: 'mpPts', keyboard: true, title: tip, alt: tip,
-              icon: Lf.divIcon({ className: 'mp-ggr', html: '<b style="--c:' + ((pior.x.peso || 0) >= 2 ? pior.x.cor : '#3B4540') + '">' + g.l.length + '</b>', iconSize: [0, 0] }) })
-              .on('click', function () {
-                var bb = Lf.latLngBounds([]);
-                g.l.forEach(function (y) { y.ll.forEach(function (l) { bb.extend(l); }); });
-                map.fitBounds(bb.pad(0.3), { maxZoom: Math.min(18, Math.max(z + 2, 13)), animate: !reduced(), padding: [40, 40] });
-              }).addTo(gLayer);
+              icon: Lf.divIcon({ className: 'mp-ggr', html: '<b style="--c:' + ((pior.x.peso || 0) >= 2 ? pior.x.cor : '#3B4540') + '">' + g.l.length + '</b>', iconSize: [34, 34] }) })
+              .on('click', abreG).addTo(gLayer);
             return;
           }
           var tipI = x.tip || x.nome || '';
@@ -1101,8 +1108,9 @@
             return;
           }
           var pt = noLado([it.ll[it.ll.length >> 1]], it, d)[0];
+          gAlvos.push({ ll: pt, f: clique(x) });
           Lf.marker(pt, { pane: 'mpPts', keyboard: true, title: tipI, alt: tipI,
-            icon: Lf.divIcon({ className: 'mp-gsm' + (x.oae ? ' oae' : Number(kl) ? ' pt' : '') + (x.neutro ? ' neu' : '') + (x.apag ? ' apag' : ''), html: '<i style="--c:' + x.cor + '"></i>', iconSize: [0, 0] }) })
+            icon: Lf.divIcon({ className: 'mp-gsm' + (x.oae ? ' oae' : Number(kl) ? ' pt' : '') + (x.neutro ? ' neu' : '') + (x.apag ? ' apag' : ''), html: '<i style="--c:' + x.cor + '"></i>', iconSize: [24, 24] }) })
             .on('click', clique(x)).addTo(gLayer);
           if (comNome && x.nome && vb.contains(pt)) Lf.marker(pt, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
             .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 9 : -9], className: 'mp-lbl' }).addTo(lblLayer);
@@ -1121,6 +1129,16 @@
       root.setAttribute('data-cts', String(gd.cts.length));
       toggleLabels();
       pedeArrumar();
+    }
+    // v185: o toque que não acertou nenhum ponto vai para o ponto (ou grupo) mais perto, até 24 px com o dedo e 12 px com o mouse
+    function gAlvoToque(e) {
+      if (!G || !gAlvos.length || !e || !e.containerPoint) return false;
+      var dedo = !e.originalEvent || e.originalEvent.pointerType !== 'mouse' && !(window.matchMedia && matchMedia('(hover:hover) and (pointer:fine)').matches);
+      var r = dedo ? 24 : 12, m = null, dm = r + 1;
+      gAlvos.forEach(function (a) { var dd = map.latLngToContainerPoint(a.ll).distanceTo(e.containerPoint); if (dd < dm) { dm = dd; m = a; } });
+      if (!m) return false;
+      m.f(e);
+      return true;
     }
     // toque na linha de um contrato: o cartão dele, com Abrir o contrato (G.onCt) e Enquadrar
     function gCtCartao(k, ll) {
@@ -1890,8 +1908,10 @@
     var FOTOS_KEY = 'diagrama-linear.mapa-fotos', fo = opts.fotos || null;
     var fot = { ini: false, on: false, lista: null, em: 0, carregando: null, dias: 0, ct: '', ctDe: null, z: null, proj: null, grupos: [], sel: null, hist: false, pula: false, depois: null, pedindo: {}, sem: {}, pedido: 0 };
     var fotosLayer = Lf.layerGroup().addTo(map);
-    // abaixo deste zoom (de longe), as fotos são bolinhas com o número; a partir dele, a miniatura (v183)
-    var FOTO_PERTO = 12, CAM = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 5h3l1.5-2h3L11 5h3v8H2z"/><circle cx="8" cy="9" r="2.3"/></svg>';
+    // três degraus (v185): de longe (régua de 100 km ou mais) bolinha com o número; a partir da régua de 50 km, miniatura
+    // pequena de 40 px com haste curta; de perto (zoom 12, régua de 3 km ou menos), a miniatura grande com haste. A régua
+    // (100 px no máximo) passa de 100 km para 50 km quando 100 px ficam abaixo de 100 km: menos de 1.000 m por pixel
+    var FOTO_MEIO = 8, FOTO_PERTO = 12, MEIO_MPP = 1000, CAM = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 5h3l1.5-2h3L11 5h3v8H2z"/><circle cx="8" cy="9" r="2.3"/></svg>';
     map.createPane('mpFotos').style.zIndex = 430;
     function fotosPode() { return !!(fo && fo.pode && fo.pode()); }
     function fotosLigada0() { var v = lsGet(FOTOS_KEY); return v === '1' ? true : v === '0' ? false : !!(fo && fo.padrao && fo.padrao()); }
@@ -1950,7 +1970,8 @@
     function fotosDesenha() {
       fot.grupos = [];
       if (!fot.on || !fot.lista) { fotosLimpa(); return; }
-      var z = map.getZoom(), longe = z < FOTO_PERTO;
+      var z = map.getZoom(), mpp = 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (256 * Math.pow(2, z));
+      var longe = mpp >= MEIO_MPP, medio = !longe && z < FOTO_PERTO;
       if (fot.z !== z || !fot.proj) {
         fot.z = z;
         fot.proj = fotosFiltradas().map(function (f) { var p = map.project(f.ll, z); return { f: f, x: p.x, y: p.y }; });
@@ -1970,14 +1991,14 @@
       gs.forEach(function (g) {
         var n = g.l.length, um = n === 1, cx = g.sx / n, cy = g.sy / n;
         var key = z + '|' + g.capa.id + '|' + n + '|' + Math.round(cx) + ',' + Math.round(cy), mk = fotMks[key];
-        var w = longe ? 64 : um ? 40 : 50, h = longe ? 36 : w + 30;
+        var w = longe ? 64 : medio || um ? 40 : 50, h = longe ? 36 : w + (medio ? 14 : 30);
         g.ll = map.unproject([cx, cy], z);
         if (!mk) {
           mudou = true;
           var m = fo.mini(g.capa.id), r = fotosResumo(g);
           mk = Lf.marker(g.ll, {
             pane: 'mpFotos', keyboard: true, riseOnHover: true, title: r.tit + ' · ' + r.l1,
-            icon: Lf.divIcon({ className: 'mp-ph' + (longe ? ' mp-phb' : um ? ' um' : ''), iconSize: [w, h], iconAnchor: [w / 2, h],
+            icon: Lf.divIcon({ className: 'mp-ph' + (longe ? ' mp-phb' : medio ? ' md' : um ? ' um' : ''), iconSize: [w, h], iconAnchor: [w / 2, h],
               html: longe ? '<span>' + CAM + nf(n, 0) + '</span>'
                 : '<i' + (m ? ' style="background-image:url(&quot;' + m + '&quot;);background-size:cover"' : '') + '></i>' + (um ? '' : '<b>' + nf(n, 0) + '</b>') })
           }).addTo(fotosLayer);
@@ -2118,8 +2139,10 @@
       if (act === 'fc-perto') {
         var bb = Lf.latLngBounds(g.l.map(function (f) { return f.ll; }));
         fotosFecha();
-        // aproximar sempre chega às miniaturas (v183): um grupo longo, que caberia de longe, fica centrado no zoom delas
-        if (map.getBoundsZoom(bb.pad(0.15), false, Lf.point(40, 180)) < FOTO_PERTO) map.setView(g.l[Math.floor(g.l.length / 2)].ll, FOTO_PERTO, { animate: !reduced() });   // a foto do meio (pelo km): o centro do grupo pode cair fora da rodovia
+        // pelo menos dois degraus de zoom (e nunca abaixo das miniaturas): num grupo longo, que já caberia na tela, centra na
+        // foto do meio pelo km (o centro do grupo pode cair fora da rodovia)
+        var zMin = Math.min(18, Math.max(FOTO_MEIO, map.getZoom() + 2));
+        if (map.getBoundsZoom(bb.pad(0.15), false, Lf.point(40, 180)) < zMin) map.setView(g.l[Math.floor(g.l.length / 2)].ll, zMin, { animate: !reduced() });
         else map.fitBounds(bb.pad(0.15), { maxZoom: 18, animate: !reduced(), paddingTopLeft: [20, 120], paddingBottomRight: [20, 60] });
         return;
       }
@@ -2183,7 +2206,7 @@
       else if (act === 'close-live') { live.err = ''; liveCard(''); setGpsBtn(); }
       else if (act === 'follow') { live.follow = !live.follow; if (live.follow && live.ll) { if (nav) { navUi(); segue(); } else map.panTo(live.ll, { animate: !reduced() }); } updateLive(); }
     });
-    map.on('click', function () { basesMenu(false); if (fot.sel) fotosFecha(); });
+    map.on('click', function (e) { basesMenu(false); if (fot.sel) { fotosFecha(); return; } gAlvoToque(e); });
     q('.mp-find').addEventListener('submit', function (e) { e.preventDefault(); goKm(q('#mpFindKm').value); });
 
     return {
