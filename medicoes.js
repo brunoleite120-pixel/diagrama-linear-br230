@@ -489,7 +489,10 @@
         var tit = oae ? 'OAE' + (p && p.codigo && p.codigo !== p.nome ? ' · ' + p.codigo : '') : cons ? 'Segmento · ' + nome(c) : 'Ponto · ' + nome(c);
         var h = '<section class="md-painel" aria-label="' + esc(nomeP(pid) + ': km e medições') + '"><div class="md-painel-top"><div><small>' + esc(tit) + '</small><h3>' + esc(nomeP(pid)) + '</h3></div>' +
           botao('ponte', '✕', ' data-p="' + esc(pid) + '" aria-label="Fechar"', 'small ghost') + '</div>';
-        h += '<div class="md-painel-kpis">' + [[kmP + 'inicial', k ? kt(k[0], 3) : '—'], [kmP + 'final', k ? kt(k[1], 3) : '—'], ['extensão', k && k[1] > k[0] ? ext(k) : '—']].map(function (x) {
+        // v184: corpo e pé separados. No computador, o painel preso ao lado da lista tem a altura da tela: o corpo rola
+        // dentro dele e o pé (Acumulado e botões) fica sempre à vista (antes, só aparecia quando a lista acabava)
+        var pe = '';
+        h += '<div class="md-painel-corpo"><div class="md-painel-kpis">' + [[kmP + 'inicial', k ? kt(k[0], 3) : '—'], [kmP + 'final', k ? kt(k[1], 3) : '—'], ['extensão', k && k[1] > k[0] ? ext(k) : '—']].map(function (x) {
           return '<div><small>' + x[0] + '</small><b>' + esc(x[1]) + '</b></div>'; }).join('') + '</div>';
         h += '<p class="md-painel-txt">Entrou em <b>' + lin.length + ' de ' + d.ms.length + '</b> medições · ' + (v ? 'nesta (' + m.n + 'ª) ' + esc(dinheiro(v)) + (valor(m.total) ? ', ' + pctCurto(v / valor(m.total) * 100) + ' da medição' : '') : 'sem valor nesta medição') + '</p>';
         if (lin.length) {
@@ -504,19 +507,20 @@
               ' data-n="' + esc(x.n) + '" aria-pressed="' + (String(x.n) === String(m.n)) + '" aria-label="' + esc('Abrir a ' + x.n + 'ª medição, ' + mesTxt(idx(x.ref)) + ': ' + dinheiro(y)) + '"', 'md-hist');
           }).join('') + '</div>';
           if (desc.length > 8) h += botao('ponte-todas', segTodas ? 'Mostrar só as 8 últimas ▴' : 'Ver as ' + desc.length + ' medições ▾', '', 'small ghost md-accent');
-          h += '<div class="md-hist-acum"><span>Acumulado</span><span>' + esc(dinheiro(acum)) + '</span></div>';
+          pe += '<div class="md-hist-acum"><span>Acumulado</span><span>' + esc(dinheiro(acum)) + '</span></div>';
         }
-        h += '<div class="md-painel-acoes">' + (p && op.diagramaPonto ? botao('ponte-diag', 'Ver no diagrama', ' data-p="' + esc(pid) + '"', 'small primary') : '') +
+        pe += '<div class="md-painel-acoes">' + (p && op.diagramaPonto ? botao('ponte-diag', 'Ver no diagrama', ' data-p="' + esc(pid) + '"', 'small primary') : '') +
           (p && op.fotos && op.fotos(c) ? botao('ponte-fotos', 'Fotos ' + (oae ? 'da OAE' : cons ? 'do segmento' : 'do ponto'), ' data-p="' + esc(pid) + '"', 'small') : '') +
           botao('ponte-serv', 'Serviços nesta medição', ' data-p="' + esc(pid) + '" aria-pressed="' + segServ + '"', 'small') + '</div>';
         if (segServ) {
+          h += '<h4 class="md-painel-sv">Serviços nesta medição (' + esc(m.n + 'ª') + ')</h4>';
           var rows = ((an[pid] && an[pid].servicos) || []).map(function (s) { var qv = s.por && s.por[m.n]; return qv && (valor(qv[0]) || valor(qv[1])) ? { s: s, q: numero(qv[0]), v: valor(qv[1]) } : null; }).filter(Boolean)
             .sort(function (x, y) { return y.v - x.v; });
           h += rows.length ? '<div class="md-scroll" tabindex="0" role="region" aria-label="Serviços nesta medição"><table class="md-tabela md-tabela-p"><thead><tr><th scope="col">Serviço</th><th scope="col">Quantidade</th><th scope="col">Valor (PI)</th></tr></thead><tbody>' + rows.map(function (r) {
             return '<tr><td>' + esc((r.s.cod ? r.s.cod + ' · ' : '') + (r.s.nome || r.s.id || '')) + '</td><td class="md-num">' + (r.q == null ? '—' : fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un))) + '</td><td class="md-num">' + dinheiro(r.v) + '</td></tr>';
           }).join('') + '</tbody></table></div>' : vazio('Sem serviços localizados nesta medição.');
         }
-        return h + '</section>';
+        return h + '</div><div class="md-painel-pe">' + pe + '</div></section>';
       }
     }
     function kmTxt(v, casas) { return v == null ? '—' : decimal(v, casas); }
@@ -701,7 +705,12 @@
         if (act === 'celula') { var dm = dado(contrato(b.dataset.cid)), ce = dm && dm.porMes[mesSel]; if (ce && ce.ms.length === 1) { abrir(b.dataset.cid, ce.ms[0].n); return; } }
       } else if (act === 'tentar') { var ct = contrato(b.dataset.cid); if (ct) op.repetir(ct); carregar(); }
       else return;
+      // o corpo do painel tem rolagem própria (v184): o desenho novo volta ao mesmo ponto; ao ligar os serviços, vai até eles
+      var pc0 = host.querySelector('.md-painel-corpo'), rol0 = pc0 && segAberto ? pc0.scrollTop : 0;
       render();
+      var pc1 = host.querySelector('.md-painel-corpo');
+      if (pc1 && rol0) pc1.scrollTop = rol0;
+      if (pc1 && act === 'ponte-serv' && segServ) { var sv = pc1.querySelector('.md-painel-sv'); if (sv) pc1.scrollTop = Math.max(0, sv.offsetTop - pc1.offsetTop - 8); }
       var alvos = host.querySelectorAll('[data-md="' + act + '"]');
       for (var i = 0; i < alvos.length; i++) if (alvos[i].dataset.n === b.dataset.n && alvos[i].dataset.g === b.dataset.g && alvos[i].dataset.e === b.dataset.e && alvos[i].dataset.v === b.dataset.v && alvos[i].dataset.p === b.dataset.p && alvos[i].className === b.className) { alvos[i].focus({ preventScroll: true }); break; }
       if (daFolha || (act === 'passo' && !host.contains(document.activeElement))) focaSeletor();
