@@ -544,7 +544,9 @@
         return '<div class="vg-leg vg-leg-m">' + out +
           '<div class="vg-lgg vg-lgp"><span class="vg-lgh"><b>De perto, nos pontos</b>' + (md === 'nc' && nNC ? ' · ' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC' : '') + '</span>' +
           (sts ? '<div class="vg-lgs">' + (md !== 'nc' && neu ? '<small>Pontos críticos: a cor é a situação</small>' : '') + sts + '</div>' : '') +
-          (neu ? '<span><i class="vg-lpt oco" style="--c:#3949AB"></i>Conservação, sinalização e OAEs: ponto vazado, na cor do contrato</span>' : '') +
+          (dm.itens.some(function (x) { return x.neutro && !(x.lado < 0); }) ? '<span><i class="vg-lpt oco" style="--c:#59615D"></i>OAEs: ponto vazado, na cor do contrato</span>' : '') +
+          // v186: conservação e sinalização sem ponto; o toque na linha abre o segmento do km
+          (md !== 'nc' && dm.cts.some(function (k) { return k.trilho && k.lado < 0; }) ? '<span><i style="display:inline-block;flex:none;width:18px;height:4px;border-radius:2px;background:#3949AB"></i>Conservação e sinalização: de perto, toque na linha para abrir o segmento daquele km</span>' : '') +
           '<span><i class="vg-lgr"></i>Vários juntos (borda: a pior situação); toque para aproximar</span>' +
           (o.temFotos && o.temFotos() ? '<span><i class="vg-lft">' + CAM_S + '12</i>Fotos (botão no mapa): de longe o número, de perto a miniatura</span>' : '') +
           '<span>“~” km a conferir · ' + (mob ? 'Dois dedos movem e aproximam o mapa' : 'Roda do mouse aproxima; arraste para mover') + '</span></div></div>';
