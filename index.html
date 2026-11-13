@@ -253,6 +253,7 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-modo{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .vg-modo button{min-height:34px;padding:4px 12px;border:0;border-right:1px solid var(--line);background:var(--panel);font-size:13px;font-weight:600;white-space:nowrap}
 .vg-modo button:last-child{border-right:0}
+.vg-ncc{display:none}
 .vg-modo button[aria-pressed="true"]{background:var(--ink);color:#fff}
 .vg-modo button:focus-visible{outline-offset:-4px}
 .vg-modo button[aria-pressed="true"]:focus-visible{outline-color:#fff}
@@ -390,6 +391,9 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg-pre{flex-wrap:nowrap;max-width:100%}
   .vg-pre button{min-height:40px;padding:4px 10px}
   .vg-modo button{min-height:40px;padding:4px 10px}
+  /* v189: no celular, o contrato e Medições | NC numa linha só (o mapa ganha a altura de uma linha) */
+  .vg-ncl{display:none}.vg-ncc{display:inline}
+  .vg-bar .vg-ctw{flex:1 1 auto}.vg-bar .vg-pre{flex:1 1 auto}.vg-bar .vg-pre .vg-ctb{flex:1 1 auto;justify-content:space-between}
   .vg-zoom{margin-left:auto}
   .vg-zoom button{width:40px;height:40px}
   .vg-mapa{height:62vh;height:calc(100dvh - var(--topbar-h,61px) - var(--pgnav-h,0px) - 190px);min-height:300px}
@@ -624,6 +628,11 @@ body[data-pg="mapa"] .map-host .mp-chip{min-height:44px;padding-left:12px;paddin
 @media (max-width:700px){
   body[data-geral] .vg-card{bottom:var(--pgnav-h,0px);padding-bottom:24px;box-shadow:0 -4px 18px rgba(23,32,28,.14);
     max-height:min(52vh,calc(100vh - var(--topbar-h,170px) - var(--pgnav-h,0px) - 16px));max-height:min(52dvh,calc(100dvh - var(--topbar-h,170px) - var(--pgnav-h,0px) - 16px))}
+}
+/* v189: com o mapa em tela cheia, o cartão do ponto aparece por cima dele (antes ficava atrás e o toque parecia não fazer nada) */
+html.mp-cheio .vg-card{position:fixed;z-index:2100;right:16px;bottom:16px;left:auto;width:min(400px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 120px);overflow-y:auto;box-shadow:0 6px 28px rgba(23,32,28,.3)}
+@media (max-width:700px){
+  html.mp-cheio .vg-card{left:0;right:0;bottom:0;width:auto;max-height:52vh;max-height:52dvh;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
 }
 @media (min-width:701px) and (max-width:1100px) and (orientation:landscape) and (min-height:501px){
   .pgnav [data-pg="geral"]{order:1}.pgnav [data-pg="contratos"]{order:2}

@@ -384,7 +384,7 @@
       var nGr = its.reduce(function (t, x) { return t + (x.nc && x.inf.ncN || 0); }, 0);   // as NC desses locais (a legenda do modo NC diz os dois)
       var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
         '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
-        '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '">Não conformidades <b>' + nNC + '</b></button></div>' : '';
+        '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '"><span class="vg-ncl">Não conformidades</span><span class="vg-ncc">NC</span> <b>' + nNC + '</b></button></div>' : '';
       var nRasc = o.rascunhos ? o.rascunhos() : 0;
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
         (nRasc ? '<button type="button" class="vg-rasc" data-vg="rasc">' + nRasc + (nRasc === 1 ? ' rascunho' : ' rascunhos') + ' neste aparelho</button>' : '') +
@@ -799,11 +799,12 @@
     // aria-controls apontar para ela
     function caixaContratos(d) {
       var ms = d.escolha ? d.mostra : [], n = ms.length;
-      var vis = 'Contratos' + (n ? ' · ' + (n <= 3 ? ms.map(function (c) { return N.numeroCurto(c) || N.nome(c); }).join(', ') : n) : '');
+      // v189 (pedido de 13/11/2026): uma lista só, "Contratos: Todos ▾", sem o "Tudo" ao lado (parecia um par e era uma lista);
+      // "Mostrar todos", na caixa, desfaz a escolha
+      var vis = 'Contratos: ' + (n ? (n <= 3 ? ms.map(function (c) { return N.numeroCurto(c) || N.nome(c); }).join(', ') : n) : 'Todos');
       // o nome acessível começa pelo texto visível, para o comando de voz achar o botão
       var nomeB = vis + ', mostrando ' + (n ? eLista(ms.map(function (c) { return N.nome(c); })) : 'todos');
       var s = '<div class="vg-ctw"><div class="vg-pre" role="group" aria-label="Contratos mostrados">' +
-        '<button type="button" data-vg="ftudo" data-fid="ft:todos" aria-pressed="' + !d.escolha + '" aria-label="Tudo, todos os contratos">Tudo</button>' +
         '<button type="button" class="vg-ctb' + (n ? ' on' : '') + '" data-vg="painel" data-fid="ft:ct" aria-expanded="' + !!st.ct + '" aria-controls="vgCts" aria-label="' + esc(nomeB) + '">' +
         '<span>' + esc(vis) + '</span><i class="vg-seta" aria-hidden="true"></i></button></div>' +
         '<div class="vg-pnl" id="vgCts" role="group" aria-label="Escolher os contratos mostrados"' + (st.ct ? '' : ' hidden') + '><div class="vg-pnl-l">';
@@ -1052,6 +1053,7 @@
         if (x) { var pd = Math.max(2, (x.kf - x.km) * 3), r = lim(x.km - pd, x.kf + pd); st.q = ''; st.k0 = r[0]; st.k1 = r[1]; delete st.off[x.fk]; mostrar(x, pre, baixo); focoX(); }
       } else if (a === 'abrir' || a === 'mapa' || a === 'fotos') {
         x = st.sel ? achar(st.sel) : null;
+        if (x && MG && MG.sairCheia) MG.sairCheia();
         if (x) (a === 'abrir' ? o.onAbrir : a === 'mapa' ? o.onMapa : o.onFotos)(x.c, x.p);
       } else if (a === 'ct') {
         o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onAbrir(c, null); });

@@ -5422,6 +5422,8 @@
         var c = contractById(cid);
         return c ? NOMES.nome(c) : cid ? String(cid).replace(/^ct-/, 'CT ') : 'Sem contrato';
       },
+      // v189: o nome curto para o botão do filtro ("Cons. 438", "PC 315")
+      rotCt: function (cid) { var c = contractById(cid); return c ? ctCurto(c) : ''; },
       // v171: o contrato escolhido no filtro das fotos passa a ser o do mapa; false quando a pessoa não tem o mapa dele
       trocaCt: function (cid) {
         var c = state.contracts.filter(function (x) { return x.id === cid; })[0];

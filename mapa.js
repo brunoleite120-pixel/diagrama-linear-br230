@@ -8,7 +8,7 @@
  *   var m = MapaSNV({ host, snv, getContract, pointInfo, saveText, tiles, gps, notify, nomes });
  *   m.show(); m.render(); m.openFull(); m.closeFull(); m.isFull(); m.exportKml();
  * nomes: funções de nome do contrato do app.js; sem elas (página online), vale a cópia curta daqui.
- * fotos (v170, só no app): { pode, padrao, listar, mini, pedir, nomeCt, trocaCt, abrirGaleria }: as fotos da equipe no mapa.
+ * fotos (v170, só no app): { pode, padrao, listar, mini, pedir, nomeCt, rotCt, trocaCt, abrirGaleria }: as fotos da equipe no mapa.
  */
 (function () {
   'use strict';
@@ -179,6 +179,8 @@
     '.mp-legend i{width:16px;height:5px;border-radius:3px;background:var(--c)}',
     '.mp .leaflet-tooltip.mp-lbl{background:var(--mp-panel);color:var(--mp-ink);border:1px solid var(--mp-line);border-radius:5px;padding:1px 6px;font:inherit;font-size:11.5px;font-weight:650;box-shadow:0 1px 2px rgba(0,0,0,.15);font-variant-numeric:tabular-nums}',
     '.mp .leaflet-tooltip.mp-lbl:before{display:none}',
+    // v189: o nome da OAE fica acima das linhas dos contratos, com um fio tracejado até ela
+    '.mp .leaflet-tooltip.mp-lbl-oae{overflow:visible}.mp .leaflet-tooltip.mp-lbl-oae:after{content:"";position:absolute;left:50%;top:100%;height:28px;border-left:1.5px dashed #59615D}',
     '.mp .leaflet-tooltip.mp-kml{background:transparent;border:0;box-shadow:none;color:var(--mp-ink-2);font-size:10.5px;font-weight:650;padding:0;text-shadow:0 0 3px var(--mp-panel),0 0 3px var(--mp-panel),0 0 2px var(--mp-panel)}',
     '.mp.sat .leaflet-tooltip.mp-kml{color:#FFFFFF;text-shadow:0 0 3px #000,0 0 3px #000}',
     '.mp .leaflet-tooltip.mp-kml:before{display:none}',
@@ -305,6 +307,11 @@
     '.mp-ff-n{font-size:12px;font-weight:700;color:var(--mp-accent);padding:0 4px;white-space:nowrap;font-variant-numeric:tabular-nums}',
     '.mp-ff-p{min-height:32px;border:1px solid var(--mp-line);border-radius:999px;padding:0 6px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600}',
     '.mp-ff-ct{min-height:32px;min-width:0;max-width:170px;text-overflow:ellipsis;border:1px solid var(--mp-line);border-radius:999px;padding:0 8px;background:var(--mp-panel);color:var(--mp-ink);font:inherit;font-size:12.5px;font-weight:600}',
+    '.mp-ff-cw{position:relative;display:inline-flex;min-width:0}',
+    '.mp-ff-cl{display:flex;align-items:center;gap:5px;min-height:32px;box-sizing:border-box;max-width:170px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border:1px solid var(--mp-line);border-radius:999px;padding:0 10px;background:var(--mp-panel);color:var(--mp-ink);font-size:12.5px;font-weight:600;pointer-events:none}',
+    '.mp-ff-cl:after{content:"";flex:none;width:6px;height:6px;margin-top:-3px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg)}',
+    '.mp-ff-cw .mp-ff-ct{position:absolute;inset:0;width:100%;max-width:none;opacity:0;cursor:pointer}',
+    '.mp-ff-cw:focus-within .mp-ff-cl{outline:2px solid var(--mp-accent);outline-offset:1px}',
     '.mp-fcard{position:absolute;z-index:1003;left:10px;right:10px;bottom:10px;max-width:420px;background:var(--mp-panel);color:var(--mp-ink);border:1px solid var(--mp-line);border-radius:14px;box-shadow:0 -2px 24px rgba(23,32,28,.22);padding:12px;display:flex;flex-direction:column;gap:10px}',
     '.mp-full .mp-fcard{bottom:calc(10px + env(safe-area-inset-bottom,0px))}',
     '.mp-fc-top{display:flex;gap:10px;align-items:flex-start}.mp-fc-top>div{flex:1;min-width:0;display:flex;flex-direction:column}',
@@ -342,6 +349,8 @@
     // que ainda assim cai fora de qualquer ponto vai para o mais perto, até 24 px no dedo (gAlvoPerto)
     '.mp-gsm.leaflet-marker-icon,.mp-ggr.leaflet-marker-icon{border-radius:50%}.mp-gsm i,.mp-ggr b{left:50%;top:50%}',
     '.mp-gpop p{margin:0 0 6px;font-size:13px;color:var(--mp-ink-2)}.mp-gpop h3{border-left:5px solid var(--c);padding-left:8px}.mp-gpop .mp-fc-bt{margin-top:4px}',
+    // v189: "Abrir o contrato" na linha toda e os outros dois lado a lado embaixo (no celular o texto cortava)
+    '.mp-gpop .mp-fc-bt{flex-wrap:wrap}.mp-gpop .mp-fc-bt .mp-fc-pri{flex:1 0 100%}',
     '.mp-dica{position:absolute;inset:0;z-index:1005;display:flex;align-items:center;justify-content:center;padding:20px;text-align:center;background:rgba(23,32,28,.5);color:#FFFFFF;font-size:15px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .2s}',
     '.mp-dica.on{opacity:1}'
   ].join('\n');
@@ -449,7 +458,8 @@
             '<form class="mp-find" novalidate><label for="mpFindKm">Ir para km</label><input id="mpFindKm" inputmode="decimal" autocomplete="off" placeholder="km 812,40"><button class="mp-btn mp-ir" type="submit">' + ICON.busca + 'Ir</button></form>' +
             '<div class="mp-ffil" role="group" aria-label="Fotos no mapa" hidden><span class="mp-ff-n" aria-live="polite"></span>' +
               '<select class="mp-ff-p" aria-label="Período das fotos"><option value="0">Tudo</option><option value="15">15 dias</option><option value="7">7 dias</option></select>' +
-              '<select class="mp-ff-ct" aria-label="Contrato das fotos"></select></div>' +
+              // v189: o botão mostra o nome curto ("Cons. 438"), igual à legenda; a lista, ao abrir, o nome completo
+              '<span class="mp-ff-cw"><span class="mp-ff-cl" aria-hidden="true">Todos</span><select class="mp-ff-ct" aria-label="Contrato das fotos"></select></span></div>' +
           '</div>' +
           '<div class="mp-tools">' +
             '<button class="mp-btn" type="button" data-mp="full" title="Tela cheia">' + ICON.full + '<span class="t">Tela cheia</span></button>' +
@@ -669,6 +679,7 @@
       if (!want.length && map.hasLayer(off.rend)) map.removeLayer(off.rend);
       want.forEach(function (k) { off.groups[k].addTo(map); });
       off.on = key;
+      if (want.length) pedeArrumar();   // v189: os nomes da base que acabaram de entrar também passam pela arrumação
     }
     map.on('zoomend', syncOffline);
 
@@ -833,27 +844,49 @@
     // rótulos que se encostam: fica o mais importante (nome do ponto, depois localidade, km, cidade e rio) e os que caem
     // embaixo das caixas do mapa (título, busca, botões, pontos de baixo) somem até o mapa mexer de novo
     var arrumaPedido = false;
-    function arrumaRotulos() {
-      arrumaPedido = false;
+    var ROT_SEL = ['.mp-gct span', '.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'];
+    function caixasFixas() {
       var caixas = Array.prototype.map.call(root.querySelectorAll('.mp-left>*:not([hidden]),.mp-tools>*,.mp-chips,.mp-legend:not([hidden]),.mp-card:not([hidden])'), function (el) { return el.getBoundingClientRect(); })
         .filter(function (r) { return r.width && r.height; });
       // no mapa de todos, os círculos de quantidade ficam por cima dos nomes: o nome que bate num círculo sai
       if (G) Array.prototype.forEach.call(root.querySelectorAll('.mp-ggr b'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
       // as fotos também (v183): a bolinha ou a miniatura, sem a haste
       Array.prototype.forEach.call(root.querySelectorAll('.mp-phb span,.mp-ph i'), function (el) { var r = el.getBoundingClientRect(); if (r.width) caixas.push(r); });
-      var vistos = caixas.slice();
-      ['.mp-gct span', '.leaflet-tooltip.mp-lbl', '.leaflet-tooltip.mp-loc', '.leaflet-tooltip.mp-kml', '.mp-place span', '.mp-rio span'].forEach(function (sel) {
-        root.querySelectorAll(sel).forEach(function (el) {
-          el.style.visibility = '';
-          var r = el.getBoundingClientRect();
-          if (!r.width) return;
-          var bate = vistos.some(function (o) { return r.left < o.right + 2 && r.right > o.left - 2 && r.top < o.bottom + 2 && r.bottom > o.top - 2; });
-          if (bate) el.style.visibility = 'hidden'; else vistos.push(r);
-        });
+      return caixas;
+    }
+    function bateEm(r, l) { return l.some(function (o) { return r.left < o.right + 2 && r.right > o.left - 2 && r.top < o.bottom + 2 && r.bottom > o.top - 2; }); }
+    function arrumaRotulos() {
+      arrumaPedido = false;
+      // v189: primeiro mede tudo, depois esconde (antes, mostrar e medir um a um recalculava a página a cada nome)
+      var els = [];
+      ROT_SEL.forEach(function (sel) { root.querySelectorAll(sel).forEach(function (el) { el.style.visibility = ''; els.push(el); }); });
+      var vistos = caixasFixas(), some = [];
+      els.forEach(function (el) {
+        var r = el.getBoundingClientRect();
+        if (!r.width) return;
+        if (bateEm(r, vistos)) some.push(el); else vistos.push(r);
       });
+      some.forEach(function (el) { el.style.visibility = 'hidden'; });
     }
     function pedeArrumar() { if (!arrumaPedido) { arrumaPedido = true; requestAnimationFrame(arrumaRotulos); } }
-    map.on('moveend', pedeArrumar);
+    // v189: e de novo um instante depois de o mapa parar. A arrumação às vezes rodava com os rótulos ainda no lugar do
+    // movimento e escondia o que não batia em nada (o nome da OAE sumia de perto)
+    var arrumaT = 0;
+    // Essa segunda vez só devolve o que foi escondido e agora cabe: lê todas as caixas antes de mexer em alguma (com milhares de
+    // fotos, a arrumação inteira de novo pesava a cada parada do mapa)
+    function reveRotulos() {
+      var esc0 = [];
+      ROT_SEL.forEach(function (sel) { root.querySelectorAll(sel).forEach(function (el) { if (el.style.visibility === 'hidden') esc0.push(el); }); });
+      if (!esc0.length) return;
+      var vistos = caixasFixas(), volta = [];
+      ROT_SEL.forEach(function (sel) { root.querySelectorAll(sel).forEach(function (el) { if (el.style.visibility !== 'hidden') { var r = el.getBoundingClientRect(); if (r.width) vistos.push(r); } }); });
+      esc0.forEach(function (el) { var r = el.getBoundingClientRect(); if (r.width && !bateEm(r, vistos)) { vistos.push(r); volta.push(el); } });
+      volta.forEach(function (el) { el.style.visibility = ''; });
+    }
+    map.on('moveend', function () { pedeArrumar(); clearTimeout(arrumaT); arrumaT = setTimeout(function () { if (!arrumaPedido) reveRotulos(); }, 400); });
+    // v189: ao entrar ou sair da tela cheia (e ao girar o celular) o mapa muda de tamanho sem mover: os rótulos que passaram a
+    // se encostar (a cidade de Placas embaixo do "km 910", nas fotos do iPhone) eram deixados como estavam
+    map.on('resize', pedeArrumar);
 
     function render() {
       ctxAtualiza();
@@ -1076,6 +1109,21 @@
       });
       function clique(x) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (gCtSel) { gCtSel = null; map.closePopup(); } if (G.onSel) G.onSel(x.key); }; }
       function noLado(ll, it, d) { return d ? gDesl(ll, d, ll.length < 2 ? gViz(it.x) : null) : ll; }
+      // o nome do item, de perto. v189 (pedido de 13/11/2026): o da OAE (no eixo) só bem perto (zoom 15, a régua de 300 m), por
+      // fora das linhas dos contratos e com um fio até ela; do zoom 16 em diante (régua de 200 m a 100 m) com a extensão
+      function nomeIt(pt, x, kl, dy) {
+        if (!comNome || !x.nome || !vb.contains(pt)) return;
+        var oaeN = !Number(kl) && x.oae;
+        if (oaeN && z < 15) return;
+        var txt = x.nome, abaixo = Number(kl) < 0, off = abaixo ? dy : -dy, cls = 'mp-lbl';
+        if (oaeN) {
+          off = -(GLADO + wCtB / 2 + 18); cls = 'mp-lbl mp-lbl-oae';
+          var m = Number(x.p.extensao) || (x.kf - x.km) * 1000;
+          if (z >= 15.5 && m > 0.5) txt += ' · ' + nf(m, m < 100 ? 1 : 0) + ' m';
+        }
+        Lf.marker(pt, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
+          .bindTooltip(esc(txt), { permanent: true, direction: abaixo ? 'bottom' : 'top', offset: [0, off], className: cls }).addTo(lblLayer);
+      }
       // o ponto do item fica ao lado da linha do contrato, por fora (sem tocar no traço)
       function dItem(kl) { var n = Number(kl); return n ? n * GLADO + (n > 0 ? 1 : -1) * (wCtB / 2 + 9) : 0; }
       Object.keys(lados).forEach(function (kl) {
@@ -1112,11 +1160,7 @@
             if (wBorda) Lf.polyline(line, { renderer: gRend, color: '#FFFFFF', weight: wBorda, opacity: x.apag ? 0.4 : 0.95, lineCap: 'round', interactive: false }).addTo(bordas);
             Lf.polyline(line, { renderer: gRend, color: x.cor, weight: x.key === gd.sel ? wLin + 2 : wLin, opacity: x.apag ? 0.3 : 1, lineCap: longe ? 'butt' : 'round', bubblingMouseEvents: false })
               .bindTooltip(esc(tipI), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(cores);
-            if (comNome && x.nome) {
-              var mid = line[line.length >> 1];
-              if (vb.contains(mid)) Lf.marker(mid, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
-                .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 8 : -8], className: 'mp-lbl' }).addTo(lblLayer);
-            }
+            nomeIt(line[line.length >> 1], x, kl, 8);
             return;
           }
           var pt = noLado([it.ll[it.ll.length >> 1]], it, d)[0];
@@ -1124,8 +1168,7 @@
           Lf.marker(pt, { pane: 'mpPts', keyboard: true, title: tipI, alt: tipI,
             icon: Lf.divIcon({ className: 'mp-gsm' + (x.oae ? ' oae' : Number(kl) ? ' pt' : '') + (x.neutro ? ' neu' : '') + (x.apag ? ' apag' : ''), html: '<i style="--c:' + x.cor + '"></i>', iconSize: [24, 24] }) })
             .on('click', clique(x)).addTo(gLayer);
-          if (comNome && x.nome && vb.contains(pt)) Lf.marker(pt, { opacity: 0, interactive: false, keyboard: false, icon: Lf.divIcon({ className: '', iconSize: [0, 0] }) })
-            .bindTooltip(esc(x.nome), { permanent: true, direction: Number(kl) < 0 ? 'bottom' : 'top', offset: [0, Number(kl) < 0 ? 9 : -9], className: 'mp-lbl' }).addTo(lblLayer);
+          nomeIt(pt, x, kl, 9);
         });
       });
       bordas.l.forEach(function (x) { x.addTo(gLayer); });
@@ -1186,7 +1229,8 @@
         '<div class="mp-fc-bt">' + (G.onCt ? '<button type="button" class="mp-btn mp-fc-pri" data-mp="gct-abre" data-id="' + id + '">Abrir o contrato</button>' : '') +
         (G.temFotos && G.temFotos() ? '<button type="button" class="mp-btn" data-mp="gct-fotos" data-id="' + id + '">Ver as fotos</button>' : '') +
         '<button type="button" class="mp-btn" data-mp="gct-enq" data-id="' + id + '">Enquadrar</button></div></div>';
-      var pop = Lf.popup({ autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [12, 40], maxWidth: 320 }).setLatLng(ll).setContent(html).openOn(map);
+      // à direita, a coluna de botões do mapa (52 px): o cartão não fica embaixo dela
+      var pop = Lf.popup({ autoPanPaddingTopLeft: [12, 70], autoPanPaddingBottomRight: [60, 40], maxWidth: Math.max(220, Math.min(320, map.getSize().x - 100)) }).setLatLng(ll).setContent(html).openOn(map);
       // o contorno do contrato vale enquanto o cartão está aberto (Enquadrar mantém, ver gCtAcao)
       gCtSel = c.id; gPede();
       pop.on('remove', function () { if (gCtSel === c.id && !gCtFica) { gCtSel = null; gPede(); } });
@@ -1380,22 +1424,25 @@
       if (isFull) return;
       isFull = true;
       root.classList.add('mp-full');
+      // v189: a página inteira em tela cheia (e não só o mapa), para o cartão do ponto (fora do mapa) aparecer por cima dele
+      document.documentElement.classList.add('mp-cheio');
       document.documentElement.style.overflow = 'hidden';
       setFullBtn();
       if (gArrasto) gArrasto();
       // no app do iPhone a tela cheia do sistema mostra aviso e um X por cima: lá fica só a de página, que já cobre tudo
       var nativo = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-      if (!nativo) try { var r = root.requestFullscreen && root.requestFullscreen({ navigationUI: 'hide' }); if (r && r.catch) r.catch(function () {}); } catch (e) { /* sem tela cheia do navegador: fica a de página */ }
+      if (!nativo) try { var de = document.documentElement, r = de.requestFullscreen && de.requestFullscreen({ navigationUI: 'hide' }); if (r && r.catch) r.catch(function () {}); } catch (e) { /* sem tela cheia do navegador: fica a de página */ }
       setTimeout(function () { map.invalidateSize(); }, 60);
     }
     function closeFull() {
       if (!isFull) return;
       isFull = false;
       root.classList.remove('mp-full');
+      document.documentElement.classList.remove('mp-cheio');
       document.documentElement.style.overflow = '';
       setFullBtn();
       if (gArrasto) gArrasto();
-      try { if (document.fullscreenElement === root && document.exitFullscreen) { var r = document.exitFullscreen(); if (r && r.catch) r.catch(function () {}); } } catch (e) { /* nada */ }
+      try { if (document.fullscreenElement && document.exitFullscreen) { var r = document.exitFullscreen(); if (r && r.catch) r.catch(function () {}); } } catch (e) { /* nada */ }
       setTimeout(function () { map.invalidateSize(); }, 60);
     }
     document.addEventListener('fullscreenchange', function () {
@@ -2005,6 +2052,11 @@
         return '<option value="' + esc(k) + '"' + (k === fot.ct ? ' selected' : '') + '>' + esc((fo.nomeCt ? fo.nomeCt(k) : k) || 'Sem contrato') + ' (' + nf(n[k] || 0, 0) + ')</option>';
       }).join('');
       sel.value = fot.ct;
+      fotosCtRot();
+    }
+    function fotosCtRot() {
+      var cl = q('.mp-ff-cl');
+      if (cl) cl.textContent = fot.ct ? ((fo.rotCt && fo.rotCt(fot.ct)) || (fo.nomeCt && fo.nomeCt(fot.ct)) || fot.ct) : 'Todos';
     }
     // marcadores por grupo (capa, quantidade e posição): ao arrastar, os grupos que não mudaram ficam como estão
     var fotMks = {};
@@ -2198,7 +2250,7 @@
     q('.mp-ff-p').addEventListener('change', function (e) { fot.dias = Number(e.target.value) || 0; fot.z = null; fotosFecha(); fotosAtualiza(); });
     q('.mp-ff-ct').addEventListener('change', function (e) {
       var v = e.target.value;
-      fot.ct = v; fot.z = null; fotosFecha();
+      fot.ct = v; fot.z = null; fotosFecha(); fotosCtRot();
       if (v && v !== fot.ctDe && fo.trocaCt && fo.trocaCt(v)) return;   // o render do contrato novo chama fotosSync
       fotosAtualiza();
       // o mapa ficou no contrato aberto (a Supervisora, que vale no trecho todo, ou um contrato sem mapa para a pessoa):
@@ -2260,6 +2312,8 @@
       janela: function (a, b) { gJan = [a, b]; gAplicaJan(); },
       // a legenda da visão geral (debaixo do mapa): tocar num contrato enquadra o trecho dele
       enquadra: function (id) { gCtAcao('gct-enq', id); },
+      // v189: o cartão (fora do mapa) leva a outra tela: sai da tela cheia antes
+      sairCheia: function () { closeFull(); },
       faixa: gFaixa,
       // area: { top, bottom } da tela que fica à vista (no celular, entre a barra do topo e a folha do cartão): o item vai para lá
       foca: function (key, area) {
