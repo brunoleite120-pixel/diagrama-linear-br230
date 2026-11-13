@@ -223,6 +223,10 @@
     '.gl-ver-info{padding:10px 16px 4px;font-size:13px;line-height:1.5;color:#E4E8E5}',
     '.gl-ver-info b{color:#fff}',
     '.gl-ver-info .gl-desc{white-space:pre-wrap;color:#C9D0CC}',
+    '.gl.gl-sofoto{background:#0E1311}',
+    '.gl.gl-sofoto>:not(.gl-ver):not(.gl-toast){visibility:hidden}',
+    '.gl.gl-sofoto::after{content:"Abrindo a foto…";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#C9D0CC;font-size:14px}',
+    '.gl-ver-acts .btn svg{flex:none;margin-right:6px}',
     '.gl-ver-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 16px calc(12px + env(safe-area-inset-bottom,0px))}',
     '.gl-ver-acts .btn,.gl-bar-acts .btn{min-height:46px;justify-content:center;font-size:14.5px;font-weight:650}',
     '.gl .btn.est1,.gl-ver .btn.est1{background:#F5B83D;border-color:#E0A52C;color:#3D2A00;font-weight:750}',
@@ -497,6 +501,8 @@
     return { modo: 'semana', off: 0, de: '', ate: '' };
   }
   function salvarPer(p) { try { localStorage.setItem(PER_KEY, JSON.stringify(p)); } catch (e) { /* sem armazenamento */ } }
+  var IC_PINO = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></svg>';
+  var IC_GRADE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.2"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2"/></svg>';
   var IC_SEL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12l3 3 5-6"/></svg>';
   var IC_PAUSA = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
   var IC_CONT = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
@@ -960,6 +966,9 @@
   var MINIS = {};
   window.Galeria = function (o) {
     var nomesCt = o.nomes || nomesPadrao();   // funções de nome do contrato (o.nomes do app.js ou a cópia curta)
+    // v191 (pedido de 13/11/2026): a foto aberta por cima do mapa. A galeria abre só com o visualizador (o resto escondido) e ao
+    // fechar volta ao mapa como estava; embaixo, só "Ir para o lugar" e "Abrir na galeria". { id, irPara, aberta, hist }
+    var soFoto = null;
     var root = null, aba = 'local', filtro = { cid: '', pid: '', autor: '', mes: '' }, ncIds = {}, agrupar = '';
     var per = lerPer(), pf = null, perNc = null;   // período escolhido; pf: rascunho da janela do período (null = fechada); perNc: o período para o qual "Fotos de NC" volta
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
@@ -1960,6 +1969,21 @@
       if (ver >= 0) renderVer();
       renderMini();   // recolhidos continuam recolhidos, mesmo com poucas fotos: só "Filtros ▾" abre
       renderFo();
+      if (soFoto && !soFoto.aberta) soFotoAbre();
+    }
+    function soFotoAbre() {
+      var i = -1;
+      lista.some(function (x, k) { if (x.id === soFoto.id) { i = k; return true; } return false; });
+      if (i >= 0) { soFoto.aberta = true; soFoto.hist = histPoe(); abrir(i); return; }
+      if (!carregando) soFotoSai();   // a foto não está na lista (apagada, sem acesso): fica a galeria com o filtro do mapa
+    }
+    function soFotoSai() { soFoto = null; if (root) root.classList.remove('gl-sofoto'); }
+    // fecha tudo e volta ao mapa (o cartão das fotos continua aberto lá)
+    function soFotoFecha(viaVoltar, depois) {
+      var h = soFoto && soFoto.hist;
+      soFoto = null;
+      var fim = function () { close(true); if (depois) depois(); };
+      if (h && !viaVoltar) histTira(fim); else fim();
     }
     // ---------------------------------------------------------------- celular: barra única e folhas
     // Até 560 px os filtros e as ações saem da pilha: a barra (contrato, Filtros, ⋯) abre folhas que usam os mesmos seletores e botões
@@ -2050,7 +2074,8 @@
       if (histPula) { histPula--; var f = histDepois; histDepois = null; if (f) f(); return true; }
       if (!histN || document.querySelector('.modal')) return false;
       histN--;
-      if (pf) pfFechar(true); else if (cl) fecharCts(true); else if (fo) fecharFo(true);
+      if (soFoto && soFoto.aberta && !pf && !cl && !fo) soFotoFecha(true);
+      else if (pf) pfFechar(true); else if (cl) fecharCts(true); else if (fo) fecharFo(true);
       return true;
     }
     // ---------------------------------------------------------------- filtros recolhidos ao rolar
@@ -2353,6 +2378,7 @@
     function soltarGrande() { if (grande) { URL.revokeObjectURL(grande.url); grande = null; } }
     function abrir(i) { soltarGrande(); ver = i; var it = lista[i]; if (it && ((locais[it.id] && locais[it.id].temArquivo) || it.driveId)) carregando = it.id; renderVer(); if (carregando === (it && it.id)) carregarGrande(); }
     function fecharVer() {
+      if (soFoto && soFoto.aberta) { soFotoFecha(); return; }   // ← Mapa, Esc e puxar para baixo
       var it = lista[ver];
       soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove();
       // o foco volta para a miniatura da última foto vista (a grade pode ter sido desenhada de novo)
@@ -2455,9 +2481,12 @@
       var leve = temGrande ? ''
         : carregando === it.id ? '<div class="gl-leve">Carregando a foto inteira' + (it.tamanho && !local && !guardadas[it.driveId] ? ' (' + tam(it.tamanho) + ')' : '') + '…</div>'
         : !local && it.driveId ? '<div class="gl-leve">Prévia leve <button type="button" class="btn small" data-g="grande">Ver a foto inteira' + (it.tamanho ? ' (' + tam(it.tamanho) + ')' : '') + '</button></div>' : '';
-      var acts = acoes([it], true).map(function (a) { return botaoAcao(a, true); }).join('');
+      var sf = soFoto && soFoto.aberta;
+      var acts = sf ? (soFoto.irPara && it.lat != null ? '<button type="button" class="btn" data-g="sf-ir">' + IC_PINO + 'Ir para o lugar</button>' : '') +
+          '<button type="button" class="btn" data-g="sf-gal">' + IC_GRADE + 'Abrir na galeria</button>'
+        : acoes([it], true).map(function (a) { return botaoAcao(a, true); }).join('');
       v.classList.toggle('det', detAberto);
-      v.innerHTML = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← Voltar</button>' +
+      v.innerHTML = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← ' + (sf ? 'Mapa' : 'Voltar') + '</button>' +
         '<span class="gl-c">' + (ver + 1) + ' de ' + lista.length + '</span>' +
         '<button type="button" class="btn small gl-nav" data-g="ant" aria-label="Anterior"' + (ver ? '' : ' disabled') + '>‹</button>' +
         '<button type="button" class="btn small gl-nav" data-g="prox" aria-label="Próxima"' + (ver < lista.length - 1 ? '' : ' disabled') + '>›</button></div>' +
@@ -2465,7 +2494,7 @@
         (it.relatorio ? '<span class="gl-ver-selo">★ No relatório</span>' : '') + '</div>' +
         '<div class="gl-ver-det" role="region" aria-label="Detalhes da foto"><b>Detalhes</b><br>' + linhas.join('<br>') + '</div></div>' +
         '<div class="gl-ver-info"><div class="gl-ver-tit"><b>' + esc(tit) + '</b><button type="button" class="btn small gl-det-bt" data-g="detalhes" aria-expanded="' + detAberto + '">Detalhes ' + (detAberto ? '▴' : '▾') + '</button></div>' +
-        (marca.length ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') + '</div>' +
+        (marca.length && !sf ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') + '</div>' +
         '<div class="gl-ver-acts">' + acts + '</div>';
     }
 
@@ -3253,6 +3282,9 @@
       }
       var g = t.getAttribute('data-g');
       if (g === 'per') { pfAbrir(); return; }
+      // v191: a foto aberta pelo mapa
+      if (g === 'sf-ir') { var itI = lista[ver], cbI = soFoto && soFoto.irPara; soFotoFecha(false, function () { if (cbI && itI) cbI(itI.id); }); return; }
+      if (g === 'sf-gal') { var hG = soFoto && soFoto.hist; soFotoSai(); if (hG) histTira(); renderVer(); return; }
       if (g === 'cts') { abrirCts(); return; }
       if (g === 'cel-fil' || g === 'cel-mais' || g === 'cel-per') { abrirFo(g === 'cel-mais' ? 'mais' : g === 'cel-per' ? 'per' : 'filtros'); return; }
       // v190: o selo de um filtro ligado (pessoa, ponto, situação) tira o filtro
@@ -3421,6 +3453,8 @@
       var pagina = !!f.pagina;
       aoFechar = pagina && f.aoFechar ? f.aoFechar : null;
       root.classList.toggle('gl-pag', pagina);
+      soFoto = f.foto ? { id: String(f.foto), irPara: typeof f.irPara === 'function' ? f.irPara : null, aberta: false, hist: false } : null;
+      root.classList.toggle('gl-sofoto', !!soFoto);
       root.setAttribute('role', pagina ? 'region' : 'dialog');
       if (pagina) root.removeAttribute('aria-modal'); else root.setAttribute('aria-modal', 'true');
       document.body.style.overflow = pagina ? '' : 'hidden';

@@ -5436,7 +5436,9 @@
         state.activeId = cid; ui.open = {}; save(); renderAll(); marcaEntrada(c, false);
         return true;
       },
-      abrirGaleria: function (ids, nome) { abrirGaleria({ aba: 'todas', ids: ids, idsNome: nome }); }
+      abrirGaleria: function (ids, nome) { abrirGaleria({ aba: 'todas', ids: ids, idsNome: nome }); },
+      // v191: a foto aberta por cima do mapa (a galeria em janela, só com o visualizador; o mapa fica onde está)
+      verFoto: function (ids, id, nome, irPara) { if (galeriaOn()) abrirGaleriaJa({ aba: 'todas', ids: ids, idsNome: nome, foto: id, irPara: irPara }); }
     };
   }
   function pausaMapa() { if (mapa && mapa.pausa && mapa.pausa()) toast('Localização ao vivo desligada: você saiu do Mapa.'); }

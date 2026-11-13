@@ -8,7 +8,7 @@
  *   var m = MapaSNV({ host, snv, getContract, pointInfo, saveText, tiles, gps, notify, nomes });
  *   m.show(); m.render(); m.openFull(); m.closeFull(); m.isFull(); m.exportKml();
  * nomes: funções de nome do contrato do app.js; sem elas (página online), vale a cópia curta daqui.
- * fotos (v170, só no app): { pode, padrao, listar, mini, pedir, nomeCt, rotCt, trocaCt, abrirGaleria }: as fotos da equipe no mapa.
+ * fotos (v170, só no app): { pode, padrao, listar, mini, pedir, nomeCt, rotCt, trocaCt, abrirGaleria, verFoto }: as fotos da equipe no mapa.
  */
 (function () {
   'use strict';
@@ -1449,7 +1449,7 @@
       if (!document.fullscreenElement && isFull) closeFull();
       setTimeout(function () { map.invalidateSize(); }, 60);
     });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isFull) closeFull(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isFull && !document.querySelector('.gl')) closeFull(); });
 
     // ---------------- posição ao vivo
     var live = { watch: null, loc: null, ll: null, follow: true, marker: null, acc: null, hist: [], heading: null, wake: null, speed: null, accuracy: null, err: '' };
@@ -2096,7 +2096,7 @@
               html: longe ? '<span>' + CAM + nf(n, 0) + '</span>'
                 : '<i' + (m ? ' style="background-image:url(&quot;' + m + '&quot;);background-size:cover"' : '') + '></i>' + (um ? '' : '<b>' + nf(n, 0) + '</b>') })
           }).addTo(fotosLayer);
-          mk.on('click', function () { fotosAbre(mk._mpG); });
+          mk.on('click', function () { var g1 = mk._mpG; if (g1.l.length === 1 && fo.verFoto) { fotosFecha(); fotosVer(g1, g1.l[0].id); } else fotosAbre(g1); });
           var el0 = mk.getElement();
           if (el0) { el0.setAttribute('role', 'button'); el0.setAttribute('aria-label', (um ? '1 foto' : nf(n, 0) + ' fotos') + ': ' + r.tit); }
         }
@@ -2186,7 +2186,7 @@
       var tira = l.slice(0, max).map(function (f) {
         var m = fo.mini(f.id), d = f.t ? new Date(f.t) : null;
         var dia = d ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : '';
-        return '<button class="mp-fc-f" type="button" data-mp="fc-gal"><img alt="" data-id="' + esc(f.id) + '"' + (m ? ' src="' + m + '"' : '') + '><span>' + esc(dia) + '</span>' + (f.km != null ? '<span>km ' + esc(km2(f.km)) + '</span>' : '') + '</button>';
+        return '<button class="mp-fc-f" type="button" data-mp="' + (fo.verFoto ? 'fc-foto' : 'fc-gal') + '" data-id="' + esc(f.id) + '" aria-label="Abrir a foto' + (dia ? ' de ' + esc(dia) : '') + '"><img alt="" data-id="' + esc(f.id) + '"' + (m ? ' src="' + m + '"' : '') + '><span>' + esc(dia) + '</span>' + (f.km != null ? '<span>km ' + esc(km2(f.km)) + '</span>' : '') + '</button>';
       }).join('') + (l.length > max ? '<button class="mp-fc-f" type="button" data-mp="fc-gal"><span class="mp-fc-mais">+' + nf(l.length - max, 0) + '</span></button>' : '');
       var el = q('.mp-fcard');
       el.innerHTML = '<div class="mp-fc-top"><div><b>' + esc(r.tit) + '</b><span>' + esc(r.l1) + '</span><span>' + esc(r.l2) + '</span></div>' +
@@ -2225,6 +2225,20 @@
       }
       return false;
     }
+    function fotosNome(g) {
+      var r = fotosResumo(g);
+      return 'Mapa · ' + (r.km ? 'km ' + nf(r.km[0], 1) + (r.km[1] - r.km[0] >= 0.05 ? ' a ' + nf(r.km[1], 1) : '') : r.tit);
+    }
+    // "Ir para o lugar": fecha o cartão (se estiver aberto) e aproxima onde a foto foi tirada
+    function fotosVer(g, id) {
+      var l = g.l.slice().sort(function (a, b) { return b.t - a.t; });
+      fo.verFoto(l.map(function (f) { return f.id; }), id || l[0].id, fotosNome(g), function (idF) {
+        var f = l.filter(function (x) { return x.id === idF; })[0];
+        if (!f) return;
+        var vai = function () { map.setView(f.ll, Math.max(map.getZoom(), 18), { animate: !reduced() }); };
+        if (fot.sel) fotosFecha(false, vai); else vai();
+      });
+    }
     function fotosAcao(act, b) {
       if (act === 'fotos') { fotosLiga(!fot.on); return; }
       if (act === 'fc-fecha') { fotosFecha(); return; }
@@ -2240,9 +2254,10 @@
         else map.fitBounds(bb.pad(0.15), { maxZoom: 18, animate: !reduced(), paddingTopLeft: [20, 120], paddingBottomRight: [20, 60] });
         return;
       }
+      // v191: a foto abre por cima do mapa, na ordem do cartão (a mais nova primeiro); o cartão continua aberto embaixo
+      if (act === 'fc-foto' && fo.verFoto) { fotosVer(g, b.getAttribute('data-id')); return; }
       if (act === 'fc-gal' && fo.abrirGaleria) {
-        var r = fotosResumo(g), ids = g.l.map(function (f) { return f.id; });
-        var nome = 'Mapa · ' + (r.km ? 'km ' + nf(r.km[0], 1) + (r.km[1] - r.km[0] >= 0.05 ? ' a ' + nf(r.km[1], 1) : '') : r.tit);
+        var ids = g.l.map(function (f) { return f.id; }), nome = fotosNome(g);
         fotosFecha(false, function () { fo.abrirGaleria(ids, nome); });
       }
     }
