@@ -3143,14 +3143,14 @@
       lst.forEach(function (x, i) {
         x = x || {};
         if ((x.sit === 'conf' ? 'conf' : 'prev') !== g[0]) return;
-        var d = at + '="' + i + '" data-pf=', conf = g[0] === 'conf', sid = 'sel-' + Math.random().toString(36).slice(2, 9);
+        var d = at + '="' + i + '" data-pf=', conf = g[0] === 'conf', sid = 'sel-' + Math.random().toString(36).slice(2, 9), nid = 'nt-' + Math.random().toString(36).slice(2, 9);
         itens.push('<div class="pz-item">' + field('Rótulo', d + '"rotulo" type="text"', x.rotulo, ' full') +
           (pz ? field('Data', d + '"data" type="date"', x.data) +
             '<div class="field"><label for="' + sid + '">Fim de</label><select id="' + sid + '" ' + d + '"fim">' + FIM_OPC.map(function (o) {
               return '<option value="' + o[0] + '"' + ((x.fim || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
             }).join('') + '</select></div>' :
             field('Valor (R$)', d + '"valor" type="text" inputmode="decimal"', fmt(x.valor, 2)) + field('Data de referência', d + '"data" type="date"', x.data)) +
-          field('Fonte', d + '"fonte" type="text"', x.fonte, ' full') + field('Nota', d + '"nota" type="text"', x.nota, ' full') +
+          field('Fonte', d + '"fonte" type="text"', x.fonte, ' full') + '<div class="field full"><label for="' + nid + '">Nota</label><textarea id="' + nid + '" ' + d + '"nota" class="pz-nota" rows="2">' + esc(x.nota == null ? '' : x.nota) + '</textarea></div>' +
           '<div class="pz-acts"><button type="button" class="pz-sit" data-act="set-' + a + '-sit" data-idx="' + i + '" aria-pressed="' + conf + '" title="Um toque troca a situação">' + (conf ? 'confirmado' : 'a confirmar') + '</button>' +
           '<button type="button" class="icon-btn" data-act="del-' + a + '" data-idx="' + i + '" aria-label="Remover ' + (pz ? 'o prazo ' : 'o valor ') + esc(x.rotulo) + '">' + ICON_TRASH + '</button></div></div>');
       });

@@ -804,6 +804,12 @@ html.mp-cheio .vg-card{position:fixed;z-index:2100;right:16px;bottom:16px;left:a
 .field label,.field .lbl{font-size:12px;color:var(--ink-3);font-weight:550}
 .field input,.field select,.field textarea{width:100%;border:1px solid var(--line-campo);border-radius:6px;padding:7px 9px;background:#fff;min-height:36px}
 .field textarea{min-height:76px;resize:vertical}
+/* nota dos prazos e valores: duas linhas, cresce ao arrastar; a nota longa não fica cortada no celular (v193) */
+.field textarea.pz-nota{min-height:44px}
+/* iPhone: o Safari dá ao campo de data uma largura mínima própria e centraliza a data; ele passava da borda do cartão
+   (Data de referência dos valores, 419). Só no iPhone (-webkit-touch-callout): no Android o calendário depende da aparência */
+@supports (-webkit-touch-callout:none){input[type=date],input[type=datetime-local]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%}}
+input::-webkit-date-and-time-value{text-align:left}
 /* conservação com a pista pavimentada: os grupos só deste contrato (caixas de marcar) */
 .gx-lista{display:flex;flex-wrap:wrap;gap:6px 16px}
 .field label.gx{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;color:var(--ink-2)}
