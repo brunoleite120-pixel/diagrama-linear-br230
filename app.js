@@ -4997,7 +4997,8 @@
     var n = oaeNec(p, dono), k = n.dn + n.exec;
     inf.nc = n.dn ? 'DN' : n.exec ? 'EX' : null;
     inf.ncN = k;
-    var med = medDoPonto(dono, p), medT = med ? 'última na ' + med.n + 'ª med.' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : '';
+    // v194: "última medição: 26ª (ago/26)"; antes "última na 26ª med.", que ao lado de "Sem não conformidade" lia-se como a última NC
+    var med = medDoPonto(dono, p), medT = med ? 'última medição: ' + med.n + 'ª' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : '';
     // no modo NC, ao lado da situação: quantas NC (com mais de uma) e a última medição
     if (modo !== 'med') { inf.pctText = [k > 1 ? k + ' NC' : '', medT].filter(Boolean).join(' · '); return inf; }
     var ncT = k ? k + ' NC' + (n.dn ? '' : ' em correção') : '';

@@ -205,6 +205,8 @@
       if (!MG && !MGfalhou && o.mapa) {
         MG = o.mapa({ legendaFora: true, onSel: seguro(noMapaSel), onMove: seguro(noMapaMove),
           onCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id) o.onAbrir(c, null); }); }),
+          // v194: o cartão de um contrato abriu no mapa: a folha do item fecha (um cartão por vez)
+          onCtCartao: seguro(function () { if (st.sel) fechar(); }),
           temFotos: function () { return !!(o.onFotosCt && o.temFotos && o.temFotos()); },
           onFotosCt: seguro(function (id) { o.contratos().forEach(function (c) { if (c.id === id && o.onFotosCt) o.onFotosCt(c); }); }) }) || null;
         if (!MG) MGfalhou = true;

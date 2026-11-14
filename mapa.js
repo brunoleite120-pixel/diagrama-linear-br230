@@ -1304,6 +1304,8 @@
     }
     // toque na linha de um contrato: o cartão dele, com Abrir o contrato (G.onCt) e Enquadrar
     function gCtCartao(k, ll) {
+      // v194: um cartão por vez: o do contrato fecha a folha do item aberto na visão (antes ficavam os dois, de contratos diferentes)
+      if (G.onCtCartao) G.onCtCartao(k.c.id);
       var c = k.c, n = (c.pontos || []).length, cor = k.cor || '#3B4540', id = esc(c.id), nome = (nomes.nome && nomes.nome(c)) || k.rot;
       var o2 = n === 1 ? ' ponto' : ' pontos';
       var html = '<div class="mp-pop mp-gpop" style="--c:' + cor + '"><h3>' + esc(nome) + '</h3>' +
@@ -2415,6 +2417,8 @@
       faixa: gFaixa,
       // area: { top, bottom } da tela que fica à vista (no celular, entre a barra do topo e a folha do cartão): o item vai para lá
       foca: function (key, area) {
+        // v194: o item aberto pela lista ou pela busca também fecha o cartão do contrato (o toque no mapa já fechava, em clique)
+        if (gCtSel) { gCtSel = null; map.closePopup(); gPede(); }
         var x = null;
         gd.itens.forEach(function (y) { if (y.key === key) x = y; });
         var ll = x && gLinha(x);
