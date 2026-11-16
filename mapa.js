@@ -1125,7 +1125,8 @@
         if (x.key === gd.sel) selIt = it;
         // v186 (pedido de 13/11/2026): conservação e sinalização sem ponto. O ponto vazado no meio do segmento não dizia nada
         // que a linha não diga; o toque na linha seleciona o contrato inteiro (v188)
-        if (x.neutro && x.lado < 0) return;
+        // v195: semPto (visão) também tira o ponto do segmento sem NC no modo NC
+        if ((x.neutro || x.semPto) && x.lado < 0) return;
         (lados[x.lado || 0] = lados[x.lado || 0] || []).push(it);
       });
       function clique(x) { return function (e) { if (e && e.originalEvent) Lf.DomEvent.stop(e.originalEvent); if (gCtSel) { gCtSel = null; map.closePopup(); } if (G.onSel) G.onSel(x.key); }; }
@@ -1281,7 +1282,7 @@
           root.setAttribute('data-sel', 'trecho');
         } else {
           // sem ponto (conservação e sinalização): o anel fica na própria linha do contrato
-          var dS = xs.neutro && ladoS < 0 ? ladoS * GLADO : dItem(ladoS) + (xs.num != null && ladoS ? (ladoS > 0 ? 5 : -5) : 0), lS = noLado(selIt.ll, selIt, dS), cS = ladoS ? noLado([selIt.ll[selIt.ll.length >> 1]], selIt, dS)[0] : lS[lS.length >> 1];
+          var dS = (xs.neutro || xs.semPto) && ladoS < 0 ? ladoS * GLADO : dItem(ladoS) + (xs.num != null && ladoS ? (ladoS > 0 ? 5 : -5) : 0), lS = noLado(selIt.ll, selIt, dS), cS = ladoS ? noLado([selIt.ll[selIt.ll.length >> 1]], selIt, dS)[0] : lS[lS.length >> 1];
           Lf.marker(cS, { pane: 'mpGsel', interactive: false, keyboard: false, icon: Lf.divIcon({ className: 'mp-gsel', html: '<i></i>', iconSize: [0, 0] }) }).addTo(gLayer);
           root.setAttribute('data-sel', 'anel');
         }

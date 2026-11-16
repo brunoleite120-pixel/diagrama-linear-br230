@@ -800,7 +800,10 @@
         var cor = semSit ? corCt(x.c) || (lado === -2 ? '#5C6661' : '#59615D') : x.cor;
         if (!semSit && !vistos[x.st]) { vistos[x.st] = true; leg.push({ cor: x.cor, txt: x.st }); }
         var nome = x.p.nome || x.p.codigo ? String(x.p.nome || x.p.codigo) : '';
-        return { key: x.key, c: x.c, p: x.p, km: x.km, kf: x.kf, cor: cor, neutro: semSit, st: x.st, peso: semSit ? 0 : PESO[x.st] || 0, oae: x.oae, apag: x.apag, lado: lado,
+        // v195 (pedido de 16/11/2026): no modo NC, segmento sem NC também fica sem ponto (só a linha do contrato); o ponto cinza
+        // de "sem NC" em cada segmento não informava nada. Com NC aberta ou em correção, o ponto continua
+        var semPto = semSit || (md === 'nc' && x.st === 'Sem não conformidade');
+        return { key: x.key, c: x.c, p: x.p, km: x.km, kf: x.kf, cor: cor, neutro: semSit, semPto: semPto, st: x.st, peso: semSit ? 0 : PESO[x.st] || 0, oae: x.oae, apag: x.apag, lado: lado,
           nome: nome, num: idt && idt.num[x.key] != null ? idt.num[x.key] : null, nomeN: idt ? idt.nome[x.key] || '' : '', tip: (nome || (x.oae ? 'OAE' : 'Ponto')) + (x.oae && x.p.codigo && x.p.nome ? ' · ' + x.p.codigo : '') + ' · ' + kmTxt(x, x.kf > x.km) + (x.st ? ' · ' + x.st : '') };
       });
       leg.sort(function (a, b) { return ordem.indexOf(a.txt) - ordem.indexOf(b.txt); });
