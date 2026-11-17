@@ -776,6 +776,9 @@
         r.cor[c.id] = corCt(c) || (pc ? null : livres.shift()) || '#3B4540';
         xs.forEach(function (x, i) {
           var nm = String(x.p.nome || x.p.codigo || '').trim();
+          // v196: OAE com o nome curto, como as do Proarte ("Ponte sobre o Rio Pacajá" → "Pacajá", "Ponte Ambé I" → "Ambé I",
+          // "Ponte sobre o Igarapé Altamira" → "Igarapé Altamira"); só na lista e no rótulo do mapa, o cadastro fica igual
+          if (!pc) nm = nm.replace(/^ponte\s+(sobre\s+(o|a)\s+(rio\s+)?)?/i, '') || nm;
           if (pc && nm && nm.length <= 6) { r.num[x.key] = nm; r.nome[x.key] = ''; }
           else { r.num[x.key] = pc ? 'P' + (i + 1) : String(i + 1); r.nome[x.key] = nm; }
         });
