@@ -735,7 +735,7 @@
         var pc = grupoCt(c) === 'pc', xs = idt.por[c.id].filter(function (x) { return !st.off[x.fk]; });
         var oQue = pc ? (xs.length === 1 ? 'ponto crítico' : 'pontos críticos') : xs.length === 1 ? 'OAE' : 'OAEs';
         return '<section class="vg-box vg-lista vg-ident" aria-label="' + esc(N.nome(c)) + ': ' + oQue + ' numerados"><div class="vg-lista-h"><h3>' + esc(N.nome(c)) + '</h3><span>' + xs.length + ' ' + oQue + ', pela ordem do km · tocar abre no mapa</span></div>' +
-          '<div class="vg-il' + (pc ? ' pc' : '') + '">' + xs.map(function (x) {
+          '<div class="vg-il' + (pc ? ' pc' : xs.some(function (x) { return String(idt.nome[x.key] || '').length > 16; }) ? ' longo' : '') + '">' + xs.map(function (x) {
             var n = idt.num[x.key], nm = idt.nome[x.key], c0 = pc || modo() === 'nc' ? x.cor : cor[c.id];
             var ext = x.oae ? (Number(x.p.extensao) ? nf(x.p.extensao, 0) + ' m' : '') : x.kf > x.km ? nf(x.kf - x.km, 2) + ' km' : '';
             var km = 'km ' + nf(x.km, 1) + (!x.oae && x.kf - x.km >= 0.05 ? ' a ' + nf(x.kf, 1) : '');
@@ -776,9 +776,9 @@
         r.cor[c.id] = corCt(c) || (pc ? null : livres.shift()) || '#3B4540';
         xs.forEach(function (x, i) {
           var nm = String(x.p.nome || x.p.codigo || '').trim();
-          // v196: OAE com o nome curto, como as do Proarte ("Ponte sobre o Rio Pacajá" → "Pacajá", "Ponte Ambé I" → "Ambé I",
-          // "Ponte sobre o Igarapé Altamira" → "Igarapé Altamira"); só na lista e no rótulo do mapa, o cadastro fica igual
-          if (!pc) nm = nm.replace(/^ponte\s+(sobre\s+(o|a)\s+(rio\s+)?)?/i, '') || nm;
+          // v197: OAE sem o "sobre o" ("Ponte sobre o Rio Pacajá" → "Ponte Rio Pacajá"; "Ponte Ambé I" fica igual;
+          // pedido de 17/11/2026, depois da v196 sem o "Ponte"); só na lista e no rótulo do mapa, o cadastro fica igual
+          if (!pc) nm = nm.replace(/^(ponte)\s+sobre\s+(o|a)\s+/i, '$1 ');
           if (pc && nm && nm.length <= 6) { r.num[x.key] = nm; r.nome[x.key] = ''; }
           else { r.num[x.key] = pc ? 'P' + (i + 1) : String(i + 1); r.nome[x.key] = nm; }
         });
