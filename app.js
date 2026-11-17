@@ -9322,7 +9322,9 @@
   function init() {
     if (!window.AMBIENTE || !window.AMBIENTE.supabaseUrl) { semAmbiente(); return false; }
     state = load() || normalize(clone(window.UNIFILAR_SEED));
-    if (window.UNIFILAR_LOGO) $('brandLogo').src = window.UNIFILAR_LOGO.src;
+    // v198: o cabeçalho mostra a marca do DNIT (logo-dnit.js); sem ela, o logo da Magna como antes. O PDF continua com UNIFILAR_LOGO
+    if (window.LOGO_DNIT_MARCA) $('brandLogo').src = window.LOGO_DNIT_MARCA.src;
+    else if (window.UNIFILAR_LOGO) { $('brandLogo').src = window.UNIFILAR_LOGO.src; $('brandLogo').alt = 'Consórcio Magna/Enecon'; $('brandLogo').className = ''; }
     var ed = $('editor');
     ed.addEventListener('input', onInput);
     ed.addEventListener('change', onInput);

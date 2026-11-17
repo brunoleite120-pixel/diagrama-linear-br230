@@ -1462,6 +1462,12 @@ span.an-chip{cursor:default}
   .svc:not(.oae) .pct-in{grid-column:2;grid-row:1}
   .svc:not(.oae) .seg{grid-column:1/-1;grid-row:2}
 }
+/* v198 (pedido de 17/11/2026, opção C): no cabeçalho, só a palavra DNIT e "UL Altamira" em destaque no lugar do logo da Magna */
+.brand img.dnit{height:38px}
+.brand .eyebrow.ul{color:#1D3A7A;font-weight:700;letter-spacing:.08em}
+@media (max-width:1100px){.brand img.dnit{height:28px}}
+@media (min-width:701px) and (max-width:1100px) and (min-height:501px){.brand img.dnit{height:30px}}
+@media (max-height:500px) and (orientation:landscape) and (max-width:1100px){.brand img.dnit{height:24px}}
 </style>
 <style id="estiloMedicoes">
 /* Área de Medições (antes em medicoes.css: dentro da página, o app do iPhone não fica sem o estilo se o arquivo não carregar) */
@@ -1771,9 +1777,9 @@ span.an-chip{cursor:default}
 <body>
 <header class="topbar">
   <div class="brand">
-    <img id="brandLogo" alt="Consórcio Magna/Enecon">
+    <img id="brandLogo" class="dnit" alt="DNIT">
     <div>
-      <div class="eyebrow">Supervisão · Pontos críticos</div>
+      <div class="eyebrow ul">UL Altamira</div>
       <h1>Diagrama linear</h1>
     </div>
   </div>
