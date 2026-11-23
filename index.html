@@ -1810,7 +1810,69 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
 .md-pg-linha.apagar.btn{background:#FFFBEF}
 .md-pg-linha>span:first-child{display:flex;flex-direction:column;min-width:0}
 .md-pg-dir{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right}
-@media(max-width:1180px){.md-kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}.md-pg-meio{grid-template-columns:minmax(0,1fr)}}
+/* v203: a parte Contrato do contrato aberto */
+.md-ct-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.md-ct-col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.md-ct-card{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.md-ct-ad{padding:0;gap:0;overflow:hidden}
+.md-ct-ad>.md-pg-tit{padding:12px 16px}
+.md-chip-ct{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:var(--ground);color:var(--ink-2);font-size:12px;font-weight:650;white-space:nowrap}
+.md-chip-ct .md-ic{width:13px;height:13px}
+.md-chip-ct.ok{border-color:#BFE0CC;background:#E9F5EE;color:#11663A}
+.md-chip-ct.at{border-color:var(--atencao-borda);background:var(--atencao-bg);color:var(--atencao)}
+.md-chip-ct.dg{border-color:#F0B4AC;background:#FDECEA;color:var(--danger)}
+.md-chip-ct.az{border-color:#C5D6EC;background:#EEF3FA;color:var(--accent)}
+.md-cas-barra{position:relative;padding-top:14px}
+.md-cas-seg{height:14px;border-radius:4px;overflow:hidden;display:flex;gap:2px}
+.md-cas-seg i{display:block;height:100%}
+.md-cs-ini{background:#12325E}
+.md-cs-ta0{background:var(--accent)}
+.md-cs-ta1{background:#5B86C4}
+.md-cs-rj{background:#A9C3E6}
+.md-cas-med{position:absolute;top:2px;width:2px;height:38px;background:var(--ink);margin-left:-1px}
+.md-cas-leg{display:flex;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--ink-2)}
+.md-cas-leg b{color:var(--ink)}
+.md-cas-cores{display:inline-flex;gap:10px;flex-wrap:wrap}
+.md-cas-cores span{display:inline-flex;align-items:center;gap:4px}
+.md-cas-cores i{display:inline-block;width:10px;height:10px;border-radius:2px}
+.md-cas{display:flex;flex-direction:column;gap:2px}
+.md-cas-l{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--line-2);font-size:13.5px}
+.md-cas-l>span:first-child{min-width:0;display:flex;flex-direction:column}
+.md-cas-l small{font-size:12.5px;color:var(--ink-3)}
+.md-cas-l.tot{background:var(--ground);border-top:0;border-radius:6px;padding:9px 10px;font-size:14.5px}
+.md-cas-l.tot .md-cas-r{font-weight:650}
+.md-cas-l.tot .md-cas-v{font-weight:700}
+.md-cas-v{white-space:nowrap;font-variant-numeric:tabular-nums}
+.md-fora{border:1.5px dashed #9DB7DC;background:#EEF3FA;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-size:13px}
+.md-fora p{margin:0;display:flex;flex-direction:column;gap:2px}
+.md-fora p span{color:var(--ink-2)}
+.md-fora p small{color:var(--ink-3)}
+.md-tl{position:relative;height:40px;margin-top:4px}
+.md-tl-trilho{position:absolute;left:0;right:0;top:18px;height:8px;border-radius:999px;background:var(--line-2)}
+.md-tl-feito{position:absolute;left:0;top:18px;height:8px;border-radius:999px;background:var(--accent)}
+.md-tl-hoje{position:absolute;top:10px;width:2px;height:24px;background:var(--ink);margin-left:-1px}
+.md-tl-exe{position:absolute;top:13px;width:2px;height:18px;background:var(--ink-3);margin-left:-1px}
+.md-tl-rot{position:absolute;top:-6px;transform:translateX(-50%);font-size:11.5px;font-weight:700;white-space:nowrap}
+.md-marcos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.md-marcos.cel{grid-template-columns:repeat(2,minmax(0,1fr))}
+.md-marco{display:flex;flex-direction:column;gap:1px;min-width:0}
+.md-marco strong{font-size:15px}
+.md-marco small{font-size:12.5px;color:var(--ink-2)}
+.md-marco.at small{color:var(--atencao);font-weight:650}
+.md-marco.dg small{color:var(--danger);font-weight:650}
+.medicoes .md-ct-nota{margin:0;font-size:13px;color:var(--ink-2);padding-top:8px;border-top:1px solid var(--line-2)}
+.md-ct-nota b{color:var(--ink)}
+.md-ad-tabela td,.md-ad-tabela th{vertical-align:top}
+.md-ad-tabela td:not(.md-ad-obj){white-space:nowrap}
+.md-ad-tabela td small{display:block;font-size:12px;color:var(--ink-3)}
+.md-ad-lista{list-style:none;margin:0;padding:0 12px 4px}
+.md-ad-lista li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line-2);font-size:13.5px}
+.md-ad-lista li>span:first-child{min-width:0}
+.md-ad-lista small{display:block;font-size:12.5px;color:var(--ink-2)}
+.md-ct-fonte{gap:8px;font-size:13px}
+.md-ct-fonte .md-proc{padding-top:0;border-top:0}
+.md-ct-fonte>small{color:var(--ink-2)}
+@media(max-width:1180px){.md-kpis5{grid-template-columns:repeat(3,minmax(0,1fr))}.md-ct-grid{grid-template-columns:minmax(0,1fr)}.md-pg-meio{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:1000px){.md-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.md-contrato{grid-template-columns:minmax(240px,30%) minmax(0,1fr)}}
 @media(max-width:700px){
   .medicoes{padding:14px 12px 30px;gap:12px}
@@ -1835,8 +1897,8 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
   .md-sel-ant{grid-column:1}
   .md-sel-prox{grid-column:3}
   .md-sel-ir.btn{grid-column:2;gap:8px;padding:4px 8px;font-size:15px;font-weight:650;white-space:normal}
-  .md-secoes .btn{flex:1 1 0;padding:8px 6px;font-size:14px}
-  .md-secoes .btn small{display:block}
+  .md-secoes .btn{flex:1 1 auto;padding:8px 6px;font-size:14px}
+  .md-secoes .btn small{display:block;white-space:nowrap}
   .md-kpis5{grid-template-columns:repeat(2,minmax(0,1fr))}
   .md-kpis5 .md-kpi:first-child{grid-column:1/-1}
   .md-soma{justify-content:flex-start}
@@ -1844,6 +1906,10 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
   .md-soma .md-soma-tot{order:-1;flex-basis:calc(100% - 56px)}
   .md-soma .md-copiar{order:-1}
   .md-op-ig{display:none}
+  .md-kpis.md-kpis-sem-cel{display:none}
+  .md-ct-grid,.md-ct-col{gap:12px}
+  .md-ct-card{padding:12px}
+  .md-ct-ad>.md-pg-tit{padding:10px 12px}
   .md-trilha{flex-direction:column;gap:2px}
   .md-trilha li{flex-direction:row;align-items:center;min-height:34px}
   .md-trilha li:not(:last-child)::after{display:none}

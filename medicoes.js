@@ -419,6 +419,137 @@
       folhaHist = false;
       focaSeletor();
     }
+    // v203: a parte Contrato: valor em cascata, o que já está assinado e ainda fora do SIAC, prazos, aditivos e apostilas, garantia e processo base
+    function fichaS(d) { return d.an.siac && d.an.siac.ficha || null; }
+    function diaIso(s) { var x = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return x ? new Date(+x[1], +x[2] - 1, +x[3]) : null; }
+    function hojeDia() { var h = new Date(); return new Date(h.getFullYear(), h.getMonth(), h.getDate()); }
+    function dias(s) { var t = diaIso(s); return t ? Math.round((t - hojeDia()) / 86400000) : null; }
+    function diasTxt(n) { return n == null ? '' : n === 0 ? 'vence hoje' : n > 0 ? 'faltam ' + n + (n === 1 ? ' dia' : ' dias') : 'venceu há ' + (-n) + (n === -1 ? ' dia' : ' dias'); }
+    function tomDias(n, a, b) { return n == null ? '' : n <= a ? 'dg' : n <= b ? 'at' : 'ok'; }
+    function chipTom(txt, tom, ic) { return '<span class="md-chip-ct ' + (tom || 'n') + '">' + (ic || '') + esc(txt) + '</span>'; }
+    function aditivos(d) { var a = d.an.siac && d.an.siac.aditivos; return Array.isArray(a) ? a.filter(function (x) { return x && x.num; }) : []; }
+    function ehTA(x) { return x.tipo ? x.tipo === 'ta' : /^ta/i.test(x.num); }
+    function foraSiac(c) {
+      return (c.valores || []).filter(function (v) { return v && v.sit === 'prev'; }).map(function (v) { return { t: v.rotulo, v: numero(v.valor) != null ? dinheiro(v.valor) : '', nota: v.nota, fonte: v.fonte, data: v.data }; })
+        .concat((c.prazos || []).filter(function (p) { return p && p.sit === 'prev'; }).map(function (p) { return { t: p.rotulo, v: p.data ? dataTxt(p.data) : '', nota: p.nota, fonte: p.fonte, data: null }; }));
+    }
+    function temContrato(c, d) { return !!(fichaS(d) || (c.valores || []).length || (c.prazos || []).length); }
+    function prazosCt(c, d) {
+      var f = fichaS(d) || {}, conf = (c.prazos || []).filter(function (p) { return p && p.sit !== 'prev' && diaIso(p.data); }), ini = null;
+      conf.forEach(function (p) { if (!p.fim && /in[ií]cio/i.test(p.rotulo || '') && !ini) ini = p.data; });
+      var ult = function (tipos, base) { var r = diaIso(base) ? base : null; conf.forEach(function (p) { if (tipos.indexOf(p.fim) >= 0 && (!r || p.data > r)) r = p.data; }); return r; };
+      return { ini: ini || (diaIso(f.inicio_servicos) ? f.inicio_servicos : null), exe: ult(['exec', 'ambos'], f.termino_execucao), vig: ult(['vig', 'ambos'], f.termino_vigencia) };
+    }
+    function cascataHtml(c, d) {
+      var f = fichaS(d), ads = aditivos(d), lin = function (r, v, tipo, sub) {
+        return '<div class="md-cas-l ' + tipo + '"><span><span class="md-cas-r">' + esc(r) + '</span>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="md-cas-v">' + (tipo === 'ad' && v >= 0 ? '+ ' : '') + esc(dinheiro(v)) + '</span></div>';
+      };
+      if (!f) {
+        var vs = (c.valores || []).filter(function (v) { return v && v.sit !== 'prev' && numero(v.valor) != null; });
+        if (!vs.length) return '';
+        return '<div class="md-cas">' + vs.map(function (v) { return lin(v.rotulo || 'Valor', numero(v.valor), 'tot', v.fonte || ''); }).join('') + '</div>';
+      }
+      var pii = numero(f.pi_inicial), piv = numero(f.pi_vigente), rj = numero(f.total_reajuste) || 0, pir = numero(f.total_pi_r), tad = numero(f.total_aditivos);
+      if (pir == null && piv != null) pir = piv + rj;
+      if (tad == null && piv != null && pii != null) tad = piv - pii;
+      var tas = ads.filter(function (x) { return ehTA(x) && numero(x.valor); }), aps = ads.filter(function (x) { return !ehTA(x); });
+      var somaTas = tas.reduce(function (s2, x) { return s2 + numero(x.valor); }, 0), partes = [];
+      if (pii != null) partes.push([pii, 'md-cs-ini', 'PI inicial']);
+      if (tas.length && tad != null && Math.abs(somaTas - tad) < 1) tas.forEach(function (x, i) { partes.push([numero(x.valor), 'md-cs-ta' + (i % 2), x.num]); });
+      else if (tad) partes.push([tad, 'md-cs-ta0', 'aditivos']);
+      if (rj) partes.push([rj, 'md-cs-rj', 'reajuste']);
+      var h = '';
+      if (pir > 0) {
+        var med = d.total, mp = Math.max(0, Math.min(100, med / pir * 100));
+        h += '<div class="md-cas-barra"><div class="md-cas-seg" role="img" aria-label="' + esc(partes.map(function (p) { return p[2] + ' ' + dinheiro(p[0]); }).join(', ') + '; medido até aqui ' + dinheiro(med)) + '">' +
+          partes.filter(function (p) { return p[0] > 0; }).map(function (p) { return '<i class="' + p[1] + '" style="width:' + (p[0] / pir * 100).toFixed(2) + '%"></i>'; }).join('') + '</div>' +
+          '<span class="md-cas-med" style="left:' + mp.toFixed(2) + '%" aria-hidden="true"></span>' +
+          '<div class="md-cas-leg"><span><b>Medido até aqui: ' + esc(dinheiro(med)) + '</b>' + (piv > 0 ? ' (' + esc(pct(med / piv * 100)) + ' do PI vigente)' : '') + '</span><span class="md-cas-cores">' +
+          partes.filter(function (p) { return p[0] > 0; }).map(function (p) { return '<span><i class="' + p[1] + '"></i>' + esc(p[2]) + '</span>'; }).join('') + '</span></div></div>';
+      }
+      h += '<div class="md-cas">';
+      if (pii != null) h += lin('PI inicial', pii, 'ini', '');
+      if (tas.length && Math.abs(somaTas - (tad || 0)) < 1) tas.forEach(function (x) { h += lin(x.num + (x.objeto ? ' · ' + objCurto(x) : ''), numero(x.valor), 'ad', x.assinatura ? 'assinado em ' + dataTxt(x.assinatura) : ''); });
+      else if (tad) h += lin('Termos aditivos', tad, 'ad', tas.length ? tas.map(function (x) { return x.num; }).join(', ') : '');
+      if (piv != null) h += lin('PI vigente', piv, 'tot', '');
+      if (rj || aps.length) h += lin('Reajuste' + (aps.length ? ' · ' + aps.length + (aps.length === 1 ? ' apostila' : ' apostilas') : ''), rj, 'ad', aps.length ? aps[0].num + (aps.length > 1 ? ' a ' + aps[aps.length - 1].num : '') : '');
+      if (pir != null) h += lin('PI + reajuste', pir, 'tot', '');
+      return h + '</div>';
+    }
+    function objCurto(x) {
+      var o = String(x.objeto || '').toLowerCase();
+      if (/renova/.test(o)) return 'renovação';
+      if (/prorroga/.test(o)) return 'prorrogação';
+      if (/reajust/.test(o)) return 'reajustamento';
+      return o.length > 40 ? o.slice(0, 38) + '…' : o;
+    }
+    function foraHtml(c) {
+      var fs = foraSiac(c);
+      if (!fs.length) return '';
+      return '<div class="md-fora" aria-label="Ainda fora do SIAC"><span class="md-chip-ct az">Ainda fora do SIAC</span>' + fs.map(function (x) {
+        return '<p><b>' + esc(x.t || '') + (x.v ? ': ' + x.v : '') + '</b>' + (x.nota ? '<span>' + esc(x.nota) + '</span>' : '') + (x.fonte ? '<small>' + esc(x.fonte) + '</small>' : '') + '</p>';
+      }).join('') + '</div>';
+    }
+    function prazosHtml(c, d) {
+      var p = prazosCt(c, d), ne = dias(p.exe), nv = dias(p.vig), cel = celular();
+      if (!p.exe && !p.vig) return '';
+      var tom = tomDias(ne, 45, 120), chip = ne == null ? '' : ne < 0 ? chipTom('execução vencida', 'dg') : tom === 'ok' ? chipTom('em dia', 'ok', IC_OK) : chipTom('execução ' + diasTxt(ne).replace(/^faltam/, 'em'), tom, IC_REL);
+      var h = '<section class="card md-ct-card" aria-label="Prazos"><div class="md-pg-tit"><h3>Prazos</h3>' + chip + '</div>';
+      var a = diaIso(p.ini), z = diaIso(p.vig || p.exe), hj = hojeDia();
+      if (a && z && z > a) {
+        var fimB = Math.max(z, hj), tot = fimB - a, ph = Math.max(0, Math.min(100, (hj - a) / tot * 100)), pe = diaIso(p.exe) ? (diaIso(p.exe) - a) / tot * 100 : null;
+        h += '<div class="md-tl" aria-hidden="true"><div class="md-tl-trilho"></div><div class="md-tl-feito" style="width:' + ph.toFixed(1) + '%"></div>' + (pe != null ? '<i class="md-tl-exe" style="left:' + pe.toFixed(1) + '%"></i>' : '') +
+          '<i class="md-tl-hoje" style="left:' + ph.toFixed(1) + '%"></i><span class="md-tl-rot" style="left:' + Math.max(8, Math.min(92, ph)).toFixed(1) + '%">hoje · ' + esc(dataTxt(isoDe(hj))) + '</span></div>';
+      }
+      var marco = function (r, v, sub, t) { return v ? '<div class="md-marco' + (t && t !== 'ok' ? ' ' + t : '') + '"><span class="md-label">' + esc(r) + '</span><strong>' + esc(dataTxt(v)) + '</strong><small>' + esc(sub) + '</small></div>' : ''; };
+      var ni = dias(p.ini);
+      h += '<div class="md-marcos' + (cel ? ' cel' : '') + '">' + marco('Início dos serviços', p.ini, ni == null ? '' : ni <= 0 ? 'há ' + (-ni) + (ni === -1 ? ' dia' : ' dias') : 'começa em ' + ni + ' dias') +
+        marco('Fim da execução', p.exe, diasTxt(ne), tom) + marco('Fim da vigência', p.vig, diasTxt(nv), tomDias(nv, 45, 120)) + '</div>';
+      if (a && diaIso(p.exe) && diaIso(p.exe) > a) {
+        var dec = Math.max(0, (hj - a) / (diaIso(p.exe) - a) * 100);
+        h += '<p class="md-ct-nota"><b>' + esc(pct(Math.min(dec, 999))) + ' do prazo de execução decorrido</b>' + (d.pi > 0 ? ' e <b>' + esc(pct(d.total / d.pi * 100)) + ' do PI medido</b>' : '') + '. ' + esc(projTxt(d)) + '.</p>';
+      } else h += '<p class="md-ct-nota">' + esc(projTxt(d)) + '.</p>';
+      return h + '</section>';
+    }
+    function isoDe(t) { return t.getFullYear() + '-' + ('0' + (t.getMonth() + 1)).slice(-2) + '-' + ('0' + t.getDate()).slice(-2); }
+    function aditivosHtml(d) {
+      var ads = aditivos(d), cel = celular();
+      if (!ads.length) return '';
+      var nT = ads.filter(ehTA).length, nA = ads.length - nT, cont = [nT ? nT + (nT === 1 ? ' aditivo' : ' aditivos') : '', nA ? nA + (nA === 1 ? ' apostila' : ' apostilas') : ''].filter(Boolean).join(' · ');
+      var h = '<section class="card md-ct-card md-ct-ad" aria-label="Termos aditivos e apostilas"><div class="md-pg-tit"><h3>Termos aditivos e apostilas</h3><small>' + esc(cont) + '</small></div>';
+      var sub = function (x) { return [x.objeto ? x.objeto.charAt(0) + x.objeto.slice(1).toLowerCase() : '', numero(x.dias) ? x.dias + ' dias' : ''].filter(Boolean).join(' · '); };
+      if (cel) return h + '<ul class="md-ad-lista">' + ads.map(function (x) {
+        return '<li><span><b>' + esc(x.num) + '</b>' + (x.assinatura ? ' · ' + esc(dataTxt(x.assinatura)) : '') + '<small>' + esc([sub(x), x.sei ? 'SEI ' + x.sei : ''].filter(Boolean).join(' · ')) + '</small></span><span class="md-cas-v">' + (numero(x.valor) ? esc((numero(x.valor) > 0 ? '+ ' : '') + n2(x.valor)) : '—') + '</span></li>';
+      }).join('') + '</ul></section>';
+      return h + '<div class="md-scroll" tabindex="0" role="region" aria-label="Termos aditivos e apostilas, tabela com rolagem"><table class="md-tabela md-ad-tabela"><thead><tr><th scope="col">Nº</th><th scope="col">Assinatura</th><th scope="col">Objeto</th><th scope="col" class="md-num">Valor (R$)</th><th scope="col">Documento</th></tr></thead><tbody>' + ads.map(function (x) {
+        return '<tr><td><b>' + esc(x.num) + '</b></td><td>' + esc(x.assinatura ? dataTxt(x.assinatura) : '—') + (x.publicacao ? '<small>publicado em ' + esc(dataTxt(x.publicacao)) + '</small>' : '') + '</td><td class="md-ad-obj">' + esc(sub(x) || '—') + '</td><td class="md-num">' + (numero(x.valor) ? esc((numero(x.valor) > 0 ? '+ ' : '') + n2(x.valor)) : '—') + '</td><td>' + esc(x.sei ? 'SEI ' + x.sei : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div></section>';
+    }
+    function garantiaHtml(d) {
+      var g = d.an.siac && d.an.siac.garantia;
+      if (!g || (!g.vencimento && !g.situacao)) return '';
+      var n = dias(g.vencimento), tom = tomDias(n, 30, 90), sit = g.situacao || '';
+      var chip = n != null && n < 0 ? chipTom('vencida', 'dg') : tom && tom !== 'ok' ? chipTom(diasTxt(n).replace(/^faltam/, 'vence em'), tom, IC_REL) : sit ? chipTom(sit, /liberad|vigente|ativ/i.test(sit) ? 'ok' : 'n', /liberad|vigente|ativ/i.test(sit) ? IC_OK : '') : '';
+      return '<section class="card md-ct-card" aria-label="Garantia"><div class="md-pg-tit"><h3>Garantia</h3>' + chip + '</div>' +
+        (g.vencimento ? '<div class="md-emp-l"><span>Vence em</span><span><b>' + esc(dataTxt(g.vencimento)) + '</b>' + (n != null ? ' · ' + esc(diasTxt(n)) : '') + '</span></div>' : '') +
+        (numero(g.valor) ? '<div class="md-emp-l"><span>Valor</span><span>' + esc(dinheiro(g.valor)) + '</span></div>' : '') +
+        (g.modalidade ? '<div class="md-emp-l"><span>Modalidade</span><span>' + esc(g.modalidade) + '</span></div>' : '') +
+        (sit && tom && tom !== 'ok' ? '<div class="md-emp-l"><span>Situação no SIAC</span><span>' + esc(sit) + '</span></div>' : '') + '</section>';
+    }
+    function fonteCtHtml(d) {
+      var s = d.an.siac || {}, pb = s.processo_base, q = consultaSiac(d);
+      if (!pb && !q) return '';
+      return '<section class="card md-ct-card md-ct-fonte" aria-label="Processo base e fonte">' + (pb ? '<div class="md-proc"><span>Processo base (SEI)</span><b>' + esc(pb) + '</b>' + copiarBtn(pb, 'Copiar o processo base', celular()) + '</div>' : '') +
+        (q ? '<small>' + esc(lista(['ficha'].concat(aditivos(d).length ? ['aditivos e apostilas'] : [], s.empenho ? ['empenho'] : [], s.garantia ? ['garantia'] : [])).replace(/^f/, 'F') + ' lidos no SIAC em ' + q + '.') + '</small>' : '') + '</section>';
+    }
+    function lista(xs) { return xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' e ' + xs[xs.length - 1]; }
+    function contratoAbaHtml(c, d) {
+      var f = fichaS(d), q = consultaSiac(d), emp = d.an.siac && d.an.siac.empenho;
+      var vc = '<section class="card md-ct-card" aria-label="Valor do contrato"><div class="md-pg-tit"><h3>Valor do contrato</h3><small>' + esc(f ? 'Ficha do SIAC' + (q ? ' · ' + q : '') : 'Cadastro') + '</small></div>' + cascataHtml(c, d) + foraHtml(c) + '</section>';
+      if (celular()) return '<div class="md-ct-grid"><div class="md-ct-col">' + vc + prazosHtml(c, d) + aditivosHtml(d) + (emp ? empenhoHtml(d, emp) : '') + garantiaHtml(d) + fonteCtHtml(d) + '</div></div>';
+      var esq = vc + aditivosHtml(d), dir = prazosHtml(c, d) + (emp ? empenhoHtml(d, emp) : '') + garantiaHtml(d) + fonteCtHtml(d);
+      return '<div class="md-ct-grid"><div class="md-ct-col">' + esq + '</div><div class="md-ct-col">' + dir + '</div></div>';
+    }
     function contratoHtml(c) {
       var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + (ehSup(c) ? '' : botao('diagrama', 'Ver no diagrama', ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama')) + '</div>';
       if (!d || !d.ms.length) return h + '<section class="card md-card"><h1>' + esc(nome(c)) + '</h1>' + (d && !d.ms.length && op.estado(c) === 'ok' ? vazio('Ainda sem medições carregadas.') : estadoHtml(c)) + '</section>';
@@ -428,18 +559,22 @@
       var e = op.etapaInfo(d.an, d.ult.etapa), ems = e ? d.ms.filter(function (x) { return x.etapa === e.etapa; }) : [], pg = pags(d);
       if (op.estado(c) === 'erro') h += estadoHtml(c);
       // v202: com o SIAC lido, o contrato aberto ganha a parte Pagamentos
-      if (!pg.com) secao = 'med';
-      else h += '<div class="md-secoes" role="group" aria-label="Partes do contrato">' + [['med', 'Medições', String(d.ms.length)], ['pag', 'Pagamentos', pg.abertas.length ? pg.abertas.length + ' a pagar' : '']].map(function (x) {
+      var tc = temContrato(c, d), abas = [['med', 'Medições', String(d.ms.length)]];
+      if (pg.com) abas.push(['pag', 'Pagamentos', pg.abertas.length ? pg.abertas.length + ' a pagar' : '']);
+      if (tc) abas.push(['ct', 'Contrato', '']);
+      if ((secao === 'pag' && !pg.com) || (secao === 'ct' && !tc)) secao = 'med';
+      if (abas.length > 1) h += '<div class="md-secoes" role="group" aria-label="Partes do contrato">' + abas.map(function (x) {
         return botao('secao', esc(x[1]) + (x[2] ? ' <small' + (x[0] === 'pag' ? ' class="md-sec-at"' : '') + '>' + esc(x[2]) + '</small>' : ''), ' data-v="' + x[0] + '" aria-pressed="' + (secao === x[0]) + '"');
       }).join('') + '</div>';
       if (secao === 'pag') return h + pagamentosHtml(c, d);
+      if (secao === 'ct') return h + contratoAbaHtml(c, d);
       var ultSm = sMed(d, d.ult.n), q = consultaSiac(d);
       var kpi3 = pg.nReaj ? kpi('Reajuste medido', dinheiro(pg.reaj), esc('Total com reajuste ' + dinheiro(pg.tot))) :
         kpi(e && e.etapa != null ? e.etapa + 'ª etapa · atual' : 'Etapa não informada', e ? dinheiro(e.total) : '—', e ? esc(e.de + ' a ' + e.ate) + ' · ' + nMed(ems.length) + ', ' + ems.filter(function (x) { return !valor(x.total); }).length + ' zeradas' : '');
       var kpi4 = ultSm ? kpi('No SIAC', esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)), esc([pagTxt(d, d.ult), d.ultima < hoje() - 3 ? falta(d) : '', q ? 'consulta de ' + q : ''].filter(Boolean).join(' · ')), pagSit(d, d.ult) === 'apagar' || d.ultima < hoje() - 3 ? 'at' : '') :
         kpi('Última carregada', esc(op.medTxt(d.an, d.ult.n)), esc(falta(d)));
-      h += '<div class="md-resumo-ctl">' + botao('resumo', (resumoCel ? '▾' : '▸') + ' Resumo do contrato', ' aria-expanded="' + resumoCel + '" aria-controls="mdKpis"') + '</div>';
-      h += '<section class="md-kpis' + (resumoCel ? '' : ' md-kpis-fechado') + '" id="mdKpis" aria-label="Resumo do contrato">' + kpi('Medido (acumulado PI)', dinheiro(d.total), esc(baseTxt(d)) + (pg.nReaj ? '' : reajHtml(d))) +
+      if (!tc) h += '<div class="md-resumo-ctl">' + botao('resumo', (resumoCel ? '▾' : '▸') + ' Resumo do contrato', ' aria-expanded="' + resumoCel + '" aria-controls="mdKpis"') + '</div>';
+      h += '<section class="md-kpis' + (resumoCel || tc ? '' : ' md-kpis-fechado') + (tc ? ' md-kpis-sem-cel' : '') + '" id="mdKpis" aria-label="Resumo do contrato">' + kpi('Medido (acumulado PI)', dinheiro(d.total), esc(baseTxt(d)) + (pg.nReaj ? '' : reajHtml(d))) +
         kpi('Saldo (PI)', d.pi != null ? dinheiro(d.pi - d.total) : 'falta o PI', esc(projTxt(d))) + kpi3 + kpi4 + '</section>';
       h += '<div class="md-contrato"><section class="card md-lista" aria-label="Medições do contrato"><div class="md-lista-top"><h2>' + nMed(d.ms.length) + '</h2><label><input type="checkbox" id="mdZeradas"' + (zeradas ? ' checked' : '') + '> Esconder as zeradas</label></div><div class="md-etapas">';
       h += etapasHtml(d) + '</div>' + seletorHtml(d, m) + '</section><section class="card md-detalhe" id="mdDetalhe" aria-label="Medição escolhida">' + medicaoHtml(c, d, m) + '</section></div>';
@@ -877,7 +1012,7 @@
         }
       }
       else if (act === 'aba') aba = b.dataset.v;
-      else if (act === 'secao') secao = b.dataset.v === 'pag' ? 'pag' : 'med';
+      else if (act === 'secao') secao = b.dataset.v === 'pag' || b.dataset.v === 'ct' ? b.dataset.v : 'med';
       else if (act === 'pag-todas') pagTodas = !pagTodas;
       else if (act === 'pag-abertas') { pagAbertas = !pagAbertas; pagTodas = false; }
       else if (act === 'ponte') { segAberto = segAberto === b.dataset.p ? '' : b.dataset.p; segTodas = false; segServ = false; }
@@ -917,7 +1052,7 @@
       else if (!ev.shiftKey && (i < 0 || i === l.length - 1)) { ev.preventDefault(); l[0].focus(); }
     });
     // celular ⇄ computador (girar o tablet, mudar a janela): a matriz troca de 6 para 16 meses
-    if (mqCel) { var trocou = function () { if (op.ativa() && ((modo === 'mes' && !cid) || (cid && secao === 'pag'))) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
+    if (mqCel) { var trocou = function () { if (op.ativa() && ((modo === 'mes' && !cid) || (cid && secao !== 'med'))) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
     host.addEventListener('change', function (ev) {
       if (!op.ativa()) return;
       if (ev.target.id === 'mdOrdem') ordem = ev.target.value;
