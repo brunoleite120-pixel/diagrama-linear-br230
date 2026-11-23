@@ -9,6 +9,8 @@
     var host = op.host, esc = op.esc, fmtN = op.fmtN, dinheiro = op.dinheiro;
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
     var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
+    // v202: o contrato aberto tem as partes Medições e Pagamentos; na tabela dos pagamentos, todas as linhas ou só as não pagas
+    var secao = 'med', pagTodas = false, pagAbertas = false;
     var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '', folha = false, folhaHist = false, folhaPula = false;
     var mqCel = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
     var meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -115,6 +117,63 @@
     function barra(d) {
       if (!(d.pi > 0)) return '';
       return '<span class="md-bar" role="img" aria-label="' + esc(baseTxt(d) + '; projeção: ' + projTxt(d)) + '"><i class="md-proj" style="width:' + largura(d.proje / d.pi * 100) + '%"></i><i style="width:' + largura(d.total / d.pi * 100) + '%"></i></span>';
+    }
+    // v202: o que a consulta ao SIAC gravou de cada medição (med_mp.dados.siac): PI, reajuste, total, datas, processo e pagamento
+    var IC_OK = '<svg class="md-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    var IC_REL = '<svg class="md-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    var IC_COP = '<svg class="md-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+    function sMed(d, n) { var x = d.an.siac && d.an.siac.medicoes; return x && x[n] || null; }
+    function totalMed(d, m) { var x = sMed(d, m.n); return x && numero(x.total) != null ? numero(x.total) : valor(m.total); }
+    function reajMed(d, m) { var x = sMed(d, m.n); return x && numero(x.reaj) != null ? numero(x.reaj) : null; }
+    // paga: processo de pagamento aprovado · apagar: AES emitido e com valor · zerada: nada a pagar · outra: outra situação do SIAC
+    function pagSit(d, m) {
+      var x = sMed(d, m.n), pg = x && x.pagamento;
+      if (!pg || !pg.situacao) return '';
+      if (/^processo de pagamento aprovado/i.test(pg.situacao)) return 'paga';
+      if (!totalMed(d, m)) return 'zerada';
+      return /aes emitid/i.test(pg.situacao) ? 'apagar' : 'outra';
+    }
+    function pagTxt(d, m) {
+      var x = sMed(d, m.n), pg = x && x.pagamento, st = pagSit(d, m), dt = pg && pg.data ? ' em ' + dataTxt(pg.data) : '';
+      return st === 'paga' ? 'Paga' + dt : st === 'apagar' ? 'AES emitido' + dt : st === 'zerada' ? 'Zerada, nada a pagar' : st ? pg.situacao + dt : '';
+    }
+    function pagIc(d, m) {
+      var st = pagSit(d, m);
+      return st === 'paga' ? '<span class="md-pg-ic paga">' + IC_OK + '</span>' : st === 'apagar' ? '<span class="md-pg-ic apagar">' + IC_REL + '</span>' : '<span class="md-pg-ic"></span>';
+    }
+    function pags(d) {
+      if (d.pags) return d.pags;
+      var r = { pi: 0, reaj: 0, nReaj: 0, tot: 0, pago: 0, nPago: 0, aPagar: 0, abertas: [], com: 0 };
+      d.ms.forEach(function (m) {
+        var t = totalMed(d, m), rj = reajMed(d, m), st = pagSit(d, m);
+        r.pi += valor(m.total); r.tot += t;
+        if (rj != null) { r.reaj += rj; r.nReaj++; }
+        if (st) r.com++;
+        if (st === 'paga') { r.pago += t; r.nPago++; } else if (st === 'apagar') { r.aPagar += t; r.abertas.push(m); }
+      });
+      d.pags = r;
+      return r;
+    }
+    // média do total (PI + reajuste) das 6 últimas medições: a régua para dizer se o saldo de empenho cobre a próxima
+    function media6(d) { var u = d.ms.slice(-6); return u.length ? u.reduce(function (s, m) { return s + totalMed(d, m); }, 0) / u.length : null; }
+    function n2(v) { return dinheiro(v).replace(/^R\$\s*/, ''); }
+    function consultaSiac(d) { var q = d.an.siac && d.an.siac.consulta; return q ? dataTxt(q) : ''; }
+    function periodoTxt(a, b) {
+      var x = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(a || '')), y = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(b || ''));
+      if (!x || !y) return '';
+      return (x[1] === y[1] && x[2] === y[2] ? x[3] : dataTxt(a)) + ' a ' + dataTxt(b);
+    }
+    function copiarBtn(txt, rotulo, comTexto) { return botao('copiar', IC_COP + (comTexto ? '<span>Copiar</span>' : ''), ' data-txt="' + esc(txt) + '" aria-label="' + esc(rotulo) + '" title="' + esc(rotulo) + '"', 'md-copiar' + (comTexto ? ' com-txt' : '')); }
+    function copiar(txt, ok) {
+      function falhou() {
+        var t = document.createElement('textarea'); t.value = txt; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+        document.body.appendChild(t); t.select();
+        var deu = false; try { deu = document.execCommand('copy'); } catch (e) { deu = false; }
+        document.body.removeChild(t);
+        if (op.toast) op.toast(deu ? ok : 'Não deu para copiar neste aparelho.');
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function () { if (op.toast) op.toast(ok); }, falhou);
+      else falhou();
     }
     function avisos(d, n) { return (d.an.alertas || []).filter(function (a) { return n == null || a.n == null || String(a.n) === String(n); }); }
     function estadoHtml(c) {
@@ -294,7 +353,7 @@
       return s.replace(/[a-záàâãäéêèëíìîïóòôõöúùûüç]/, function (letra) { return letra.toUpperCase(); });
     }
 
-    function kpi(t, v, s) { return '<div class="card md-kpi"><span class="md-label">' + esc(t) + '</span><strong>' + v + '</strong><small>' + s + '</small></div>'; }
+    function kpi(t, v, s, cls) { return '<div class="card md-kpi' + (cls ? ' ' + cls : '') + '"><span class="md-label">' + esc(t) + '</span><strong>' + v + '</strong><small>' + s + '</small></div>'; }
     // a lista por etapa: a do computador e a da folha do celular
     function etapasHtml(d) {
       var h = '';
@@ -303,7 +362,9 @@
         h += '<div class="md-etapa">' + botao('etapa', '<span><b>' + esc(et.etapa != null ? et.etapa + 'ª etapa' : 'Etapa não informada') + '</b><small>' + esc(et.de + ' a ' + et.ate) + ' · ' + esc(nMed(et.ns.length)) + '</small></span><span>' + moeda(et.total) + (aberto ? ' ▾' : ' ▸') + '</span>', ' data-e="' + esc(key) + '" aria-expanded="' + aberto + '"', 'md-etapa-btn');
         if (aberto) h += '<div>' + d.ms.slice().reverse().filter(function (x) { return x.etapa === et.etapa && (!zeradas || valor(x.total)); }).map(function (x) {
           var rotulo = op.medTxt(d.an, x.n) + (x.retificada ? ' · retificada' : '') + ' · ' + (valor(x.total) ? dinheiro(x.total) : 'zerada');
-          return botao('med', '<b>' + esc(x.n + 'ª' + (x.retificada ? '*' : '')) + '</b><span>' + esc(mesTxt(idx(x.ref))) + '</span><span class="md-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(valor(x.total)) / (d.max || 1) * 100) + '%"></i></span><span class="md-med-valor' + (!valor(x.total) ? ' md-zerada' : '') + '">' + esc(valor(x.total) ? dinheiro(x.total) : 'zerada') + '</span>', ' data-n="' + esc(x.n) + '" aria-label="' + esc(rotulo) + '" title="' + esc(rotulo) + '" aria-pressed="' + (String(x.n) === String(med)) + '"', 'md-med-row');
+          var comPag = pags(d).com > 0, pt = comPag ? pagTxt(d, x) : '';
+          if (pt) rotulo += ' · ' + pt + (pagSit(d, x) === 'apagar' ? ', a pagar' : '');
+          return botao('med', '<b>' + esc(x.n + 'ª' + (x.retificada ? '*' : '')) + '</b><span>' + esc(mesTxt(idx(x.ref))) + '</span><span class="md-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(valor(x.total)) / (d.max || 1) * 100) + '%"></i></span><span class="md-med-valor' + (!valor(x.total) ? ' md-zerada' : '') + '">' + esc(valor(x.total) ? dinheiro(x.total) : 'zerada') + '</span>' + (comPag ? pagIc(d, x) : ''), ' data-n="' + esc(x.n) + '" aria-label="' + esc(rotulo) + '" title="' + esc(rotulo) + '" aria-pressed="' + (String(x.n) === String(med)) + '"', 'md-med-row' + (comPag ? ' com-pag' : ''));
         }).join('') + '</div>';
         h += '</div>';
       });
@@ -364,13 +425,22 @@
       var m = null;
       d.ms.forEach(function (x) { if (String(x.n) === String(med)) m = x; });
       if (!m) { m = d.ult; med = m.n; }
-      var e = op.etapaInfo(d.an, d.ult.etapa), ems = e ? d.ms.filter(function (x) { return x.etapa === e.etapa; }) : [];
+      var e = op.etapaInfo(d.an, d.ult.etapa), ems = e ? d.ms.filter(function (x) { return x.etapa === e.etapa; }) : [], pg = pags(d);
       if (op.estado(c) === 'erro') h += estadoHtml(c);
+      // v202: com o SIAC lido, o contrato aberto ganha a parte Pagamentos
+      if (!pg.com) secao = 'med';
+      else h += '<div class="md-secoes" role="group" aria-label="Partes do contrato">' + [['med', 'Medições', String(d.ms.length)], ['pag', 'Pagamentos', pg.abertas.length ? pg.abertas.length + ' a pagar' : '']].map(function (x) {
+        return botao('secao', esc(x[1]) + (x[2] ? ' <small' + (x[0] === 'pag' ? ' class="md-sec-at"' : '') + '>' + esc(x[2]) + '</small>' : ''), ' data-v="' + x[0] + '" aria-pressed="' + (secao === x[0]) + '"');
+      }).join('') + '</div>';
+      if (secao === 'pag') return h + pagamentosHtml(c, d);
+      var ultSm = sMed(d, d.ult.n), q = consultaSiac(d);
+      var kpi3 = pg.nReaj ? kpi('Reajuste medido', dinheiro(pg.reaj), esc('Total com reajuste ' + dinheiro(pg.tot))) :
+        kpi(e && e.etapa != null ? e.etapa + 'ª etapa · atual' : 'Etapa não informada', e ? dinheiro(e.total) : '—', e ? esc(e.de + ' a ' + e.ate) + ' · ' + nMed(ems.length) + ', ' + ems.filter(function (x) { return !valor(x.total); }).length + ' zeradas' : '');
+      var kpi4 = ultSm ? kpi('No SIAC', esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)), esc([pagTxt(d, d.ult), d.ultima < hoje() - 3 ? falta(d) : '', q ? 'consulta de ' + q : ''].filter(Boolean).join(' · ')), pagSit(d, d.ult) === 'apagar' || d.ultima < hoje() - 3 ? 'at' : '') :
+        kpi('Última carregada', esc(op.medTxt(d.an, d.ult.n)), esc(falta(d)));
       h += '<div class="md-resumo-ctl">' + botao('resumo', (resumoCel ? '▾' : '▸') + ' Resumo do contrato', ' aria-expanded="' + resumoCel + '" aria-controls="mdKpis"') + '</div>';
-      h += '<section class="md-kpis' + (resumoCel ? '' : ' md-kpis-fechado') + '" id="mdKpis" aria-label="Resumo do contrato">' + kpi('Medido (acumulado PI)', dinheiro(d.total), esc(baseTxt(d)) + reajHtml(d)) +
-        kpi('Saldo (PI)', d.pi != null ? dinheiro(d.pi - d.total) : 'falta o PI', esc(projTxt(d))) +
-        kpi(e && e.etapa != null ? e.etapa + 'ª etapa · atual' : 'Etapa não informada', e ? dinheiro(e.total) : '—', e ? esc(e.de + ' a ' + e.ate) + ' · ' + nMed(ems.length) + ', ' + ems.filter(function (x) { return !valor(x.total); }).length + ' zeradas' : '') +
-        kpi('Última carregada', esc(op.medTxt(d.an, d.ult.n)), esc(falta(d))) + '</section>';
+      h += '<section class="md-kpis' + (resumoCel ? '' : ' md-kpis-fechado') + '" id="mdKpis" aria-label="Resumo do contrato">' + kpi('Medido (acumulado PI)', dinheiro(d.total), esc(baseTxt(d)) + (pg.nReaj ? '' : reajHtml(d))) +
+        kpi('Saldo (PI)', d.pi != null ? dinheiro(d.pi - d.total) : 'falta o PI', esc(projTxt(d))) + kpi3 + kpi4 + '</section>';
       h += '<div class="md-contrato"><section class="card md-lista" aria-label="Medições do contrato"><div class="md-lista-top"><h2>' + nMed(d.ms.length) + '</h2><label><input type="checkbox" id="mdZeradas"' + (zeradas ? ' checked' : '') + '> Esconder as zeradas</label></div><div class="md-etapas">';
       h += etapasHtml(d) + '</div>' + seletorHtml(d, m) + '</section><section class="card md-detalhe" id="mdDetalhe" aria-label="Medição escolhida">' + medicaoHtml(c, d, m) + '</section></div>';
       return h + (folha ? folhaHtml(c, d) : '');
@@ -382,17 +452,56 @@
       return '<small class="md-pagamento">' + esc('SIAC: ' + p.situacao + (p.data ? ' em ' + dataTxt(p.data) : '') +
         (sm.processo ? ' · processo ' + sm.processo : '') + (p.consultado ? ' (consultado em ' + dataTxt(p.consultado) + ')' : '')) + '</small>';
     }
+    // v202: período, processamento, AES e pagamento em trilha, com o processo de suporte (SEI) para copiar
+    function trilhaHtml(c, d, m, sm) {
+      var pg = sm.pagamento || {}, st = pagSit(d, m), ps = [], q = pg.consultado ? dataTxt(pg.consultado) : consultaSiac(d);
+      var per = periodoTxt(sm.inicio, sm.fim);
+      if (per) ps.push(['Período medido', per, 1]);
+      if (sm.processado) ps.push(['Processada no SIAC', dataTxt(sm.processado), 1]);
+      if (st === 'paga') ps.push(['Pagamento aprovado', pg.data ? dataTxt(pg.data) : '', 1]);
+      else if (st === 'apagar') { ps.push(['AES emitido', pg.data ? dataTxt(pg.data) : '', 1]); ps.push(['Pagamento aprovado', 'aguardando', 0]); }
+      else if (st === 'zerada') ps.push(['Sem valor a pagar', pg.situacao + (pg.data ? ' em ' + dataTxt(pg.data) : ''), 1]);
+      else if (pg.situacao) ps.push([pg.situacao, pg.data ? dataTxt(pg.data) : '', 1]);
+      if (!ps.length && !sm.processo) return '';
+      var chip = st === 'apagar' ? '<span class="md-chip-pg apagar">' + IC_REL + 'a pagar</span>' : st === 'paga' ? '<span class="md-chip-pg paga">' + IC_OK + 'paga</span>' : '';
+      var h = '<section class="md-trilha-box' + (st === 'apagar' ? ' apagar' : '') + '" aria-label="Andamento no SIAC"><div class="md-trilha-top"><b>Andamento no SIAC</b>' + chip + (q ? '<small>consultado em ' + esc(q) + '</small>' : '') + '</div>';
+      if (ps.length) h += '<ol class="md-trilha">' + ps.map(function (x) {
+        return '<li class="' + (x[2] ? 'feito' : 'falta') + '"><span class="md-trilha-bola" aria-hidden="true">' + (x[2] ? IC_OK : '') + '</span><span class="md-trilha-txt"><b>' + esc(x[0]) + '</b><small>' + esc(x[1]) + '</small></span></li>';
+      }).join('') + '</ol>';
+      if (sm.processo) h += '<div class="md-proc"><span>Processo de suporte (SEI)</span><b>' + esc(sm.processo) + '</b>' + copiarBtn(sm.processo, 'Copiar o número do processo', celular()) + '</div>';
+      return h + '</section>';
+    }
+    function resumoMedTxt(c, d, m, sm) {
+      var t = nome(c) + ' · ' + m.n + 'ª medição (' + mesTxt(idx(m.ref)) + '): ';
+      t += sm && numero(sm.reaj) != null && numero(sm.total) != null ? 'PI ' + dinheiro(m.total) + ' + reajuste ' + dinheiro(sm.reaj) + ' = ' + dinheiro(sm.total) : dinheiro(m.total) + ' (PI)';
+      var pt = pagTxt(d, m);
+      if (pt) t += '. SIAC: ' + pt;
+      if (sm && sm.processo) t += '. Processo ' + sm.processo;
+      return t + '.';
+    }
     function medicaoHtml(c, d, m) {
       var sm = d.an.siac && d.an.siac.medicoes && d.an.siac.medicoes[m.n], anterior = d.ms[d.ms.indexOf(m) - 1], v = valor(m.total), als = avisos(d, m.n);
       var processado = sm && sm.processado || m.processado, situacao = sm && sm.situacao || m.situacao, indices = sm && sm.indices || m.indices;
       var semKm = soSiac(d);
       if (semKm && aba === 'segmentos') aba = 'grupos';
-      var h = '<div class="md-top"><div><small>' + esc((m.etapa != null ? m.etapa + 'ª etapa · ' : '') + 'Competência ' + (m.mes || mesTxt(idx(m.ref)))) + '</small><h2 id="mdTituloMed" tabindex="-1">' + esc(m.n + 'ª medição' + (m.retificada ? ' · retificada' : '')) + '</h2><small>' + esc('Fonte: ' + (m.fonte || d.an.sobre && d.an.sobre.fonte || 'não informada') + ' · processada no SIAC em ' + (processado ? dataTxt(processado) : 'data não informada')) + '</small>' +
+      var varTxt = anterior ? (valor(anterior.total) ? (v - valor(anterior.total) >= 0 ? '+' : '−') + pctCurto(Math.abs((v - valor(anterior.total)) / valor(anterior.total)) * 100) : 'Variação percentual sem base (anterior zerada)') + ' em relação à ' + anterior.n + 'ª (' + dinheiro(anterior.total) + ')' : '';
+      var h;
+      if (sm && (sm.pagamento || sm.processo || numero(sm.reaj) != null)) {
+        var rj = numero(sm.reaj), tt = numero(sm.total), sit = [situacao ? 'medição ' + String(situacao).toLowerCase() : '', indices ? 'índices ' + String(indices).toLowerCase() : ''].filter(Boolean).join(' · ');
+        h = '<div class="md-top"><div><small>' + esc((m.etapa != null ? m.etapa + 'ª etapa · ' : '') + 'competência ' + mesTxt(idx(m.ref))) + '</small><h2 id="mdTituloMed" tabindex="-1">' + esc(m.n + 'ª medição' + (m.retificada ? ' · retificada' : '')) + '</h2>' +
+          (varTxt ? '<small>' + esc(varTxt) + '</small>' : '') + (sit ? '<small>' + esc(sit.charAt(0).toUpperCase() + sit.slice(1)) + '</small>' : '') + '</div><div class="md-soma">' +
+          (rj != null && tt != null ? '<div><span class="md-label">Preços iniciais (PI)</span><b>' + esc(dinheiro(v)) + '</b></div><span class="md-op" aria-hidden="true">+</span><div><span class="md-label">Reajuste</span><b>' + esc(dinheiro(rj)) + '</b></div><span class="md-op md-op-ig" aria-hidden="true">=</span><div class="md-soma-tot"><span class="md-label">Total da medição</span><strong class="md-total">' + esc(dinheiro(tt)) + '</strong></div>'
+            : '<div class="md-soma-tot"><span class="md-label">Preços iniciais (PI)</span><strong class="md-total">' + esc(dinheiro(v)) + '</strong></div>') +
+          copiarBtn(resumoMedTxt(c, d, m, sm), 'Copiar o resumo da medição') + '</div></div>';
+        h += trilhaHtml(c, d, m, sm);
+      } else {
+      h = '<div class="md-top"><div><small>' + esc((m.etapa != null ? m.etapa + 'ª etapa · ' : '') + 'Competência ' + (m.mes || mesTxt(idx(m.ref)))) + '</small><h2 id="mdTituloMed" tabindex="-1">' + esc(m.n + 'ª medição' + (m.retificada ? ' · retificada' : '')) + '</h2><small>' + esc('Fonte: ' + (m.fonte || d.an.sobre && d.an.sobre.fonte || 'não informada') + ' · processada no SIAC em ' + (processado ? dataTxt(processado) : 'data não informada')) + '</small>' +
         (situacao ? '<small>' + esc(situacao + (indices ? ' · índices ' + indices : '')) + '</small>' : '') + pagamentoHtml(sm) + '</div><div class="md-direita"><strong class="md-total">' + esc(dinheiro(v)) + '</strong><small>Preços iniciais (PI)</small>';
       if (sm && numero(sm.total) != null) h += '<small>Com reajuste ' + dinheiro(sm.total) + '</small>';
       if (sm && numero(sm.reaj) != null) h += '<small>Reajuste da medição: ' + dinheiro(sm.reaj) + '</small>';
-      if (anterior) h += '<small>' + esc((valor(anterior.total) ? (v - valor(anterior.total) >= 0 ? '+' : '−') + pctCurto(Math.abs((v - valor(anterior.total)) / valor(anterior.total)) * 100) : 'Variação percentual sem base (anterior zerada)') + ' em relação à ' + anterior.n + 'ª (' + dinheiro(anterior.total) + ')') + '</small>';
+      if (anterior) h += '<small>' + esc(varTxt) + '</small>';
       h += '</div></div>';
+      }
       // As análises antigas trazem [localizado, semLocal]; as novas podem trazer [localizado, total].
       // O total PI da medição é a base em ambos os casos; nunca se soma uma segunda vez o que já é total.
       var cob = d.an.cobertura && d.an.cobertura[m.n], local = cob ? numero(cob[0]) : null;
@@ -403,6 +512,79 @@
       if (aba === 'avisos') return h + avisosHtml(als);
       if (aba === 'segmentos') return h + segmentosHtml(c, d, m);
       return h + gruposHtml(d, m);
+    }
+    // v202: a parte Pagamentos do contrato aberto: totais, gráfico por medição, empenho (quando lido do SIAC) e a tabela
+    function graficoHtml(d) {
+      var cel = celular(), W = cel ? 340 : 760, H = cel ? 170 : 230, L = 40, B = 22, T = 8, ms = d.ms, n = ms.length;
+      var mx = 0; ms.forEach(function (m) { mx = Math.max(mx, valor(m.total) + Math.max(0, reajMed(d, m) || 0), totalMed(d, m)); });
+      if (!n || !(mx > 0)) return '';
+      var bruto = mx / 4, pot = Math.pow(10, Math.floor(Math.log(bruto) / Math.LN10)), passo = [1, 2, 2.5, 5, 10].map(function (k) { return k * pot; }).filter(function (k) { return k >= bruto; })[0], topo = passo * 4;
+      var g = '', bw = (W - L - 4) / n, y0 = H - B, alt = H - B - T, cada = Math.max(1, Math.ceil(n / (cel ? 5 : 9)));
+      for (var k = 1; k <= 4; k++) { var y = (T + alt * (1 - k / 4)).toFixed(1); g += '<line x1="' + L + '" y1="' + y + '" x2="' + W + '" y2="' + y + '" class="md-g-grade"/><text x="' + (L - 5) + '" y="' + (Number(y) + 4) + '" text-anchor="end" class="md-g-txt">' + esc(fmtN(Math.round(passo * k / 1000))) + '</text>'; }
+      ms.forEach(function (m, i) {
+        var x = L + i * bw + bw * 0.16, w = Math.max(1, bw * 0.68), pi = Math.max(0, valor(m.total)), rj = Math.max(0, reajMed(d, m) || 0), hp = alt * pi / topo, hr = alt * rj / topo, st = pagSit(d, m);
+        var tip = m.n + 'ª · ' + mesTxt(idx(m.ref)) + ': PI ' + dinheiro(m.total) + (reajMed(d, m) != null ? ' + reajuste ' + dinheiro(reajMed(d, m)) + ' = ' + dinheiro(totalMed(d, m)) : '') + (st ? ' · ' + pagTxt(d, m) : '');
+        g += '<g><title>' + esc(tip) + '</title>' + (st === 'apagar' ? '<rect x="' + x.toFixed(1) + '" y="' + (y0 - hp - hr).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(1, hp + hr).toFixed(1) + '" class="md-g-apagar"/>' :
+          '<rect x="' + x.toFixed(1) + '" y="' + (y0 - hp).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + Math.max(0, hp).toFixed(1) + '" class="md-g-pi"/>' + (hr >= 0.5 ? '<rect x="' + x.toFixed(1) + '" y="' + (y0 - hp - hr).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hr.toFixed(1) + '" class="md-g-rj"/>' : '')) + '</g>';
+        if ((n - 1 - i) % cada === 0) g += '<text x="' + (i === n - 1 ? x + w : x + w / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="' + (i === n - 1 ? 'end' : 'middle') + '" class="md-g-txt">' + esc(mesTxt(idx(m.ref))) + '</text>';
+      });
+      g += '<line x1="' + L + '" y1="' + y0 + '" x2="' + W + '" y2="' + y0 + '" class="md-g-eixo"/>';
+      var p = pags(d);
+      return '<section class="card md-grafico"><div class="md-pg-tit"><h3>Por medição, em R$ mil</h3><span class="md-g-leg"><span><i class="md-g-pi"></i>PI</span>' + (p.nReaj ? '<span><i class="md-g-rj"></i>reajuste</span>' : '') + (p.abertas.length ? '<span><i class="md-g-apagar"></i>a pagar</span>' : '') + '</span></div>' +
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc('Valor de cada uma das ' + n + ' medições, em mil reais' + (p.nReaj ? ', PI e reajuste' : '') + (p.abertas.length ? '; a medição a pagar aparece tracejada' : '')) + '">' + g + '</svg></section>';
+    }
+    function empenhoHtml(d, emp) {
+      var p = pags(d), md = media6(d), saldo = numero(emp.saldo), sobra = saldo == null ? null : saldo - p.aPagar, prox = d.ultima != null ? mesTxt(d.ultima + 1) : 'a próxima', aviso = '', tom = '';
+      var lin = function (t, v, forte) { return v == null ? '' : '<div class="md-emp-l' + (forte ? ' forte' : '') + '"><span>' + esc(t) + '</span><span>' + esc(dinheiro(v)) + '</span></div>'; };
+      if (sobra != null) {
+        var antes = p.abertas.length ? 'Depois da ' + p.abertas.map(function (m) { return m.n + 'ª'; }).join(' e da ') + ' sobram ' + dinheiro(Math.max(0, sobra)) + '.' : 'Saldo de ' + dinheiro(saldo) + '.';
+        if (sobra < 0) { aviso = 'O saldo não cobre ' + (p.abertas.length > 1 ? 'as medições a pagar' : 'a medição a pagar') + ': faltam ' + dinheiro(-sobra) + '.'; tom = 'dg'; }
+        else if (md != null && sobra >= md) { aviso = antes + ' Cobre a medição de ' + prox + ' (média das 6 últimas: ' + dinheiro(md) + ').'; tom = 'ok'; }
+        else if (md != null) { aviso = antes + ' Não cobre a medição de ' + prox + ': a média das 6 últimas é ' + dinheiro(md) + '.'; tom = 'at'; }
+        else aviso = antes;
+      }
+      var notas = (emp.notas || []).filter(function (x) { return x && x.ne; });
+      return '<section class="card md-emp" aria-label="Empenho"><div class="md-pg-tit"><h3>Empenho</h3><small>' + esc('SIAC' + (emp.atualizado ? ' · atualizado em ' + dataTxt(emp.atualizado) : '') + (emp.consulta ? ' · consulta de ' + dataTxt(emp.consulta) : '')) + '</small></div>' +
+        lin('Empenhado', numero(emp.empenhado)) + lin('Ajustes', numero(emp.ajustes)) + lin('Consumido (medições pagas)', numero(emp.consumido)) + lin('Saldo', saldo, true) +
+        (notas.length ? '<small class="md-emp-notas">' + esc((notas.length === 1 ? 'Nota com saldo: ' : 'Notas com saldo: ') + notas.map(function (x) { return x.ne + (numero(x.saldo) != null ? ' (' + dinheiro(x.saldo) + ')' : ''); }).join(' e ')) + '</small>' : '') +
+        (aviso ? '<p class="md-emp-aviso ' + tom + '">' + esc(aviso) + '</p>' : '') + '</section>';
+    }
+    function pagLinhas(d) {
+      return d.ms.slice().reverse().filter(function (m) { var st = pagSit(d, m); return !pagAbertas || st === 'apagar' || st === 'outra'; });
+    }
+    function pagTabelaTxt(c, d) {
+      var br = function (v) { return v == null ? '' : (v < 0 ? '-' : '') + decimal(Math.abs(v), 2).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
+      return [['Contrato', 'Medição', 'Competência', 'PI', 'Reajuste', 'Total', 'Processada', 'Pagamento', 'Processo de suporte'].join('\t')].concat(pagLinhas(d).map(function (m) {
+        var x = sMed(d, m.n) || {};
+        return [nome(c), m.n + 'ª', mesTxt(idx(m.ref)), br(valor(m.total)), br(reajMed(d, m)), br(totalMed(d, m)), x.processado ? dataTxt(x.processado) : '', pagTxt(d, m), x.processo || ''].join('\t');
+      })).join('\n');
+    }
+    function pagamentosHtml(c, d) {
+      var p = pags(d), f = d.an.siac && d.an.siac.ficha, pir = f && numero(f.total_pi_r), emp = d.an.siac && d.an.siac.empenho, cel = celular();
+      var ab = p.abertas.map(function (m) { return m.n + 'ª · ' + pagTxt(d, m); }).join(' · ');
+      var h = '<section class="md-kpis md-kpis5" aria-label="Pagamentos do contrato">' +
+        kpi('Medido (PI)', dinheiro(p.pi), esc(nMed(d.ms.length) + (d.ms.length - d.comValor ? ', ' + (d.ms.length - d.comValor) + ' zeradas' : ''))) +
+        kpi('Reajuste', p.nReaj ? dinheiro(p.reaj) : '—', esc(p.nReaj && p.pi ? pctCurto(p.reaj / p.pi * 100) + ' sobre o PI medido' : 'sem reajuste no SIAC')) +
+        kpi('Total medido (PI + R)', dinheiro(p.tot), esc(pir ? 'de ' + dinheiro(pir) + ' (PI + R do contrato)' : 'PI + reajuste das medições')) +
+        kpi('Pago', dinheiro(p.pago), esc(nMed(p.nPago) + ' com pagamento aprovado'), 'ok') +
+        kpi('A pagar', p.abertas.length ? dinheiro(p.aPagar) : 'Nada', esc(p.abertas.length ? ab : 'todas as medições com valor estão pagas'), p.abertas.length ? 'at' : '') + '</section>';
+      h += '<div class="md-pg-meio' + (emp ? '' : ' so') + '">' + graficoHtml(d) + (emp ? empenhoHtml(d, emp) : '') + '</div>';
+      var linhas = pagLinhas(d), mostra = pagTodas ? linhas : linhas.slice(0, 12), q = consultaSiac(d);
+      h += '<section class="card md-pg-tab" aria-label="Medições e pagamentos"><div class="md-pg-tit"><h3>Medições e pagamentos</h3><small>' + esc((mostra.length < linhas.length ? mostra.length + ' de ' : '') + nMed(linhas.length) + (pagAbertas ? ' não pagas' : '') + ' · mais recentes primeiro' + (q ? ' · SIAC, consulta de ' + q : '')) + '</small>' +
+        '<span class="md-pg-ctl">' + botao('pag-abertas', 'Só as não pagas', ' aria-pressed="' + pagAbertas + '"', 'small') + (cel ? '' : botao('pag-copiar', IC_COP + '<span>Copiar tabela</span>', '', 'small md-copiar com-txt')) + '</span></div>';
+      if (!linhas.length) h += vazio('Nenhuma medição a pagar.');
+      else if (cel) h += '<ul class="md-pg-lista">' + mostra.map(function (m) {
+        var st = pagSit(d, m), rj = reajMed(d, m);
+        return '<li>' + botao('pag-med', '<span><b>' + esc(m.n + 'ª · ' + mesTxt(idx(m.ref))) + '</b><small>' + esc(rj != null ? 'PI ' + n2(valor(m.total)) + ' + reaj. ' + n2(rj) : 'PI') + '</small></span><span class="md-pg-dir"><b>' + esc(dinheiro(totalMed(d, m))) + '</b>' + (st ? '<span class="md-chip-pg ' + st + '">' + (st === 'paga' ? IC_OK : st === 'apagar' ? IC_REL : '') + esc(pagTxt(d, m)) + '</span>' : '') + '</span>',
+          ' data-n="' + esc(m.n) + '" aria-label="' + esc('Abrir a ' + m.n + 'ª medição, ' + mesTxt(idx(m.ref)) + ', ' + dinheiro(totalMed(d, m)) + (st ? ', ' + pagTxt(d, m) : '')) + '"', 'md-pg-linha' + (st === 'apagar' ? ' apagar' : '')) + '</li>';
+      }).join('') + '</ul>';
+      else h += '<div class="md-scroll" tabindex="0" role="region" aria-label="Medições e pagamentos, tabela com rolagem"><table class="md-tabela md-pg-tabela"><thead><tr><th scope="col">Med.</th><th scope="col">Competência</th><th scope="col" class="md-num">PI</th><th scope="col" class="md-num">Reajuste</th><th scope="col" class="md-num">Total</th><th scope="col" class="md-num">Processada</th><th scope="col">Pagamento</th><th scope="col">Processo de suporte (SEI)</th></tr></thead><tbody>' + mostra.map(function (m) {
+        var x = sMed(d, m.n) || {}, st = pagSit(d, m), rj = reajMed(d, m);
+        return '<tr' + (st === 'apagar' ? ' class="apagar"' : '') + '><td>' + botao('pag-med', esc(m.n + 'ª'), ' data-n="' + esc(m.n) + '" aria-label="' + esc('Abrir a ' + m.n + 'ª medição') + '"', 'small ghost md-pg-n') + '</td><td>' + esc(mesTxt(idx(m.ref))) + '</td><td class="md-num">' + esc(n2(valor(m.total))) + '</td><td class="md-num">' + esc(rj == null ? '—' : n2(rj)) + '</td><td class="md-num"><b>' + esc(n2(totalMed(d, m))) + '</b></td><td class="md-num">' + esc(x.processado ? dataTxt(x.processado) : '—') + '</td>' +
+          '<td>' + (st === 'apagar' ? '<span class="md-chip-pg apagar">' + IC_REL + esc(pagTxt(d, m)) + '</span>' : st === 'paga' ? '<span class="md-pg-ok">' + IC_OK + esc(pagTxt(d, m).replace(/^Paga/, 'Aprovado')) + '</span>' : esc(pagTxt(d, m) || '—')) + '</td><td>' + (x.processo ? '<span class="md-pg-proc">' + esc(x.processo) + copiarBtn(x.processo, 'Copiar o processo da ' + m.n + 'ª') + '</span>' : '—') + '</td></tr>';
+      }).join('') + '</tbody>' + (pagAbertas ? '' : '<tfoot><tr><td colspan="2"><b>' + esc(nMed(d.ms.length)) + '</b></td><td class="md-num"><b>' + esc(n2(p.pi)) + '</b></td><td class="md-num"><b>' + esc(p.nReaj ? n2(p.reaj) : '—') + '</b></td><td class="md-num"><b>' + esc(n2(p.tot)) + '</b></td><td colspan="3"></td></tr></tfoot>') + '</table></div>';
+      if (linhas.length > 12) h += botao('pag-todas', pagTodas ? 'Mostrar só as 12 mais recentes ▴' : 'Ver as ' + nMed(linhas.length) + ' ▾', '', 'ghost md-accent md-pg-mais');
+      return h + '</section>';
     }
     function dataTxt(s) { return /^\d{4}-\d{2}-\d{2}/.test(String(s)) ? op.data(s) : String(s); }
     function soSiac(d) {
@@ -653,6 +835,8 @@
     }
     function abrir(id, n) {
       if (!contrato(id)) return;
+      if (id !== cid) { secao = 'med'; pagTodas = false; pagAbertas = false; }
+      if (n != null) secao = 'med';
       cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segSem = null; segOrdem = 'km';
       var d = dado(contrato(id));
       if (d && n != null) d.ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; });
@@ -667,6 +851,9 @@
       if (act === 'folha-x') { fechaFolha(); return; }
       if (act === 'diagrama') { var c = contrato(b.dataset.cid); if (c) op.diagrama(c); return; }
       if (act === 'abrir') { abrir(b.dataset.cid, b.dataset.n); return; }
+      if (act === 'copiar') { copiar(b.dataset.txt || '', 'Copiado.'); return; }
+      if (act === 'pag-copiar') { var cc = contrato(cid), dc = cc && dado(cc); if (dc) copiar(pagTabelaTxt(cc, dc), 'Tabela copiada: cole na planilha.'); return; }
+      if (act === 'pag-med') { abrir(cid, b.dataset.n); return; }
       if (act === 'ponte-diag' || act === 'ponte-fotos') {
         var cp = contrato(cid), pp = cp && op.pontos(cp).filter(function (x) { return x.id === b.dataset.p; })[0];
         if (pp) (act === 'ponte-diag' ? op.diagramaPonto : op.fotos)(cp, pp);
@@ -690,6 +877,9 @@
         }
       }
       else if (act === 'aba') aba = b.dataset.v;
+      else if (act === 'secao') secao = b.dataset.v === 'pag' ? 'pag' : 'med';
+      else if (act === 'pag-todas') pagTodas = !pagTodas;
+      else if (act === 'pag-abertas') { pagAbertas = !pagAbertas; pagTodas = false; }
       else if (act === 'ponte') { segAberto = segAberto === b.dataset.p ? '' : b.dataset.p; segTodas = false; segServ = false; }
       else if (act === 'ponte-todas') segTodas = !segTodas;
       else if (act === 'ponte-serv') segServ = !segServ;
@@ -727,7 +917,7 @@
       else if (!ev.shiftKey && (i < 0 || i === l.length - 1)) { ev.preventDefault(); l[0].focus(); }
     });
     // celular ⇄ computador (girar o tablet, mudar a janela): a matriz troca de 6 para 16 meses
-    if (mqCel) { var trocou = function () { if (op.ativa() && modo === 'mes' && !cid) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
+    if (mqCel) { var trocou = function () { if (op.ativa() && ((modo === 'mes' && !cid) || (cid && secao === 'pag'))) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
     host.addEventListener('change', function (ev) {
       if (!op.ativa()) return;
       if (ev.target.id === 'mdOrdem') ordem = ev.target.value;
