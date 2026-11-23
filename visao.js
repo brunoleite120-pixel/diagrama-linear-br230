@@ -384,9 +384,10 @@
       var dm = noMapa ? dadosMapa(d, its) : null;
       var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
       var nGr = its.reduce(function (t, x) { return t + (x.nc && x.inf.ncN || 0); }, 0);   // as NC desses locais (a legenda do modo NC diz os dois)
+      var nBt = Math.max(nGr, nNC);   // o botão diz "Não conformidades": conta as NC, como a legenda (4 locais · 5 NC → 5), não os locais
       var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
         '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
-        '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nNC + '"><span class="vg-ncl">Não conformidades</span><span class="vg-ncc">NC</span> <b>' + nNC + '</b></button></div>' : '';
+        '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nBt + '"><span class="vg-ncl">Não conformidades</span><span class="vg-ncc">NC</span> <b>' + nBt + '</b></button></div>' : '';
       var nRasc = o.rascunhos ? o.rascunhos() : 0;
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
         (nRasc ? '<button type="button" class="vg-rasc" data-vg="rasc">' + nRasc + (nRasc === 1 ? ' rascunho' : ' rascunhos') + ' neste aparelho</button>' : '') +

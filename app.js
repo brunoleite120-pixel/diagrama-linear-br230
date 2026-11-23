@@ -3357,6 +3357,7 @@
   // NC", só os que têm NC salva. Km que nenhuma faixa contém: o mais perto (a OAE fica num km só; 322 acha a do km 322,77)
   function listaAcha(c, ps, L) {
     var base = L.so ? ps.filter(function (p) { return comNc(p, c); }) : ps, q = L.q.trim();
+    L.perto = null;
     if (!q) return base;
     var km = window.VisaoGeral && VisaoGeral.kmBusca ? VisaoGeral.kmBusca(q) : null, t = semAcento(q).split(' ');
     var r = base.filter(function (p) {
@@ -3364,8 +3365,10 @@
       return t.every(function (w) { return s.indexOf(w) >= 0; }) || (km != null && listaFaixas(c, p).some(function (x) { return km >= x[0] - 1e-6 && km <= x[1] + 1e-6; }));
     });
     if (r.length || km == null) return r;
-    var mp = null, md = Infinity;
-    base.forEach(function (p) { listaFaixas(c, p).forEach(function (x) { var d = Math.min(Math.abs(km - x[0]), Math.abs(km - x[1])); if (d < md) { md = d; mp = p; } }); });
+    // o mais perto vem marcado (L.perto): a lista diz que é aproximação, a que distância e se o km fica fora do contrato
+    var mp = null, md = Infinity, k0 = Infinity, k1 = -Infinity;
+    base.forEach(function (p) { listaFaixas(c, p).forEach(function (x) { k0 = Math.min(k0, x[0]); k1 = Math.max(k1, x[1]); var d = Math.min(Math.abs(km - x[0]), Math.abs(km - x[1])); if (d < md) { md = d; mp = p; } }); });
+    if (mp) L.perto = { p: mp, d: md, km: km, fora: km < k0 || km > k1, k0: k0, k1: k1 };
     return mp ? [mp] : [];
   }
   // aplica o filtro ao que está na tela. A linha do item aberto no lado a lado (.pt-marcado) não tem data-id no .pt, só no botão
@@ -3383,7 +3386,13 @@
     itens.forEach(function (x) { var v = !ativo || acha.indexOf(x.p) >= 0 || (ui.open[x.p.id] && L.fix[x.p.id]); x.el.hidden = !v; if (v) k++; });
     var ct = $('ptCount'), nd = $('ptNada');
     if (ct) ct.textContent = ativo ? k + ' de ' + ps.length : ct.getAttribute('data-t');
-    if (nd) { nd.hidden = !ativo || k > 0; nd.textContent = k ? '' : 'Nada encontrado' + (L.so ? ' com NC' : '') + '. Confira o nome ou o km.'; }
+    var pt = ativo && k > 0 && L.perto;
+    if (nd) {
+      nd.hidden = !ativo || (k > 0 && !pt);
+      nd.textContent = pt ? (pt.fora ? 'O km ' + fmtKm(pt.km) + ' fica fora ' + (isOae(c) ? 'das OAEs' : c.tipo === 'conserva' ? 'dos segmentos' : 'dos pontos') + ' deste contrato (km ' + fmtKm(pt.k0) + ' a ' + fmtKm(pt.k1) + '). ' : 'Nada no km ' + fmtKm(pt.km) + '. ') +
+          'O mais perto é ' + (pt.p.nome || pt.p.codigo || 'este') + ', a ' + fmtKm(pt.d) + ' km.'
+        : k ? '' : 'Nada encontrado' + (L.so ? ' com NC' : '') + '. Confira o nome ou o km.';
+    }
   }
   function listaMuda() { ui.lista.fix = null; listaAplica(); }
   // abrir um item vindo de fora da lista (mapa, desenho, análise, rascunho): se o filtro o esconde, o filtro sai
@@ -9430,7 +9439,7 @@
       // acesso sem nenhuma opção aqui (fiscal no computador): explica, em vez de abrir um menu vazio
       if (!pop.hidden) {
         var algum = [].some.call(pop.querySelectorAll('button[data-act]'), function (x) { return !x.hidden && x.offsetParent; }), vz = $('menuVazio');
-        if (!algum && !vz) { vz = document.createElement('p'); vz.id = 'menuVazio'; vz.className = 'menu-vazio'; vz.textContent = 'Seu acesso não tem opções neste menu. Os pontos, o mapa, as fotos e a galeria ficam nas abas da barra de cima.'; pop.insertBefore(vz, pop.firstChild); }
+        if (!algum && !vz) { vz = document.createElement('p'); vz.id = 'menuVazio'; vz.className = 'menu-vazio'; vz.textContent = 'Seu acesso não tem opções neste menu. O que você pode ver fica nas abas da barra de cima.'; pop.insertBefore(vz, pop.firstChild); }
         if (vz) vz.hidden = algum;
       }
     });

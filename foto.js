@@ -1428,11 +1428,14 @@
     // o km da foto pelo ponto escolhido: o do eixo; na OAE da travessia (só km local) e nos pontos do 731, o km local
     function kmDoPonto(o, p) {
       var c = contract(), rm = c && c.kmLocal ? c.ramal || '' : p.kmIni == null && p.kmLocal != null && p.snv ? p.snv : '', k = kmPonto(p, c, rm);
-      if (k) { o.km = k[0]; o.ramal = rm; }
+      if (k) { o.km = k[0]; o.ramal = rm; o.kmDoPt = true; o.kmRuim = null; }
       return !!k;
     }
     // km digitado: no 731 (c.kmLocal), o km local; senão o eixo, ou a travessia quando o número só cabe nela (ramalDoKm)
-    function kmDigitado(o, k) {
+    // o km digitado: kmDoPt sai (escolher outro ponto não passa por cima dele) e o número que não cabe na rodovia fica em kmRuim,
+    // para o aviso dizer por que a foto ficou sem local em vez de jogar o número fora calado
+    function kmDigitado(o, k) { kmAceito(o, k); o.kmDoPt = false; o.kmRuim = k != null && o.km == null ? k : null; }
+    function kmAceito(o, k) {
       var c = contract(), r = c && c.kmLocal && c.ramal ? ramais()[c.ramal] : null;
       o.km = null;
       if (k == null) return;
@@ -1459,7 +1462,7 @@
       q('.ft-batch').hidden = true;
       q('.ft-work').hidden = false;
       q('.ft-foot').hidden = false;
-      q('#ftKm').value = st.km != null ? nf(st.km, 2) : '';
+      q('#ftKm').value = st.km != null ? nf(st.km, 2) : st.kmRuim != null ? nf(st.kmRuim, 2) : '';
       q('#ftLado').value = st.side || '';
       q('#ftDl').value = st.dist != null ? String(st.dist) : '';
       q('#ftData').value = dateInput(st.date);
@@ -1512,7 +1515,7 @@
     }
     function applyFix(o, fix) {
       var loc = locate(fix.ll), near = loc.dist <= 2000;
-      o.ll = fix.ll; o.acc = fix.acc; o.src = 'gps'; o.noLoc = false; o.loc = loc; o.keepLot = '';
+      o.ll = fix.ll; o.acc = fix.acc; o.src = 'gps'; o.noLoc = false; o.loc = loc; o.keepLot = ''; o.kmDoPt = false; o.kmRuim = null;
       o.km = near ? loc.km : null;
       o.ramal = near ? loc.ramal : '';
       o.side = near && loc.dist >= 10 ? loc.side : '';
@@ -1539,11 +1542,17 @@
         if (st.src === 'exif') h = 'Posição: <b>GPS gravado na foto</b> ' + coordTxt(st.ll) + side + ' · ' + dateTxt(st.date) + '.';
         else if (st.src === 'gps') h = 'Posição: <b>GPS do aparelho</b> ' + coordTxt(st.ll) + (st.acc ? ' (precisão ' + Math.round(st.acc) + ' m)' : '') + side + ' · ' + dateTxt(st.date) + '.';
         else if (st.noLoc && st.km == null) h = '<span class="ft-warn">Foto sem localização.</span> ' + noLocWhy() + ' Digite o km ou escolha o ponto.';
+        else if (st.km == null) h = 'Posição: <b>ainda não informada</b>. Digite o km ou escolha o ponto.';
         else h = 'Posição: <b>km informado à mão</b> (coordenadas ' + (st.ramal ? 'da travessia' : 'do eixo') + (st.noLoc ? '; a foto não tem localização' : '') + ').';
       } else if (st.src === 'exif') h = 'Posição: <b>GPS gravado na foto</b> ' + coordTxt(st.ll) + '.';
       else if (st.src === 'gps') h = 'Posição: <b>GPS do aparelho</b> na hora da foto ' + coordTxt(st.ll) + (st.acc ? ' (precisão ' + Math.round(st.acc) + ' m)' : '') + '.';
+      else if (st.km == null) h = 'Posição: <b>ainda não informada</b>. Digite o km ou escolha o ponto.';
       else h = 'Posição: <b>informada à mão</b>. As coordenadas são as ' + (st.ramal ? 'da ' + esc(ramais()[st.ramal] ? ramais()[st.ramal].nome.charAt(0).toLowerCase() + ramais()[st.ramal].nome.slice(1) : 'travessia') + ' no km local digitado (SNV ' + esc(st.ramal) + ').'
         : 'do eixo no km digitado (SNV ' + esc(snv.versao) + ').');
+      if (st.kmRuim != null && st.km == null) {
+        var cR = contract(), rR = cR && cR.kmLocal && cR.ramal && ramais()[cR.ramal] ? ramais()[cR.ramal].ref : ref;
+        h = '<span class="ft-warn">O km ' + nf(st.kmRuim, 2) + ' não existe neste trecho (vai do km ' + nf(rR.kmMin, 2) + ' ao ' + nf(rR.kmMax, 2) + ').</span> Confira o número: assim a foto fica sem local.';
+      }
       if (!short && st.src === 'manual' && st.noLoc) {
         h += ' <span class="ft-warn">Esta foto chegou sem localização.</span> ' + noLocWhy() + ' ' + noLocTip() +
           '<br><small>Arquivo: ' + esc(st.info || '') + ' · dados da câmera (EXIF): ' + (st.meta && st.meta.exif ? 'sim' : 'não') +
@@ -1555,7 +1564,8 @@
         // ponto de outra régua (OAE da travessia com a foto no eixo, ou o contrário): também fora
         var cp = contract(), dp = distPonto(p, cp, st.km, st.ramal || '');
         if (dp == null || dp > raioPonto(cp)) h += ' <span class="ft-warn">O km está fora do ' + esc(p.nome) + ' (' + esc(kmPTxt(p, cp)) +
-          (p.kmIni != null && p.kmFim != null ? ' a ' + nf(p.kmFim, 2) : '') + ').</span>';
+          (p.kmIni != null && p.kmFim != null ? ' a ' + nf(p.kmFim, 2) : '') + ').</span>' +
+          (st.src === 'manual' ? '<div class="ft-opts"><button type="button" class="ft-opt ft-fix" data-ft="km-ponto"' + (st.bi != null ? ' data-i="' + st.bi + '"' : '') + '>Usar o km ' + (oaeCt(cp) ? 'da OAE' : 'do ponto') + '</button></div>' : '');
       }
       return h;
     }
@@ -2183,7 +2193,7 @@
             '<label class="ft-f"><span>' + (oaeCt(byId(it.cid) || activeContract()) ? 'OAE' : 'Ponto') + '</span><select data-b="ponto"' + d + '></select></label>' +
             '<label class="ft-f full"><span>Descrição desta foto</span><input data-b="desc"' + d + ' maxlength="240" autocomplete="off"></label>' +
           '</div>' + (opts.drive ? '<label class="ft-chk"><input type="checkbox" data-b="drive"' + d + (it.drive !== false ? ' checked' : '') + '> Enviar ao Drive</label>' : '') + '</div>';
-      el.querySelector('[data-b="km"]').value = it.km != null ? nf(it.km, 2) : '';
+      el.querySelector('[data-b="km"]').value = it.km != null ? nf(it.km, 2) : it.kmRuim != null ? nf(it.kmRuim, 2) : '';
       el.querySelector('[data-b="desc"]').value = it.desc;
       refreshItem(i);
       queueDraw(i);
@@ -3046,6 +3056,7 @@
       else if (b.dataset.ft === 'logo-team') setTeam();
       else if (b.dataset.ft === 'logo-team-off') clearTeam();
       else if (b.dataset.ft === 'fix-lot') applyLot(b.dataset.cid, 'fix');
+      else if (b.dataset.ft === 'km-ponto' && st) { var kp = findPoint(st.pid); if (kp && kmDoPonto(st, kp)) { q('#ftKm').value = nf(st.km, 2); renderSrc(); scheduleDraw(0); } }
       else if (b.dataset.ft === 'keep-lot' && st) { var kc = contract(); st.keepLot = kc ? kc.id + '@' + nf(st.km, 2) : ''; renderLote(); }
     }
     // botões de uma foto do lote de fotos
@@ -3069,6 +3080,11 @@
         refreshItem(i); itemChanged(i); renderBatchSum();
         var p = withItem(it, function () { return findPoint(it.pid); });
         notify('Foto ' + (i + 1) + ' no contrato ' + lotName(c) + (p ? ' · ponto ' + p.nome : '') + '.');
+      } else if (b.dataset.ft === 'km-ponto') {
+        withItem(it, function () { var p = findPoint(it.pid); if (p) kmDoPonto(it, p); });
+        var kpi = itemEl(i).querySelector('[data-b="km"]');
+        if (kpi) kpi.value = it.km != null ? nf(it.km, 2) : '';
+        refreshItem(i); renderBatchSum(); itemChanged(i);
       } else if (b.dataset.ft === 'keep-lot') {
         var kc = withItem(it, contract);
         it.keepLot = kc && it.km != null ? kc.id + '@' + nf(it.km, 2) : '';
@@ -3112,7 +3128,7 @@
         withItem(it, function () {
           it.pid = t.value;
           var p = findPoint(it.pid);
-          if (p && (it.km == null || it.src === 'manual')) kmDoPonto(it, p);
+          if (p && (it.km == null || (it.src === 'manual' && it.kmDoPt))) kmDoPonto(it, p);
         });
         var ki = itemEl(i).querySelector('[data-b="km"]');
         if (ki) ki.value = it.km != null ? nf(it.km, 2) : '';
@@ -3168,7 +3184,7 @@
       if (t.id === 'ftPonto') {
         st.pid = t.value;
         var p = findPoint(st.pid);
-        if (p && (st.km == null || st.src === 'manual') && kmDoPonto(st, p)) q('#ftKm').value = nf(st.km, 2);
+        if (p && (st.km == null || (st.src === 'manual' && st.kmDoPt)) && kmDoPonto(st, p)) q('#ftKm').value = nf(st.km, 2);
         renderSrc(); scheduleDraw(0);
       } else if (t.id === 'ftLote') {
         applyLot(t.value, 'select');
