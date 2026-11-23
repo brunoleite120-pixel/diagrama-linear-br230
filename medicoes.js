@@ -534,7 +534,8 @@
         (g.vencimento ? '<div class="md-emp-l"><span>Vence em</span><span><b>' + esc(dataTxt(g.vencimento)) + '</b>' + (n != null ? ' · ' + esc(diasTxt(n)) : '') + '</span></div>' : '') +
         (numero(g.valor) ? '<div class="md-emp-l"><span>Valor</span><span>' + esc(dinheiro(g.valor)) + '</span></div>' : '') +
         (g.modalidade ? '<div class="md-emp-l"><span>Modalidade</span><span>' + esc(g.modalidade) + '</span></div>' : '') +
-        (sit && tom && tom !== 'ok' ? '<div class="md-emp-l"><span>Situação no SIAC</span><span>' + esc(sit) + '</span></div>' : '') + '</section>';
+        (sit && tom && tom !== 'ok' ? '<div class="md-emp-l"><span>Situação no SIAC</span><span>' + esc(sit) + '</span></div>' : '') +
+        (g.nota ? '<small class="md-emp-notas">' + esc(g.nota) + '</small>' : '') + '</section>';
     }
     function fonteCtHtml(d) {
       var s = d.an.siac || {}, pb = s.processo_base, q = consultaSiac(d);
