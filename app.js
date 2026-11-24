@@ -5550,6 +5550,33 @@
     (banco.propostas || []).forEach(function (x) { Object.keys(x.campos || {}).forEach(function (k) { if (k.indexOf('serv.') === 0) poe((x.campos[k] || {}).v); }); });
     return m;
   }
+  // v216 (item 89): a NC de uma foto (a galeria diz "Foto de não conformidade" e leva até ela): a primeira aberta ou em correção
+  // que tem a foto, com o serviço, a situação e a data de abertura
+  function ncDaFoto(id) {
+    var r = null;
+    state.contracts.some(function (c) {
+      return (c.pontos || []).some(function (p) {
+        return Object.keys(p.serv || {}).some(function (k) {
+          var sv = p.serv[k];
+          if (!sv || !comQtd(oaeSt(sv)) || !Array.isArray(sv.fotos) || sv.fotos.indexOf(id) < 0) return false;
+          var s = servicesOf(c).find(function (x) { return x.key === k; });
+          r = { cid: c.id, pid: p.id, nome: s ? s.label || s.short : k, st: oaeSt(sv), desde: sv.desde || '' };
+          return true;
+        });
+      });
+    });
+    return r;
+  }
+  // fecha a galeria e abre o ponto na aba Não conformidades (como a lista de NC e o rascunho)
+  function abrirNcDaFoto(cid, pid) {
+    var c = contractById(cid), p = c && (c.pontos || []).find(function (q) { return q.id === pid; });
+    if (!c || !p) { toast('Não encontrei o ponto desta não conformidade.', 5000); return; }
+    if (glPgCid !== null) fechaGaleriaPg(); else if (galeria) galeria.close(true);
+    if (!ui.abaCt || ui.abaCt.cid !== c.id) abaZera(c);
+    ui.aba[p.id] = 'vist';
+    delete ui.abaPad[p.id];
+    abrirDaVisao(c, p, false);
+  }
   // miniaturas das fotos da NC (cartão da NC e mudança aguardando aprovação): as do aparelho (fila do Drive) e as do banco
   function ncFtHtml(fid, tira) {
     return '<span class="nc-ft" data-foto="' + esc(fid) + '"><button type="button" class="nc-ft-v" data-act="nc-fotos-ver" aria-label="Ver as fotos da NC"><img alt=""></button>' +
@@ -9493,7 +9520,7 @@
         contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin, carimbar: function (fotos) { openFoto('', fotos); },
         podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, nativo: isNativeApp, onBaixa: renderGaleriaBtn,
-        relatorioPdf: window.RelatorioFoto ? relatorioPdf : null, ncFotos: ncFotosIds
+        relatorioPdf: window.RelatorioFoto ? relatorioPdf : null, ncFotos: ncFotosIds, ncDaFoto: ncDaFoto, abrirNc: abrirNcDaFoto
       });
     }
     return galeria;

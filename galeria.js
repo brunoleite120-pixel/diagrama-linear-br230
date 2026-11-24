@@ -242,6 +242,39 @@
     '.gl-lg-acts{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}',
     '.gl-lg-acts .btn{min-height:44px;justify-content:center}',
     '@media (max-width:560px){.gl-lg-m img:nth-child(n+2){display:none}.gl-lg-acts .btn.primary{flex:1}}',
+    // v216 (itens 85 e 88): no celular, as ações numa linha de botões com nome (ícone em cima); o resto em "Mais"
+    '.gl-bar-ic,.gl-ver-ic{display:flex;gap:6px}',
+    '.gl-ic-b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:56px;padding:4px 2px;border:0;border-radius:10px;background:var(--ground,#F1F3F1);color:var(--ink,#17201C);font:inherit;font-size:12px;font-weight:600;line-height:1.15;text-align:center}',
+    '.gl-ic-i{display:flex;align-items:center;justify-content:center;height:20px;font-size:19px;line-height:1}',
+    '.gl-ic-b.pri{background:var(--accent-soft,#E7EEF7);color:var(--accent,#1D4F91)}',
+    '.gl-ic-b.est .gl-ic-i{color:#B26B00}',
+    '.gl-ver-ic{padding:8px 12px calc(12px + env(safe-area-inset-bottom,0px))}',
+    '.gl-ver .gl-ic-b{min-height:58px;border:1px solid #3A4440;background:#1D2421;color:#fff}',
+    '.gl-ver .gl-ic-b.pri{background:var(--accent,#1D4F91);border-color:#2E6BC0}',
+    '.gl-ver .gl-ic-b.est .gl-ic-i{color:#FDB022}',
+    '.gl-vi-cel{padding:10px 12px 2px}',
+    '.gl-ver-lin{font-size:14.5px;line-height:1.35}.gl-ver-lin span{color:#C9D0CC}',
+    '.gl-fo-ma .btn.danger{color:#B42318}',
+    '.gl-det-x{float:right;margin:-8px -8px 0 0;width:40px;height:40px;border:0;background:none;color:#fff;font-size:16px}',
+    '@media (max-width:560px){.gl.gl-selon:not(.gl-selt) .gl-body,.gl-pag.gl-selon:not(.gl-selt) .gl-body{padding-bottom:150px}.gl.gl-selon:not(.gl-selt) .gl-toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}}',
+    // v216 (item 87): no computador, a foto aberta com um painel à direita, sempre aberto
+    '.gl-ver-corpo{flex:1;min-height:0;display:flex}',
+    '.gl-ver-esq{flex:1;min-width:0;display:flex;flex-direction:column;padding-bottom:12px}',
+    '.gl-vp{width:360px;flex:none;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;padding:18px;overflow:auto;background:#161C19;border-left:1px solid #2A322E;font-variant-numeric:tabular-nums}',
+    '.gl-vp h2{margin:0;font-size:18px;font-weight:700;line-height:1.3;color:#fff}',
+    '.gl-vp-r{display:flex;flex-direction:column;gap:2px;font-size:14px;line-height:1.45;color:#fff;overflow-wrap:anywhere}',
+    '.gl-vp-r>span{font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:#9AA39E}',
+    '.gl-vp-r .gl-arq{color:#9AA6A0}.gl-vp-r .gl-lk{color:#9FB4D6;font-weight:650}.gl-vp-r .gl-warn{color:#FEC84B}.gl-vp-r .gl-desc{white-space:pre-wrap;color:#C9D0CC}',
+    '.gl-vp-marca{font-size:13px;font-weight:650;line-height:1.5}.gl-vp-marca .gl-warn{color:#FEC84B}.gl-vp-marca .gl-est{color:#F5B83D}',
+    '.gl-vp-acts{display:flex;flex-direction:column;gap:8px;margin-top:4px}',
+    '.gl-ver .gl-vp-acts .btn,.gl-ver .gl-vp-pe .btn{min-height:40px;justify-content:flex-start;font-size:14px}',
+    '.gl-vp-esp{flex:1}',
+    '.gl-vp-pe{border-top:1px solid #2A322E;padding-top:12px;display:flex;flex-direction:column}',
+    // v216 (item 89): a foto de uma não conformidade
+    '.gl-vnc{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid #6B5520;background:#2A2313;border-radius:8px;font-size:13px;line-height:1.45;color:#E6DCC4}',
+    '.gl-vnc b{color:#FFD98A}',
+    '.gl-vnc button{align-self:flex-start;border:0;background:none;padding:4px 0;color:#9CC1F5;font:inherit;font-size:13.5px;font-weight:650;cursor:pointer}',
+    '.gl-vnc.l{flex-direction:row;align-items:center;gap:8px;margin-top:6px;padding:4px 10px}.gl-vnc.l span{flex:1;min-width:0}.gl-vnc.l button{align-self:center;min-height:40px}',
     '.gl-info .gl-lk{border:0;background:none;padding:0;color:var(--accent,#1D4F91);font-size:12.5px;text-decoration:underline}',
     '.gl-star{position:absolute;top:4px;right:6px;color:#FDB022;font-size:17px;text-shadow:0 1px 2px rgba(0,0,0,.5)}',
     '.gl-ck{position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}',
@@ -2224,6 +2257,35 @@
       if (n >= 3 && aba === 'deletadas') a.push({ k: 'restaurar', t: 'Restaurar', c: 'primary' });
       return a;
     }
+    // v216 (itens 85 e 88): no celular, até três ações em botões com nome e ícone; o resto (e Apagar) em "Mais"
+    var IC_AC = { baixar: IC_BAIXA, mover: IC_PINO, 'enviar-drive': IC_SOBE, carimbar: '✎', segurar: '⏸', restaurar: '↺', 'por-rel': '☆', 'tirar-rel': '★', apagar: '🗑', 'ic-mais': '⋯' };
+    var ROT_AC = { baixar: 'Baixar', mover: 'Contrato e ponto', 'enviar-drive': 'Enviar', carimbar: 'Carimbo', segurar: 'Não enviar', restaurar: 'Restaurar', 'por-rel': 'Relatório', 'tirar-rel': 'No relatório', apagar: 'Apagar', 'ic-mais': 'Mais' };
+    function botaoIc(a, um) {
+      var ic = IC_AC[a.k] || '•';
+      if (/^<svg/.test(ic)) ic = ic.replace('<svg', '<svg width="20" height="20"');
+      return '<button type="button" class="gl-ic-b' + (a.c === 'primary' ? ' pri' : '') + (a.k === 'tirar-rel' ? ' est' : '') + '" data-g="' + a.k + '"' + (um ? ' data-um="1"' : '') +
+        ' aria-label="' + esc(String(a.t).replace(/^[^A-Za-zÀ-ú0-9]+\s*/, '')) + '"><span class="gl-ic-i" aria-hidden="true">' + ic + '</span>' + esc(ROT_AC[a.k] || a.t) + '</button>';
+    }
+    function divideAc(acts) {
+      var ap = acts.filter(function (a) { return a.k === 'apagar'; }), r = acts.filter(function (a) { return a.k !== 'apagar'; });
+      return { main: r.slice(0, 3), sobra: r.slice(3).concat(ap) };
+    }
+    function icones(acts, um) {
+      var d = divideAc(acts);
+      return d.main.map(function (a) { return botaoIc(a, um); }).join('') + (d.sobra.length || um ? botaoIc({ k: 'ic-mais', t: 'Mais ações' }, um) : '');
+    }
+    // a folha "Mais ações": as ações que não couberam (Apagar por último; a janela de Apagar confirma) e, na foto aberta, Detalhes
+    var foUm = false;
+    function maisFolha() {
+      if (foUm && ver >= 0 && lista[ver]) {
+        var it = lista[ver], d = divideAc(acoes([it], true)), loc = locais[it.id] && locais[it.id].temArquivo;
+        return '<button type="button" class="btn small" data-g="detalhes" data-um="1">Detalhes (local, arquivo)</button>' +
+          (!(grande && grande.id === it.id) && !loc && it.driveId && carregando !== it.id ? '<button type="button" class="btn small" data-g="grande" data-um="1">Ver a foto inteira' + (it.tamanho ? ' (' + tam(it.tamanho) + ')' : '') + '</button>' : '') +
+          d.sobra.map(function (a) { return botaoAcao(a, true); }).join('');
+      }
+      if (selecionando) return divideAc(acoes(selecionadas())).sobra.map(function (a) { return botaoAcao(a); }).join('');
+      return maisHtml();
+    }
     function botaoAcao(a, um) {
       return '<button type="button" class="btn small ' + (a.c || '') + '" data-g="' + a.k + '"' + (um ? ' data-um="1"' : '') + (a.p != null ? ' aria-pressed="' + a.p + '"' : '') + '>' + esc(a.t) + '</button>';
     }
@@ -2253,7 +2315,7 @@
       }
       return '<div class="gl-bar"><div class="gl-bar-top"><span class="gl-n"><b>' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') : 'Toque nas fotos') + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
         todasN + '<button type="button" class="btn small" data-g="sair-sel">Cancelar</button></div>' +
-        (ls.length ? '<div class="gl-bar-acts">' + acoes(ls).map(function (a) { return botaoAcao(a); }).join('') + '</div>'
+        (ls.length ? (celular() ? '<div class="gl-bar-ic">' + icones(acoes(ls), false) + '</div>' : '<div class="gl-bar-acts">' + acoes(ls).map(function (a) { return botaoAcao(a); }).join('') + '</div>')
           : celular() && lista.length && fichasHtml() ? '<div class="gl-bar-acts"><button type="button" class="btn small" data-g="baixar-tudo" style="grid-column:1/-1">⤓ Baixar ' + (lista.length === 1 ? 'a foto' : 'todas (' + lista.length + ')') + '</button></div>' : '') + '</div>';
     }
     function render() {
@@ -2319,6 +2381,10 @@
     // v212: no computador (1101 px ou mais) os filtros cabem numa linha
     var mmLargo = window.matchMedia ? matchMedia('(min-width:1101px)') : null;
     function largo() { return !!(mmLargo && mmLargo.matches) && !celular(); }
+    // v216 (item 87): a foto aberta com o painel à direita a partir de 900 px
+    var mmPainel = window.matchMedia ? matchMedia('(min-width:900px)') : null;
+    function painelVer() { return !!(mmPainel && mmPainel.matches) && !celular(); }
+    if (mmPainel && mmPainel.addEventListener) mmPainel.addEventListener('change', function () { if (root && ver >= 0) renderVer(); });
     if (mmLargo && mmLargo.addEventListener) mmLargo.addEventListener('change', function () { if (root) render(); });
     if (mmCel && mmCel.addEventListener) mmCel.addEventListener('change', function () { if (!root) return; if (fo) fecharFo(); recolher(false); render(); });
     // o período padrão (esta semana) está dito no resumo e "Todas as datas" não esconde nada: não contam
@@ -2345,8 +2411,10 @@
       return h;
     }
     function abrirFo(qual) {
+      var ja = !!fo;
+      [].forEach.call(root.querySelectorAll('.gl-sh.fo'), function (x) { x.remove(); });   // v216
       fo = qual;
-      histPoe();
+      if (!ja) histPoe();
       var el = document.createElement('div');
       el.className = 'gl-sh fo' + (qual === 'mais' ? ' ma' : '');
       el.innerHTML = '<div class="gl-sh-box gl-fo-box" role="dialog" aria-modal="true" aria-labelledby="glFoT"><div class="gl-sh-top gl-fo-top"><h3 id="glFoT">' + (qual === 'mais' ? 'Mais ações' : qual === 'per' ? 'Período' : 'Filtros') + '</h3>' +
@@ -2359,7 +2427,7 @@
     function renderFo() {
       var el = root && fo && q('.gl-sh.fo');
       if (!el) return;
-      if (fo === 'mais') { el.querySelector('.gl-fo-ma').innerHTML = maisHtml(); return; }
+      if (fo === 'mais') { el.querySelector('.gl-fo-ma').innerHTML = maisFolha(); return; }
       var a = document.activeElement, at = a && el.contains(a) ? ['data-f', 'data-k', 'data-v', 'data-g'].filter(function (x) { return a.hasAttribute(x); })[0] : '';
       var sel0 = at ? '[' + at + '="' + cssId(a.getAttribute(at)) + '"]' : '';
       el.querySelector('.gl-fo-c').innerHTML = fo === 'per' ? perHtml() : filtrosHtml(true);
@@ -2374,7 +2442,7 @@
     function fecharFo(viaVoltar, depois) {
       if (!fo) { if (depois) depois(); return; }
       var sel0 = fo === 'mais' ? '[data-g="cel-mais"]' : fo === 'per' ? '[data-g="cel-per"]' : '[data-g="cel-fil"]', el = q('.gl-sh.fo');
-      fo = null;
+      fo = null; foUm = false;
       if (el) el.remove();
       var volta = function () { var b = root && q(sel0); if (b) b.focus({ preventScroll: true }); if (depois) depois(); };
       if (viaVoltar || !histN) setTimeout(volta, 0); else histTira(volta);
@@ -2819,6 +2887,7 @@
         if (it.origem === 'drive' && it.driveId && guardadas[it.driveId]) linhas.push('Já guardada neste aparelho (abre sem sinal)');
       }
       if (it.tamanho) linhas.push('<span class="gl-arq">' + esc(it.nome) + ' · ' + tam(it.tamanho) + '</span>');
+      var nDesc = linhas.length;   // v216: o que vem antes é o arquivo (o painel separa)
       if (it.desc) linhas.push('<span class="gl-desc">' + esc(it.desc) + '</span>');
       var lk = nv() >= 3 ? linkDrive(it.driveId) : '';
       if (lk) linhas.push('<a class="gl-lk" href="' + esc(lk) + '" target="_blank" rel="noopener noreferrer">Abrir no Drive ↗</a>');
@@ -2852,16 +2921,53 @@
           return '<figure><img alt="" data-adid="' + esc(x.id) + '"' + (u ? ' src="' + esc(u) + '"' : '') + '><figcaption><b>' + (k ? 'Depois' : 'Antes') + '</b> · ' + esc(hora(x.em) || 'sem data') + '</figcaption></figure>';
         }).join('') + '</div>';
       }
-      v.classList.toggle('det', detAberto);
-      v.innerHTML = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← ' + (sf ? 'Mapa' : 'Voltar') + '</button>' +
-        '<span class="gl-c">' + (ver + 1) + ' de ' + lista.length + '</span>' +
+      // v216: o computador (900 px ou mais) com o painel à direita (87); o celular com a linha fixa e os botões com nome (88); a
+      // foto de uma NC diz qual e leva até ela (89). O tablet e a foto aberta pelo mapa continuam como eram
+      var painel = painelVer(), cel = celular() && !sf;
+      var nc = !sf && o.ncDaFoto ? o.ncDaFoto(it.id) : null;
+      var ncSit = nc ? (nc.st === 'EX' ? 'em correção' : 'aberta') + (validoIso(nc.desde) ? ' desde ' + ddmm(nc.desde) : '') : '';
+      var ncBt = nc ? '<button type="button" data-g="nc-abrir" data-c="' + esc(nc.cid) + '" data-p="' + esc(nc.pid) + '">' : '';
+      var topH = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← ' + (sf ? 'Mapa' : 'Voltar') + '</button>' +
+        '<span class="gl-c">' + (ver + 1) + ' de ' + lista.length + (painel ? ' · ← → passa de foto' : '') + '</span>' +
         '<button type="button" class="btn small gl-nav" data-g="ant" aria-label="Anterior"' + (ver ? '' : ' disabled') + '>‹</button>' +
-        '<button type="button" class="btn small gl-nav" data-g="prox" aria-label="Próxima"' + (ver < lista.length - 1 ? '' : ' disabled') + '>›</button></div>' +
-        '<div class="gl-ver-meio"><div class="gl-ver-img">' + (src ? '<img alt="" src="' + esc(src) + '">' : '<img alt="">') + leve +
-        (it.relatorio ? '<span class="gl-ver-selo">★ No relatório</span>' : '') + '</div>' +
-        '<div class="gl-ver-det" role="region" aria-label="Detalhes da foto"><b>Detalhes</b><br>' + linhas.join('<br>') + '</div>' + adH + '</div>' + mpH +
+        '<button type="button" class="btn small gl-nav" data-g="prox" aria-label="Próxima"' + (ver < lista.length - 1 ? '' : ' disabled') + '>›</button></div>';
+      var imgH = '<div class="gl-ver-img">' + (src ? '<img alt="" src="' + esc(src) + '">' : '<img alt="">') + leve +
+        (it.relatorio ? '<span class="gl-ver-selo">★ No relatório</span>' : '') + '</div>';
+      var detH = '<div class="gl-ver-det" role="region" aria-label="Detalhes da foto"><button type="button" class="gl-det-x" data-g="detalhes" aria-label="Fechar os detalhes">✕</button><b>Detalhes</b><br>' + linhas.join('<br>') + '</div>';
+      v.classList.toggle('det', detAberto && !painel);
+      v.classList.toggle('gl-vp-on', painel);
+      if (painel) {
+        var rotP = function (r, x) { return x ? '<div class="gl-vp-r"><span>' + r + '</span><div>' + x + '</div></div>' : ''; };
+        var titP = [cons ? '' : it.pnome ? (oae ? it.pnome : 'Ponto ' + it.pnome) : oae ? 'Sem OAE' : 'Sem ponto', kmCurto(it.km)].filter(Boolean).join(' · ') || 'Foto';
+        var cpP = esc([it.cid ? curto(it.cid) : it.lote || 'Sem contrato', cons ? '' : it.pnome || (oae ? 'sem OAE' : 'sem ponto')].filter(Boolean).join(' · '));
+        var acsP = sf ? [] : acoes([it], true), apP = acsP.filter(function (a) { return a.k === 'apagar'; })[0];
+        acsP = acsP.filter(function (a) { return a.k !== 'apagar'; });
+        var arqP = linhas.slice(2, nDesc).concat(lk ? [linhas[linhas.length - 1]] : []).join('<br>');
+        v.innerHTML = topH + '<div class="gl-ver-corpo"><div class="gl-ver-esq"><div class="gl-ver-meio">' + imgH + adH + '</div>' + mpH + '</div>' +
+          '<aside class="gl-vp" aria-label="Sobre a foto"><h2>' + esc(titP) + '</h2>' +
+          (marca.length && !sf ? '<div class="gl-vp-marca">' + marca.join('<br>') + '</div>' : '') +
+          rotP('Contrato e ponto', cpP) + rotP('Tirada', esc([hora(it.em), it.autor].filter(Boolean).join(' · '))) + rotP('Local', linhas[0]) + rotP('Arquivo', arqP) +
+          (it.desc ? rotP('Descrição', '<span class="gl-desc">' + esc(it.desc) + '</span>') : '') +
+          (nc ? '<div class="gl-vnc"><b>Foto de não conformidade</b><span>' + esc(nc.nome) + ' · ' + esc(ncSit) + '</span>' + ncBt + 'Abrir a NC ' + (oae ? 'na OAE' : 'no ponto') + ' ›</button></div>' : '') +
+          '<div class="gl-vp-acts">' + (sf ? acts : acsP.map(function (a) { return botaoAcao(a, true); }).join('')) + '</div><span class="gl-vp-esp"></span>' +
+          (apP ? '<div class="gl-vp-pe">' + botaoAcao({ k: 'apagar', t: '🗑 Apagar esta foto', c: 'danger' }, true) + '</div>' : '') + '</aside></div>';
+        return;
+      }
+      if (cel) {
+        var linT = [!filtro.cid && it.cid ? numCt(it.cid) : '', cons ? '' : it.pnome || (oae ? 'Sem OAE' : 'Sem ponto'), kmCurto(it.km)].filter(Boolean).join(' · ');
+        var dH = data(it.em), quandoC = dH ? pad(dH.getDate()) + '/' + pad(dH.getMonth() + 1) + ' ' + pad(dH.getHours()) + ':' + pad(dH.getMinutes()) : '';
+        var depoisT = [quandoC, it.autor].filter(Boolean).join(' · ');
+        v.innerHTML = topH + '<div class="gl-ver-meio">' + imgH + detH + adH + '</div>' +
+          '<div class="gl-ver-info gl-vi-cel"><div class="gl-ver-lin"><b>' + esc(linT || 'Foto') + '</b>' + (depoisT ? ' <span>· ' + esc(depoisT) + '</span>' : '') + '</div>' +
+          (marca.length ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') +
+          (nc ? '<div class="gl-vnc l"><span><b>NC</b> · ' + esc(nc.nome) + ' · ' + esc(ncSit) + '</span>' + ncBt + 'Abrir ›</button></div>' : '') + '</div>' + mpH +
+          '<div class="gl-ver-ic">' + icones(acoes([it], true), true) + '</div>';
+        return;
+      }
+      v.innerHTML = topH + '<div class="gl-ver-meio">' + imgH + detH + adH + '</div>' + mpH +
         '<div class="gl-ver-info"><div class="gl-ver-tit"><b>' + esc(tit) + '</b><button type="button" class="btn small gl-det-bt" data-g="detalhes" aria-expanded="' + detAberto + '">Detalhes ' + (detAberto ? '▴' : '▾') + '</button></div>' +
-        (marca.length && !sf ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') + '</div>' +
+        (marca.length && !sf ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') +
+        (nc ? '<div class="gl-vnc l"><span><b>NC</b> · ' + esc(nc.nome) + ' · ' + esc(ncSit) + '</span>' + ncBt + 'Abrir a NC ›</button></div>' : '') + '</div>' +
         '<div class="gl-ver-acts">' + acts + '</div>';
     }
 
@@ -3620,6 +3726,14 @@
     }
     function fecharEc() { ec = null; var el = root && q('.gl-sh.ec'); if (el) el.remove(); }
 
+    // abre ou fecha os detalhes por cima da foto (o app lembra); no painel do computador eles ficam sempre à vista
+    function detMuda() {
+      detAberto = !detAberto; lsPor(DET_KEY, detAberto ? '1' : null);
+      var vv = q('.gl-ver');
+      if (!vv) return;
+      vv.classList.toggle('det', detAberto && !painelVer());
+      var bd = vv.querySelector('.gl-det-bt'); if (bd) { bd.setAttribute('aria-expanded', detAberto); bd.textContent = 'Detalhes ' + (detAberto ? '▴' : '▾'); }
+    }
     function onClick(e) {
       if (pf && e.target.classList && e.target.classList.contains('gl-pf')) { pfFechar(); return; }   // toque no fundo escuro
       if (lg && e.target.classList && e.target.classList.contains('gl-lg')) { if (!lg.salvando) fecharLigar(); return; }
@@ -3669,7 +3783,19 @@
       // v190: o selo de um filtro ligado (pessoa, ponto, situação) tira o filtro
       if (g === 'f-tirar') { var fk = t.getAttribute('data-f'); if (fk === 'fl') fLocal = ''; else filtro[fk] = ''; sel = {}; render(); return; }
       if (g === 'fo-fechar') { fecharFo(); return; }
-      if (t.closest('.gl-sh.ma') || t.closest('.gl-fo-mais')) { fecharFo(false, function () { acaoMais(g); }); return; }
+      if (t.closest('.gl-sh.ma') || t.closest('.gl-fo-mais')) {
+        // v216: a folha "Mais ações" também da seleção e da foto aberta (data-um) no celular
+        var umM = t.hasAttribute('data-um');
+        fecharFo(false, function () {
+          if (acaoMais(g)) return;
+          if (g === 'detalhes') { detMuda(); return; }
+          if (g === 'grande') { carregarGrande(); return; }
+          fazer(g, umM ? (lista[ver] ? [lista[ver]] : []) : selecionadas());
+        });
+        return;
+      }
+      if (g === 'ic-mais') { foUm = t.hasAttribute('data-um'); abrirFo('mais'); return; }
+      if (g === 'nc-abrir') { var cN = t.getAttribute('data-c'), pN = t.getAttribute('data-p'); if (o.abrirNc) o.abrirNc(cN, pN); return; }   // v216 (item 89)
       if (g === 'desfazer') { var df = desfazerFn; fecharAviso(); if (df) df(); return; }
       // v119: cópias de fotos apagadas da equipe, conferência com a equipe e o aviso que fica até fechar
       if (g === 'apg-tirar') { tirarCopias(apagadasAqui()); return; }
@@ -3686,7 +3812,7 @@
         });
         return;
       }
-      if (g === 'detalhes') { detAberto = !detAberto; lsPor(DET_KEY, detAberto ? '1' : null); var vv = q('.gl-ver'); if (vv) { vv.classList.toggle('det', detAberto); var bd = vv.querySelector('[data-g="detalhes"]'); if (bd) { bd.setAttribute('aria-expanded', detAberto); bd.textContent = 'Detalhes ' + (detAberto ? '▴' : '▾'); } } return; }
+      if (g === 'detalhes') { detMuda(); return; }
       if (g === 'cts-fechar') { fecharCts(); return; }
       // a pergunta "sem carimbo" ao enviar (dentro da folha: antes do filtro das folhas, logo abaixo)
       if (g === 'ec-carimbo') { var e1 = ec; fecharEc(); if (e1) { if (e1.ok.length) enviarDrive(e1.ok, true, true); carimbar(e1.sc, true); } return; }
@@ -3861,7 +3987,7 @@
         if (window.MutationObserver) new MutationObserver(camadasMudaram).observe(root, { childList: true });
         q('.gl-body').addEventListener('scroll', aoRolar, { passive: true });
         root.addEventListener('change', onChange);
-        root.addEventListener('click', function (e) { var dm = root.querySelector('.gl-mais[open]'); if (dm && (!dm.contains(e.target) || (e.target.closest && e.target.closest('.gl-mais-pop button')))) dm.removeAttribute('open'); });   // v212: "Mais" fecha no toque fora e depois de escolher
+        root.addEventListener('click', function (e) { if (!root) return; var dm = root.querySelector('.gl-mais[open]'); if (dm && (!dm.contains(e.target) || (e.target.closest && e.target.closest('.gl-mais-pop button')))) dm.removeAttribute('open'); });   // v212: "Mais" fecha no toque fora e depois de escolher
         root.addEventListener('input', onInput);
         document.addEventListener('keydown', onKey);
         document.body.appendChild(root);
