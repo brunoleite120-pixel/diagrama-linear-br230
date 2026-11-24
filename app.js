@@ -2653,6 +2653,13 @@
   }
   // "Voltar ao diagrama · folha N" (ou "ao mapa"): o item foi aberto tocando nele no desenho ou no mapa
   var ICON_VOLTA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>';
+  var ICON_PROX = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+  // v208: a contagem e o alvo de cada seta são postos por listaAplica, que conhece a lista da tela
+  function ptNavHtml(p) {
+    var id = esc(p.id);
+    return '<div class="pt-nav" data-nav="' + id + '" hidden><button type="button" class="btn small" data-act="pt-nav" data-id="' + id + '" data-d="-1" disabled>' + ICON_VOLTA + '<span>Anterior</span></button>' +
+      '<span class="pt-nav-n" role="status"></span><button type="button" class="btn small" data-act="pt-nav" data-id="' + id + '" data-d="1" disabled><span>Próximo</span>' + ICON_PROX + '</button></div>';
+  }
   function voltarHtml() {
     var v = ui.voltar;
     if (!v) return '';
@@ -3171,7 +3178,7 @@
     var c = active(), cons = isConserva(c);
     var h = [];
     ui.trechosErro = '';   // o erro da lista de limites recusada vale até o editor ser refeito
-    if (!ui.lista || ui.lista.cid !== c.id) ui.lista = listaNova(c.id, false);   // outro contrato: busca limpa e "Só com NC" desligado
+    if (!ui.lista || ui.lista.cid !== c.id) ui.lista = listaNova(c.id, false);   // outro contrato: busca limpa e filtro em Todos
     h.push('<section class="card">');
     // conservação: o tipo no título, numa linha embaixo, só para leitura (sem número, o nome de tela é o Lote, que não diz o tipo)
     h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span>' +
@@ -3333,16 +3340,34 @@
   // só esconde cartões (hidden), sem redesenhar o editor: o teclado não fecha. O item aberto não fecha quando sai do filtro.
   // fix: os que estavam no filtro quando a pessoa mexeu nele; aberto e em fix não some enquanto é editado (corrigiu a última NC ou
   // mudou o nome), só depois de fechar
-  function listaNova(cid, so) { return { cid: cid, q: '', so: !!so, fix: null }; }
+  // v208: f = a situação escolhida nas fichas ('' = todos). Ponto: P, A, OK. OAE e segmento: nc, ex, sem
+  function listaNova(cid, so) { return { cid: cid, q: '', f: so ? 'nc' : '', fix: null }; }
+  function listaFiltros(c) {
+    if (isContinuo(c)) return parte(c, 'acomp') ? [['nc', 'Com NC'], ['ex', 'Em correção'], ['sem', 'Sem NC']] : [];
+    return [['P', 'Parados'], ['A', 'Ativos'], ['OK', 'Concluídos']];
+  }
+  // Parado e Ativo: com algum serviço assim (o mesmo ponto pode estar nos dois); Concluído: como o "Tudo concluído" da linha
+  function listaNoFiltro(p, c, f) {
+    if (!f) return true;
+    if (f === 'nc') return comNc(p, c);
+    if (f === 'ex') return oaeNec(p, c).exec > 0;
+    if (f === 'sem') return !comNc(p, c);
+    var tem = { OK: 0, A: 0, P: 0 };
+    servicesOf(c).forEach(function (s) { var st = (p.serv[s.key] || {}).st; if (st in tem) tem[st]++; });
+    return f === 'OK' ? !tem.A && !tem.P && tem.OK > 0 : tem[f] > 0;
+  }
+  function listaFiltroNome(c, f) { var n = ''; listaFiltros(c).forEach(function (x) { if (x[0] === f) n = x[1]; }); return n; }
   function listaLimpa() { ui.lista = listaNova(active().id, false); }
   // o fiscal só tem o modo NC e não o escolheu: vê a lista inteira, para marcar NC em local novo e não perder de vista o item que enviou
   function listaSoNc() { return !!visao && visao.modoNc() && !isFiscal(); }
   function comNc(p, c) { var n = oaeNec(p, c); return n.dn + n.exec > 0; }
   function listaFiltroHtml(c, it) {
-    var ph = 'Buscar ' + it + ' ou km', temNc = it !== 'ponto' && parte(c, 'acomp');
+    var ph = 'Buscar ' + it + ' ou km', fs = listaFiltros(c);
     return '<div class="lista-fil"><label class="cts-busca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>' +
       '<input id="ptBusca" data-lbusca="1" type="search" inputmode="search" autocomplete="off" placeholder="' + ph + '" aria-label="' + ph + '" value="' + esc(ui.lista.q) + '"></label>' +
-      (temNc ? '<button type="button" class="lista-sonc" id="ptSoNc" data-act="lista-sonc" aria-pressed="false" hidden></button>' : '') + '</div><div class="hint lista-nada" id="ptNada" role="status" hidden></div>';
+      (fs.length ? '<div class="lista-chips" id="ptFil" role="group" aria-label="Filtrar por situação" hidden>' + [['', 'Todos']].concat(fs).map(function (x) {
+        return '<button type="button" class="lista-chip" data-act="lista-f" data-f="' + x[0] + '" aria-pressed="false">' + x[1] + '<b></b></button>';
+      }).join('') + '</div>' : '') + '</div><div class="hint lista-nada" id="ptNada" role="status" hidden></div>';
   }
   // as faixas de km em que o item é achado. Segmento: km Atualizado e km do contrato (709: só o do contrato, o do site é só a
   // posição no eixo; 731: o km local, que é o km dele). OAE: um km só ou, na travessia de Altamira, o km local
@@ -3356,7 +3381,7 @@
   // o que passa no filtro: nome (sem ligar para acento, termos em qualquer ordem) ou km (as formas da Visão geral) e, com "Só com
   // NC", só os que têm NC salva. Km que nenhuma faixa contém: o mais perto (a OAE fica num km só; 322 acha a do km 322,77)
   function listaAcha(c, ps, L) {
-    var base = L.so ? ps.filter(function (p) { return comNc(p, c); }) : ps, q = L.q.trim();
+    var base = L.f ? ps.filter(function (p) { return listaNoFiltro(p, c, L.f); }) : ps, q = L.q.trim();
     L.perto = null;
     if (!q) return base;
     var km = window.VisaoGeral && VisaoGeral.kmBusca ? VisaoGeral.kmBusca(q) : null, t = semAcento(q).split(' ');
@@ -3376,10 +3401,15 @@
     var l = $('ptList'), L = ui.lista, c = active();
     if (!l || !L || L.cid !== c.id) return;
     var itens = [].map.call(l.children, function (el) { var h = el.dataset.id ? el : el.querySelector('.pt-head'); return { el: el, p: h ? findPoint(h.dataset.id) : null }; }).filter(function (x) { return x.p; });
-    var ps = itens.map(function (x) { return x.p; }), bt = $('ptSoNc'), nNc = bt ? ps.filter(function (p) { return comNc(p, c); }).length : 0;
-    if (!nNc) L.so = false;
-    if (bt) { bt.hidden = !nNc; bt.textContent = 'Só com NC (' + nNc + ')'; bt.setAttribute('aria-pressed', String(L.so)); }
-    var ativo = L.so || !!L.q.trim(), acha = ativo ? listaAcha(c, ps, L) : ps;
+    var ps = itens.map(function (x) { return x.p; }), fil = $('ptFil'), nF = { '': ps.length }, util = false;
+    // as fichas: a contagem de cada situação; ficha com zero some, e a faixa só aparece se alguma separa a lista (nem zero nem todos)
+    listaFiltros(c).forEach(function (x) { var n = ps.filter(function (p) { return listaNoFiltro(p, c, x[0]); }).length; nF[x[0]] = n; if (n > 0 && n < ps.length) util = true; });
+    if (L.f && !nF[L.f]) L.f = '';
+    if (fil) {
+      fil.hidden = !util && !L.f;
+      [].forEach.call(fil.children, function (bt) { var f = bt.dataset.f; bt.hidden = !!f && !nF[f]; bt.lastChild.textContent = nF[f]; bt.setAttribute('aria-pressed', String(L.f === f)); });
+    }
+    var ativo = !!L.f || !!L.q.trim(), acha = ativo ? listaAcha(c, ps, L) : ps;
     if (!L.fix) { L.fix = {}; acha.forEach(function (p) { L.fix[p.id] = true; }); }
     acha.forEach(function (p) { if (ui.open[p.id]) L.fix[p.id] = true; });   // entrou na lista depois (outra medição, sincronização) e foi aberto: também não some enquanto é editado
     var k = 0;
@@ -3391,8 +3421,22 @@
       nd.hidden = !ativo || (k > 0 && !pt);
       nd.textContent = pt ? (pt.fora ? 'O km ' + fmtKm(pt.km) + ' fica fora ' + (isOae(c) ? 'das OAEs' : c.tipo === 'conserva' ? 'dos segmentos' : 'dos pontos') + ' deste contrato (km ' + fmtKm(pt.k0) + ' a ' + fmtKm(pt.k1) + '). ' : 'Nada no km ' + fmtKm(pt.km) + '. ') +
           'O mais perto é ' + (pt.p.nome || pt.p.codigo || 'este') + ', a ' + fmtKm(pt.d) + ' km.'
-        : k ? '' : 'Nada encontrado' + (L.so ? ' com NC' : '') + '. Confira o nome ou o km.';
+        : k ? '' : 'Nada encontrado' + (L.f ? ' em “' + listaFiltroNome(c, L.f) + '”' : '') + '. Confira o nome ou o km.';
     }
+    // v208 (item 57): "6 de 10" e as setas do item aberto seguem a lista que está na tela (ordem do km; com filtro, só os do filtro)
+    var vis = itens.filter(function (x) { return !x.el.hidden; }).map(function (x) { return x.p; });
+    [].forEach.call($('editor').querySelectorAll('.pt-nav'), function (nv) {
+      var i = -1;
+      vis.forEach(function (p, j) { if (p.id === nv.dataset.nav) i = j; });
+      nv.hidden = i < 0 || vis.length < 2;
+      if (nv.hidden) return;
+      nv.querySelector('.pt-nav-n').textContent = (i + 1) + ' de ' + vis.length;
+      [].forEach.call(nv.querySelectorAll('button'), function (bt) {
+        var al = vis[i + Number(bt.dataset.d)];
+        bt.disabled = !al; bt.dataset.alvo = al ? al.id : '';
+        bt.setAttribute('aria-label', (bt.dataset.d === '1' ? 'Próximo' : 'Anterior') + (al ? ': ' + (al.nome || al.codigo || '') : ''));
+      });
+    });
   }
   function listaMuda() { ui.lista.fix = null; listaAplica(); }
   // abrir um item vindo de fora da lista (mapa, desenho, análise, rascunho): se o filtro o esconde, o filtro sai
@@ -3400,7 +3444,7 @@
     var anM = isOae(c) ? anOf(c) : null, gM = medGlobalDe(c, anM), aM = gM && anM.pontes ? anM.pontes[p.id] : null;
     if (gM && !(aM && Number(aM.meses[String(gM)]) > 0)) delete ui.medGlobal[c.id];   // a lista por medição não tem este item: volta a lista inteira
     var L = ui.lista;
-    if (!L || L.cid !== c.id || (!L.so && !L.q.trim())) return;
+    if (!L || L.cid !== c.id || (!L.f && !L.q.trim())) return;
     L.fix = null;
     if (listaAcha(c, sortedPoints(c), L).indexOf(p) < 0) ui.lista = listaNova(c.id, false);
   }
@@ -3527,7 +3571,7 @@
     h += '<button type="button" class="pt-head" data-act="toggle-point" data-id="' + esc(p.id) + '" aria-expanded="' + open + '">' + pointHead(p) + '</button>';
     if (open) {
       var id = esc(p.id), len = pointLen(p);
-      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(active().id, p.id)) : '');
+      h += '<div class="pt-body">' + ptNavHtml(p) + (banco.on ? lastLine(metaKey(active().id, p.id)) : '');
       h += '<div class="section-title">Serviços</div>';
       h += servHtml(p, servicesOf(ownerOf(p)));
 
@@ -4118,8 +4162,8 @@
       // com a análise (engenheiro, auxiliar, Administrador): duas abas, Vistoria e Medições. Sem ela (fiscal), só a vistoria
       var soMed = !parte(c, 'acomp');   // analista só com as medições: sem a vistoria
       var aba = a && (soMed || abaDe(c, p) === 'med') ? 'med' : 'vist';
-      if (soMed && !a) return h + '<div class="pt-body"><div class="an-note">' + (analise.estado[c.id] === 'carregando' ? 'Carregando as medições…' : 'Sem medições desta OAE.') + '</div></div></article>';
-      h += '<div class="pt-body">' + (banco.on ? lastLine(metaKey(c.id, p.id)) : '');
+      if (soMed && !a) return h + '<div class="pt-body">' + ptNavHtml(p) + '<div class="an-note">' + (analise.estado[c.id] === 'carregando' ? 'Carregando as medições…' : 'Sem medições desta OAE.') + '</div></div></article>';
+      h += '<div class="pt-body">' + ptNavHtml(p) + (banco.on ? lastLine(metaKey(c.id, p.id)) : '');
       if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes da OAE">' + [['vist', 'Não conformidades'], ['med', 'Medições']].map(function (x) {
         return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
       }).join('') + '</div>';
@@ -4192,7 +4236,8 @@
     var anS = anOf(c), aS = anS && anS.pontes ? anS.pontes[p.id] : null;
     var badge = n.pri ? '<b class="pt-pri" title="' + n.pri + (n.pri === 1 ? ' grupo com prioridade' : ' grupos com prioridade') + '">!</b>' : '';
     return '<span class="pt-name" title="' + esc(nome) + '">' + esc(nome) + (np ? '<span class="pt-prop" title="Alteração aguardando aprovação" aria-label="aguardando aprovação"></span>' : '') + '</span>' +
-      '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(km) + (aS ? ultTagHtml(c, anS, aS) : '') + '</span><span class="pt-dots">' + dots + '</span>' +
+      '<span class="pt-km" title="' + esc(km) + '">' + badge + esc(segKmTxt(c, p)) + (contr && !kmSoContrato(c) ? '<span class="km-x"> (' + esc(contr) + ')</span>' : '') +
+        (len != null ? ' · ' + esc(fmt(len, 2)) + ' km' : '') + (snv ? '<span class="km-x"> · ' + esc(snv) + '</span>' : '') + (aS ? ultTagHtml(c, anS, aS) : '') + '</span><span class="pt-dots">' + dots + '</span>' +
       '<span class="pt-pct nec-' + (kt === 'NV' ? 'nv' : kt) + '" title="' + esc(oaeNecTxt(n, c) + (kt === 'NV' ? '' : ' · ' + TRAF_STATUS[kt].name)) + '">' + ncBdg(n) + rascBdg(c, p) +
         (kt === 'R' || kt === 'I' ? '<small class="pt-traf">' + esc(TRAF_STATUS[kt].name.toLowerCase()) + '</small>' : '') + '</span>' + ICON_CHEV + resumoNc(p, c, np);
   }
@@ -4209,7 +4254,7 @@
       // com as medições: abas Vistoria e Medições, como na ponte; o analista (sem o acompanhamento) vê só as medições
       var an = anOf(c), a = an && an.pontes ? an.pontes[p.id] : null, soMed = !parte(c, 'acomp');
       var aba = a && (soMed || abaDe(c, p) === 'med') ? 'med' : 'vist';
-      h += '<div class="pt-body">' + (banco.on && !soMed ? lastLine(metaKey(c.id, p.id)) : '');
+      h += '<div class="pt-body">' + ptNavHtml(p) + (banco.on && !soMed ? lastLine(metaKey(c.id, p.id)) : '');
       if (a && !soMed) h += '<div class="pt-abas" role="tablist" aria-label="Partes do segmento">' + [['vist', 'Não conformidades'], ['med', 'Medições']].map(function (x) {
         return '<button type="button" role="tab" data-act="pt-aba" data-id="' + id + '" data-v="' + x[0] + '" aria-selected="' + (aba === x[0]) + '">' + x[1] + '</button>';
       }).join('') + '</div>';
@@ -6058,7 +6103,26 @@
       return;
     }
     if (act === 'ld-resumo') { undoProxima(); ui.open = {}; ui.voltar = null; renderEditor(); return; }
-    if (act === 'lista-sonc') { ui.lista.so = !ui.lista.so; listaMuda(); return; }
+    if (act === 'lista-f') { ui.lista.f = ui.lista.f === b.dataset.f ? '' : b.dataset.f; listaMuda(); return; }   // v208: tocar na ficha marcada volta a Todos
+    // v208 (item 57): Anterior e Próximo. No lado a lado troca o item da direita; no celular fecha o atual, abre o vizinho e o leva ao alto
+    if (act === 'pt-nav') {
+      var alvoN = b.dataset.alvo, dirN = b.dataset.d;
+      if (!alvoN || !findPoint(alvoN)) return;
+      undoProxima();
+      if (mdOn()) { ui.open = {}; ui.voltar = null; } else ui.open[b.dataset.id] = false;
+      ui.open[alvoN] = true;
+      renderEditor();
+      var artN = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(alvoN) : alvoN) + '"]');
+      if (mdOn()) {
+        var mrN = document.querySelector('#editor .ld-r'), mkN = document.querySelector('#ptList .pt-marcado');
+        if (mrN) mrN.scrollTop = 0;
+        if (mkN) mkN.scrollIntoView({ block: 'nearest' });
+      } else if (artN) artN.scrollIntoView({ block: 'start' });
+      var fbN = artN && artN.querySelector('[data-act="pt-nav"][data-d="' + dirN + '"]');
+      if (fbN && fbN.disabled) fbN = artN.querySelector('[data-act="pt-nav"]:not(:disabled)');
+      if (fbN) try { fbN.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+      return;
+    }
     if (act === 'res-lin') {
       var rk = c.id + '|' + b.dataset.v;
       ui.resAb[rk] = !ui.resAb[rk];
