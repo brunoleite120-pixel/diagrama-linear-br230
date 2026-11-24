@@ -326,6 +326,12 @@
         var im = S.mes.findIndex(function (s) { return ultima >= s.de && ultima <= s.ate; });
         if (im >= 0) S.iMes = im;
       }
+      // v213: relatório de um ponto só (a.pid): todas as fotos dele, do primeiro ao último dia; a pessoa pode ficar só com as ★
+      if (a.pid) {
+        var diasP = a.itens.filter(function (it) { return it.cid === S.cid && it.pid === a.pid; }).map(function (it) { return diaDe(it.em); }).filter(Boolean).sort();
+        S.modo = 'livre'; S.so = 'todas';
+        if (diasP.length) { S.de = diasP[0]; S.ate = diasP[diasP.length - 1]; }
+      }
       var textos = lsGet(DESC_KEY) || {};
 
       function contrato() { return cs.find(function (c) { return c.id === S.cid; }) || cs[0]; }
@@ -344,20 +350,21 @@
         pts.forEach(function (p) { ids[p.id] = 1; });
         a.itens.forEach(function (it) {
           if (it.cid !== c.id) return;
+          if (a.pid && (it.pid !== a.pid || (S.so === 'estrela' && !it.relatorio))) return;
           var d = diaDe(it.em);
           if (!d || d < per.de || d > per.ate) return;
           total++;
           if (!it.pid || !ids[it.pid]) { sem++; return; }
           (porP[it.pid] = porP[it.pid] || []).push(it);
         });
-        var oae = o.ehOae(c), lista = [];
+        var oae = o.ehOae(c), lista = [], inteiro = oae || !!a.pid;   // v213: o relatório de um ponto leva todas as fotos, em quantas folhas precisar
         pts.forEach(function (p, i) {
           var fs = porP[p.id];
           if (!fs) return;
           fs.sort(function (x, y) { return String(x.em || '').localeCompare(String(y.em || '')); });
           var num = numero(c, p, i), k = chave(c, p, per), auto = o.descricao(c, p);
-          lista.push({ p: p, num: num, fotos: oae ? fs : fs.slice(0, 6), corte: oae ? 0 : Math.max(0, fs.length - 6), titulo: titulo(c, p, num), auto: auto,
-            curto: curto(c, p, num), desc: textos[k] != null ? textos[k] : auto, chave: k, folhas: oae ? Math.ceil(fs.length / 6) : 1 });
+          lista.push({ p: p, num: num, fotos: inteiro ? fs : fs.slice(0, 6), corte: inteiro ? 0 : Math.max(0, fs.length - 6), titulo: titulo(c, p, num), auto: auto,
+            curto: curto(c, p, num), desc: textos[k] != null ? textos[k] : auto, chave: k, folhas: inteiro ? Math.ceil(fs.length / 6) : 1 });
         });
         return { c: c, per: per, oae: oae, pts: lista, sem: sem, total: total };
       }
@@ -401,8 +408,14 @@
         G = grupos();
         var c = G.c, folhas = folhasDoPdf().length, pode = o.podeEditar();
         var h = '<div class="field"><label for="rfLocal">Local (vai no cabeçalho de todas as folhas)</label><input id="rfLocal" maxlength="160" value="' + esc(localPadrao(c)) + '"' + (pode ? '' : ' disabled') + '></div>';
+        if (a.pid) {
+          h += '<div class="seg rf-folhas rf-so" role="group" aria-label="Quais fotos">' + [['todas', G.oae ? 'Todas as fotos da OAE' : 'Todas as fotos do ponto'], ['estrela', 'Só as marcadas com ★']].map(function (m) {
+            return '<button type="button" data-rf="so" data-v="' + m[0] + '" aria-pressed="' + (S.so === m[0]) + '">' + m[1] + '</button>';
+          }).join('') + '</div>';
+        }
         if (!G.total) {
-          h += '<div class="rf-resumo">Nenhuma foto marcada com ★ ' + (S.modo === 'semana' ? 'nesta semana' : S.modo === 'mes' ? 'neste mês' : 'neste período') + ' para este contrato.</div>';
+          h += '<div class="rf-resumo">' + (a.pid ? 'Nenhuma foto ' + (S.so === 'estrela' ? 'marcada com ★ ' : '') + (G.oae ? 'desta OAE' : 'deste ponto') + ' neste período.'
+            : 'Nenhuma foto marcada com ★ ' + (S.modo === 'semana' ? 'nesta semana' : S.modo === 'mes' ? 'neste mês' : 'neste período') + ' para este contrato.') + '</div>';
           return h;
         }
         h += '<div class="rf-resumo">' + (G.cons ? '' : '<b>' + plural(G.pts.length, G.oae ? 'OAE' : 'ponto', G.oae ? 'OAEs' : 'pontos') + '</b> · ') +
@@ -440,11 +453,12 @@
           (S.gerando ? esc(S.gerando) : 'Gerar PDF' + (n ? ' (' + plural(n, 'folha', 'folhas') + ')' : '')) + '</button>';
       }
 
-      var f = o.modal('<h2 id="modalTitle">Relatório fotográfico</h2>' +
-        '<div class="field"><label for="rfCt">Contrato</label><select id="rfCt" class="rf-sel">' + cs.map(function (c) {
+      var pSo = a.pid ? (o.ordem(contrato()) || []).find(function (p) { return p.id === a.pid; }) : null;
+      var f = o.modal('<h2 id="modalTitle">Relatório fotográfico' + (pSo && pSo.nome ? ' · ' + esc(pSo.nome) : '') + '</h2>' +
+        '<div class="field"><label for="rfCt">Contrato</label><select id="rfCt" class="rf-sel"' + (a.pid ? ' disabled' : '') + '>' + cs.map(function (c) {
           return '<option value="' + esc(c.id) + '"' + (c.id === S.cid ? ' selected' : '') + '>' + esc(nomes.nome(c) || 'Contrato') + '</option>';
         }).join('') + '</select></div>' +
-        '<fieldset class="rf-per"><legend>Período das fotos (marcadas com ★ na galeria)</legend><div id="rfPer"></div></fieldset>' +
+        '<fieldset class="rf-per"><legend>' + (a.pid ? 'Período das fotos' : 'Período das fotos (marcadas com ★ na galeria)') + '</legend><div id="rfPer"></div></fieldset>' +
         '<div id="rfCorpo" style="display:grid;gap:10px"></div>' +
         '<p class="modal-err" role="alert" hidden></p><div class="modal-foot" id="rfFoot"></div>', gerar, 'rf-modal');
 
@@ -464,6 +478,7 @@
         var k = b.getAttribute('data-rf');
         if (k === 'modo') { S.modo = b.getAttribute('data-v'); desenhar(); }
         else if (k === 'folhas') { S.folhas = b.getAttribute('data-v'); lsPut(FOLHAS_KEY, S.folhas); desenhar(true); }
+        else if (k === 'so') { S.so = b.getAttribute('data-v'); desenhar(true); var bs = f.querySelector('[data-rf="so"][aria-pressed="true"]'); if (bs) bs.focus(); }
         else if (k === 'auto') {
           var x = G.pts[Number(b.getAttribute('data-i'))];
           if (!x) return;

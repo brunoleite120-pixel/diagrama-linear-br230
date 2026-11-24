@@ -428,6 +428,24 @@
     '.ft-file{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}',
     '.ft-gps{font-size:13px;padding:10px 12px;border-radius:8px;background:var(--ft-panel);border:1px solid var(--ft-line);font-variant-numeric:tabular-nums}',
     '.ft-gps b{font-family:var(--font-mono,ui-monospace,Consolas,monospace)}',
+    // v213 (item 67): sem GPS, escolher o ponto do contrato aberto ou informar o km antes de fotografar
+    '.ft-onde{border:1px solid var(--ft-line);border-radius:8px;background:var(--ft-panel);overflow:hidden}',
+    '.ft-onde h4{margin:0;padding:12px 12px 8px;font-size:15px;font-weight:650}',
+    '.ft .ft-onde-b{display:block;width:calc(100% - 24px);min-height:44px;margin:0 12px 10px;padding:0 12px;border:1px solid var(--ft-line);border-radius:8px;background:var(--ft-bg,#fff);color:inherit;font:inherit;font-size:15px;box-sizing:border-box}',
+    '.ft-onde-l{list-style:none;margin:0;padding:0}',
+    '.ft-onde-p{width:100%;display:flex;align-items:center;gap:10px;min-height:48px;padding:6px 12px;border:0;border-top:1px solid var(--ft-line);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}',
+    '.ft-onde-p b{flex:0 1 auto;font-size:15px;overflow-wrap:anywhere}',
+    '.ft-onde-p span{flex:1;font-size:13px;opacity:.75;font-variant-numeric:tabular-nums;white-space:nowrap}',
+    '.ft-onde-p::after{content:"";flex:none;width:18px;height:18px}',
+    '.ft-onde-p[aria-pressed="true"]{background:color-mix(in srgb,var(--ft-accent) 12%,transparent);font-weight:650}',
+    '.ft-onde-p[aria-pressed="true"]::after{content:"✓";color:var(--ft-accent);font-weight:700;text-align:center;line-height:18px}',
+    '.ft-onde-0{padding:10px 12px;border-top:1px solid var(--ft-line);font-size:13px;opacity:.75}',
+    '.ft-onde-m{width:100%;min-height:48px;border:0;border-top:1px solid var(--ft-line);background:none;color:var(--ft-accent);font:inherit;font-size:14px;font-weight:650;cursor:pointer}',
+    '.ft-onde-k{display:flex;flex-direction:column;gap:4px;padding:10px 12px 12px;border-top:1px solid var(--ft-line);font-size:13px}',
+    '.ft-onde-l:empty+.ft-onde-m[hidden]+.ft-onde-k,.ft-onde-k:first-child{border-top:0}',
+    '.ft .ft-onde-k input{min-height:48px;padding:0 12px;border:1px solid var(--ft-line);border-radius:8px;background:var(--ft-bg,#fff);color:inherit;font:inherit;font-size:16px;box-sizing:border-box}',
+    '.ft-onde-r{margin:0;padding:10px 12px;border-top:1px solid var(--ft-line);font-size:13px}',
+    '.ft-onde-r.ruim{color:var(--ft-warn,#B42318);font-weight:600}',
     '.ft-work{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}',
     '.ft-prev{position:sticky;top:0;background:#000;border-radius:8px;overflow:hidden;display:flex;justify-content:center}',
     '.ft-prev canvas{display:block;max-width:100%;max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);width:auto;height:auto}',
@@ -849,6 +867,7 @@
           '<div class="ft-start">' +
             '<h3>Tirar ou importar fotos</h3>' +
             '<div class="ft-gps"></div>' +
+            '<div class="ft-onde" hidden></div>' +
             (noCel ? btTirar + btImportar : btImportar + btTirar) +
             '<p class="ft-msg ft-warn" hidden></p>' +
             '<p class="ft-note" hidden></p>' +
@@ -1255,11 +1274,86 @@
     function renderTirar() {
       var b = q('[data-ft="cam-open"]'), sem = semKm();
       if (!b) return;
-      b.querySelector('.ft-bn').textContent = sem ? 'Tirar foto e informar o km' : 'Tirar foto';
-      b.querySelector('.ft-sub').textContent = sem ? 'várias seguidas · ponto e contrato no carimbo' : 'várias seguidas · km, ponto e contrato no carimbo';
+      // v213: com o ponto ou o km já escolhido (sem GPS), o botão diz para onde a foto vai
+      var pe = sem && onde.meu && opts.initialPoint ? ondePonto(opts.initialPoint) : null, ke = sem && onde.meu && !pe && opts.initialKm != null ? opts.initialKm : null;
+      b.querySelector('.ft-bn').textContent = pe ? 'Tirar foto: ' + (pe.nome || 'ponto escolhido') : ke != null ? 'Tirar foto no km ' + nf(ke, 2) : sem ? 'Tirar foto e informar o km' : 'Tirar foto';
+      b.querySelector('.ft-sub').textContent = pe ? 'várias seguidas · km ' + (oaeCt(activeContract()) ? 'da OAE' : 'do ponto') + ' e contrato no carimbo'
+        : sem && ke == null ? 'várias seguidas · ponto e contrato no carimbo' : 'várias seguidas · km, ponto e contrato no carimbo';
+    }
+    // ---- v213 (item 67): sem GPS (bloqueado, sem sinal ou longe da rodovia), a pessoa diz antes onde está: escolhe o ponto do contrato
+    // aberto ou digita o km. Vale para as fotos sem localização que vierem em seguida, como quando a Foto abre de dentro do ponto
+    var onde = { sig: '', aberta: false, busca: '', meu: false, kmRuim: false };
+    function semAcento(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    function ondePontos() {
+      var c = activeContract(), l = c && c.tipo !== 'conserva' && !ehSup(c) ? pontosDe(c).filter(function (p) { return p.kmIni != null || p.kmLocal != null; }) : [], ord = {};
+      l.forEach(function (p) { ord[p.id] = p.kmIni != null ? p.kmIni : p.lat != null && p.lon != null ? ref.locate(p.lat, p.lon).km : 1e9; });
+      return l.sort(function (x, y) { return ord[x.id] - ord[y.id]; });
+    }
+    function ondePonto(id) { return ondePontos().find(function (p) { return p.id === id; }) || null; }
+    function ondeLista() {
+      var ul = q('.ft-onde-l'), mais = q('[data-ft="onde-mais"]'), c = activeContract();
+      if (!ul) return;
+      var l = ondePontos(), b = semAcento(onde.busca).trim(), sel = opts.initialPoint || '';
+      var fl = b ? l.filter(function (p) { return semAcento((p.nome || '') + ' ' + kmPTxt(p, c)).indexOf(b) >= 0; }) : l;
+      var corte = !onde.aberta && !b && fl.length > 7 ? 6 : fl.length, ver = fl.slice(0, corte);
+      if (sel && corte < fl.length && !ver.some(function (p) { return p.id === sel; })) { var ps = fl.find(function (p) { return p.id === sel; }); if (ps) ver.unshift(ps); }
+      ul.innerHTML = ver.length ? ver.map(function (p) {
+        return '<li><button type="button" class="ft-onde-p" data-ft="onde-pt" data-id="' + esc(p.id) + '" aria-pressed="' + (p.id === sel) + '"><b>' + esc(p.nome || 'Sem nome') + '</b><span>' + esc(kmPTxt(p, c)) + '</span></button></li>';
+      }).join('') : '<li class="ft-onde-0">Nada com "' + esc(onde.busca.trim()) + '".</li>';
+      mais.hidden = corte >= fl.length;
+      mais.textContent = (oaeCt(c) ? 'Ver as ' + fl.length + ' OAEs' : 'Ver os ' + fl.length + ' pontos');
+    }
+    function ondeResumo() {
+      var r = q('.ft-onde-r');
+      if (!r) return;
+      var p = opts.initialPoint ? ondePonto(opts.initialPoint) : null, c = activeContract();
+      r.classList.toggle('ruim', !p && onde.kmRuim);
+      r.hidden = !(p || opts.initialKm != null || onde.kmRuim);
+      r.innerHTML = p ? 'As fotos sem localização vão para <b>' + esc(p.nome || 'o ponto escolhido') + '</b> (' + esc(kmPTxt(p, c)) + '). Toque de novo ' + (oaeCt(c) ? 'na OAE' : 'no ponto') + ' para desmarcar.'
+        : opts.initialKm != null ? 'As fotos sem localização saem com o <b>km ' + nf(opts.initialKm, 2) + '</b>.'
+        : onde.kmRuim ? 'Este km não fica na ' + esc(rodovia()) + '.' : '';
+    }
+    function renderOnde() {
+      var el = q('.ft-onde');
+      if (!el) return;
+      var c = activeContract(), escolheu = onde.meu && (!!opts.initialPoint || opts.initialKm != null);
+      var mostra = !!opts.gps && !opts.nc && !!c && (semKm() || escolheu);
+      var sig = [mostra, c ? c.id : '', c ? ondePontos().length : 0].join('|');
+      if (sig !== onde.sig) {
+        onde.sig = sig; onde.aberta = false; onde.busca = '';
+        el.hidden = !mostra;
+        if (mostra) {
+          var n = ondePontos().length, oae = oaeCt(c);
+          el.innerHTML = (n ? '<h4 id="ftOndeT">' + (oae ? 'Em qual OAE?' : 'Em qual ponto?') + '</h4>' +
+            (n > 7 ? '<input type="search" class="ft-onde-b" id="ftOndeB" autocomplete="off" placeholder="Buscar ' + (oae ? 'OAE' : 'ponto') + ' ou km" aria-label="Buscar ' + (oae ? 'OAE' : 'ponto') + ' ou km">' : '') +
+            '<ul class="ft-onde-l" aria-labelledby="ftOndeT"></ul><button type="button" class="ft-onde-m" data-ft="onde-mais" hidden></button>' : '') +
+            '<label class="ft-onde-k"><span>' + (n ? 'ou informe o km' : 'Informe o km') + '</span><input id="ftOndeKm" inputmode="decimal" autocomplete="off" placeholder="km"></label>' +
+            '<p class="ft-onde-r" aria-live="polite" hidden></p>';
+          q('#ftOndeKm').value = opts.initialKm != null ? nf(opts.initialKm, 2) : '';
+        } else el.innerHTML = '';
+      }
+      if (mostra) { ondeLista(); ondeResumo(); }
+    }
+    function ondeEscolhe(id) {
+      opts.initialPoint = opts.initialPoint === id ? '' : id;
+      opts.initialKm = null; onde.kmRuim = false; onde.meu = true;
+      var k = q('#ftOndeKm'); if (k) k.value = '';
+      ondeLista(); ondeResumo(); renderTirar();
+      var b = [].filter.call(root.querySelectorAll('.ft-onde-p'), function (x) { return x.dataset.id === id; })[0];
+      if (b) b.focus();
+    }
+    function ondeKm(txt) {
+      var k = String(txt || '').trim() ? parseNum(txt) : null, t = { km: null };
+      if (k != null && isFinite(k)) kmAceito(t, k);
+      opts.initialKm = t.km != null ? k : null;
+      onde.kmRuim = !!String(txt || '').trim() && t.km == null;
+      if (opts.initialKm != null) opts.initialPoint = '';
+      onde.meu = true;
+      ondeLista(); ondeResumo(); renderTirar();
     }
     function renderGps() {
       var el = q('.ft-gps');
+      renderOnde();
       renderTirar();
       if (!opts.gps) { el.hidden = true; return; }
       el.hidden = false;
@@ -1402,11 +1496,16 @@
       }
       o.noLoc = !o.ll;
       withItem(o, function () {
-        var auto = o.km != null ? identify(o.km) : null;
-        o.pid = pertoPonto(auto) ? auto.p.id : (opts.initialPoint || '');
+        // v213: o km informado antes (sem GPS) vale para a foto que chegou sem localização
+        var kmIni = false;
+        if (!o.ll && o.km == null && opts.initialKm != null && !opts.nc && !(ex.cid && ex.pid)) { kmAceito(o, opts.initialKm); kmIni = o.km != null; }
+        var auto = o.km != null ? identify(o.km) : null, ini = opts.initialPoint || '';
+        // o ponto escolhido sem GPS não vale para a foto que tem posição a mais de 1 km dele
+        if (ini && onde.meu && o.ll && o.km != null && pontoLonge(ini, o.km)) ini = '';
+        o.pid = pertoPonto(auto) ? auto.p.id : ini;
         if (ex.cid && ex.cid === o.cid && ex.pid && findPoint(ex.pid)) o.pid = ex.pid;
         if (opts.nc && opts.nc.cid === o.cid) { o.pid = findPoint(opts.nc.pid) ? opts.nc.pid : ''; if (!o.desc) o.desc = opts.nc.desc || ''; }
-        if (!o.ll && o.pid) { var p0 = findPoint(o.pid); if (p0) kmDoPonto(o, p0); }
+        if (!o.ll && o.pid && !kmIni) { var p0 = findPoint(o.pid); if (p0) kmDoPonto(o, p0); }   // v213: o km informado antes fica como foi digitado
       });
     }
     // as funções de desenho e de texto leem `st`: no lote, cada foto passa por aqui
@@ -3035,6 +3134,8 @@
       if (batch && b.dataset.i != null) { batchClick(b, +b.dataset.i); return; }
       if (b.dataset.ft === 'cam-open') { openCam(); return; }
       if (b.dataset.ft === 'gps-liberar') { abreLiberar(); return; }
+      if (b.dataset.ft === 'onde-pt') { ondeEscolhe(b.dataset.id); return; }
+      if (b.dataset.ft === 'onde-mais') { onde.aberta = true; ondeLista(); var p7 = root.querySelectorAll('.ft-onde-p')[6]; if (p7) p7.focus(); return; }
       if (b.dataset.ft === 'gps-liberar-fim') { fechaLiberar(); return; }
       if (b.dataset.ft === 'cam-shot') { camPop(''); shoot(); return; }
       if (b.dataset.ft === 'cam-giro' || b.dataset.ft === 'cam-car') { var qual = b.dataset.ft === 'cam-giro' ? 'giro' : 'car', ab = q('.ft-campop[data-pop="' + qual + '"]'); camPop(ab.hidden ? qual : ''); return; }
@@ -3181,6 +3282,8 @@
     }
     function onInput(e) {
       var t = e.target;
+      if (t.id === 'ftOndeB') { onde.busca = t.value; ondeLista(); return; }   // v213: a lista de pontos da tela inicial (sem GPS)
+      if (t.id === 'ftOndeKm') { ondeKm(t.value); return; }
       if (batch && t.tagName !== 'SELECT' && batchInput(t)) return;
       if (!st) return;
       if (t.id === 'ftKm') {
@@ -3350,6 +3453,7 @@
     function open(o) {
       o = o || {};
       opts.initialPoint = o.pointId || '';
+      opts.initialKm = null; onde = { sig: '', aberta: false, busca: '', meu: false, kmRuim: false };   // v213
       // foto da não conformidade: { cid, pid, svc, nome, ponto, desc } (a foto fica no contrato e no ponto da NC e entra na lista dela)
       opts.nc = o.nc || null;
       if (!root) build();

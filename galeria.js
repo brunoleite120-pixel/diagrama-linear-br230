@@ -3630,7 +3630,9 @@
         });
       }, 400);
     }
-    return { open: open, close: close, changed: changed, voltar: voltar, isOpen: function () { return !!root; }, baixando: function () { return bx ? bx.ls.length - bx.fim : 0; } };
+    // v213 (item 58): o relatório fotográfico de um ponto só, com as fotos que o app acabou de ler do banco
+    function relPonto(cid, pid, fotos) { if (o.relatorioPdf) o.relatorioPdf({ itens: fotos.map(deBanco), arquivo: arquivo, cid: cid, pid: pid }); }
+    return { open: open, close: close, changed: changed, voltar: voltar, relPonto: relPonto, isOpen: function () { return !!root; }, baixando: function () { return bx ? bx.ls.length - bx.fim : 0; } };
   };
   window.Galeria.listarTodas = listarFotos;   // a NC lista as fotos do ponto do mesmo jeito (app.js)
   // as contas sem tela, para o teste em ferramentas/teste-galeria.js (node, sem banco)

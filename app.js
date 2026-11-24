@@ -3809,7 +3809,9 @@
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
+      h += antesDepoisHtml(ownerOf(p), p);
       h += '<div class="pt-foot"><span class="pt-foot-l">' + (galeriaOn() ? '<button type="button" class="btn small" data-act="fotos-ponto" data-id="' + id + '">Fotos deste ponto</button>' : '') +
+        (relPontoPode() ? '<button type="button" class="btn small" data-act="rel-ponto" data-id="' + id + '">Relatório deste ponto (PDF)</button>' : '') +
         '<button type="button" class="btn small" data-act="dup-point" data-id="' + id + '">Duplicar ponto</button></span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir ponto</button></div>';
       h += '</div>';
     }
@@ -3852,6 +3854,8 @@
     var d = e.target;
     if (d && d.classList && d.classList.contains('pt-dados') && !d.classList.contains('pt-des') && d.dataset.id) ui.dadosAb[d.dataset.id] = d.open;
     if (d && d.classList && d.classList.contains('pt-des') && d.dataset.id) ui.desAb[d.dataset.id] = d.open;
+    // v213: "Fotos deste ponto · antes e depois" lê as fotos só quando abre
+    if (d && d.classList && d.classList.contains('pt-ad') && d.dataset.id) { (ui.adAb || (ui.adAb = {}))[d.dataset.id] = d.open; if (d.open) adCarrega(); }
     // "Onde foi medido" (segmento da conservação): a lista só é montada aberta; ao abrir, lê as ocorrências e refaz o cartão
     if (d && d.classList && d.classList.contains('an-oc') && d.dataset.id) {
       ui.ocAb[d.dataset.id] = d.open;
@@ -4408,7 +4412,9 @@
 
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
+      h += antesDepoisHtml(c, p);
       h += '<div class="pt-foot"><span class="pt-foot-l">' + (galeriaOn() ? '<button type="button" class="btn small" data-act="fotos-ponto" data-id="' + id + '">Fotos desta OAE</button>' : '') +
+        (relPontoPode() ? '<button type="button" class="btn small" data-act="rel-ponto" data-id="' + id + '">Relatório desta OAE (PDF)</button>' : '') +
         '</span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir OAE</button></div>';
       h += '</div>';
     }
@@ -6167,6 +6173,8 @@
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item' && act !== 'set-desemp') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
+    if (act === 'ad-denovo') { adCarrega(true); return; }
+    if (act === 'rel-ponto') { relatorioDoPonto(c, findPoint(b.dataset.id), b); return; }
     if (act === 'nc-fotos-ver') {
       var ncb = b.closest('.nc-fotos'), ncIds = ncb ? [].map.call(ncb.querySelectorAll('.nc-ft'), function (x) { return x.dataset.foto; }) : [];
       if (ncIds.length) abrirGaleria({ cid: c.id, ids: ncIds, idsNome: ncb.dataset.nome || 'Fotos da NC' });
@@ -8571,6 +8579,7 @@
   function setLogin(l, inicio) {
     var limpou = banco.on && !inicio && !mesmaPessoa(banco.login, l);
     if (limpou) undoFecha();   // o Desfazer de quem saiu não fica para quem entra (antes só a barra da Corrigida fechava)
+    if (!inicio) fotosEq = { em: 0, p: null, arr: null, erro: null, falhou: 0 };   // v213: as fotos lidas são de quem estava
     if (limpou) limparDadosAparelho();
     banco.login = l;
     lsPut(LOGIN_KEY, l);
@@ -9470,7 +9479,7 @@
     }
     abrirGaleriaJa(f);
   }
-  function abrirGaleriaJa(f) {
+  function galeriaInst() {
     if (!galeria) {
       galeria = window.Galeria({
         // o analista que tira fotos fica como o fiscal na galeria: Neste aparelho e Minhas
@@ -9487,7 +9496,72 @@
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null, ncFotos: ncFotosIds
       });
     }
-    galeria.open(f);
+    return galeria;
+  }
+  function abrirGaleriaJa(f) { galeriaInst().open(f); }
+  // ---------------- v213 (itens 58 e 59): as fotos do ponto no cartão (antes e depois) e o relatório fotográfico só dele
+  // as fotos da equipe vêm do banco numa leitura só, que serve a todos os pontos por 5 minutos (a falha espera 1 minuto)
+  var fotosEq = { em: 0, p: null, arr: null, erro: null, falhou: 0 }, adT = null;
+  function fotosEqPode() { return galeriaOn() && nivel() >= 2 && !!(window.Galeria && window.Galeria.listarTodas); }
+  function fotosEqVelha() { return !fotosEq.p || (fotosEq.erro ? Date.now() - fotosEq.falhou > 60000 : !!fotosEq.arr && Date.now() - fotosEq.em >= 300000); }
+  function fotosEqLer() {
+    var eu = fotosEq = { em: Date.now(), p: null, arr: fotosEq.arr, erro: null, falhou: 0 };
+    eu.p = window.Galeria.listarTodas(window.Banco, banco.login.codigo, 'todas').then(function (arr) { eu.arr = arr || []; eu.em = Date.now(); return eu.arr; },
+      function (e) { eu.erro = e || {}; eu.falhou = Date.now(); throw e; });
+    return eu.p;
+  }
+  function fotosDoPonto(c, p) {
+    return (fotosEq.arr || []).filter(function (f) { return f.contrato_id === c.id && f.ponto_id === p.id && f.situacao !== 'deletada' && !f.deletada_em; })
+      .sort(function (x, y) { return String(x.tirada_em || x.enviada_em || '').localeCompare(String(y.tirada_em || y.enviada_em || '')); });
+  }
+  function relPontoPode() { return fotosEqPode() && nivel() >= 3 && !!window.RelatorioFoto; }
+  // recolhido no celular (abre com um toque, e só então lê as fotos); aberto no computador e no tablet
+  function antesDepoisHtml(c, p) {
+    if (!fotosEqPode()) return '';
+    var ab = ui.adAb && ui.adAb[p.id] != null ? ui.adAb[p.id] : mdOn(), oae = isOae(c);
+    if (ab && fotosEqVelha() && !adT) adT = setTimeout(function () { adT = null; adCarrega(); }, 0);
+    return '<details class="pt-ad" data-id="' + esc(p.id) + '"' + (ab ? ' open' : '') + '><summary>' + (oae ? 'Fotos desta OAE' : 'Fotos deste ponto') + ' <span>· antes e depois</span></summary>' +
+      '<div class="pt-ad-c" data-ad="' + esc(p.id) + '">' + (ab ? antesDepoisCorpo(c, p) : '') + '</div></details>';
+  }
+  function adQuadro(f, rot) {
+    var t = f.tirada_em || f.enviada_em, d = t && isFinite(Date.parse(t)) ? new Date(t).toLocaleDateString('pt-BR') : 'sem data';
+    return '<figure class="pt-ad-f"><span class="nc-ft" data-foto="' + esc(f.id) + '"><img alt=""></span><figcaption><b>' + rot + '</b><small>' + esc(d + (f.autor_nome ? ' · ' + f.autor_nome : '')) + '</small></figcaption></figure>';
+  }
+  function antesDepoisCorpo(c, p) {
+    var oae = isOae(c);
+    if (fotosEq.erro && !fotosEq.arr) return '<p class="pt-ad-m">' + esc(banco.online === false ? 'Sem sinal: as fotos vêm do banco da equipe.' : errText(fotosEq.erro)) +
+      ' <button type="button" class="btn small" data-act="ad-denovo">Tentar de novo</button></p>';
+    if (!fotosEq.arr) return '<p class="pt-ad-m">Carregando as fotos…</p>';
+    var fs = fotosDoPonto(c, p);
+    if (!fs.length) return '<p class="pt-ad-m">' + (oae ? 'Esta OAE' : 'Este ponto') + ' ainda não tem foto enviada.</p>';
+    return '<div class="pt-ad-g">' + (fs.length === 1 ? adQuadro(fs[0], 'Única foto') : adQuadro(fs[0], 'Primeira foto') + adQuadro(fs[fs.length - 1], 'Foto mais recente')) + '</div>' +
+      '<button type="button" class="pt-ad-v" data-act="fotos-ponto" data-id="' + esc(p.id) + '">' + (fs.length === 1 ? 'Ver na galeria' : 'Ver as ' + fs.length + ' na galeria') + ' ›</button>';
+  }
+  // refaz só o quadro das fotos dos cartões abertos (o resto do cartão, o foco e o que a pessoa digita ficam como estão)
+  function adAtualiza() {
+    document.querySelectorAll('.pt-ad[open] > .pt-ad-c').forEach(function (el) {
+      var p = findPoint(el.dataset.ad), c = p && ownerOf(p);
+      if (c) el.innerHTML = antesDepoisCorpo(c, p);
+    });
+  }
+  function adCarrega(denovo) {
+    if (!fotosEqPode()) return;
+    if (!denovo && !fotosEqVelha()) { adAtualiza(); return; }
+    var pr = fotosEqLer();
+    adAtualiza();
+    pr.then(adAtualiza, adAtualiza);
+  }
+  // "Relatório deste ponto (PDF)": lê as fotos de novo (a ★ pode ter mudado) e abre a janela do relatório só com este ponto
+  function relatorioDoPonto(c, p, b) {
+    if (!p || !relPontoPode()) return;
+    var rot = b ? b.textContent : '';
+    if (b) { b.disabled = true; b.textContent = 'Lendo as fotos…'; }
+    fotosEqLer().then(function () {
+      adAtualiza();
+      var fs = fotosDoPonto(c, p);
+      if (!fs.length) { toast((isOae(c) ? 'Esta OAE' : 'Este ponto') + ' ainda não tem foto enviada.'); return; }
+      galeriaInst().relPonto(c.id, p.id, fs);
+    }, function (e) { adAtualiza(); toast(errText(e)); }).then(function () { if (b && b.isConnected) { b.disabled = false; b.textContent = rot; } });
   }
   // ---------------- relatório fotográfico em PDF (relatorio.js), no modelo do DNIT: uma folha por ponto ou ponte
   var relFoto = null;
