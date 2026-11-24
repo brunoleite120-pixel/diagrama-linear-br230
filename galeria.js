@@ -129,6 +129,13 @@
     '.gl-g small{font-weight:400;font-size:12px;color:var(--ink-3,#5C6661);font-variant-numeric:tabular-nums}',
     '.gl-g button{margin-left:auto;border:0;background:none;color:var(--accent,#1D4F91);font-size:12.5px;padding:2px 4px}',
     '.gl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:6px}',
+    // v217 (item 83): Menores · Médias · Maiores no computador
+    '@media (min-width:561px){.gl.gl-tam-p .gl-grid{grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:4px}.gl.gl-tam-p .gl-cap span{display:none}.gl.gl-tam-p .gl-cap{padding:10px 5px 3px}',
+    '  .gl.gl-tam-g .gl-grid{grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:8px}.gl.gl-tam-g .gl-cap{font-size:12px;padding:18px 8px 6px}.gl.gl-tam-g .gl-cap b{font-size:13px}}',
+    '.gl-tam{flex:none;display:inline-flex;align-items:stretch;border:1px solid var(--line,#D5DAD6);border-radius:8px;overflow:hidden;background:var(--panel,#fff)}',
+    '.gl-tam button{min-height:32px;padding:0 10px;border:0;border-left:1px solid var(--line,#D5DAD6);background:transparent;color:var(--ink-2,#3B4540);font:inherit;font-size:12.5px;white-space:nowrap;cursor:pointer}',
+    '.gl-tam button:first-child{border-left:0}',
+    '.gl-tam button[aria-pressed="true"]{background:var(--ink,#17201C);color:#fff;font-weight:650}',
     '.gl-t{position:relative;display:block;padding:0;border:0;border-radius:6px;overflow:hidden;background:var(--line-2,#E6E9E6);aspect-ratio:1/1;max-width:100%}',
     '.gl-t img{display:block;width:100%;height:100%;object-fit:cover}',
     '.gl-t .gl-cap{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 4px;background:linear-gradient(transparent,rgba(0,0,0,.7));color:#fff;font-size:11px;line-height:1.25;text-align:left}',
@@ -835,6 +842,7 @@
   var DRIVE_KEY = 'diagrama-linear.foto-drive', MANTER_KEY = 'diagrama-linear.manter-enviadas';
   // aba Drive: por contrato ou por pessoa, e quando cada pasta foi aberta (para contar as novas)
   var DMODO_KEY = 'diagrama-linear.drive-ver-modo', DVISTO_KEY = 'diagrama-linear.drive-ver-vistos';
+  var ABA_KEY = 'diagrama-linear.galeria-aba', TAM_KEY = 'diagrama-linear.galeria-tam';   // v217: a última aba usada e o tamanho das miniaturas
   var DET_KEY = 'diagrama-linear.foto-detalhes';   // a foto aberta com os detalhes abertos (a pessoa deixou assim)
   // v119: a última conferência com a equipe das fotos guardadas neste aparelho ({ em, q: ids perguntados, s: id -> situação })
   var CONF_KEY = 'diagrama-linear.fotos-conferidas';
@@ -1699,6 +1707,15 @@
       return '<button type="button" class="gl-chip" data-g="nc-fil" aria-pressed="' + !!filtro.nc + '">Fotos de NC · ' + n + '</button>';
     }
     // folha: o conteúdo da folha Filtros do celular, com o nome de cada grupo. No celular a fila mostra só os selos (no Drive, a busca e as pastas)
+    // v217 (item 83): tamanho das miniaturas no computador (fica guardado neste aparelho)
+    function tamAtual() { var t = lsLer(TAM_KEY); return t === 'p' || t === 'g' ? t : 'm'; }
+    function tamAplica() { if (!root) return; var t = tamAtual(); root.classList.toggle('gl-tam-p', t === 'p'); root.classList.toggle('gl-tam-g', t === 'g'); }
+    function tamHtml() {
+      var t = tamAtual();
+      return '<span class="gl-tam" role="group" aria-label="Tamanho das miniaturas">' + [['p', 'Menores'], ['m', 'Médias'], ['g', 'Maiores']].map(function (x) {
+        return '<button type="button" data-g="tam" data-v="' + x[0] + '" aria-pressed="' + (t === x[0]) + '">' + x[1] + '</button>';
+      }).join('') + '</span>';
+    }
     function filtrosHtml(folha) {
       var rot = function (t, x) { return folha ? '<div class="gl-fo-l"><span>' + t + '</span>' + x + '</div>' : x; };
       if (aba === 'drive') return !folha ? driveFil() : emCartoes() || celular() ? '' : rot('Período', perHtml());
@@ -1746,7 +1763,7 @@
           return '<option value="' + k + '"' + (k === g ? ' selected' : '') + '>' + AGRUPAR[k] + '</option>';
         }).join('') + '</select>');
       }
-      return h + (folha && celular() ? '' : rot('Período', perHtml()));
+      return h + (folha && celular() ? '' : rot('Período', perHtml())) + (itens.length && !folha && !celular() ? tamHtml() : '');
     }
     // período em fichas; "Escolher…" abre a janela (hoje, semana passada, todas as datas, de… até…) e mostra o escolhido nela
     function perHtml() {
@@ -2017,6 +2034,19 @@
       if (carregando && !itens.length) return '<div class="gl-vazio">Carregando…</div>';
       if (erroTxt) return '<div class="gl-vazio">' + esc(erroTxt) + (login() ? '' : '<br><button type="button" class="btn small primary" data-g="entrar">Entrar</button>') + '</div>';
       if (!itens.length) {
+        // v217 (item 90): "No aparelho" vazia fora do celular leva a Equipe; "Relatório ★" vazia leva a marcar em Equipe
+        var visV = abasVisiveis().map(function (a) { return a.k; }), temEq = visV.indexOf('todas') >= 0;
+        var nEq = contas.todas ? contas.todas.toLocaleString('pt-BR') : '';
+        if (aba === 'local' && !celular() && temEq) {
+          return '<div class="gl-vazio"><b class="gl-vz-t">Nenhuma foto guardada neste ' + (toque() ? 'aparelho' : 'computador') + '.</b>' +
+            (toque() ? 'As fotos com carimbo (botão Foto) ficam aqui assim que você tira; as enviadas pela equipe estão em Equipe.' : 'As fotos tiradas com o botão Foto ficam no aparelho de quem tirou e, depois de enviadas, aparecem em Equipe.') +
+            '<span class="gl-vz-b"><button type="button" class="btn small primary" data-aba="todas">' + (nEq ? 'Ver as ' + nEq + ' da equipe' : 'Ver as fotos da equipe') + '</button></span></div>';
+        }
+        if (aba === 'relatorio' && temEq) {
+          return '<div class="gl-vazio"><b class="gl-vz-t">Nenhuma foto marcada para o relatório.</b>' +
+            'Em Equipe, selecione as fotos e escolha ★ Pôr no relatório.' +
+            '<span class="gl-vz-b"><button type="button" class="btn small primary" data-aba="todas">Marcar em Equipe</button></span></div>';
+        }
         return '<div class="gl-vazio">' + ({
           local: 'Nenhuma foto guardada neste aparelho. As fotos com carimbo (botão Foto) ficam aqui assim que você tira.',
           minhas: 'Você ainda não enviou fotos.', todas: 'Nenhuma foto enviada pela equipe ainda.',
@@ -3751,6 +3781,7 @@
       if (t.hasAttribute('data-aba')) {
         var a = t.getAttribute('data-aba');
         if (a === aba) return;
+        if (a !== 'deletadas') lsPor(ABA_KEY, a);   // v217 (item 76): a lixeira não fica como a aba de abrir
         aba = a; agrupar = ''; filtro.autor = ''; filtro.rel = false; sel = {}; selecionando = false; itens = []; fLocal = ''; semRede = 0; fecharAviso();
         carregar();
         return;
@@ -3781,6 +3812,7 @@
       if (g === 'cts') { abrirCts(); return; }
       if (g === 'cel-fil' || g === 'cel-mais' || g === 'cel-per') { abrirFo(g === 'cel-mais' ? 'mais' : g === 'cel-per' ? 'per' : 'filtros'); return; }
       // v190: o selo de um filtro ligado (pessoa, ponto, situação) tira o filtro
+      if (g === 'tam') { var tv = t.getAttribute('data-v'); lsPor(TAM_KEY, tv === 'm' ? null : tv); tamAplica(); render(); return; }   // v217 (item 83)
       if (g === 'f-tirar') { var fk = t.getAttribute('data-f'); if (fk === 'fl') fLocal = ''; else filtro[fk] = ''; sel = {}; render(); return; }
       if (g === 'fo-fechar') { fecharFo(); return; }
       if (t.closest('.gl-sh.ma') || t.closest('.gl-fo-mais')) {
@@ -3996,6 +4028,7 @@
       var pagina = !!f.pagina;
       aoFechar = pagina && f.aoFechar ? f.aoFechar : null;
       root.classList.toggle('gl-pag', pagina);
+      tamAplica();
       soFoto = f.foto ? { id: String(f.foto), irPara: typeof f.irPara === 'function' ? f.irPara : null, aberta: false, hist: false } : null;
       root.classList.toggle('gl-sofoto', !!soFoto);
       root.setAttribute('role', pagina ? 'region' : 'dialog');
@@ -4022,11 +4055,21 @@
       fecharMover();
       lg = null; var lg0 = q('.gl-lg'); if (lg0) lg0.remove();   // v215
       var vis = abasVisiveis().map(function (a) { return a.k; });
-      aba = f.aba && vis.indexOf(f.aba) >= 0 ? f.aba : (f.pid || filtro.km || filtro.ids ? (vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local') : (vis.indexOf(aba) >= 0 ? aba : 'local'));
+      aba = f.aba && vis.indexOf(f.aba) >= 0 ? f.aba : (f.pid || filtro.km || filtro.ids ? (vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local') : abaInicial(vis));
       sel = {}; selecionando = false; ver = -1; itens = []; fLocal = ''; semRede = 0; bs = null; cfg = false;
       cacheIds().then(function (m) { guardadas = m; });
       limparEnviadas(o.drive).then(function (k) { if (k && root && aba === 'local') carregar(); });
       carregar();
+    }
+    // v217 (item 76): no computador, a última aba usada (na primeira vez, Equipe); no celular e no tablet, "No aparelho"
+    // quando há foto esperando envio, senão a última aba usada (na primeira vez, "No aparelho")
+    function toque() { return celular() || !!(window.matchMedia && matchMedia('(pointer:coarse)').matches); }
+    function abaInicial(vis) {
+      var ult = lsLer(ABA_KEY), inf = o.drive && o.drive.info ? o.drive.info() : null;
+      if (toque() && inf && inf.n > 0 && vis.indexOf('local') >= 0) return 'local';
+      if (ult && vis.indexOf(ult) >= 0) return ult;
+      if (toque()) return vis.indexOf('local') >= 0 ? 'local' : vis[0];
+      return vis.indexOf('todas') >= 0 ? 'todas' : vis.indexOf('minhas') >= 0 ? 'minhas' : 'local';
     }
     function close(semAviso) {
       if (!root) return;
