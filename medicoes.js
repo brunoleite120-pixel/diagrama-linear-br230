@@ -595,6 +595,20 @@
       var rk = { dg: 0, at: 1, az: 2 };
       return its.sort(function (a, b) { return rk[a.tom] - rk[b.tom] || a.ord - b.ord; });
     }
+    // v209: o que o painel do contrato (app.js) mostra; as mesmas contas da Situação
+    function resumoCt(c) {
+      var d = dado(c);
+      if (!d || !d.ms.length) return null;
+      var p = prazosCt(c, d), ne = dias(p.exe), e = empMed(d), f = fichaS(d) || {}, g = d.an.siac && d.an.siac.garantia, s = d.an.siac;
+      return {
+        pct: d.pi > 0 ? pctCurto(d.total / d.pi * 100) : '', medido: compacto(d.total), pi: d.pi > 0 ? compacto(d.pi) : '', n: d.ms.length,
+        ult: d.ult.n + 'ª · ' + mesTxt(d.ultima), ultValor: dinheiro(totalMed(d, d.ult)), ultPag: pagTxt(d, d.ult) || '', semMeses: mesesSem(d),
+        exe: p.exe ? dataTxt(p.exe) : '', vig: p.vig ? dataTxt(p.vig) : '', dias: ne, tomPrazo: tomDias(ne, 45, 120),
+        emp: e ? compacto(e.saldo) : '', cobre: e ? e.cobre : null,
+        siac: s ? { consulta: s.consulta ? dataTxt(s.consulta) : '', pi: numero(f.pi_vigente) != null ? dinheiro(numero(f.pi_vigente)) : '', exe: diaIso(f.termino_execucao) ? dataTxt(f.termino_execucao) : '',
+          vig: diaIso(f.termino_vigencia) ? dataTxt(f.termino_vigencia) : '', garantia: g ? [g.situacao, g.vencimento ? 'vence em ' + dataTxt(g.vencimento) : ''].filter(Boolean).join(' · ') : '' } : null
+      };
+    }
     function confItemHtml(x) {
       return '<li class="md-conf-it ' + x.tom + '"><div class="md-conf-q">' + chipTom(x.tipo, x.tom) + '<b>' + esc(x.quem) + '</b></div><span class="md-conf-txt">' + esc(x.txt) + '</span>' +
         (x.cid ? botao('abrir-ab', 'Abrir', ' data-cid="' + esc(x.cid) + '" data-ab="' + x.ab + '" aria-label="' + esc('Abrir ' + x.quem + ' em ' + ABAS[x.ab]) + '"', 'small ghost md-accent md-conf-abrir') : '') + '</li>';
@@ -1204,6 +1218,15 @@
       // v205: "Para conferir" (faixa da tela inicial) e a entrada direto na Situação
       conferir: function () { try { return confItens(); } catch (e) { return []; } },
       situacao: function () { modo = 'sit'; cid = ''; med = null; },
+      // v209: os números de um contrato para o painel do editor e a entrada direto no contrato (aba Medições, Pagamentos ou Contrato)
+      resumo: function (c) { try { return resumoCt(c); } catch (e) { return null; } },
+      irContrato: function (id, ab) {
+        if (!contrato(id)) return false;
+        if (id !== cid) { pagTodas = false; pagAbertas = false; }
+        secao = ab === 'pag' || ab === 'ct' ? ab : 'med';
+        cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segSem = null; segOrdem = 'km';
+        return true;
+      },
       // chamada no popstate do app; true: a folha resolveu
       voltar: function () {
         if (folhaPula) { folhaPula = false; return true; }

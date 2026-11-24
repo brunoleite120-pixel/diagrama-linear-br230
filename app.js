@@ -3179,11 +3179,17 @@
     var h = [];
     ui.trechosErro = '';   // o erro da lista de limites recusada vale até o editor ser refeito
     if (!ui.lista || ui.lista.cid !== c.id) ui.lista = listaNova(c.id, false);   // outro contrato: busca limpa e filtro em Todos
-    h.push('<section class="card">');
+    // v209: no lado a lado, os dados ficam sempre à vista no painel (em leitura); no celular, a linha abre e fecha como antes
+    var mdP = mdOn(), ctPode = !readOnly() && !isFiscal(), ctEd = ctPode && ui.ctEdit === c.id, ctAb = mdP || ui.contractOpen;
+    var ctTit = '<span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span>' +
+      (cons ? ' <span class="sub ct-tipo">Tipo: ' + esc(ctGrupo(c) === 'sinal' ? 'Sinalização (P.A.T.O. de sinalização)' : tipoInfo(c).opcao) + '</span>' : '') + '</span>';
+    var ctBt = ctPode && !ctEd ? '<button type="button" class="btn small" data-act="ct-editar" data-v="1">Editar</button>' : '';
+    h.push('<section class="card ct-dados">');
     // conservação: o tipo no título, numa linha embaixo, só para leitura (sem número, o nome de tela é o Lote, que não diz o tipo)
-    h.push('<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '"><span>Dados do contrato <span class="sub" data-nomes="sub">· ' + esc(ctNome(c)) + '</span>' +
-      (cons ? ' <span class="sub ct-tipo">Tipo: ' + esc(ctGrupo(c) === 'sinal' ? 'Sinalização (P.A.T.O. de sinalização)' : tipoInfo(c).opcao) + '</span>' : '') + '</span>' + ICON_CHEV + '</button>');
-    if (ui.contractOpen) {
+    h.push(mdP ? '<div class="card-head fixo">' + ctTit + ctBt + '</div>' : '<button type="button" class="card-head" data-act="toggle-contract" aria-expanded="' + ui.contractOpen + '">' + ctTit + ICON_CHEV + '</button>');
+    if (ctAb && !ctEd) h.push(dadosLeituraHtml(c, mdP ? '' : ctBt));
+    if (ctAb && ctEd) {
+      h.push('<div class="card-body"><div class="ct-ed-top"><span>Editando os dados do contrato. O que é digitado já fica salvo.</span><button type="button" class="btn small primary" data-act="ct-editar" data-v="0">Concluir</button></div></div>');
       h.push('<div class="card-body">' + (banco.on ? lastLine(metaKey(c.id)) : '') + '<div class="grid">');
       h.push(field('Nº da obra / contrato', 'data-c="numero" type="text"', c.numero));
       h.push(field('Lote (da licitação)', 'data-c="lote" type="text"', c.lote));
@@ -3279,6 +3285,7 @@
     var pts = sortedPoints(c), oae = isOae(c);
     // celular: a análise e o desempenho numa linha fechada, para a lista subir; tablet e computador: à direita, no Resumo do contrato
     var cel = !mdOn() && !!(mmCel && mmCel.matches);
+    if (!oae && !cons) carregarAnalise(c, true);   // v209: o painel dos pontos críticos também mostra o medido, o prazo e o empenho
     if (oae || cons) { carregarAnalise(c); h.push(cel ? analiseLinha(c) : analiseResumoHtml(c)); }
     if (isPavimentada(c)) h.push(cel ? desempLinha(c) : desempResumoHtml(c));
     var iLista = h.length;   // até aqui, o resumo do contrato (dados, análise, desempenho); daqui em diante, a lista
@@ -3326,15 +3333,112 @@
     var ed = $('editor'), aeB = document.activeElement, fB = aeB && aeB.id === 'ptBusca' ? { s: aeB.selectionStart, e: aeB.selectionEnd } : null;   // o redesenho não fecha o teclado da busca
     ed.classList.toggle('ld', md);
     if (md) {
-      var resBtn = '<button type="button" class="ld-resumo" data-act="ld-resumo" aria-current="' + !pAb + '"><span class="ld-resumo-t"><b>Resumo do contrato</b>' +
-        '<small>Dados do contrato' + (anOf(c) ? ' · Análise das medições' : '') + '</small></span>' + ICON_CHEV + '</button>';
+      var resBtn = '<button type="button" class="ld-resumo" data-act="ld-resumo" aria-current="' + !pAb + '"><span class="ld-resumo-t"><b>Painel do contrato</b>' +
+        '<small>Resumo · Dados do contrato' + (anOf(c) ? ' · Análise das medições' : '') + '</small></span>' + ICON_CHEV + '</button>';
       ed.innerHTML = '<div class="ld-l">' + nota + resBtn + h.slice(iLista).join('') + dicaInstalarHtml() + '</div>' +
-        '<div class="ld-r">' + (pAb ? voltarHtml() + pointCard(pAb) : '<h2 class="ld-tit">Resumo do contrato</h2>' + h.slice(0, iLista).join('')) + '</div>';
-    } else ed.innerHTML = nota + h.join('') + dicaInstalarHtml();
+        '<div class="ld-r">' + (pAb ? voltarHtml() + pointCard(pAb) : painelHtml(c) + h.slice(0, iLista).join('')) + '</div>';
+    } else ed.innerHTML = nota + (cel ? '<div class="pn-cel">' + painelCelHtml(c) + h.slice(0, iLista).join('') + '</div>' + h.slice(iLista).join('') : h.join('')) + dicaInstalarHtml();
     listaAplica();
     lockEditor();
     var bB = fB && $('ptBusca');
     if (bB) try { bB.focus({ preventScroll: true }); bB.setSelectionRange(fB.s, fB.e); } catch (e) { /* sem foco */ }
+  }
+  // ---------------- v209: painel do contrato. Os quadros: o campo (avanço ou NC abertas) e, para quem vê as medições, o medido,
+  // o prazo de execução e o saldo de empenho (as contas são as da Situação, em medicoes.js)
+  var PN_KEY = 'diagrama-linear.resumo-celular';
+  function painelSiac(c) { return banco.on && banco.login && temMedicoes() && parte(c, 'med') && medObj() ? medicoes.resumo(c) : null; }
+  function painelNums(c, rs) {
+    var q = [], pts = c.pontos, nome = isOae(c) ? 'OAEs' : 'segmentos';
+    if (isContinuo(c)) {
+      if (parte(c, 'acomp')) {
+        var ab = 0, co = 0, com = 0;
+        pts.forEach(function (p) { var n = oaeNec(p, c); ab += n.dn; co += n.exec; if (n.dn + n.exec) com++; });
+        q.push({ r: 'NC abertas', v: String(ab), s: (co ? co + ' em correção · ' : '') + (com ? 'em ' + com + ' de ' + pts.length + ' ' + nome : 'nenhuma NC em ' + pts.length + ' ' + nome), tom: ab ? 'at' : '' });
+      }
+    } else {
+      var t = totals(c);
+      q.push({ r: 'Campo', v: t.avg != null ? fmtPct(t.avg) : '—', s: 'de avanço · ' + pts.length + (pts.length === 1 ? ' ponto' : ' pontos') + (c.dataVistoria ? ' · vistoria em ' + fmtDate(c.dataVistoria) : '') });
+    }
+    if (rs) {
+      q.push({ r: 'Medido (SIAC)', v: rs.pct || '—', s: rs.pi ? rs.medido + ' de ' + rs.pi + ' · ' + rs.n + (rs.n === 1 ? ' medição' : ' medições') : 'falta o PI no SIAC' });
+      q.push({ r: 'Prazo de execução', v: rs.dias == null ? '—' : rs.dias < 0 ? 'vencido' : rs.dias + (rs.dias === 1 ? ' dia' : ' dias'),
+        s: rs.exe ? 'até ' + rs.exe + (rs.vig && rs.vig !== rs.exe ? ' · vigência até ' + rs.vig : '') : 'sem data no cadastro', tom: rs.tomPrazo === 'ok' ? '' : rs.tomPrazo });
+      q.push({ r: 'Saldo de empenho', v: rs.emp || '—', s: rs.cobre === false ? 'não cobre a próxima medição' : rs.cobre ? 'cobre a próxima medição' : '', tom: rs.cobre === false ? 'at' : '' });
+    }
+    return q;
+  }
+  function painelNumsHtml(q) {
+    return q.length ? '<div class="pn-kpis" data-n="' + q.length + '">' + q.map(function (x) {
+      return '<div class="pn-kpi' + (x.tom ? ' ' + x.tom : '') + '"><span>' + esc(x.r) + '</span><strong>' + esc(x.v) + '</strong><small>' + esc(x.s) + '</small></div>';
+    }).join('') + '</div>' : '';
+  }
+  // os itens que pedem atenção (item 52): pontos com serviço parado ou, no serviço contínuo, OAEs e segmentos com NC. O toque abre o item
+  function painelAtencaoHtml(c) {
+    var pts = sortedPoints(c), cont = isContinuo(c);
+    if (!pts.length || (cont && !parte(c, 'acomp'))) return '';
+    var f = cont ? 'nc' : 'P', l = pts.filter(function (p) { return listaNoFiltro(p, c, f); }), MAX = 6;
+    var h = '<section class="card pn-card" aria-label="' + (cont ? 'Com não conformidade' : 'Parados agora') + '"><h3>' + (cont ? 'Com NC' : 'Parados agora') + ' · ' + l.length + ' de ' + pts.length + '</h3>';
+    if (!l.length) return h + '<div class="pn-vazio">' + (cont ? 'Nenhuma NC aberta ou em correção.' : 'Nenhum ponto com serviço parado.') + '</div></section>';
+    h += '<ul class="pn-lista">' + l.slice(0, MAX).map(function (p) {
+      var t, v, km = p.kmIni != null ? 'km ' + fmtKm(p.kmIni) : p.kmLocal != null ? 'km ' + kmPtTxt(p) : '';
+      if (cont) {
+        var n = oaeNec(p, c), gs = [];
+        servicesOf(c).forEach(function (s) { if (comQtd(oaeSt(svSalvo(p, s.key, c)))) gs.push(s.short); });
+        t = nomesCurtos(gs); v = ncBdg(n);
+      } else {
+        var par = [];
+        servicesOf(c).forEach(function (s) { if ((p.serv[s.key] || {}).st === 'P') par.push(s.short); });
+        t = nomesCurtos(par); v = esc(fmtPct(pointPct(p, c)));
+      }
+      return '<li><button type="button" class="pn-it" data-act="an-ir" data-id="' + esc(p.id) + '"><b>' + esc(p.nome || p.codigo || '?') + '</b><span class="km">' + esc(km) + '</span><span class="t">' + t + '</span><span class="v">' + v + '</span>' + ICON_CHEV + '</button></li>';
+    }).join('') + '</ul>';
+    if (l.length > MAX) h += '<button type="button" class="btn small" data-act="lista-f" data-f="' + f + '" data-fixo="1">Ver os ' + l.length + ' na lista</button>';
+    return h + '</section>';
+  }
+  function painelHtml(c) {
+    var rs = painelSiac(c), semKm = kmSoContrato(c) || c.kmLocal;
+    var sub = [c.executora, c.rodovia, !semKm && c.kmIni != null && c.kmFim != null ? 'km ' + fmtKm(c.kmIni) + ' a ' + fmtKm(c.kmFim) : '', c.origem && c.destino ? c.origem + ' → ' + c.destino : ''].filter(Boolean).join(' · ');
+    var h = '<div class="pn-top"><h2 class="ld-tit">' + esc(ctNome(c)) + (ctNumeroCT(c) ? ' · ' + esc(ctNumeroCT(c)) : '') + '</h2>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + '</div>';
+    h += painelNumsHtml(painelNums(c, rs));
+    var esq = painelAtencaoHtml(c), dir = '';
+    if (rs) dir += '<section class="card pn-card" aria-label="Última medição"><h3>Última medição</h3><span><b>' + esc(rs.ult) + '</b> · ' + esc(rs.ultValor) + '</span>' +
+      '<span class="s">' + esc([rs.ultPag, rs.semMeses ? 'sem medição nova há ' + rs.semMeses + (rs.semMeses === 1 ? ' mês' : ' meses') : ''].filter(Boolean).join(' · ')) + '</span>' +
+      '<button type="button" class="btn small" data-act="pn-med">Abrir em Medições ›</button></section>';
+    if (galeriaOn() && ctsFoto().indexOf(c) >= 0) dir += '<section class="card pn-card" aria-label="Fotos"><h3>Fotos</h3><span class="s">As fotos deste contrato, por dia e por ' + (isOae(c) ? 'OAE' : isConserva(c) ? 'km' : 'ponto') + '.</span>' +
+      '<button type="button" class="btn small" data-act="pn-fotos">Abrir a galeria deste contrato ›</button></section>';
+    if (esq || dir) h += '<div class="pn-meio' + (esq && dir ? '' : ' so') + '">' + (esq ? '<div>' + esq + '</div>' : '') + (dir ? '<div>' + dir + '</div>' : '') + '</div>';
+    return h;
+  }
+  // celular (item 54): o cartão "Resumo" abre o grupo das linhas do contrato, com os mesmos números; recolhido, fica só a linha
+  function painelCelHtml(c) {
+    var rs = painelSiac(c), q = painelNums(c, rs);
+    if (!q.length) return '';
+    if (ui.pnCel == null) ui.pnCel = lsGet(PN_KEY) !== false;
+    return '<section class="card"><button type="button" class="card-head" data-act="pn-cel" aria-expanded="' + !!ui.pnCel + '"><span>Resumo <span class="sub">· ' + esc(ctNumeroCT(c) || ctNome(c)) + '</span></span>' + ICON_CHEV + '</button>' +
+      (ui.pnCel ? '<div class="pn-cel-c">' + painelNumsHtml(q) + (rs ? '<button type="button" class="btn small" data-act="pn-med">Medições deste contrato ›</button>' : '') + '</div>' : '') + '</section>';
+  }
+  // os dados do contrato só para ler (item 53); o que vem do SIAC fica à parte, com a data da consulta, e não se edita aqui
+  function dadosLeituraHtml(c, botao) {
+    var cons = isConserva(c), snvV = (window.SNV_BR230 && window.SNV_BR230.versao) || '', soK = kmSoContrato(c);
+    var dl = function (k, v, cl) { v = v == null ? '' : String(v).trim(); return v ? '<div' + (cl ? ' class="' + cl + '"' : '') + '><dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd></div>' : ''; };
+    var faixa = function (a, b) { return a != null || b != null ? (a != null ? fmtKm(a) : '?') + ' a ' + (b != null ? fmtKm(b) : '?') : ''; };
+    var kmRot = cons ? (c.kmLocal ? 'km local (' + (c.ramal || 'ramal') + ')' : soK ? 'posição no eixo (km do site)' : 'km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '')) : pcRegua(c) ? 'km Atualizado' + (snvV ? ' (SNV ' + snvV + ')' : '') : 'km';
+    var ext = typeof c.extensaoContrato === 'number' && isFinite(c.extensaoContrato) ? fmt(c.extensaoContrato, 2) + ' km' : '';
+    var h = '<div class="card-body">' + (banco.on ? lastLine(metaKey(c.id)) : '') + '<dl class="ct-ler">' +
+      dl('Nº da obra / contrato', c.numero) + dl('Lote (da licitação)', c.lote) + dl('Objeto', c.objeto, 'full') + dl('Executora', c.executora) +
+      dl('Supervisora', [c.supervisora, c.ctSupervisao ? 'CT ' + c.ctSupervisao : ''].filter(Boolean).join(' · ')) + dl('Rodovia', c.rodovia) + dl('Extensão do contrato', ext) +
+      dl('Sentido', c.origem || c.destino ? (c.origem || '?') + ' → ' + (c.destino || '?') : '') + dl('Trecho · ' + kmRot, faixa(c.kmIni, c.kmFim)) +
+      (cons || pcRegua(c) ? dl(soK ? txtLimpo(c.rotuloKmContrato) : 'Km do contrato', faixa(c.kmIniContrato, c.kmFimContrato)) + dl('SNV do contrato', c.snvContrato) : '') +
+      (cons ? dl('Superfície da pista', isPavimentada(c) ? 'Pavimentada' : isSinalizacao(c) ? 'Sinalização (todo o eixo)' : 'Revestimento primário') : dl('Largura da plataforma', c.plataforma)) +
+      dl('Data da última vistoria', c.dataVistoria ? fmtDate(c.dataVistoria) : '') + dl('Pasta no Drive', ctPasta(c)) +
+      dl('Marcos no diagrama', c.marcos.length ? c.marcos.map(function (m) { return m.nome; }).filter(Boolean).join(', ') || String(c.marcos.length) : '') +
+      (cons ? dl('Observações da folha', c.obsFolha, 'full') : '') + '</dl>';
+    var rs = painelSiac(c), s = rs && rs.siac;
+    if (s && (s.pi || s.exe || s.vig || s.garantia)) h += '<div class="ct-siac"><span class="lbl">Do SIAC' + (s.consulta ? ' · consulta de ' + esc(s.consulta) : '') + ' · não se edita aqui</span><dl class="ct-ler">' +
+      dl('PI vigente', s.pi) + dl('Fim da execução', s.exe) + dl('Fim da vigência', s.vig) + dl('Garantia', s.garantia) + '</dl>' +
+      '<button type="button" class="btn small" data-act="pn-med" data-ab="ct">Ver valor, aditivos e pagamentos em Medições › Contrato</button></div>';
+    if (botao) h += '<div class="ct-ler-bts">' + botao + '</div>';
+    return h + '</div>';
   }
   // ---------------- busca e "Só com NC" da lista do contrato. ui.lista vale para um contrato: q = o texto, so = só com NC. Filtrar
   // só esconde cartões (hidden), sem redesenhar o editor: o teclado não fecha. O item aberto não fecha quando sai do filtro.
@@ -6103,7 +6207,25 @@
       return;
     }
     if (act === 'ld-resumo') { undoProxima(); ui.open = {}; ui.voltar = null; renderEditor(); return; }
-    if (act === 'lista-f') { ui.lista.f = ui.lista.f === b.dataset.f ? '' : b.dataset.f; listaMuda(); return; }   // v208: tocar na ficha marcada volta a Todos
+    if (act === 'lista-f') { ui.lista.f = !b.dataset.fixo && ui.lista.f === b.dataset.f ? '' : b.dataset.f; listaMuda(); return; }   // v208: tocar na ficha marcada volta a Todos
+    // v209: painel do contrato
+    if (act === 'pn-med') { if (medObj() && medicoes.irContrato(c.id, b.dataset.ab || '')) abrirMedicoes(); return; }
+    if (act === 'pn-fotos') { abrirGaleria({ cid: c.id }); return; }
+    if (act === 'pn-cel') {
+      ui.pnCel = !ui.pnCel; lsPut(PN_KEY, ui.pnCel ? null : false);
+      renderEditor();
+      var bpc = document.querySelector('[data-act="pn-cel"]'); if (bpc) try { bpc.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+      return;
+    }
+    if (act === 'ct-editar') {
+      if (readOnly() || isFiscal()) return;
+      flushSave();
+      ui.ctEdit = b.dataset.v === '1' ? c.id : null;
+      if (ui.ctEdit) ui.contractOpen = true;
+      renderEditor();
+      var bce = document.querySelector(ui.ctEdit ? '.ct-dados [data-c="numero"]' : '.ct-dados [data-act="ct-editar"]'); if (bce) try { bce.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+      return;
+    }
     // v208 (item 57): Anterior e Próximo. No lado a lado troca o item da direita; no celular fecha o atual, abre o vizinho e o leva ao alto
     if (act === 'pt-nav') {
       var alvoN = b.dataset.alvo, dirN = b.dataset.d;
@@ -6562,7 +6684,7 @@
       var nc = novoContrato(tp.value, ref, numero, lote);
       state.contracts.push(nc);
       state.activeId = nc.id;
-      ui.contractOpen = true; ui.open = {};
+      ui.contractOpen = true; ui.open = {}; ui.ctEdit = nc.id;   // contrato novo: já abre no formulário
       var ncVisao = visaoOn;
       setVisao(false);
       renderAll();
