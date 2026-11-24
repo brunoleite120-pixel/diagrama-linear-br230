@@ -56,6 +56,39 @@
     '.gl-ct small{font-size:inherit;font-weight:inherit;color:inherit;font-variant-numeric:tabular-nums;white-space:pre}',
     '.gl-ct[aria-pressed="true"]{background:var(--ink,#17201C);border:1.5px solid var(--ink,#17201C);color:#fff}',
     '.gl-ct-l{flex:1 0 auto}',
+    // v212 (item 69): no computador, o contrato, os filtros e o período ficam numa linha só; as ações raras, em "Mais"
+    '.gl-cts-in{display:flex;gap:6px;flex:none}',
+    '.gl-cts-in .gl-ct{min-height:32px;border-radius:6px;padding:0 10px;font-size:13px}',
+    '.gl-cts-in .gl-ct-l{flex:none}',
+    '@media (min-width:1101px){.gl-fil{align-items:center}.gl-fil select{min-height:32px}}',
+    '.gl-mais{position:relative}',
+    '.gl-mais>summary{list-style:none;cursor:pointer}',
+    '.gl-mais>summary::-webkit-details-marker{display:none}',
+    '.gl-mais>summary::after{content:"▾";margin-left:6px;font-size:11px}',
+    '.gl-mais-pop{position:absolute;right:0;top:calc(100% + 4px);z-index:5;display:flex;flex-direction:column;gap:6px;min-width:270px;padding:8px;border:1px solid var(--line,#D5DAD6);border-radius:10px;background:var(--panel,#fff);box-shadow:0 8px 24px rgba(23,32,28,.18)}',
+    '.gl-mais-pop .btn{justify-content:flex-start}',
+    // v212 (item 70): período sem foto
+    '.gl-vazio .gl-vz-t{display:block;font-size:15px;color:var(--ink,#17201C)}',
+    '.gl-vazio .gl-vz-b{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}',
+    '.gl-vazio .gl-vz-b .btn{margin-top:0}',
+    // v212 (item 71): na foto aberta, as fotos do mesmo ponto e o "Antes e depois"
+    '.gl-mp{display:flex;flex-direction:column;gap:6px;padding:8px 16px 0}',
+    '.gl-mp-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:#C9D0CC}',
+    '.gl-mp-top b{color:#fff;font-variant-numeric:tabular-nums}',
+    '.gl-ver .gl-mp-top .btn[aria-pressed="true"]{background:#fff;border-color:#fff;color:#0E1311}',
+    '.gl-mp-l{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px}',
+    '.gl-mp-l::-webkit-scrollbar{display:none}',
+    '.gl-mp-t{flex:none;width:58px;height:44px;padding:0;border:0;border-radius:4px;overflow:hidden;background:#2A322E;opacity:.65}',
+    '.gl-mp-t img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.gl-mp-t img:not([src]){visibility:hidden}',
+    '.gl-mp-t[aria-current="true"]{opacity:1;outline:2px solid #fff;outline-offset:1px}',
+    '.gl-ad{position:absolute;inset:0;z-index:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 8px;background:#0E1311}',
+    '.gl-ad figure{margin:0;min-width:0;min-height:0;display:flex;flex-direction:column;gap:6px}',
+    '.gl-ad img{flex:1;min-height:0;width:100%;object-fit:contain;background:#141A17}',
+    '.gl-ad img:not([src]){visibility:hidden}',
+    '.gl-ad figcaption{font-size:12.5px;color:#C9D0CC;text-align:center}',
+    '.gl-ad figcaption b{color:#fff}',
+    '@media (max-width:560px) and (orientation:portrait){.gl-ad{grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(2,minmax(0,1fr))}}',
     '.gl-cl-busca{min-height:44px;width:100%;box-sizing:border-box;border:1px solid var(--line-campo,#7A8580);border-radius:10px;padding:0 12px;font-size:15px;background:#F1F3F1;color:var(--ink,#17201C)}',
     '.gl-cl-ls{display:grid;gap:2px}',
     '.gl-cl-g{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3,#5C6661);padding:10px 12px 2px}',
@@ -1344,6 +1377,9 @@
       var t = root.querySelector('.gl-t[data-id="' + cssId(id) + '"] img');
       if (t) t.src = minis[id];
       if (ver >= 0 && lista[ver] && lista[ver].id === id && !grande) { var im = q('.gl-ver-img img'); if (im) im.src = minis[id]; }
+      // v212: a tira do mesmo ponto e o "Antes e depois" (enquanto a foto inteira não chega)
+      var tm = root.querySelector('.gl-mp-t[data-id="' + cssId(id) + '"] img'); if (tm) tm.src = minis[id];
+      var ta = root.querySelector('.gl-ad img[data-adid="' + cssId(id) + '"]'); if (ta && !(adp && adp.urls[id])) ta.src = minis[id];
     }
     function cssId(id) { return String(id).replace(/["\\]/g, '\\$&'); }
     function observar() {
@@ -1567,7 +1603,8 @@
         ps[filtro.pid] = (p0 && p0.nome) || 'Ponto';
       }
       var ordem = function (m) { return Object.keys(m).map(function (k) { return [k, m[k] === 1 ? k : m[k]]; }).sort(function (a, b) { return a[1].localeCompare(b[1], 'pt-BR', { numeric: true }); }); };
-      var h = '';
+      var h = '', ctsL = largo() && !folha ? contratosHtml() : '';
+      if (ctsL) h += '<span class="gl-cts-in" role="group" aria-label="Contrato">' + ctsL + '</span>';
       // No aparelho: Todas · Só aqui · Na fila · No Drive (cada uma com a quantidade; só as que têm foto)
       if (aba === 'local' && itens.length) {
         var cs = { aparelho: 0, fila: 0, enviada: 0, semcar: 0 };
@@ -1602,7 +1639,10 @@
       var h = '', iv = intervaloPer(per);
       var atual = per.modo === 'semana' ? (per.off ? '' : 'semana0') : per.modo, fichas = [['semana0', 'Esta semana'], ['sem2', '2 semanas'], ['mes', 'Mês'], ['mes3', '3 meses']];
       var outro = !fichas.some(function (f2) { return f2[0] === atual; });
-      h += '<div class="gl-chips gl-pers" role="group" aria-label="Período">' + fichas.map(function (f2) {
+      if (largo() && aba !== 'drive') h += '<select data-f="per" aria-label="Período">' + fichas.concat([['tudo', 'Todas as datas']]).map(function (f2) {
+        return '<option value="' + f2[0] + '"' + (atual === f2[0] ? ' selected' : '') + '>' + f2[1] + '</option>';
+      }).join('') + (outro && atual !== 'tudo' ? '<option value="=" selected>' + esc(rotuloPer(per)) + '</option>' : '') + '<option value="outro">Escolher datas…</option></select>';
+      else h += '<div class="gl-chips gl-pers" role="group" aria-label="Período">' + fichas.map(function (f2) {
         return '<button type="button" class="gl-chip" data-g="per-chip" data-k="' + f2[0] + '" aria-pressed="' + (atual === f2[0]) + '">' + f2[1] + '</button>';
       }).join('') + '<button type="button" class="gl-chip gl-per" data-g="per" aria-haspopup="dialog" aria-pressed="' + outro + '" aria-label="Período: ' + esc(outro ? rotuloPer(per) : 'escolher') + '">' +
         CAL + '<span>' + esc(outro ? rotuloPer(per) : 'Escolher…') + '</span></button></div>';
@@ -1781,6 +1821,7 @@
         '<button type="button" class="btn small" data-g="drive-pastas">Pastas do Drive pelo nº do contrato</button>' : '';
       // Administrador: confere se a galeria e a pasta Deletados do Drive dizem a mesma coisa (só lê; nada muda)
       if (aba === 'deletadas' && nv() >= 3 && !selecionando && o.driveUrl && o.driveUrl()) trazer += '<button type="button" class="btn small" data-g="drive-conferir">Conferir com o Drive</button>';
+      if (trazer && largo()) return '<details class="gl-mais"><summary class="btn small">Mais</summary><div class="gl-mais-pop">' + trazer + '</div></details>';
       return trazer;
     }
     function foraHtml() {
@@ -1820,9 +1861,13 @@
       if (!lista.length && aba === 'local' && itens.every(function (it) { return escondida(it.id); })) return '<div class="gl-vazio">Nenhuma outra foto neste aparelho.</div>';
       if (!lista.length) {
         if (foraDoPeriodo()) {
-          return '<div class="gl-vazio">Nenhuma foto neste período (' + esc(rotuloPer(per).toLowerCase()) + ').<br>' +
-            (per.modo === 'semana' ? '<button type="button" class="btn small" data-g="per-ant">Ver a semana anterior</button> ' : '') +
-            '<button type="button" class="btn small" data-g="per-tudo">Todas as datas</button></div>';
+          var ivF = intervaloPer(per), foraL = itens.filter(function (it) { return semPeriodo(it) && !noPeriodo(it, ivF); });
+          var ultF = foraL.reduce(function (a, x) { return !a || String(x.em || '') > String(a.em || '') ? x : a; }, null), diaF = ultF ? dia(ultF.em) : '';
+          return '<div class="gl-vazio"><b class="gl-vz-t">Nenhuma foto neste período (' + esc(rotuloPer(per).toLowerCase()) + ').</b>' +
+            (foraL.length === 1 ? 'Há 1 foto fora dele' : 'Há ' + foraL.length + ' fotos fora dele') + (diaF ? (foraL.length === 1 ? ', de ' : '. A mais recente é de ') + esc(diaF) : '') + '.' +
+            '<span class="gl-vz-b">' + (ultF ? '<button type="button" class="btn small primary" data-g="per-ult" data-id="' + esc(ultF.id) + '">Ver a mais recente</button>' : '') +
+            (per.modo === 'semana' ? '<button type="button" class="btn small" data-g="per-ant">Ver a semana anterior</button>' : '') +
+            '<button type="button" class="btn small" data-g="per-tudo">Todas as datas</button></span></div>';
         }
         return '<div class="gl-vazio">' + (aba === 'drive' && dbusca.trim() ? 'Nada no Drive com “' + esc(dbusca.trim()) + '” aqui.' : 'Nenhuma foto com esses filtros.') + '</div>';
       }
@@ -1953,7 +1998,7 @@
           '<span class="gl-tab-t">' + esc(a.t) + '</span><span class="gl-tab-c" aria-hidden="true">' + esc(a.c || a.t) + '</span>' + (n ? '<small>' + n + '</small>' : '') + '</button>';
       }).join('') : '';
       renderEnv();
-      q('.gl-cts').innerHTML = celular() ? barraCel() : aba === 'drive' ? '' : contratosHtml();
+      q('.gl-cts').innerHTML = celular() ? barraCel() : aba === 'drive' || largo() ? '' : contratosHtml();   // v212: no computador os contratos vão na linha dos filtros
       var fil = q('.gl-fil'), bus = fil.querySelector('.gl-dr-busca');
       if (aba === 'drive' && bus && document.activeElement === bus) {   // digitando: só o resto do filtro muda
         var tmp = document.createElement('div'); tmp.innerHTML = filtrosHtml();
@@ -1991,6 +2036,10 @@
     var NOTA_ESTRELA = 'Marque com ★ as que vão para o relatório fotográfico.';
     var mmCel = window.matchMedia ? matchMedia('(max-width:560px)') : null, fo = null, histN = 0, histPula = 0, histDepois = null;
     function celular() { return !!(mmCel && mmCel.matches); }
+    // v212: no computador (1101 px ou mais) os filtros cabem numa linha
+    var mmLargo = window.matchMedia ? matchMedia('(min-width:1101px)') : null;
+    function largo() { return !!(mmLargo && mmLargo.matches) && !celular(); }
+    if (mmLargo && mmLargo.addEventListener) mmLargo.addEventListener('change', function () { if (root) render(); });
     if (mmCel && mmCel.addEventListener) mmCel.addEventListener('change', function () { if (!root) return; if (fo) fecharFo(); recolher(false); render(); });
     // o período padrão (esta semana) está dito no resumo e "Todas as datas" não esconde nada: não contam
     // v190 (seção 13, A): o período tem botão próprio na barra e não conta em Filtros
@@ -2377,11 +2426,24 @@
 
     // ---------------------------------------------------------------- foto aberta
     function soltarGrande() { if (grande) { URL.revokeObjectURL(grande.url); grande = null; } }
-    function abrir(i) { soltarGrande(); ver = i; var it = lista[i]; if (it && ((locais[it.id] && locais[it.id].temArquivo) || it.driveId)) carregando = it.id; renderVer(); if (carregando === (it && it.id)) carregarGrande(); }
+    // v212: "Antes e depois" (a primeira e a última foto do ponto). As prévias entram na hora; as fotos inteiras, quando chegam
+    var adp = null;
+    function adSolta() { if (adp) { Object.keys(adp.urls).forEach(function (k) { URL.revokeObjectURL(adp.urls[k]); }); adp = null; } }
+    function adCarrega(x) {
+      var meu = adp;
+      if (!meu || meu.urls[x.id] || meu['p' + x.id] || !((locais[x.id] && locais[x.id].temArquivo) || x.driveId)) return;
+      meu['p' + x.id] = 1;
+      arquivo(x).then(function (b) {
+        if (adp !== meu) return;
+        meu.urls[x.id] = URL.createObjectURL(b);
+        var im = root && root.querySelector('.gl-ad img[data-adid="' + cssId(x.id) + '"]'); if (im) im.src = meu.urls[x.id];
+      }, function () { /* fica a prévia leve */ });
+    }
+    function abrir(i) { adSolta(); soltarGrande(); ver = i; var it = lista[i]; if (it && ((locais[it.id] && locais[it.id].temArquivo) || it.driveId)) carregando = it.id; renderVer(); if (carregando === (it && it.id)) carregarGrande(); }
     function fecharVer() {
       if (soFoto && soFoto.aberta) { soFotoFecha(); return; }   // ← Mapa, Esc e puxar para baixo
       var it = lista[ver];
-      soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove();
+      adSolta(); soltarGrande(); ver = -1; var v = q('.gl-ver'); if (v) v.remove();
       // o foco volta para a miniatura da última foto vista (a grade pode ter sido desenhada de novo)
       if (it && v) setTimeout(function () { var t = root && q('.gl-t[data-id="' + cssId(it.id) + '"]'); if (t && (!document.activeElement || document.activeElement === document.body || !root.contains(document.activeElement))) t.focus(); }, 0);
     }
@@ -2486,6 +2548,27 @@
       var acts = sf ? (soFoto.irPara && it.lat != null ? '<button type="button" class="btn" data-g="sf-ir">' + IC_PINO + 'Ir para o lugar</button>' : '') +
           '<button type="button" class="btn" data-g="sf-gal">' + IC_GRADE + 'Abrir na galeria</button>'
         : acoes([it], true).map(function (a) { return botaoAcao(a, true); }).join('');
+      // v212 (item 71): as fotos do mesmo ponto que estão na lista, da mais antiga para a mais nova; até 9 miniaturas, com a atual à vista
+      var mp = it.pid && !sf ? lista.map(function (x, k) { return { x: x, i: k }; }).filter(function (m) { return m.x.pid === it.pid && (m.x.cid || '') === (it.cid || ''); })
+        .sort(function (a, b) { return String(a.x.em || '').localeCompare(String(b.x.em || '')); }) : [], mpPos = 0, mpH = '', adH = '';
+      mp.forEach(function (m, k) { if (m.i === ver) mpPos = k; });
+      if (mp.length < 2) adSolta();
+      else {
+        var a0 = Math.max(0, Math.min(mpPos - 4, mp.length - 9)), jan = mp.slice(a0, a0 + 9);
+        mpH = '<div class="gl-mp"><div class="gl-mp-top"><span>' + (oae ? 'Da mesma OAE' : 'Do mesmo ponto') + ': <b>' + (mpPos + 1) + ' de ' + mp.length + '</b></span>' +
+          '<button type="button" class="btn small" data-g="mp-ad" aria-pressed="' + !!adp + '">Antes e depois</button></div><div class="gl-mp-l">' + jan.map(function (m) {
+            var mi = miniDe(m.x);
+            if (!mi) pedirMini(m.x.id);
+            return '<button type="button" class="gl-mp-t" data-g="mp-ir" data-i="' + m.i + '" data-id="' + esc(m.x.id) + '"' + (m.i === ver ? ' aria-current="true"' : '') + ' aria-label="Foto de ' + esc(dia(m.x.em) || 'data não informada') + '">' +
+              '<img alt=""' + (mi ? ' src="' + esc(mi) + '"' : '') + '></button>';
+          }).join('') + '</div></div>';
+        if (adp) adH = '<div class="gl-ad" role="group" aria-label="Antes e depois">' + [mp[0].x, mp[mp.length - 1].x].map(function (x, k) {
+          var u = adp.urls[x.id] || miniDe(x);
+          if (!u) pedirMini(x.id);
+          adCarrega(x);
+          return '<figure><img alt="" data-adid="' + esc(x.id) + '"' + (u ? ' src="' + esc(u) + '"' : '') + '><figcaption><b>' + (k ? 'Depois' : 'Antes') + '</b> · ' + esc(hora(x.em) || 'sem data') + '</figcaption></figure>';
+        }).join('') + '</div>';
+      }
       v.classList.toggle('det', detAberto);
       v.innerHTML = '<div class="gl-ver-top"><button type="button" class="btn small" data-g="fechar-ver">← ' + (sf ? 'Mapa' : 'Voltar') + '</button>' +
         '<span class="gl-c">' + (ver + 1) + ' de ' + lista.length + '</span>' +
@@ -2493,7 +2576,7 @@
         '<button type="button" class="btn small gl-nav" data-g="prox" aria-label="Próxima"' + (ver < lista.length - 1 ? '' : ' disabled') + '>›</button></div>' +
         '<div class="gl-ver-meio"><div class="gl-ver-img">' + (src ? '<img alt="" src="' + esc(src) + '">' : '<img alt="">') + leve +
         (it.relatorio ? '<span class="gl-ver-selo">★ No relatório</span>' : '') + '</div>' +
-        '<div class="gl-ver-det" role="region" aria-label="Detalhes da foto"><b>Detalhes</b><br>' + linhas.join('<br>') + '</div></div>' +
+        '<div class="gl-ver-det" role="region" aria-label="Detalhes da foto"><b>Detalhes</b><br>' + linhas.join('<br>') + '</div>' + adH + '</div>' + mpH +
         '<div class="gl-ver-info"><div class="gl-ver-tit"><b>' + esc(tit) + '</b><button type="button" class="btn small gl-det-bt" data-g="detalhes" aria-expanded="' + detAberto + '">Detalhes ' + (detAberto ? '▴' : '▾') + '</button></div>' +
         (marca.length && !sf ? '<div class="gl-ver-marca">' + marca.join('<br>') + '</div>' : '') + '</div>' +
         '<div class="gl-ver-acts">' + acts + '</div>';
@@ -3346,6 +3429,21 @@
       if (g === 'per-ant') { mudarPer({ modo: 'semana', off: (per.modo === 'semana' ? per.off || 0 : 0) - 1, de: '', ate: '' }); return; }
       if (g === 'per-prox') { if (per.modo === 'semana' && (per.off || 0) < 0) mudarPer({ modo: 'semana', off: (per.off || 0) + 1, de: '', ate: '' }); return; }
       if (g === 'per-tudo') { pfFechar(); mudarPer({ modo: 'tudo', off: 0, de: '', ate: '' }); return; }
+      if (g === 'per-ult') {   // v212: todas as datas e a foto mais recente já aberta
+        var idU = t.getAttribute('data-id'), iU = -1;
+        pfFechar(); mudarPer({ modo: 'tudo', off: 0, de: '', ate: '' });
+        lista.some(function (x, k) { if (x.id === idU) { iU = k; return true; } return false; });
+        if (iU >= 0) abrir(iU);
+        return;
+      }
+      // v212 (item 71): outra foto do mesmo ponto; "Antes e depois" põe a primeira e a última lado a lado
+      if (g === 'mp-ir') {   // pelo id: a lista pode ter mudado com a foto aberta
+        var idM = t.getAttribute('data-id'), iM = -1;
+        lista.some(function (x, k) { if (x.id === idM) { iM = k; return true; } return false; });
+        if (iM >= 0 && iM !== ver) abrir(iM);
+        return;
+      }
+      if (g === 'mp-ad') { if (adp) adSolta(); else adp = { urls: {} }; renderVer(); var bA = q('[data-g="mp-ad"]'); if (bA) bA.focus(); return; }
       if (g === 'pf-fechar') { pfFechar(); return; }
       if (g === 'pf-op' && pf) { pf.r = t.getAttribute('data-k'); renderPf(); var b2 = q('.gl-pf-op[data-k="' + pf.r + '"]'); if (b2) b2.focus(); return; }
       if (g === 'pf-ult' && pf) { var nd = +t.getAttribute('data-n'); pf.r = 'datas'; pf.ate = hojeIso(); pf.de = maisDias(pf.ate, -(nd - 1)); renderPf(); return; }
@@ -3407,6 +3505,12 @@
       if (e.target.id === 'glMvP') { sugestao(); return; }
       var f = e.target.getAttribute('data-f');
       if (!f || f === 'dbusca') return;
+      if (f === 'per') {   // v212: o período escolhido na lista (computador)
+        var pv = e.target.value;
+        if (pv === 'outro') { render(); pfAbrir(); }
+        else if (pv !== '=') mudarPer(pv === 'semana0' ? { modo: 'semana', off: 0, de: '', ate: '' } : { modo: pv, off: 0, de: '', ate: '' });
+        return;
+      }
       if (f === 'agrupar') agrupar = e.target.value;
       else { filtro[f] = e.target.value; if (f === 'cid') filtro.pid = ''; }
       render();
@@ -3425,6 +3529,8 @@
       if (fo) { if (e.key === 'Escape') fecharFo(); else prendeTab(e, q('.gl-sh.fo')); return; }
       if (ec) { if (e.key === 'Escape') fecharEc(); return; }
       if (bs || cfg) { if (e.key === 'Escape') { fecharBaixar(); fecharCfg(); } return; }
+      var dmK = e.key === 'Escape' && ver < 0 && !mv && root.querySelector('.gl-mais[open]');   // v212: Esc fecha o "Mais" antes do resto
+      if (dmK) { dmK.removeAttribute('open'); dmK.querySelector('summary').focus(); return; }
       if (e.key === 'Escape') { if (mv) fecharMover(); else if (ver >= 0) fecharVer(); else if (selecionando) { selecionando = false; sel = {}; render(); } else close(); }
       else if (ver >= 0 && e.key === 'ArrowLeft' && ver > 0) abrir(ver - 1);
       else if (ver >= 0 && e.key === 'ArrowRight' && ver < lista.length - 1) abrir(ver + 1);
@@ -3446,6 +3552,7 @@
         if (window.MutationObserver) new MutationObserver(camadasMudaram).observe(root, { childList: true });
         q('.gl-body').addEventListener('scroll', aoRolar, { passive: true });
         root.addEventListener('change', onChange);
+        root.addEventListener('click', function (e) { var dm = root.querySelector('.gl-mais[open]'); if (dm && (!dm.contains(e.target) || (e.target.closest && e.target.closest('.gl-mais-pop button')))) dm.removeAttribute('open'); });   // v212: "Mais" fecha no toque fora e depois de escolher
         root.addEventListener('input', onInput);
         document.addEventListener('keydown', onKey);
         document.body.appendChild(root);
