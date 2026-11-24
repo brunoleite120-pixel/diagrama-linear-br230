@@ -3343,6 +3343,108 @@
     var bB = fB && $('ptBusca');
     if (bB) try { bB.focus({ preventScroll: true }); bB.setSelectionRange(fB.s, fB.e); } catch (e) { /* sem foco */ }
   }
+  // ---------------- v211: lista de não conformidades (itens 48 a 50). Todas as NC salvas, abertas e em correção, dos contratos
+  // de serviço contínuo que a pessoa acompanha, na ordem do km. Só leitura: o que se muda continua no cartão do item
+  function hojeDia() { var d = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); }
+  var lnc = { f: '', cid: '' };
+  var LNC_F = [['', 'Todas'], ['ab', 'Abertas'], ['co', 'Em correção'], ['pri', 'Com prioridade'], ['ci', 'Correção informada']];
+  function listaNcDados() {
+    var l = [];
+    state.contracts.forEach(function (c) {
+      if (!isContinuo(c) || !parte(c, 'acomp')) return;
+      sortedPoints(c).forEach(function (p) {
+        servicesOf(c).forEach(function (s) {
+          var sv = svSalvo(p, s.key, c), k = oaeSt(sv);
+          if (!comQtd(k)) return;
+          var mt = banco.on && banco.meta[metaKey(c.id, p.id)], mf = mt && mt.m && mt.m['serv.' + s.key];
+          l.push({ c: c, p: p, s: s, sv: sv, co: k === 'EX', km: p.kmIni != null ? p.kmIni : p.kmLocal != null && RAMAL_EIXO[p.snv] != null ? RAMAL_EIXO[p.snv] + p.kmLocal : 1e9,
+            desde: /^\d{4}-\d{2}-\d{2}$/.test(sv.desde || '') ? sv.desde : '', mud: mf ? mf.vist || mf.em || '' : '' });
+        });
+      });
+    });
+    return l.sort(function (a, b) { return a.km - b.km; });
+  }
+  function listaNcPassa(x, f) { return !f || (f === 'ab' ? !x.co : f === 'co' ? x.co : f === 'pri' ? !!x.sv.pri : !!x.sv.ci); }
+  function listaNcKm(x) { return isConserva(x.c) ? segKmTxt(x.c, x.p) : 'km ' + kmPtTxt(x.p); }
+  function listaNcOque(x) {
+    var its = itensDe(x.s.key, x.sv).map(function (i) { return minus1(i.n); }), qt = fmtQtd(x.s, x.sv.q);
+    return [qt, its.join(', '), txtLimpo(x.sv.n)].filter(Boolean).join(' · ');
+  }
+  function listaNcDesde(x) { return x.desde ? fmtDate(x.desde) : ''; }
+  function listaNcTexto(l) {
+    var ab = l.filter(function (x) { return !x.co; }).length, t = ['Não conformidades · ' + fmtDate(hojeDia()), l.length + ' no total · ' + ab + (ab === 1 ? ' aberta' : ' abertas') + ' · ' + (l.length - ab) + ' em correção', ''], ult = '';
+    l.forEach(function (x) {
+      var n = ctNumeroCT(x.c) || ctNome(x.c);
+      if (n !== ult) { if (ult) t.push(''); t.push(n + (ctNumeroCT(x.c) ? ' · ' + ctNome(x.c) : '')); ult = n; }
+      var o = listaNcOque(x);
+      t.push('- ' + (x.p.nome || x.p.codigo || '?') + ' (' + listaNcKm(x) + ') · ' + x.s.short + ': ' + (x.co ? 'em correção' : 'aberta') + (x.sv.pri ? ', prioridade' : '') + (x.sv.ci ? ', correção informada' : '') +
+        (o ? ' · ' + o : '') + (x.desde ? ' · aberta desde ' + fmtDate(x.desde) : ''));
+    });
+    return t.join('\n');
+  }
+  function listaNcCorpo() {
+    var todas = listaNcDados(), cts = [];
+    todas.forEach(function (x) { if (cts.indexOf(x.c) < 0) cts.push(x.c); });
+    if (lnc.cid && !cts.some(function (c) { return c.id === lnc.cid; })) lnc.cid = '';
+    var doCt = todas.filter(function (x) { return !lnc.cid || x.c.id === lnc.cid; });
+    if (lnc.f && !doCt.some(function (x) { return listaNcPassa(x, lnc.f); })) lnc.f = '';
+    var l = doCt.filter(function (x) { return listaNcPassa(x, lnc.f); }), ab = doCt.filter(function (x) { return !x.co; }).length, locais = {};
+    doCt.forEach(function (x) { locais[x.c.id + '|' + x.p.id] = 1; });
+    var nLoc = Object.keys(locais).length, cel = !!(mmCel && mmCel.matches);
+    var h = '<div class="lnc-top"><div><h2 id="modalTitle">Não conformidades</h2><p>' + (doCt.length ? doCt.length + ' em ' + nLoc + (nLoc === 1 ? ' local' : ' locais') + ' · ' + ab + (ab === 1 ? ' aberta' : ' abertas') + ' · ' + (doCt.length - ab) + ' em correção' : 'Nenhuma aberta ou em correção') +
+      ' · ' + (lnc.cid ? esc(ctNome(contractById(lnc.cid))) : cts.length > 1 ? 'todos os contratos' : cts.length ? esc(ctNome(cts[0])) : '') + '</p></div>' +
+      (l.length ? '<button type="button" class="btn small" data-lnc="copiar">Copiar lista</button>' : '') + '</div>';
+    h += '<div class="lnc-fil"><div class="lista-chips" role="group" aria-label="Filtrar por situação">' + LNC_F.map(function (f) {
+      var n = doCt.filter(function (x) { return listaNcPassa(x, f[0]); }).length;
+      return f[0] && !n ? '' : '<button type="button" class="lista-chip" data-lnc="f" data-f="' + f[0] + '" aria-pressed="' + (lnc.f === f[0]) + '">' + f[1] + '<b>' + n + '</b></button>';
+    }).join('') + '</div>' + (cts.length > 1 ? '<select data-lnc="ct" aria-label="Contrato"><option value="">Todos os contratos</option>' + cts.map(function (c) {
+      return '<option value="' + esc(c.id) + '"' + (c.id === lnc.cid ? ' selected' : '') + '>' + esc(ctNome(c)) + '</option>';
+    }).join('') + '</select>' : '') + '</div>';
+    var marcas = function (x) { return (x.sv.pri ? '<span class="md-chip-ct dg">Prioridade</span>' : '') + (x.sv.ci ? '<span class="md-chip-ct ok">Correção informada</span>' : ''); };
+    var sit = function (x) { return '<span class="nc-chip ' + (x.co ? 'co">Em correção' : 'ab">Aberta') + '</span>'; };
+    var desde = function (x) { var d = listaNcDesde(x); return d ? esc(d) : '<span class="sem">sem data</span>' + (x.mud ? '<small>última mudança em ' + esc(fmtIsoDate(x.mud)) + '</small>' : ''); };
+    var ir = function (x) { return '<button type="button" class="btn small ghost lnc-ir" data-lnc="ir" data-cid="' + esc(x.c.id) + '" data-pid="' + esc(x.p.id) + '">Abrir no contrato ›</button>'; };
+    if (!l.length) h += '<div class="lnc-scroll"><div class="lnc-vazio">Nenhuma não conformidade aberta ou em correção.</div></div>';
+    else if (cel) h += '<div class="lnc-scroll"><ul class="lnc-lista">' + l.map(function (x) {
+      var o = listaNcOque(x);
+      return '<li class="lnc-it"><div class="lnc-it-h"><b>' + esc(x.p.nome || x.p.codigo || '?') + '</b><span>' + esc(listaNcKm(x)) + ' · ' + esc(ctNome(x.c)) + '</span></div>' +
+        '<div class="lnc-it-s">' + sit(x) + '<span>' + esc(x.s.short) + '</span>' + marcas(x) + '</div>' + (o ? '<small>' + esc(o) + '</small>' : '') +
+        '<small>Aberta desde: ' + desde(x).replace('<small>', ' · ').replace('</small>', '') + '</small>' + ir(x) + '</li>';
+    }).join('') + '</ul></div>';
+    else h += '<div class="lnc-scroll" tabindex="0" role="region" aria-label="Lista de não conformidades, tabela com rolagem"><table class="lnc-tab"><thead><tr><th scope="col">Contrato</th><th scope="col">Local</th><th scope="col">km</th><th scope="col">Serviço</th><th scope="col">Situação</th><th scope="col">Marcas</th><th scope="col">Aberta desde</th><th scope="col"><span class="sr-only">Abrir</span></th></tr></thead><tbody>' +
+      l.map(function (x) {
+        var o = listaNcOque(x);
+        return '<tr><td>' + esc(ctNome(x.c)) + '</td><td><b>' + esc(x.p.nome || x.p.codigo || '?') + '</b></td><td class="km">' + esc(listaNcKm(x)) + '</td><td>' + esc(x.s.short) + (o ? '<small>' + esc(o) + '</small>' : '') + '</td><td>' + sit(x) + '</td>' +
+          '<td><div class="lnc-marcas">' + marcas(x) + '</div></td><td class="dt">' + desde(x) + '</td><td>' + ir(x) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    h += '<p class="lnc-nota">Medição é o serviço feito; não conformidade é o que falta corrigir. A data de abertura passou a ser guardada em 24/11/2026: as NC anteriores aparecem sem data.</p>';
+    return { h: h + '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', l: l };
+  }
+  function listaNcAbre() {
+    var r = listaNcCorpo(), f = modal(r.h, null, 'lnc-box');
+    var refaz = function (foco) {
+      r = listaNcCorpo();
+      var y = f.scrollTop;
+      f.innerHTML = r.h; f.scrollTop = y;
+      var el = foco && f.querySelector(foco); if (el) try { el.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+    };
+    f.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-lnc]');
+      if (!b) return;
+      var k = b.dataset.lnc;
+      if (k === 'f') { lnc.f = lnc.f === b.dataset.f ? '' : b.dataset.f; refaz('[data-lnc="f"][data-f="' + lnc.f + '"]'); }
+      else if (k === 'copiar') {
+        var t = listaNcTexto(r.l), n = r.l.length;
+        (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast(n + (n === 1 ? ' não conformidade copiada.' : ' não conformidades copiadas.'), 4000); },
+          function () { toast('Não foi possível copiar neste aparelho.', 5000); });
+      } else if (k === 'ir') {
+        var c = contractById(b.dataset.cid), p = c && c.pontos.find(function (q) { return q.id === b.dataset.pid; });
+        if (!c || !p) return;
+        closeModal(function () { abrirDaVisao(c, p, false); });
+      }
+    });
+    f.addEventListener('change', function (ev) { if (ev.target.getAttribute('data-lnc') === 'ct') { lnc.cid = ev.target.value; refaz('[data-lnc="ct"]'); } });
+  }
   // ---------------- v209: painel do contrato. Os quadros: o campo (avanço ou NC abertas) e, para quem vê as medições, o medido,
   // o prazo de execução e o saldo de empenho (as contas são as da Situação, em medicoes.js)
   var PN_KEY = 'diagrama-linear.resumo-celular';
@@ -5716,6 +5818,7 @@
       temSemProarte: function () { return !isPublico() && !!ctSemProarte(); },
       // "1 rascunho neste aparelho": à parte do número do botão, que conta só as NC salvas
       rascunhos: function () { return rascNaLista().length; }, onRascunho: rascIr,
+      onListaNc: function () { if (!isPublico()) listaNcAbre(); },
       conferir: conferirFaixa, onConferir: abrirSituacao,
       publico: isPublico, onEntrar: function () { openLogin(); },
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
@@ -6337,8 +6440,8 @@
                 afterEdit('set-st', c2);
               }, { fica: corr });
             }
-            delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens; delete sv.fotos;
-          }
+            delete sv.q; delete sv.n; delete sv.pri; delete sv.ci; delete sv.itens; delete sv.fotos; delete sv.desde;
+          } else if (!comQtd(oaeSt(sv))) sv.desde = hojeDia();   // v211 (item 50): nasceu agora; de aberta para em correção, a data continua a da abertura
         } else if (st === 'OK' || st === 'NA') {
           // ponto crítico: o % digitado sumia ao passar por OK ou N/A (de volta, Ativo vira 50% e Parado 0%): Desfazer devolve
           if ((sv.st === 'A' || sv.st === 'P') && Number(sv.pct) > 0 && Number(sv.pct) !== (sv.st === 'A' ? 50 : 0)) {

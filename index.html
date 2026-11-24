@@ -210,6 +210,42 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-ct-m{font-size:12.5px;font-weight:600;color:#17713F}
 .vg-ct-m.al{color:#B25000}
 .vg-ct-a{display:flex;flex-wrap:wrap;gap:6px}
+/* v211 (itens 48 a 50): a lista de não conformidades de todos os contratos */
+.vg-lnc{min-height:34px;white-space:nowrap}
+.modal-box.lnc-box{max-width:1080px;gap:10px}
+.lnc-top{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 12px}
+.lnc-top > div{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lnc-top p{font-size:13px}
+.lnc-fil{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.lnc-fil .lista-chips{flex:1 1 auto;min-width:0}
+.lnc-fil select{min-height:36px;max-width:100%;padding:0 30px 0 10px;border:1px solid var(--line-campo);border-radius:var(--radius);background-color:var(--panel);font:inherit;font-size:13.5px;color:var(--ink)}
+.lnc-scroll{overflow:auto;border:1px solid var(--line);border-radius:var(--radius);min-height:120px}
+.lnc-tab{width:100%;border-collapse:collapse;font-size:13.5px}
+.lnc-tab th{position:sticky;top:0;z-index:1;padding:8px 10px;text-align:left;font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);background:var(--panel);border-bottom:1px solid var(--line);white-space:nowrap}
+.lnc-tab td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}
+.lnc-tab tr:last-child td{border-bottom:0}
+.lnc-tab .km,.lnc-tab .dt{white-space:nowrap;font-variant-numeric:tabular-nums}
+.lnc-tab .sem{color:var(--ink-3)}
+.lnc-tab small,.lnc-it small{display:block;font-size:12px;line-height:1.35;color:var(--ink-2)}
+.lnc-marcas{display:flex;flex-wrap:wrap;gap:4px}
+.lnc-ir{white-space:nowrap}
+.lnc-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.lnc-it{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius)}
+.lnc-it-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
+.lnc-it-h b{font-size:14.5px}
+.lnc-it-h span{font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.lnc-it-s{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:13.5px}
+.lnc-it .btn{align-self:flex-start;min-height:44px}
+.lnc-vazio{padding:18px 12px;font-size:13.5px;color:var(--ink-2);text-align:center}
+.lnc-nota{font-size:12.5px;color:var(--ink-2)}
+@media (max-width:700px){
+  .modal-box.lnc-box{max-width:none;height:100%;max-height:none;border-radius:0;padding:14px}
+  .modal:has(.lnc-box){padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+  .modal-box.lnc-box > *{flex-shrink:0}   /* a janela inteira rola; sem isto a lista encolhia e a nota de baixo passava por cima dela */
+  .lnc-scroll{border:0;border-radius:0;overflow:visible;min-height:0}
+  .lnc-fil select{min-height:44px;flex:1 1 100%}
+  .modal-box.lnc-box>.modal-foot:last-child{bottom:-14px;margin:0 -14px -14px;padding:10px 14px 14px}
+}
 /* v210 (item 44): a linha do SIAC no cartão do contrato; (item 46): as faixas de legenda atrás do botão Legenda */
 .vg-ct-siac{display:flex;flex-direction:column;gap:5px;padding-top:7px;border-top:1px solid var(--line-2);font-size:12.5px;color:var(--ink-2)}
 .vg-ct-siac b{color:var(--ink);font-variant-numeric:tabular-nums}

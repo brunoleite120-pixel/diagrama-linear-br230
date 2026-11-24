@@ -400,6 +400,8 @@
       var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
         '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
         '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nBt + '"><span class="vg-ncl">Não conformidades</span><span class="vg-ncc">NC</span> <b>' + nBt + '</b></button></div>' : '';
+      // v211: a lista com todas as NC (abertas e em correção) dos contratos, no modo Não conformidades
+      if (md === 'nc' && nBt > 0 && o.onListaNc) bMod += '<button type="button" class="btn small vg-lnc" data-vg="lista-nc">Lista das NC</button>';
       var nRasc = o.rascunhos ? o.rascunhos() : 0;
       h += '<div class="vg-meio"><section class="vg-box vg-diag" tabindex="-1" aria-label="Diagrama em escala"><div class="vg-bar">' + (nT > 1 ? caixaContratos(d) : '') + bMod +
         (nRasc ? '<button type="button" class="vg-rasc" data-vg="rasc">' + nRasc + (nRasc === 1 ? ' rascunho' : ' rascunhos') + ' neste aparelho</button>' : '') +
@@ -1111,6 +1113,7 @@
       else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
       else if (a === 'conf') { if (o.onConferir) o.onConferir(); }
       else if (a === 'entrar') { if (o.onEntrar) o.onEntrar(); }
+      else if (a === 'lista-nc') { if (o.onListaNc) o.onListaNc(); }
       // v210: a legenda abre e fecha sem redesenhar a tela
       else if (a === 'leg') { st.leg = !st.leg; b.setAttribute('aria-expanded', String(st.leg)); var lg = host.querySelector('#vgLegs'); if (lg) lg.hidden = !st.leg; }
       // Raias | Mapa: o trecho na tela continua o mesmo, e o cartão aberto continua aberto
