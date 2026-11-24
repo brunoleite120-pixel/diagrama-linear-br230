@@ -2396,7 +2396,7 @@
   var toastTimer = null;
   // O aviso não cobre botões (v167): sobe para cima da barra de Desfazer sem prazo e, na galeria, da folha "Contrato e ponto",
   // do título e dos botões da foto aberta e da barra das fotos selecionadas. Sem nada disso na tela, fica no rodapé (CSS)
-  var TOAST_ACIMA = ['.gl-mv-box', '.gl-ver .gl-ver-info', '.gl-bar'];
+  var TOAST_ACIMA = ['.gl-mv-box', '.gl-ver .gl-ver-info', '.gl-bar', '.ft-camfoot', '.ft-foot'];   // v206: também o rodapé da câmera e da Foto
   function toastAcima() {
     var ub = undoFica && $('undoBar');
     if (ub && ub.getClientRects().length) return ub;
@@ -8673,8 +8673,14 @@
           closeModal(); logout(); refresh(true);
           if (tok && String(tok).indexOf('tk_') === 0) window.Banco.sair(tok).catch(function () { /* sem sinal: a sessão expira sozinha */ });
         };
-        if (!banco.pend.length) { sair(); return; }
-        confirmar({ titulo: 'Sair com alterações sem enviar?', texto: 'Há ' + banco.pend.length + (banco.pend.length === 1 ? ' alteração' : ' alterações') + ' deste aparelho que ainda não ' + (banco.pend.length === 1 ? 'subiu' : 'subiram') + ' para o banco. ' + (banco.pend.length === 1 ? 'Ela fica guardada' : 'Elas ficam guardadas') + ' neste aparelho com o seu nome e ' + (banco.pend.length === 1 ? 'sobe' : 'sobem') + ' quando você entrar de novo aqui.', botao: 'Sair e guardar' })
+        // v206: a pergunta conta também as fotos na fila do Drive e as NC em rascunho, que ficam paradas neste aparelho
+        var nAlt = banco.pend.length, nFot = driveQ && driveQ.info ? (driveQ.info().n || 0) : 0, nRas = rascNaLista().length, partes = [];
+        if (nAlt) partes.push(nAlt + (nAlt === 1 ? ' alteração' : ' alterações'));
+        if (nFot) partes.push(nFot + (nFot === 1 ? ' foto' : ' fotos'));
+        if (nRas) partes.push(nRas + ' NC em rascunho');
+        if (!partes.length) { sair(); return; }
+        var um = nAlt + nFot + nRas === 1, lista = partes.length > 1 ? partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1] : partes[0];
+        confirmar({ titulo: 'Sair sem enviar?', texto: 'Há ' + lista + ' neste aparelho que ainda não ' + (um ? 'subiu' : 'subiram') + '. ' + (um ? 'Fica guardada' : 'Ficam guardadas') + ' aqui com o seu nome e ' + (um ? 'sobe' : 'sobem') + ' quando você entrar de novo neste aparelho.', botao: 'Sair e guardar' })
           .then(function (r) { if (r) sair(); });
       }
     });

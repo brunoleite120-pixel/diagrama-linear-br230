@@ -1883,6 +1883,9 @@
       if (batch) {
         var n = batch.perdaOk ? 0 : batch.items.filter(function (it) { return it.preset && it.preset.naoGuardada && !it.salva && !it.gone; }).length;
         if (n) { perguntaPerda(n, depois); return; }
+        // v206: lote com foto pronta que ainda não foi guardada nem mandada: pergunta antes de sair (o km e a descrição digitados se perderiam)
+        var falta = batch.saiOk || batch.busy || !driveOn() ? 0 : readyItems().filter(function (it) { return !it.salva; }).length;
+        if (falta) { perguntaSairLote(falta, depois, aposGuardar); return; }
         depois(); if (aposGuardar) aposGuardar(); return;
       }
       if (!st) { depois(); if (aposGuardar) aposGuardar(); return; }
@@ -1909,6 +1912,34 @@
         '<button type="button" class="ft-btn danger" data-ft="perda-descartar">Sair e perder ' + (n === 1 ? 'a foto' : 'as fotos') + '</button></div>';
       root.appendChild(d);
       var bp = d.querySelector('[data-ft="perda-salvar"]'); if (bp) bp.focus();
+    }
+    // v206: as três saídas do lote ainda não enviado (enviar e sair, voltar, sair sem enviar)
+    var sairLote = null;
+    function perguntaSairLote(n, depois, aposGuardar) {
+      sairLote = { depois: depois, aposGuardar: aposGuardar };
+      var d = q('.ft-sairlote');
+      if (d) d.remove();
+      var ok = readyItems().filter(function (it) { return !it.salva; }), nd = ok.filter(function (it) { return it.drive !== false && !semNada(it); }).length;
+      var daCam = ok.length && ok.every(function (it) { return it.from === 'camapp'; });
+      d = document.createElement('div');
+      d.className = 'ft-camask ft-sairlote'; d.setAttribute('role', 'alertdialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'ftSairLoteT');
+      d.innerHTML = '<div class="ft-camask-box"><b id="ftSairLoteT">Sair sem enviar?</b>' +
+        '<p>' + (n === 1 ? 'A foto ainda não foi enviada' : 'As ' + n + ' fotos ainda não foram enviadas') + '. Saindo agora, o km e a descrição que você digitou se perdem' +
+        (daCam ? '; ' + (n === 1 ? 'a foto fica' : 'as fotos ficam') + ' em Galeria › No aparelho, sem carimbo.' : '.') + '</p>' +
+        '<button type="button" class="ft-btn primary" data-ft="sl-enviar">' + (nd ? '☁ Enviar ' + (n === 1 ? 'a foto' : 'as ' + n) + (nd < n ? ' (' + nd + ' ao Drive)' : ' ao Drive') : 'Guardar ' + (n === 1 ? 'a foto' : 'as ' + n) + ' no aparelho') + '</button>' +
+        '<button type="button" class="ft-btn" data-ft="sl-voltar">Voltar às fotos</button>' +
+        '<button type="button" class="ft-btn danger" data-ft="sl-sair">Sair sem enviar</button></div>';
+      root.appendChild(d);
+      d.querySelector('[data-ft="sl-enviar"]').focus();
+    }
+    function sairLoteFim(k) {
+      var d = q('.ft-sairlote'), p = sairLote;
+      if (d) d.remove();
+      sairLote = null;
+      if (!p || !batch || k === 'sl-voltar') return;
+      if (k === 'sl-sair') { batch.saiOk = true; p.depois(); if (p.aposGuardar) p.aposGuardar(); return; }
+      // enviar: só sai depois de as fotos ficarem guardadas na fila do aparelho; se a geração falhar, a pessoa continua no lote
+      sendAllDrive(function () { p.depois(); if (p.aposGuardar) p.aposGuardar(); });
     }
     function perdaFim(k) {
       var d = q('.ft-perda'), p = perda;
@@ -2001,7 +2032,7 @@
       });
     }
     // a foto fica guardada no aparelho (galeria do app) mesmo sem o Drive configurado; o envio espera
-    function toDrive(list, auto) {
+    function toDrive(list, auto, feito) {
       if (!opts.drive || !list.length) return;
       // sem nada escrito: guarda no aparelho, não sobe (o aviso fica na faixa)
       if (batch) list.forEach(function (x) { var it = batch.items.find(function (y) { return y.uid === x.id; }); if (it && semNada(it)) x.enviar = false; });
@@ -2027,15 +2058,16 @@
           (na ? ' ' + (na === 1 ? '1 ficou' : na + ' ficaram') + ' só neste aparelho.' : '')).trim());
         else if (na && !nd) notify(na === 1 ? 'Foto guardada só neste aparelho (não vai para o Drive).' : na + ' fotos guardadas só neste aparelho (não vão para o Drive).');
         refreshDrive();
+        if (feito) feito();
       }, function () { notify('Não foi possível guardar a foto para o Drive neste aparelho.'); });
     }
-    function sendAllDrive() {
+    function sendAllDrive(feito) {
       if (!batch || batch.busy || !driveOn()) return;
       var b = batch;
       setBatchBusy(true);
       outputs().then(function (files) {
         if (!files.length) { notify('Nenhuma foto pôde ser gerada.'); return; }
-        toDrive(files.map(function (f) { return driveItem(f.it, f.blob, f.name); }));
+        toDrive(files.map(function (f) { return driveItem(f.it, f.blob, f.name); }), false, typeof feito === 'function' ? function () { if (batch === b) { setBatchBusy(false); feito(); } } : null);
       }).catch(function (e) {
         if (!e || e.message !== 'cancel') notify('Não foi possível gerar as fotos. Tente com menos fotos por vez.');
       }).then(function () { if (batch === b) setBatchBusy(false); });
@@ -2231,13 +2263,14 @@
       if (!batch) return;
       var live = liveItems(), ok = readyItems();
       var wait = live.filter(function (it) { return it.wait; }).length, bad = live.filter(function (it) { return it.err; }).length;
-      var gps = ok.filter(function (it) { return it.src === 'exif' || it.src === 'gps'; }).length, sem = ok.filter(function (it) { return it.noLoc; }).length;
+      var gps = ok.filter(function (it) { return it.src === 'exif' || it.src === 'gps'; }).length, sem = ok.filter(function (it) { return it.noLoc && it.km == null; }).length, mao = ok.filter(function (it) { return it.noLoc && it.km != null; }).length;
       q('.ft-bcount').textContent = live.length + (live.length === 1 ? ' foto' : ' fotos');
       renderHead();
       var parts = [];
       if (wait) parts.push('lendo ' + wait + (wait === 1 ? ' foto' : ' fotos') + '…');
       if (ok.length) parts.push(gps + ' com localização');
-      if (sem) parts.push('<span class="ft-warn">' + sem + ' sem localização</span>: digite o km ou escolha o ponto nelas');
+      if (mao) parts.push(mao + ' com km digitado');
+      if (sem) parts.push('<span class="ft-warn">' + sem + ' sem localização</span>: digite o km ou escolha o ponto ' + (sem === 1 ? 'nela' : 'nelas'));
       if (bad) parts.push('<span class="ft-warn">' + bad + (bad === 1 ? ' não abriu' : ' não abriram') + '</span>');
       q('.ft-bstat').innerHTML = parts.join(' · ');
       // "Corrigir pelo km" muda sozinho só as fotos com um único contrato possível; nas outras (o km está no trecho de mais de um),
@@ -2264,7 +2297,10 @@
       var bd = q('.ft-bdrv');
       if (bd) {
         bd.hidden = !opts.drive || !n;
-        q('.ft-bdrvn').textContent = nd === n ? (n === 1 ? 'Vai para o Drive.' : 'Todas vão para o Drive.') : !nd ? (n === 1 ? 'Fica só no aparelho.' : 'Todas ficam só no aparelho.')
+        // v206: enquanto não foram mandadas, o texto diz o que falta fazer ("toque em Enviar"), e não que já vão
+        var faltaEnv = ok.filter(function (it) { return it.drive !== false && !it.filaDrive; }).length;
+        q('.ft-bdrvn').textContent = faltaEnv && driveOn() ? (nd === n ? (n === 1 ? 'Marcada para o Drive' : 'As ' + n + ' marcadas para o Drive') : nd + ' de ' + n + ' marcadas para o Drive') + ': toque em Enviar.'
+          : nd === n ? (n === 1 ? 'Vai para o Drive.' : 'Todas vão para o Drive.') : !nd ? (n === 1 ? 'Fica só no aparelho.' : 'Todas ficam só no aparelho.')
           : nd + ' de ' + n + ' vão para o Drive; ' + (n - nd) + ' só no aparelho.';
       }
       root.querySelectorAll('[data-ft="b-save"],[data-ft="b-share"]').forEach(function (b) { b.disabled = off; });
@@ -3015,7 +3051,14 @@
       if (b.dataset.ft === 'ir-logo') { abreFolha('logo', q('[data-folha="logo"]')); return; }
       if (b.dataset.ft === 'cam-cancel') { camCancel(); return; }
       if (/^perda-/.test(b.dataset.ft)) { perdaFim(b.dataset.ft); return; }
-      if (/^ask-/.test(b.dataset.ft)) { camAskFim(b.dataset.ft); return; }
+      if (/^sl-/.test(b.dataset.ft)) { sairLoteFim(b.dataset.ft); return; }
+      if (b.dataset.ft === 'ask-descartar' && !b.classList.contains('conf')) {   // v206: o segundo toque é que descarta, como na foto única
+        var txt0 = b.textContent;
+        b.classList.add('conf'); b.textContent = 'Tocar de novo para descartar';
+        clearTimeout(descT); descT = setTimeout(function () { if (b.isConnected) { b.classList.remove('conf'); b.textContent = txt0; } }, 4000);
+        return;
+      }
+      if (/^ask-/.test(b.dataset.ft)) { clearTimeout(descT); camAskFim(b.dataset.ft); return; }
       if (b.dataset.ft === 'here') {
         useHere(b, function (fix) {
           if (!st) return;
