@@ -3371,6 +3371,28 @@
     return [qt, its.join(', '), txtLimpo(x.sv.n)].filter(Boolean).join(' · ');
   }
   function listaNcDesde(x) { return x.desde ? fmtDate(x.desde) : ''; }
+  // v218: há quanto tempo a NC está aberta, pela data de abertura (sv.desde, gravada desde a v211); sem a data, "antes de 24/11/2026"
+  var NC_DESDE_V211 = '2026-11-24';
+  function ncDias(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''), h = /^(\d{4})-(\d{2})-(\d{2})$/.exec(hojeDia());
+    return m ? Math.max(0, Math.round((Date.UTC(+h[1], h[2] - 1, +h[3]) - Date.UTC(+m[1], m[2] - 1, +m[3])) / 864e5)) : null;
+  }
+  function ncDesdeTxt(iso) {
+    var n = ncDias(iso);
+    if (n == null) return 'Aberta antes de ' + fmtDate(NC_DESDE_V211);
+    return 'Aberta desde ' + fmtDate(iso) + ' · ' + (n === 0 ? 'hoje' : n === 1 ? 'há 1 dia' : 'há ' + n + ' dias');
+  }
+  // v218: a faixa da tela inicial (no lugar do "Para conferir" das medições): as NC abertas e em correção, as com prioridade
+  // e desde quando está aberta a mais antiga. Abre a lista de não conformidades
+  function ncFaixa() {
+    if (isPublico()) return null;
+    var l = listaNcDados();
+    if (!l.length) return null;
+    var semData = l.some(function (x) { return !x.desde; }), datas = l.map(function (x) { return x.desde; }).filter(Boolean).sort();
+    return { n: l.length, ab: l.filter(function (x) { return !x.co; }).length, co: l.filter(function (x) { return x.co; }).length,
+      pri: l.filter(function (x) { return !!x.sv.pri; }).length, ci: l.filter(function (x) { return !!x.sv.ci; }).length,
+      desde: semData || !datas[0] ? '' : fmtDate(datas[0]), antesDe: semData ? fmtDate(NC_DESDE_V211) : '', dias: semData ? null : ncDias(datas[0]) };
+  }
   function listaNcTexto(l) {
     var ab = l.filter(function (x) { return !x.co; }).length, t = ['Não conformidades · ' + fmtDate(hojeDia()), l.length + ' no total · ' + ab + (ab === 1 ? ' aberta' : ' abertas') + ' · ' + (l.length - ab) + ' em correção', ''], ult = '';
     l.forEach(function (x) {
@@ -3736,6 +3758,7 @@
         h += '<div class="svc oae nc-on">' + cab + '<div class="nc-card' + (cur === 'EX' ? ' co' : '') + '">' +
           '<div class="nc-l1"><span class="nc-chip ' + (nova ? 'ra">Rascunho' : cur === 'EX' ? 'co">Em correção' : 'ab">Aberta') + '</span>' + (sv.ci ? '<span class="nc-chip in">Correção informada</span>' : '') +
             '<span class="nc-tipo">' + esc(nova ? 'só neste aparelho' : cur === 'EX' ? 'em execução pela contratada' : 'aguarda a correção') + '</span></div>' +
+          (nova ? '' : '<div class="nc-desde">' + esc(ncDesdeTxt(sv.desde)) + '</div>') +
           (s.un ? '<span class="nc-qt" aria-hidden="true">Quantidade estimada</span><div class="pct-in"><input type="number" min="0"' + (s.un === '%' ? ' max="100"' : '') + ' step="any" inputmode="decimal" data-svcpct="' + s.key + '" data-id="' + id + '" value="' + (sv.q != null ? esc(sv.q) : '') + '"' +
             ' placeholder="~" aria-label="' + esc(s.short + ': estimativa, ' + s.q.replace(/ com (dano|defeito)$/, ' na NC')) + '"><span>' + esc(s.un) + '</span></div>' : '') +
           (temItens ? itensHtml(id, s, sv, pv) + (itensMais ? itensMais(s, sv) : '') : '') +
@@ -5852,7 +5875,7 @@
       // "1 rascunho neste aparelho": à parte do número do botão, que conta só as NC salvas
       rascunhos: function () { return rascNaLista().length; }, onRascunho: rascIr,
       onListaNc: function () { if (!isPublico()) listaNcAbre(); },
-      conferir: conferirFaixa, onConferir: abrirSituacao,
+      ncFaixa: ncFaixa,
       publico: isPublico, onEntrar: function () { openLogin(); },
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
@@ -5945,13 +5968,6 @@
     medicoes.render(); medicoes.carregar();
     return true;
   }
-  // v205: o "Para conferir" das Medições, na faixa da tela inicial; só para quem vê as medições e com as análises já no aparelho
-  function conferirFaixa() {
-    if (isPublico() || !temMedicoes() || !medObj()) return null;
-    var its = medicoes.conferir();
-    return its.length ? its : null;
-  }
-  function abrirSituacao() { if (!medObj()) return; medicoes.situacao(); abrirMedicoes(); }
   function medObj() {
     if (medicoes || !window.Medicoes || !$('medicoesHost')) return medicoes;
     medicoes = window.Medicoes({

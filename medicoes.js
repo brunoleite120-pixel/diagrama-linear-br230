@@ -10,7 +10,7 @@
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
     var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
     // v202: o contrato aberto tem as partes Medições e Pagamentos; na tabela dos pagamentos, todas as linhas ou só as não pagas
-    var secao = 'med', pagTodas = false, pagAbertas = false, confTodos = false, ordSit = 'prazo';
+    var secao = 'med', pagTodas = false, pagAbertas = false, ordSit = 'prazo';
     var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '', folha = false, folhaHist = false, folhaPula = false;
     var mqCel = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
     var meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -553,8 +553,7 @@
       var esq = vc + aditivosHtml(d), dir = prazosHtml(c, d) + (emp ? empenhoHtml(d, emp) : '') + garantiaHtml(d) + fonteCtHtml(d);
       return '<div class="md-ct-grid"><div class="md-ct-col">' + esq + '</div><div class="md-ct-col">' + dir + '</div></div>';
     }
-    // v205: Situação (3ª organização), "Para conferir" (também na faixa da tela inicial), cartões com o SIAC e marca de a pagar em Por mês
-    var ABAS = { med: 'Medições', pag: 'Pagamentos', ct: 'Contrato' };
+    // v205: Situação (3ª organização), cartões com o SIAC e marca de a pagar em Por mês; o "Para conferir" saiu na v218
     function empMed(d) {
       var e = d.an.siac && d.an.siac.empenho, sd = e ? numero(e.saldo) : null;
       if (sd == null) return null;
@@ -562,39 +561,6 @@
       return { saldo: sd, sobra: sd - p.aPagar, media: md, cobre: md == null ? null : sd - p.aPagar >= md };
     }
     function mesesSem(d) { return d.ultima == null ? null : Math.max(0, hoje() - 1 - d.ultima); }
-    function confItens() {
-      var its = [], semEmp = [], parados = [], total = 0;
-      var item = function (tom, tipo, quem, cid, txt, ab, ord) { its.push({ tom: tom, tipo: tipo, quem: quem, cid: cid, txt: txt, ab: ab, ord: ord }); };
-      permitidos().forEach(function (c) {
-        var d = dado(c);
-        if (!d || !d.ms.length) return;
-        total++;
-        var nm = nome(c), p = prazosCt(c, d), ne = dias(p.exe), nv = dias(p.vig), f = fichaS(d) || {}, fe = diaIso(f.termino_execucao) ? f.termino_execucao : null;
-        if (nv != null && nv < 0) item('dg', 'Prazo', nm, c.id, 'A vigência terminou em ' + dataTxt(p.vig) + '.', 'ct', nv);
-        else if (ne != null && ne < 0) item('dg', 'Prazo', nm, c.id, 'Execução vencida desde ' + dataTxt(p.exe) + (p.vig && p.vig !== p.exe && nv != null ? '; a vigência vai até ' + dataTxt(p.vig) + ' (' + nv + (nv === 1 ? ' dia' : ' dias') + ').' : '.'), 'ct', ne);
-        else if (ne != null && ne <= 120) item(ne <= 45 ? 'dg' : 'at', 'Prazo', nm, c.id, 'A execução termina em ' + dataTxt(p.exe) + ' (' + ne + (ne === 1 ? ' dia' : ' dias') + ').', 'ct', ne);
-        // o cadastro (conferido no SEI) já leva o prazo adiante, mas o SIAC ainda não
-        var fs = foraSiac(c), nf = dias(fe);
-        if (fe && p.exe && fe < p.exe && nf != null && nf <= 120) fs = [{ t: 'No SIAC a execução ' + (nf < 0 ? 'terminou' : 'termina') + ' em ' + dataTxt(fe) + '; no cadastro, em ' + dataTxt(p.exe), v: '' }].concat(fs);
-        if (fs.length) item('az', 'Fora do SIAC', nm, c.id, fs.map(function (x) { return x.t + (x.v ? ' (' + x.v + ')' : ''); }).join('; ') + '.', 'ct', 9000);
-        var g = d.an.siac && d.an.siac.garantia, ng = g ? dias(g.vencimento) : null;
-        if (ng != null && ng <= 90) item(ng <= 30 ? 'dg' : 'at', 'Garantia', nm, c.id, (ng < 0 ? 'A garantia venceu em ' : 'A garantia vence em ') + dataTxt(g.vencimento) + (ng >= 0 ? ' (' + ng + (ng === 1 ? ' dia' : ' dias') + ').' : '.'), 'ct', ng);
-        pags(d).abertas.forEach(function (m) {
-          var sm = sMed(d, m.n), pg = sm && sm.pagamento, idade = pg && pg.data ? -dias(pg.data) : null;
-          item(idade != null && idade > 60 ? 'dg' : 'at', 'Pagamento', nm, c.id, m.n + 'ª medição (' + mesTxt(idx(m.ref)) + ') com AES emitido' + (pg && pg.data ? ' em ' + dataTxt(pg.data) : '') + (idade > 60 ? ', há ' + idade + ' dias' : '') + ': ' + dinheiro(totalMed(d, m)) + ' ainda sem pagamento aprovado.', 'pag', idade != null ? -idade : 0);
-        });
-        var e = empMed(d);
-        if (e && e.cobre === false) semEmp.push(c);
-        var ms = mesesSem(d);
-        if (ms != null && ms >= 4 && !(ne != null && ne < 0)) parados.push(c);
-      });
-      if (semEmp.length) item('at', 'Empenho', semEmp.length === 1 ? nome(semEmp[0]) : semEmp.length + ' de ' + total, semEmp.length === 1 ? semEmp[0].id : '',
-        (semEmp.length === 1 ? 'O saldo de empenho' : 'Em ' + semEmp.length + ' contratos, o saldo de empenho') + ', depois do que está a pagar, não cobre a próxima medição (média das 6 últimas)' + (semEmp.length > 1 ? ': ' + lista(semEmp.map(curto)) : '') + '.', 'pag', 8000);
-      if (parados.length) item('at', 'Medição', parados.length === 1 ? nome(parados[0]) : parados.length + ' de ' + total, parados.length === 1 ? parados[0].id : '',
-        'Sem medição nova no SIAC há 4 meses ou mais: ' + lista(parados.map(function (c) { return curto(c) + ' (desde ' + mesTxt(dado(c).ultima) + ')'; })) + '.', 'med', 8500);
-      var rk = { dg: 0, at: 1, az: 2 };
-      return its.sort(function (a, b) { return rk[a.tom] - rk[b.tom] || a.ord - b.ord; });
-    }
     // v209: o que o painel do contrato (app.js) mostra; as mesmas contas da Situação
     function resumoCt(c) {
       var d = dado(c);
@@ -619,18 +585,6 @@
         siac: s ? { consulta: s.consulta ? dataTxt(s.consulta) : '', pi: numero(f.pi_vigente) != null ? dinheiro(numero(f.pi_vigente)) : '', exe: diaIso(f.termino_execucao) ? dataTxt(f.termino_execucao) : '',
           vig: diaIso(f.termino_vigencia) ? dataTxt(f.termino_vigencia) : '', garantia: g ? [g.situacao, g.vencimento ? 'vence em ' + dataTxt(g.vencimento) : ''].filter(Boolean).join(' · ') : '' } : null
       };
-    }
-    function confItemHtml(x) {
-      return '<li class="md-conf-it ' + x.tom + '"><div class="md-conf-q">' + chipTom(x.tipo, x.tom) + '<b>' + esc(x.quem) + '</b></div><span class="md-conf-txt">' + esc(x.txt) + '</span>' +
-        (x.cid ? botao('abrir-ab', 'Abrir', ' data-cid="' + esc(x.cid) + '" data-ab="' + x.ab + '" aria-label="' + esc('Abrir ' + x.quem + ' em ' + ABAS[x.ab]) + '"', 'small ghost md-accent md-conf-abrir') : '') + '</li>';
-    }
-    function confHtml(its) {
-      var cel = celular(), mostra = cel && !confTodos ? its.slice(0, 3) : its, nDg = its.filter(function (x) { return x.tom === 'dg'; }).length;
-      var h = '<section class="card md-conf" aria-label="Para conferir"><div class="md-pg-tit"><h2>Para conferir</h2>' + (its.length ? chipTom(String(its.length), nDg ? 'dg' : 'at') : chipTom('nada', 'ok', IC_OK)) + '<small>Prazo, garantia, pagamento e empenho, do mais urgente para o menos. Some quando o SIAC mudar.</small></div>';
-      if (!its.length) return h + vazio('Nada para conferir nos contratos carregados.') + '</section>';
-      h += '<ul class="md-conf-lista">' + mostra.map(confItemHtml).join('') + '</ul>';
-      if (mostra.length < its.length || (cel && confTodos)) h += botao('conf-todos', confTodos ? 'Mostrar só os 3 primeiros ▴' : 'Ver os ' + its.length + ' ▾', '', 'ghost md-accent md-pg-mais');
-      return h + '</section>';
     }
     function sitTd(v, sub, tom) { return '<td><div class="md-sit-c"><span>' + v + '</span>' + (sub ? '<small class="' + (tom && tom !== 'ok' ? tom : '') + '">' + esc(sub) + '</small>' : '') + '</div></td>'; }
     function pagUlt(d) {
@@ -670,7 +624,7 @@
       var com = cs.filter(function (c) { var d = dado(c); return d && d.ms.length; }), obras = sitOrd(com.filter(function (c) { return !ehSup(c); })), sups = sitOrd(com.filter(ehSup)), cel = celular();
       var qs = [];
       com.forEach(function (c) { var q = dado(c).an.siac && dado(c).an.siac.consulta; if (q && qs.indexOf(q) < 0) qs.push(q); });
-      var h = cabecalho(cs) + confHtml(confItens());
+      var h = cabecalho(cs);
       h += '<div class="md-sit-ctl"><h2>Contratos</h2><small>' + esc(com.length + ' contratos' + (qs.length ? ' · consulta ao SIAC de ' + qs.sort().map(dataTxt).join(', ') : '')) + '</small><label class="md-ordenar">Ordem<select id="mdOrdSit"><option value="prazo"' + (ordSit === 'prazo' ? ' selected' : '') + '>fim da execução mais perto</option><option value="nome"' + (ordSit === 'nome' ? ' selected' : '') + '>número do contrato</option></select></label></div>';
       if (cel) {
         h += '<ul class="md-sit-lista">' + obras.map(sitCartaoHtml).join('') + '</ul>';
@@ -1152,7 +1106,6 @@
       }
       if (act === 'voltar') { cid = ''; med = null; segAberto = ''; }
       else if (act === 'modo') { modo = b.dataset.v === 'mes' || b.dataset.v === 'sit' ? b.dataset.v : 'contrato'; cid = ''; matrizScroll = null; }
-      else if (act === 'conf-todos') confTodos = !confTodos;
       else if (act === 'med') { daFolha = folha; fechaFolha(); med = b.dataset.n; grupo = null; semValor = false; }
       else if (act === 'passo') {
         var dp = dado(contrato(cid)), mp = dp && aberta(dp), vz = mp ? vizinhas(dp, mp) : {}, alvo = b.dataset.v === '-1' ? vz.ant : vz.prox;
@@ -1226,9 +1179,6 @@
     return {
       render: render,
       carregar: carregar,
-      // v205: "Para conferir" (faixa da tela inicial) e a entrada direto na Situação
-      conferir: function () { try { return confItens(); } catch (e) { return []; } },
-      situacao: function () { modo = 'sit'; cid = ''; med = null; },
       // v209: os números de um contrato para o painel do editor e a entrada direto no contrato (aba Medições, Pagamentos ou Contrato)
       resumo: function (c) { try { return resumoCt(c); } catch (e) { return null; } },
       irContrato: function (id, ab) {

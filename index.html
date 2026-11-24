@@ -1083,6 +1083,8 @@ article.pt{scroll-margin-bottom:calc(var(--pgnav-h,0px) + 12px)}
 .nc-card>.nc-qt{grid-column:1;grid-row:2;font-size:13px;color:var(--ink-2)}
 .nc-l1{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}
 .nc-tipo{font-size:13px;color:var(--ink-2)}
+.nc-desde{font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.nc-card>.nc-desde{grid-row:2;margin-top:-4px}.nc-card>.nc-desde~.nc-qt,.nc-card>.nc-desde~.pct-in{grid-row:3}
 .nc-chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;border:1px solid}
 .nc-chip.ra{background:var(--rasc-bg);color:var(--atencao-ink);border:1px dashed var(--rasc-borda)}
 .nc-chip.ab{background:var(--atencao-bg);color:#7A3F00;border-color:#E3A84A}.nc-chip.co{background:#EAF0F8;color:var(--ativo);border-color:#A9BEDD}.nc-chip.in{background:#fff;color:var(--ink-2);border-color:var(--line-campo)}
@@ -1987,19 +1989,8 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
 .md-pg-linha.apagar.btn{background:#FFFBEF}
 .md-pg-linha>span:first-child{display:flex;flex-direction:column;min-width:0}
 .md-pg-dir{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right}
-/* v205: Situação, Para conferir, cartões com o SIAC e a marca de a pagar em Por mês */
+/* v205: Situação, cartões com o SIAC e a marca de a pagar em Por mês */
 .md-modo{grid-template-columns:repeat(3,minmax(0,1fr));min-width:330px}
-.md-conf{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.md-conf h2{font-size:16px;font-weight:650}
-.md-conf-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.md-conf-it{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line-2);border-left-width:4px;border-radius:8px;background:var(--panel);min-width:0}
-.md-conf-it.dg{border-left-color:var(--danger)}
-.md-conf-it.at{border-left-color:var(--atencao)}
-.md-conf-it.az{border-left-color:var(--accent)}
-.md-conf-q{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex:none;width:130px}
-.md-conf-q b{font-size:13px}
-.md-conf-txt{flex:1;min-width:0;font-size:13px;color:var(--ink-2)}
-.md-conf-abrir.btn{align-self:center;flex:none}
 .md-sit-ctl{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
 .md-sit-ctl h2{font-size:16px;font-weight:650}
 .md-sit-ctl small{color:var(--ink-3)}
@@ -2133,11 +2124,6 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
   .md-soma .md-copiar{order:-1}
   .md-op-ig{display:none}
   .md-modo{min-width:0}
-  .md-conf{padding:12px}
-  .md-conf-it{flex-wrap:wrap;gap:6px 10px}
-  .md-conf-q{flex-direction:row;align-items:center;width:auto}
-  .md-conf-txt{flex-basis:100%;order:3}
-  .md-conf-abrir.btn{margin-left:auto;min-height:44px}
   .md-sit-ctl .md-ordenar{margin-left:0}
   .md-card-cel .md-sit-chips{width:100%}
   .md-kpis.md-kpis-sem-cel{display:none}

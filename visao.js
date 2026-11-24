@@ -378,12 +378,17 @@
         h += '<div class="vg-entrar"><div><b>Este conteúdo pede o seu código.</b><span>Os contratos, as fotos e as medições aparecem depois de entrar. Quem não tem código pede ao responsável pela conta.</span></div>' +
           '<button type="button" class="btn primary" data-vg="entrar">Entrar</button></div>';
       }
-      // v205: "Para conferir" das Medições (prazo, garantia, pagamento, empenho), curto, com atalho para a Situação
-      var conf = o.conferir ? o.conferir() : null;
-      if (conf && conf.length) {
-        var nDg = conf.filter(function (x) { return x.tom === 'dg'; }).length, porTipo = {}, ordT = [];
-        conf.forEach(function (x) { if (!porTipo[x.tipo]) { porTipo[x.tipo] = 0; ordT.push(x.tipo); } porTipo[x.tipo]++; });
-        h += '<button type="button" class="vg-conf' + (nDg ? ' dg' : '') + '" data-vg="conf"><b>Para conferir · ' + conf.length + '</b><span>' + esc(ordT.map(function (t) { return porTipo[t] + ' ' + t.toLowerCase().replace('siac', 'SIAC'); }).join(' · ')) + '</span><span class="vg-conf-ir">Ver em Medições ›</span></button>';
+      // v218: as não conformidades abertas e em correção (no lugar do "Para conferir" das medições), com as de prioridade
+      // e desde quando está aberta a mais antiga; abre a lista das NC
+      var ncFx = o.ncFaixa ? o.ncFaixa() : null;
+      if (ncFx && ncFx.n) {
+        var ncFxP = function (n, um, varios) { return n + ' ' + (n === 1 ? um : varios); };
+        var ncFxT = [ncFx.ab ? ncFxP(ncFx.ab, 'aberta', 'abertas') : '', ncFx.co ? ncFx.co + ' em correção' : '', ncFx.pri ? ncFxP(ncFx.pri, 'com prioridade', 'com prioridade') : '',
+          ncFx.ci ? ncFxP(ncFx.ci, 'com correção informada', 'com correção informada') : ''].filter(Boolean).join(' · ');
+        var ncFxD = ncFx.desde ? (ncFx.n === 1 ? 'aberta desde ' : 'a mais antiga desde ') + ncFx.desde + (ncFx.dias ? ' (' + (ncFx.dias === 1 ? '1 dia' : ncFx.dias + ' dias') + ')' : '')
+          : ncFx.antesDe ? (ncFx.n === 1 ? 'aberta antes de ' : 'a mais antiga antes de ') + ncFx.antesDe : '';
+        h += '<button type="button" class="vg-conf vg-nc' + (ncFx.pri ? ' dg' : '') + '" data-vg="lista-nc"><b>Não conformidades · ' + ncFx.n + '</b><span>' + esc(ncFxT + (ncFxD ? ' · ' + ncFxD : '')) +
+          '</span><span class="vg-conf-ir">Ver a lista ›</span></button>';
       }
 
       // desenho, antes dos cartões e da busca: marcar um contrato só muda o que está embaixo da barra
@@ -1111,7 +1116,6 @@
           : 'OAEs 230: mostrando só as não atendidas pelo Proarte.');
       }
       else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
-      else if (a === 'conf') { if (o.onConferir) o.onConferir(); }
       else if (a === 'entrar') { if (o.onEntrar) o.onEntrar(); }
       else if (a === 'lista-nc') { if (o.onListaNc) o.onListaNc(); }
       // v210: a legenda abre e fecha sem redesenhar a tela
