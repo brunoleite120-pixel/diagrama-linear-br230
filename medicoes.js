@@ -605,6 +605,17 @@
         ult: d.ult.n + 'ª · ' + mesTxt(d.ultima), ultValor: dinheiro(totalMed(d, d.ult)), ultPag: pagTxt(d, d.ult) || '', semMeses: mesesSem(d),
         exe: p.exe ? dataTxt(p.exe) : '', vig: p.vig ? dataTxt(p.vig) : '', dias: ne, tomPrazo: tomDias(ne, 45, 120),
         emp: e ? compacto(e.saldo) : '', cobre: e ? e.cobre : null,
+        conferir: (function () {
+          var ch = [], ng = g ? dias(g.vencimento) : null, ms = mesesSem(d);
+          if (ne != null && ne < 0) ch.push({ t: 'execução vencida', tom: 'dg' });
+          else if (ne != null && ne <= 120) ch.push({ t: 'execução em ' + ne + (ne === 1 ? ' dia' : ' dias'), tom: ne <= 45 ? 'dg' : 'at' });
+          if (ng != null && ng <= 90) ch.push({ t: ng < 0 ? 'garantia vencida' : 'garantia em ' + ng + (ng === 1 ? ' dia' : ' dias'), tom: ng <= 30 ? 'dg' : 'at' });
+          pags(d).abertas.forEach(function (x) { ch.push({ t: x.n + 'ª a pagar', tom: 'at' }); });
+          if (e && e.cobre === false) ch.push({ t: 'empenho não cobre', tom: 'at' });
+          if (ms >= 4) ch.push({ t: ms + ' meses sem medição', tom: 'at' });
+          if (foraSiac(c).length) ch.push({ t: 'fora do SIAC', tom: 'az' });
+          return ch;
+        })(),
         siac: s ? { consulta: s.consulta ? dataTxt(s.consulta) : '', pi: numero(f.pi_vigente) != null ? dinheiro(numero(f.pi_vigente)) : '', exe: diaIso(f.termino_execucao) ? dataTxt(f.termino_execucao) : '',
           vig: diaIso(f.termino_vigencia) ? dataTxt(f.termino_vigencia) : '', garantia: g ? [g.situacao, g.vencimento ? 'vence em ' + dataTxt(g.vencimento) : ''].filter(Boolean).join(' · ') : '' } : null
       };

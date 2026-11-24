@@ -523,7 +523,9 @@
       h += '</div>';
       }
       // legenda dos contratos mostrados: trecho e losango só com pontos críticos ou conservação; "OAE" só com OAEs
-      h += (noMapa ? legMapa() : '<div class="vg-leg">' + (tem.pc || tem.conserva ? '<span><i style="width:18px;height:10px;border-radius:2px;background:#2B5797"></i>Trecho no tamanho real</span>' +
+      h += (noMapa ? legMapa() : '<div class="vg-legbar"><button type="button" class="btn small" data-vg="leg" aria-expanded="' + !!st.leg + '" aria-controls="vgLegs">Legenda' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>' +
+        (md === 'nc' && nNC ? '<span class="vg-leg-n">' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC</span>' : '') + '</div><div class="vg-legs" id="vgLegs"' + (st.leg ? '' : ' hidden') + '><div class="vg-leg">' + (tem.pc || tem.conserva ? '<span><i style="width:18px;height:10px;border-radius:2px;background:#2B5797"></i>Trecho no tamanho real</span>' +
         '<span><i style="width:9px;height:9px;transform:rotate(45deg);border-radius:1px;background:#3B4540"></i>Ponto curto demais para esta escala</span>' : '') +
         (tem.oae ?'<span><i style="width:11px;height:11px;border-radius:50%;background:#7A8580"></i>OAE</span>' : '') +
         // faixa "OAEs 230": as cores dela (não atendida e, em "Todas", a do 424)
@@ -537,10 +539,9 @@
           ? '<span><i style="width:14px;height:10px;border-radius:2px;background:#1E9E55"></i>Medido (serviço medido ali)</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580"></i>Sem medição</span>' +
             (doisModos() ? '<span>Onde estão as não conformidades: botão Não conformidades, acima</span>' : '')
-          : (nNC ? '<span class="vg-leg-n">' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC</span>' : '') +
-            '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
+          : '<span><i style="width:14px;height:10px;border-radius:2px;background:#F2A93B"></i>Não conformidade aberta</span>' +
             '<span><i style="width:14px;height:10px;border-radius:2px;background:#2B5797"></i>NC em correção</span>' +
-            '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '')) + '</section>';
+            '<span><i style="width:14px;height:10px;border-radius:2px;background:#7A8580;opacity:.25"></i>Sem NC (apagado)</span>') + '</div>' : '') + '</div>') + '</section>';
       // no Mapa (v183), a legenda é a do mapa: os contratos na cor de cada um (tocar enquadra), a situação dos pontos de perto,
       // o ponto vazado, os grupos e as fotos. A das raias (trecho no tamanho real, losango, medido) não vale para o mapa
       function legMapa() {
@@ -613,6 +614,13 @@
         return m.atraso >= 3 ? '<div class="vg-ct-m al">Última med.: ' + esc(m.n + 'ª · ' + m.txt) + ' · há ' + m.atraso + ' meses</div>'
           : '<div class="vg-ct-m">✓ Conferido até a ' + esc(m.n + 'ª med.' + (m.txt ? ' · ' + m.txt : '')) + '</div>';
       }
+      // v210 (item 44): o que veio do SIAC, numa linha: medido, fim da execução e o que há para conferir (as fichas da Situação)
+      function siacLinha(c) {
+        var r = o.siac ? o.siac(c) : null;
+        if (!r || (!r.pct && !r.exe)) return '';
+        var t = [r.pct ? '<b>' + esc(r.pct) + '</b> medido' : '', r.exe ? 'execução até <b>' + esc(r.exe) + '</b>' : ''].filter(Boolean).join(' · ');
+        return '<div class="vg-ct-siac"><span>SIAC: ' + t + '</span>' + (r.conferir && r.conferir.length ? '<span>' + r.conferir.map(function (x) { return '<span class="md-chip-ct ' + esc(x.tom) + '">' + esc(x.t) + '</span>'; }).join('') + '</span>' : '') + '</div>';
+      }
       // modo Medições: quantos segmentos ou pontes têm NC; o toque passa para o modo Não conformidades
       function ncLinha(c, tp, xs) {
         if (md !== 'med' || !doisModos() || (tp !== 'conserva' && tp !== 'oae')) return '';
@@ -656,7 +664,7 @@
         return '<article class="vg-box vg-ct ' + tp + '"' + (corCt(c) ? ' style="--vg-t:' + corCt(c) + '"' : '') + '><div class="vg-ct-h"><h3>' + esc(nome) + '</h3>' + (formal && formal !== nome ? '<span>' + esc(formal) + '</span>' : '') + '</div>' +
           (f ? '<div class="vg-ct-t">' + kmFaixaTxt(c, f) + (c.origem || c.destino ? ' · ' + esc(c.origem || '?') + ' → ' + esc(c.destino || '?') : '') + '</div>' : '') +
           '<div class="vg-ct-n"><b>' + tot + (oae ? (tot === 1 ? ' OAE' : ' OAEs') : tp === 'conserva' ? (tot === 1 ? ' segmento' : ' segmentos') : (tot === 1 ? ' ponto' : ' pontos')) + '</b><span>' + nf(ext, 2) + (oae ? ' km de OAEs' : ' km de atuação') + '</span></div>' +
-          '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) + ncLinha(c, tp, xs) +
+          '<div class="vg-seg" aria-hidden="true">' + segs + '</div><div class="vg-ct-s">' + (txt || 'sem itens com km') + '</div>' + medLinha(c, tp) + ncLinha(c, tp, xs) + siacLinha(c) +
           '<div class="vg-ct-a">' + (f ? '<button type="button" class="btn small" data-vg="ir" data-fid="vd:' + esc(c.id) + '" data-a="' + (f[0] - pad) + '" data-b="' + (f[1] + pad) + '">' + (noMapa ? 'Ver no mapa' : 'Ver no desenho') + '</button>' : '') +
           '<button type="button" class="btn small ghost" data-vg="ct" data-cid="' + esc(c.id) + '">Abrir contrato →</button></div></article>';
       }).join('') + '</section>';
@@ -1103,6 +1111,8 @@
       else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
       else if (a === 'conf') { if (o.onConferir) o.onConferir(); }
       else if (a === 'entrar') { if (o.onEntrar) o.onEntrar(); }
+      // v210: a legenda abre e fecha sem redesenhar a tela
+      else if (a === 'leg') { st.leg = !st.leg; b.setAttribute('aria-expanded', String(st.leg)); var lg = host.querySelector('#vgLegs'); if (lg) lg.hidden = !st.leg; }
       // Raias | Mapa: o trecho na tela continua o mesmo, e o cartão aberto continua aberto
       else if (a === 'forma') {
         var fm = b.dataset.f === 'mapa' ? 'mapa' : 'raias';

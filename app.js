@@ -5710,6 +5710,7 @@
       temMed: function () { return !isPublico() && temMedVisao('med'); }, temNC: function () { return !isPublico() && temMedVisao('acomp'); },
       // a última medição do contrato (cartão: "Conferido até a 48ª med. · ago/26"); quem não vê as medições: null
       medContrato: function (c) { return isPublico() || c.oaes230 ? null : medDoContrato(c); },
+      siac: function (c) { return isPublico() || c.oaes230 ? null : painelSiac(c); },   // v210: a linha do SIAC no cartão do contrato
       temMapa: function () { return !!(window.MapaSNV && window.L && window.SNV_BR230) && !isPublico(); }, temFotos: galeriaOn,
       // a não atendida abre no item OAEs sem Proarte (as NC dela)
       temSemProarte: function () { return !isPublico() && !!ctSemProarte(); },
