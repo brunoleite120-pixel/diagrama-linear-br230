@@ -373,6 +373,11 @@
         '<p>' + (noMapa ? 'No mapa, pelo eixo do SNV.' : 'Em escala de km.') + ' Só na tela: o PDF oficial continua dentro de cada contrato.</p></div>' + bForma +
         '<span class="vg-tot">' + its.length + (its.length === 1 ? ' item' : ' itens') + ' no desenho' + (d.semKm ? ' · <b>' + d.semKm + ' sem km</b> (não aparecem)' : ' · nenhum sem km') +
         (ruins ? ' · <b>' + ruins + ' com km fora da rodovia</b> (confira a vírgula)' : '') + '</span></div>';
+      // v207: sem acesso, a tela diz que o conteúdo pede código e mostra o Entrar (no celular ele só existia dentro do menu)
+      if (o.publico && o.publico()) {
+        h += '<div class="vg-entrar"><div><b>Este conteúdo pede o seu código.</b><span>Os contratos, as fotos e as medições aparecem depois de entrar. Quem não tem código pede ao responsável pela conta.</span></div>' +
+          '<button type="button" class="btn primary" data-vg="entrar">Entrar</button></div>';
+      }
       // v205: "Para conferir" das Medições (prazo, garantia, pagamento, empenho), curto, com atalho para a Situação
       var conf = o.conferir ? o.conferir() : null;
       if (conf && conf.length) {
@@ -1097,6 +1102,7 @@
       }
       else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
       else if (a === 'conf') { if (o.onConferir) o.onConferir(); }
+      else if (a === 'entrar') { if (o.onEntrar) o.onEntrar(); }
       // Raias | Mapa: o trecho na tela continua o mesmo, e o cartão aberto continua aberto
       else if (a === 'forma') {
         var fm = b.dataset.f === 'mapa' ? 'mapa' : 'raias';

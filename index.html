@@ -118,6 +118,7 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .menu{position:relative}
 .menu-pop{position:absolute;right:0;top:calc(100% + 6px);min-width:250px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;max-height:calc(100vh - 80px - var(--pgnav-h,0px));max-height:calc(100dvh - 80px - var(--pgnav-h,0px));overflow-y:auto;overscroll-behavior:contain}
 .menu-pop[hidden]{display:none}
+.menu-pop{z-index:40}   /* v207: por cima da barra das páginas, como a lista dos contratos (.ctm-pop) */
 .menu-pop button{border:0;background:none;text-align:left;padding:9px 10px;border-radius:5px;font-size:13px}
 .menu-pop button:hover{background:var(--ground)}
 .menu-pop hr{border:0;border-top:1px solid var(--line-2);margin:4px 0}
@@ -524,7 +525,8 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .save-state{grid-area:est;display:none;min-width:0;text-align:left}
   .save-state.warn{display:block}
   .so-compacto{display:block}
-  .menu-estado{margin-top:6px;border-top:1px solid var(--line-2);padding:8px 10px 2px;font-size:12px;color:var(--ink-3)}
+  .menu-estado{order:-1;margin:0 0 6px;border-bottom:1px solid var(--line-2);padding:6px 10px 10px;font-size:13px;line-height:1.4;color:var(--ink-2)}
+  .menu-estado.warn{color:var(--atencao);font-weight:600}
   .menu-estado:not([hidden]) ~ hr{display:none}
   .menu-pop{max-width:calc(100vw - 24px)}
   .menu-pop button{min-height:44px}
@@ -851,6 +853,15 @@ input::-webkit-date-and-time-value{text-align:left}
 
 .points-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 2px}
 .points-head h2{margin:0;font-size:15px}
+.ph-bts{display:flex;align-items:center;gap:6px;flex:none}
+.pt-ajuda{min-width:30px;justify-content:center;padding:0 8px;font-weight:700}
+.pt-ajuda[aria-expanded="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+article.pt{scroll-margin-bottom:calc(var(--pgnav-h,0px) + 12px)}
+.vg-entrar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:10px 0 0;padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.vg-entrar div{flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:3px}
+.vg-entrar b{font-size:15px}
+.vg-entrar span{font-size:13.5px;line-height:1.4;color:var(--ink-2)}
+.vg-entrar .btn{min-height:44px;min-width:120px;justify-content:center}
 .count{display:inline-block;min-width:22px;padding:0 7px;border-radius:999px;background:var(--line-2);font-size:12px;text-align:center;margin-left:6px;font-weight:600}
 .hint{font-size:12px;color:var(--ink-3);padding:0 2px}
 .pt-list{display:flex;flex-direction:column;gap:8px}
@@ -887,6 +898,14 @@ input::-webkit-date-and-time-value{text-align:left}
 .res-lin > .chev{transform:rotate(-90deg)}
 .res-lin[aria-expanded="true"] > .chev{transform:none}
 @media (max-width:560px){
+  .pt:not(.oae) .pt-head{grid-template-columns:minmax(0,1fr) auto 46px 16px;row-gap:1px}
+  .pt:not(.oae) .pt-name{grid-column:1;grid-row:1}
+  .pt:not(.oae) .pt-km{grid-column:1;grid-row:2;overflow:visible}
+  .pt:not(.oae) .pt-dots{grid-column:2;grid-row:1 / span 2}
+  .pt:not(.oae) .pt-pct{grid-column:3;grid-row:1 / span 2}
+  .pt:not(.oae) .pt-head > .chev{grid-column:4;grid-row:1 / span 2}
+}
+@media (min-width:701px) and (max-width:1100px){   /* v207 */
   .pt:not(.oae) .pt-head{grid-template-columns:minmax(0,1fr) auto 46px 16px;row-gap:1px}
   .pt:not(.oae) .pt-name{grid-column:1;grid-row:1}
   .pt:not(.oae) .pt-km{grid-column:1;grid-row:2;overflow:visible}
@@ -1448,7 +1467,8 @@ span.an-chip{cursor:default}
    situação descem para uma linha inteira embaixo do nome e do percentual (ao lado deles, 5 botões ficavam com 36 px) */
 @media (pointer:coarse),(max-width:700px){
   .field input,.field select,.pct-in input,.svc-nota{min-height:44px}
-  .seg button,.svc.oae .seg button,.svc-marcas button,.pt .btn,.section-title .btn,[data-act="add-point"]{min-height:44px}
+  .seg button,.svc.oae .seg button,.svc-marcas button,.pt .btn,.section-title .btn,[data-act="add-point"],.points-head .btn,.modal-foot .btn{min-height:44px}
+  .points-head .pt-ajuda{min-width:44px}
   .nc-l button,.nc-acts button,.nc-rasc button,.nc-foto-add,.svc-it,.vg-rasc{min-height:44px}
   .ss-rasc{display:inline-flex;align-items:center;min-height:44px;margin:0 -4px;padding:0 4px;vertical-align:middle}   /* altura de verdade: a linha cresce, e o toque não passa por cima do botão do contrato nem do que está abaixo do topo */
 }

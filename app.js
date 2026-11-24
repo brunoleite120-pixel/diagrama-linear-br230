@@ -3278,10 +3278,10 @@
     // conservação: a lista "Segmentos". Sem nenhum, só "Gerar segmentos" (pelos limites dos trechos); com pelo menos um, só
     // "+ Segmento" (os dois nunca juntos: um segmento solto num contrato vazio esconderia o "Gerar")
     if (cons) {
-      h.push('<div class="points-head"><h2>Segmentos<span class="count" id="ptCount" data-t="' + pts.length + '">' + pts.length + '</span></h2>' + (pts.length ? '<button type="button" class="btn small" data-act="add-point">+ Segmento</button>' :
-        '<button type="button" class="btn small" data-act="gerar-segmentos">Gerar segmentos</button>') + '</div>');
+      h.push('<div class="points-head"><h2>Segmentos<span class="count" id="ptCount" data-t="' + pts.length + '">' + pts.length + '</span></h2><span class="ph-bts">' + (pts.length ? '<button type="button" class="btn small pt-ajuda" data-act="dica-lista" aria-expanded="' + !!ui.dicaLista + '" aria-controls="ptDica" aria-label="Como a lista funciona">?</button>' + '<button type="button" class="btn small" data-act="add-point">+ Segmento</button>' :
+        '<button type="button" class="btn small" data-act="gerar-segmentos">Gerar segmentos</button>') + '</span></div>');
       h.push('<div class="hint"><b>Faixa do contrato:</b> ' + esc(faixaTexto(c) || 'informe o km inicial e o final nos dados do contrato') + '</div>');
-      if (pts.length) h.push('<div class="hint">Ordenados por km, como no diagrama. Toque num segmento (aqui ou no desenho) para marcar o estado.</div>');
+      if (pts.length) h.push('<div class="hint" id="ptDica"' + (ui.dicaLista ? '' : ' hidden') + '>Ordenados por km, como no diagrama. Toque num segmento' + (cel ? '' : ' (aqui ou no desenho)') + ' para registrar não conformidades.</div>');
       else h.push('<div class="empty" data-segvazio="1">' + esc(segVazioTxt(c)) + '</div>');
       h.push('<div class="hint ct-aviso" data-aviso="segmentos">' + esc(avisoSegmentosTxt(c)) + '</div>');
     } else if (oae && medGlobalDe(c, anOf(c))) {
@@ -3292,9 +3292,9 @@
       h.push('<div class="points-head"><h2>OAEs<span class="count" id="ptCount" data-t="' + pts.length + ' de ' + nTot + '">' + pts.length + ' de ' + nTot + '</span></h2><button type="button" class="btn small" data-act="an-med" data-v="0">Todas por km</button></div>');
       h.push('<div class="hint">Só as OAEs com serviço na ' + esc(medTxt(anL, gL)) + ', da maior para a menor. Ao abrir uma, o gráfico já mostra essa medição.</div>');
     } else {
-      h.push('<div class="points-head"><h2>' + (oae ? 'OAEs' : 'Pontos críticos') + '<span class="count" id="ptCount" data-t="' + pts.length + '">' + pts.length + '</span></h2><button type="button" class="btn small" data-act="add-point">' + (oae ? '+ OAE' : '+ Ponto') + '</button></div>');
-      h.push('<div class="hint">' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa OAE (aqui ou no desenho) para marcar o estado' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
-        'Ordenados por KM, como no diagrama. Clique num ponto (aqui ou no desenho) para editar.') + '</div>');
+      h.push('<div class="points-head"><h2>' + (oae ? 'OAEs' : 'Pontos críticos') + '<span class="count" id="ptCount" data-t="' + pts.length + '">' + pts.length + '</span></h2><span class="ph-bts">' + '<button type="button" class="btn small pt-ajuda" data-act="dica-lista" aria-expanded="' + !!ui.dicaLista + '" aria-controls="ptDica" aria-label="Como a lista funciona">?</button>' + '<button type="button" class="btn small" data-act="add-point">' + (oae ? '+ OAE' : '+ Ponto') + '</button></span></div>');
+      h.push('<div class="hint" id="ptDica"' + (ui.dicaLista ? '' : ' hidden') + '>' + (oae ? 'Ordenadas por km, como no diagrama. Toque numa OAE' + (cel ? '' : ' (aqui ou no desenho)') + ' para registrar não conformidades' + (anOf(c) ? ' e ver as medições e os alertas.' : '.') :
+        'Ordenados por km, como no diagrama. ' + (cel ? 'Toque num ponto para editar.' : 'Clique num ponto (aqui ou no desenho) para editar.')) + '</div>');
     }
     // lado a lado: um item aberto por vez, à direita; na lista, no lugar dele, só a linha marcada
     var md = mdOn(), pAb = null;
@@ -5567,6 +5567,7 @@
       // "1 rascunho neste aparelho": à parte do número do botão, que conta só as NC salvas
       rascunhos: function () { return rascNaLista().length; }, onRascunho: rascIr,
       conferir: conferirFaixa, onConferir: abrirSituacao,
+      publico: isPublico, onEntrar: function () { openLogin(); },
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
       onAbrir: function (c, p) { if (c.oaes230) abrir230(p, false); else abrirDaVisao(c, p, false); },
@@ -6085,6 +6086,11 @@
         ui.contractOpen = !ui.contractOpen;
         renderEditor();
         return;
+      case 'dica-lista':   // v207: a dica da lista abre e fecha pelo "?"
+        ui.dicaLista = !ui.dicaLista;
+        renderEditor();
+        var bd = document.querySelector('[data-act="dica-lista"]'); if (bd) try { bd.focus({ preventScroll: true }); } catch (e) { /* sem foco */ }
+        return;
       case 'toggle-point':
         undoProxima();
         if (document.activeElement && document.activeElement.id === 'ptBusca') document.activeElement.blur();   // abriu um resultado: o teclado fecha
@@ -6101,7 +6107,7 @@
         p = findPoint(b.dataset.id);
         // ao fechar, a lista volta a ser ordenada por KM
         if (!ui.open[b.dataset.id]) renderEditor();
-        else if (p) rerenderPoint(p);
+        else if (p) { rerenderPoint(p); mostraAberto(b.dataset.id); }
         return;
       case 'set-st':
         p = findPoint(b.dataset.id);
@@ -8261,7 +8267,7 @@
     else if (el.textContent !== t || !el.querySelector('button')) el.innerHTML = esc(tAntes) + ' · <button type="button" class="ss-rasc" data-rasc-ir>' + esc(tRasc) + '</button>' + esc(t.slice(nAte));
     el.classList.toggle('warn', warn);
     var me = $('menuEstado');
-    if (me) { me.textContent = t; me.hidden = false; }
+    if (me) { me.textContent = t; me.hidden = false; me.classList.toggle('warn', warn || n > 0 || !!(dq && dq.n)); }
     momSync();
   }
 
@@ -8484,6 +8490,14 @@
     var m = $('modal'), v = modalVolta;
     if (m) { m.remove(); modalCancela = null; modalVolta = null; if (v && v.focus && v !== document.body && v.isConnected) try { v.focus({ preventScroll: true }); } catch (e) { /* navegador antigo */ } }
     if (modalHist || depois) modalSolta(depois);
+  }
+  // v207: o cartão recém-aberto rola até ficar à vista: com o começo escondido pelo topo ou o fim atrás da barra de baixo, vai para o alto
+  function mostraAberto(id) {
+    var el = document.querySelector('article.pt[data-id="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (!el) return;
+    var r = el.getBoundingClientRect(), tb = document.querySelector('.topbar'), nav = $('pgNav');
+    var topo = tb ? tb.getBoundingClientRect().bottom : 0, fundo = window.innerHeight - (nav && nav.getClientRects().length ? nav.getBoundingClientRect().height : 0);
+    if (r.top < topo + 4 || r.bottom > fundo - 4) el.scrollIntoView({ behavior: rolagem(), block: 'start' });
   }
   function modalErr(f, t) { var e = f.querySelector('.modal-err'); if (e) { e.textContent = t || ''; e.hidden = !t; if (t) e.scrollIntoView({ block: 'nearest' }); } }   // o botão fica sempre à vista e o erro, no fim do conteúdo: rola até ele
   function busyBtn(f, on, label) {

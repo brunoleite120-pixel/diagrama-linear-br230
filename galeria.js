@@ -388,6 +388,7 @@
     '  .gl-cb-ct:disabled{opacity:.6}',
     '  .gl-cb-f{gap:6px;padding:0 10px}',
     '  .gl-cb-ct,.gl-cb-p{flex:1 1 auto;min-width:0;gap:6px;padding:0 10px}',
+    '  .gl-cb-ct{flex:0 0 auto;max-width:58%}.gl-cb-p{flex:1 1 0}',
     '  .gl-cb-fi{min-width:52px;padding:0 8px}',
     '  .gl-info .gl-txt.gl-txt-n{flex:1 1 0;min-width:110px}.gl-info .gl-txt-n b{white-space:nowrap}',
     '  .gl-cb-p{font-weight:600}',
