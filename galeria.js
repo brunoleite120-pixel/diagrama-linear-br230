@@ -170,6 +170,29 @@
     '.gl-b.ap{background:#E4E7EC;color:#344054}',
     '@media (max-width:359px){.gl-b{font-size:10.5px}}',
     '.gl-b.sp{background:#FEF0C7;color:#7A2E0E}',
+    // v214 (item 82): a foto ligada a uma não conformidade
+    '.gl-b.nc{background:#FEE4E2;color:#912018;box-shadow:inset 0 0 0 1px #FDA29B;font-weight:750}',
+    // v214 (item 91): contagem nas abas; em "No aparelho", as fotos que esperam envio, em laranja
+    '.gl-tab small.at{padding:0 7px;border-radius:999px;background:#FEF0C7;color:#9A5B00;font-weight:650}',
+    '.gl-tab[aria-selected="true"] small.at{background:#B26B00;color:#fff}',
+    // v214 (item 84): no computador e no tablet a barra da seleção fica no alto, no lugar dos filtros, e não cobre as fotos
+    '.gl.gl-selt .gl-cts,.gl.gl-selt .gl-fil,.gl.gl-selt .gl-info{display:none}',
+    '.gl.gl-selt .gl-barhost{order:1}.gl.gl-selt .gl-body{order:2}',
+    '.gl.gl-selt .gl-bar{position:static;max-width:none;margin:10px 16px 0;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border:0;border-radius:10px;background:var(--ink,#17201C);color:#fff;box-shadow:none}',
+    '.gl-selt .gl-bar .gl-n{flex:none}',
+    '.gl-selt .gl-bar .gl-n b{display:inline;font-size:14px}',
+    '.gl-selt .gl-bar .gl-n small{display:inline;margin-left:8px;color:#C9D0CC}',
+    '.gl-selt .gl-bar .btn{min-height:34px;font-size:13px;background:#1D2421;border-color:#4A5550;color:#fff}',
+    '.gl-selt .gl-bar .btn:hover{background:#2A322E}',
+    '.gl-selt .gl-bar .btn.primary{background:var(--accent,#1D4F91);border-color:#2E6BC0}',
+    '.gl-selt .gl-bar .btn.est1{background:#F5B83D;border-color:#E0A52C;color:#3D2A00}',
+    '.gl-selt .gl-bar .btn.danger{background:transparent;border-color:#F0B4AC;color:#FFB4AB}',
+    '.gl-bt-sep{width:1px;height:22px;background:#3B4540;margin:0 4px}',
+    '.gl-bt-esp{flex:1}',
+    '.gl-bt-dica{flex:1 1 100%;font-size:12.5px;color:#C9D0CC}',
+    '.gl.gl-selt.gl-selon .gl-body{padding-bottom:24px}',
+    '.gl.gl-selt.gl-selon .gl-toast{bottom:calc(24px + env(safe-area-inset-bottom,0px))}',
+    '.gl-selt .gl-grid{user-select:none;-webkit-user-select:none}',
     '.gl-info .gl-lk{border:0;background:none;padding:0;color:var(--accent,#1D4F91);font-size:12.5px;text-decoration:underline}',
     '.gl-star{position:absolute;top:4px;right:6px;color:#FDB022;font-size:17px;text-shadow:0 1px 2px rgba(0,0,0,.5)}',
     '.gl-ck{position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.25);box-shadow:0 1px 3px rgba(0,0,0,.4)}',
@@ -318,7 +341,7 @@
     '.gl-s.sobe{padding:0;width:20px}.gl-s.sobe::after{content:"";width:11px;height:11px;box-sizing:border-box;border-radius:50%;border:2px solid #C9D8EC;border-top-color:var(--accent,#1D4F91);animation:glgira 1s linear infinite}',
     '@keyframes glgira{to{transform:rotate(360deg)}}',
     '@media (prefers-reduced-motion:reduce){.gl-s.sobe::after{animation:none}}',
-    '.gl-t .gl-star{right:30px}',
+    '.gl-t .gl-star{right:6px}.gl-t .gl-s+.gl-star{right:30px}',   // v214: sem a setinha, a estrela vai para o canto
     '.gl-t:has(.gl-star) .gl-b{font-size:10.5px}',
     '.gl-leg{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 12px;margin:16px auto 0;padding:6px 12px;width:max-content;max-width:100%;box-sizing:border-box;border:1px solid var(--line,#D5DAD6);border-radius:14px;background:var(--panel,#fff);font-size:12px;color:var(--ink-2,#3B4540)}',
     '.gl-leg span{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}',
@@ -415,6 +438,9 @@
     '  .gl-tab[aria-selected="true"]{font-weight:700}',
     '  .gl-tab small{position:absolute;top:2px;left:calc(50% + 6px);padding:0 4px;border-radius:999px;background:var(--ink,#17201C);color:#fff;font-size:9.5px;font-weight:700;line-height:14px}',
     '  .gl-tab[aria-selected="true"] small{background:#fff;color:var(--ink,#17201C)}}',
+    '@media (max-width:560px){.gl-tab small.at,.gl-tab[aria-selected="true"] small.at{padding:0 4px;background:#B26B00;color:#fff}',
+    // v214 (item 78): três botões que cabem; o período aparece inteiro
+    '  .gl-cb-p{padding:0 8px;gap:5px}.gl-cb-p>span{font-size:13.5px}}',
     '@media (max-width:560px){.gl-fil:empty{display:none}',
     '  .gl-fil>.gl-chip{min-height:44px}',
     '  .gl-cts{overflow:visible;gap:8px}',
@@ -1007,6 +1033,8 @@
     var per = lerPer(), pf = null, perNc = null;   // período escolhido; pf: rascunho da janela do período (null = fechada); perNc: o período para o qual "Fotos de NC" volta
     var itens = [], locais = {}, lista = [], sel = {}, selecionando = false, carregando = false, erroTxt = '', geracao = 0;
     var minis = MINIS, pedindo = {}, fila = {}, filaT = null, obs = null, urlsLocais = [];
+    // v214: ultSel: a última foto clicada na seleção (Shift + clique); contas: a última contagem de Equipe e de Relatório ★ (abas)
+    var ultSel = '', contas = {};
     var ver = -1, grande = null, ocupado = null, cancelar = false, mv = null, guardadas = {}, carregando = null;
     // fLocal: filtro de No aparelho ('aparelho' só aqui, 'fila', 'enviada' no Drive); lote: as fotos que entraram na fila nesta
     // leva (id -> tamanho), para a barra contar "3 de 7" e os MB até a fila esvaziar; semRede: a aba do banco mostra as guardadas
@@ -1022,6 +1050,7 @@
     // v119: conferência com a equipe das fotos guardadas aqui. mantidas: as apagadas que a pessoa quis manter à vista (nesta tela)
     var conf = lerConf(), confT = 0, confAndando = false, confErro = false, mantidas = {};
     aoLimpar.push(function () { conf = { em: 0, q: {}, s: {} }; lsPor(CONF_KEY, null); mantidas = {}; });
+    aoLimpar.push(function () { contas = {}; });
 
     function login() { return o.getLogin ? o.getLogin() : null; }
     function lerConf() {
@@ -1686,7 +1715,7 @@
       if (aba === 'deletadas') return '';
       var lo = locais[it.id];
       if (lo && aba !== 'local') {   // nas abas da equipe continua o ícone (a estrela do relatório fica ao lado)
-        if (lo.situacao === 'enviada') return '<span class="gl-s ok" title="No Drive e neste aparelho">' + IC_NUVEM + '</span>';
+        if (lo.situacao === 'enviada') return '<span class="gl-s ok" title="Baixada neste aparelho (também no Drive)">✓</span>';   // v214 (item 82)
         if (lo.situacao === 'aparelho') return '<span class="gl-s" title="Só neste aparelho">' + IC_APAR + '</span>';
         if (sobemAgora().indexOf(it.id) >= 0) return '<span class="gl-s sobe" title="Subindo para o Drive"></span>';
         return '<span class="gl-s fila" title="Na fila do Drive">fila</span>';
@@ -1714,13 +1743,14 @@
         if (bx.vindo[it.id]) return '<span class="gl-s sobe" title="Baixando"></span>';
         if (bx.pos[it.id] >= bx.i) return '<span class="gl-s fila" title="Na fila do download">fila</span>';
       }
-      return it.driveId && guardadas[it.driveId] ? '<span class="gl-s" title="Baixada neste aparelho">' + IC_APAR + '</span>'
-        : '<span class="gl-s nuvem" title="Só no Drive">' + IC_BAIXA + '</span>';
+      // v214 (item 82): sai a setinha "Só no Drive" de toda foto (parecia um botão de baixar); fica o ✓ da baixada aqui
+      return it.driveId && guardadas[it.driveId] ? '<span class="gl-s ok" title="Baixada neste aparelho">✓</span>' : '';
     }
     function badge(it) {
       if (selecionando) return '';
       if (aba === 'deletadas') return '<span class="gl-b erro">Apagada</span>';
       if (semCar(it)) return '<span class="gl-b sc">Sem carimbo</span>';
+      if (ncIds[it.id]) return '<span class="gl-b nc" title="Foto de não conformidade">NC</span>';   // v214 (item 82)
       if (it.origem === 'banco' && !it.pid && !ehCons(it.cid)) return '<span class="gl-b sp">Sem ponto</span>';
       return '';
     }
@@ -1728,7 +1758,8 @@
       var s1 = function (c, ic, t) { return '<span><span class="gl-s ' + c + '">' + ic + '</span>' + t + '</span>'; };
       if (aba === 'local') return '';   // v119: a situação vem escrita em cada foto
       if (aba === 'deletadas') return '';
-      return '<div class="gl-leg">' + s1('nuvem', IC_BAIXA, 'só no Drive') + s1('', IC_APAR, 'baixada neste aparelho') + '</div>';
+      if (!lista.some(function (x) { return (x.driveId && guardadas[x.driveId]) || (locais[x.id] && locais[x.id].situacao === 'enviada'); })) return '';
+      return '<div class="gl-leg">' + s1('ok', '✓', 'baixada neste aparelho') + '</div>';   // v214: só o ✓ (a setinha saiu)
     }
     // legenda em duas linhas: "P14 · km 756,30" em destaque; embaixo o dia (a hora, quando o grupo já é o dia) e quem tirou.
     // Em "Todos" os contratos, o nº do contrato na frente da 2ª linha ("314 · 16/10 · Bruno")
@@ -1736,7 +1767,7 @@
       var m = miniDe(it), l1 = [it.pnome, kmCurto(it.km)].filter(Boolean).join(' · ') || (ehCons(it.cid) ? 'Sem km' : 'Sem ponto');
       var d = data(it.em), quando = !d ? '' : modo() === 'mes' && porDia() ? pad(d.getHours()) + ':' + pad(d.getMinutes()) : pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
       var quem = (aba === 'todas' || aba === 'relatorio' || aba === 'deletadas' || aba === 'drive') && modo() !== 'pessoa' && it.autor ? it.autor.split(' ')[0] : '';
-      var nCt = !filtro.cid ? ((/(\d+)\s*$/.exec(curto(it.cid)) || [])[1] || curto(it.cid)) : '';
+      var nCt = !filtro.cid && modo() !== 'contrato' ? ((/(\d+)\s*$/.exec(curto(it.cid)) || [])[1] || curto(it.cid)) : '';   // v214: dentro do grupo do contrato, sem o nº
       var l2 = [nCt, quando, quem].filter(Boolean).join(' · ');
       var cap = l1 + (l2 ? ' · ' + l2 : '');
       var rotulo = [it.pid || ehCons(it.cid) ? '' : 'Sem ponto', it.pnome, kmTxt(it.km), quem ? it.autor : '', hora(it.em)].filter(Boolean).join(', ');
@@ -1838,7 +1869,7 @@
       if (!lista.length) return '';
       if (celular() && !selecionando) return '<span class="gl-acts"><button type="button" class="btn small" data-g="selecionar">' + IC_SEL + 'Selecionar</button>' +
         '<button type="button" class="btn small gl-bx" data-g="baixar-tudo" aria-label="Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length + ' fotos') + '">' + IC_BAIXA.replace('aria-hidden', 'width="15" height="15" aria-hidden') + 'Baixar</button></span>';
-      return selecionando ? '<button type="button" class="btn small" data-g="todas">' + (intervaloPer(per) ? 'Tudo do período' : 'Selecionar todas') + ' (' + lista.length + ')</button>'
+      return selecionando ? ''   // v214 (item 84): o "Todas (N)" fica só na barra da seleção
         : '<button type="button" class="btn small" data-g="selecionar">Selecionar</button>' +
           '<button type="button" class="btn small" data-g="baixar-tudo">Baixar ' + (lista.length === 1 ? 'a foto' : 'as ' + lista.length) + '</button>';
     }
@@ -1980,6 +2011,16 @@
       var dentro = ls.filter(function (x) { return x.relatorio; }).length, noDrive = ls.filter(function (x) { return x.origem === 'banco' || (locais[x.id] && locais[x.id].situacao === 'enviada'); }).length;
       var sub = !ls.length ? '' : [bs0 ? tam(bs0) : '', aba === 'local' ? (noDrive ? noDrive + ' no Drive' : 'nenhuma no Drive') : dentro ? (dentro === ls.length ? (ls.length === 1 ? 'já está' : 'todas já estão') : dentro + (dentro === 1 ? ' já está' : ' já estão')) + ' no relatório' : ''].filter(Boolean).join(' · ');
       var todasN = lista.length && ls.length < lista.length ? '<button type="button" class="btn small" data-g="todas">Todas (' + lista.length + ')</button>' : '';
+      if (barTopo()) {
+        // v214 (item 84): uma linha no alto: quantas, as ações, "Todas" e Cancelar; Apagar no fim, separado (a janela de Apagar confirma)
+        var acsT = ls.length ? acoes(ls) : [], apgT = acsT.filter(function (a) { return a.k === 'apagar'; })[0];
+        acsT = acsT.filter(function (a) { return a.k !== 'apagar'; });
+        return '<div class="gl-bar gl-bar-t" role="toolbar" aria-label="Seleção"><span class="gl-n"><b>' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') : 'Clique nas fotos') + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+          (acsT.length ? '<span class="gl-bt-sep" aria-hidden="true"></span>' + acsT.map(function (a) { return botaoAcao(a); }).join('') : '') +
+          '<span class="gl-bt-esp"></span>' + todasN + '<button type="button" class="btn small" data-g="sair-sel">Cancelar</button>' +
+          (apgT ? '<span class="gl-bt-sep" aria-hidden="true"></span>' + botaoAcao(apgT) : '') +
+          (ls.length < 2 ? '<span class="gl-bt-dica"><b>Shift + clique</b> marca de uma vez da última foto clicada até esta.</span>' : '') + '</div>';
+      }
       return '<div class="gl-bar"><div class="gl-bar-top"><span class="gl-n"><b>' + (ls.length ? plural(ls.length, 'selecionada', 'selecionadas') : 'Toque nas fotos') + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
         todasN + '<button type="button" class="btn small" data-g="sair-sel">Cancelar</button></div>' +
         (ls.length ? '<div class="gl-bar-acts">' + acoes(ls).map(function (a) { return botaoAcao(a); }).join('') + '</div>' : '') + '</div>';
@@ -1990,12 +2031,20 @@
       var abas = abasVisiveis(), corpo = q('.gl-body'), top = corpo ? corpo.scrollTop : 0;
       var tabs = q('.gl-tabs');
       tabs.style.setProperty('--n', abas.length);
+      // v214 (item 91): a última contagem de Equipe e de Relatório ★ fica nas abas (sem sinal, a lista é só a guardada: não conta)
+      if (!carregando && !semRede && !erroTxt && (aba === 'todas' || aba === 'relatorio')) {
+        contas[aba] = itens.length;
+        if (aba === 'todas') contas.relatorio = itens.filter(function (x) { return x.relatorio; }).length;
+      }
+      var infF = o.drive && o.drive.info ? o.drive.info() : null, nFila = infF && infF.n || 0;
       tabs.innerHTML = abas.length > 1 ? abas.map(function (a) {
-        var n = a.k === aba && itens.length ? itens.length : 0;
+        var n = a.k === aba && itens.length ? itens.length : 0, at0 = false;
+        if (a.k === 'local' && nFila) { n = nFila; at0 = true; }   // em No aparelho, as que esperam envio
+        else if (!n && contas[a.k] && (a.k === 'todas' || a.k === 'relatorio')) n = contas[a.k];
         return '<button type="button" class="gl-tab" role="tab" data-aba="' + a.k + '" aria-selected="' + (a.k === aba) + '" title="' + esc(a.t) + '"' +
-          (n ? ' aria-label="' + esc(a.t + ', ' + plural(n, 'foto', 'fotos')) + '"' : '') + '>' +
+          (n ? ' aria-label="' + esc(a.t + ', ' + (at0 ? plural(n, 'esperando envio', 'esperando envio') : plural(n, 'foto', 'fotos'))) + '"' : '') + '>' +
           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + a.ic + '</svg>' +
-          '<span class="gl-tab-t">' + esc(a.t) + '</span><span class="gl-tab-c" aria-hidden="true">' + esc(a.c || a.t) + '</span>' + (n ? '<small>' + n + '</small>' : '') + '</button>';
+          '<span class="gl-tab-t">' + esc(a.t) + '</span><span class="gl-tab-c" aria-hidden="true">' + esc(a.c || a.t) + '</span>' + (n ? '<small' + (at0 ? ' class="at"' : '') + '>' + n.toLocaleString('pt-BR') + '</small>' : '') + '</button>';
       }).join('') : '';
       renderEnv();
       q('.gl-cts').innerHTML = celular() ? barraCel() : aba === 'drive' || largo() ? '' : contratosHtml();   // v212: no computador os contratos vão na linha dos filtros
@@ -2060,10 +2109,8 @@
       if (aba !== 'drive' || !emCartoes()) {
         h += '<button type="button" class="gl-ct gl-cb-p" data-g="cel-per" aria-haspopup="dialog" aria-label="Período: ' + esc(rotuloPer(per)) + '">' + CAL + '<span>' + esc(rotuloPer(per)) + '</span>' + SETA + '</button>';
       }
-      // com o ⋯ (ações do Drive do Administrador) não cabe tudo: Filtros fica só com o ícone
-      var mais = !!maisHtml();
-      if (filtrosHtml(true)) { var n = nFiltros(); h += '<button type="button" class="gl-ct gl-cb-f' + (mais ? ' gl-cb-fi' : '') + '" data-g="cel-fil" aria-haspopup="dialog"' + (n || mais ? ' aria-label="Filtros' + (n ? ', ' + n + (n === 1 ? ' ligado' : ' ligados') : '') + '"' : '') + '>' + IC_FIL + (mais ? '' : 'Filtros') + (n ? '<b class="gl-cb-n">' + n + '</b>' : '') + '</button>'; }
-      if (mais) h += '<button type="button" class="gl-ct gl-cb-m" data-g="cel-mais" aria-haspopup="dialog" aria-label="Mais ações">⋯</button>';
+      // v214 (item 78): três botões que cabem (contrato, período inteiro, Filtros); as ações do Drive do Administrador vão para o fim da folha Filtros
+      if (filtrosHtml(true) || maisHtml()) { var n = nFiltros(); h += '<button type="button" class="gl-ct gl-cb-f" data-g="cel-fil" aria-haspopup="dialog"' + (n ? ' aria-label="Filtros, ' + n + (n === 1 ? ' ligado' : ' ligados') + '"' : '') + '>' + IC_FIL + 'Filtros' + (n ? '<b class="gl-cb-n">' + n + '</b>' : '') + '</button>'; }
       return h;
     }
     function abrirFo(qual) {
@@ -2085,6 +2132,8 @@
       var a = document.activeElement, at = a && el.contains(a) ? ['data-f', 'data-k', 'data-v', 'data-g'].filter(function (x) { return a.hasAttribute(x); })[0] : '';
       var sel0 = at ? '[' + at + '="' + cssId(a.getAttribute(at)) + '"]' : '';
       el.querySelector('.gl-fo-c').innerHTML = fo === 'per' ? perHtml() : filtrosHtml(true);
+      var mhF = fo === 'per' ? '' : maisHtml();   // v214 (item 78): o que era o "⋯"
+      if (mhF) el.querySelector('.gl-fo-c').insertAdjacentHTML('beforeend', '<div class="gl-fo-l gl-fo-mais"><span>Mais ações</span><div class="gl-fo-ma">' + mhF + '</div></div>');
       el.querySelector('.gl-fo-rod').innerHTML = (aba === 'todas' && nv() >= 2 ? '<p class="gl-fo-nota">' + NOTA_ESTRELA + '</p>' : '') +
         '<div class="gl-fo-ver"><button type="button" class="btn primary" data-g="fo-fechar">Ver ' + plural(lista.length, 'foto', 'fotos') + '</button></div>';
       var b = sel0 && !el.contains(document.activeElement) && el.querySelector(sel0);
@@ -2184,7 +2233,9 @@
       var info = q('.gl-info'), bt = info && info.querySelector('.gl-recolher');
       if (!rec && !celular() && info && !bt && lista.length > 6 && filtrosAltos()) info.insertAdjacentHTML('beforeend', '<div class="gl-recolher"><button type="button" data-g="rec-fechar">\u25b4 Recolher filtros</button></div>');
     }
-    function renderBar() { if (!root) return; q('.gl-barhost').innerHTML = barHtml(); root.classList.toggle('gl-selon', selecionando && !ocupado); root.classList.toggle('gl-ocupon', !!ocupado); }
+    // v214 (item 84): no computador e no tablet a barra da seleção vai para o alto; no celular continua embaixo
+    function barTopo() { return selecionando && !ocupado && !celular(); }
+    function renderBar() { if (!root) return; root.classList.toggle('gl-selt', barTopo()); q('.gl-barhost').innerHTML = barHtml(); root.classList.toggle('gl-selon', selecionando && !ocupado); root.classList.toggle('gl-ocupon', !!ocupado); }
     function renderEnv() { if (root) { var e = q('.gl-env'); if (e) e.innerHTML = envioHtml() + baixaHtml() + (semRede && aba !== 'local' ? '<div class="gl-off">Sem conexão: mostrando ' + (semRede === 1 ? 'a foto baixada' : 'as ' + semRede + ' fotos baixadas') + ' neste aparelho.</div>' : ''); } }
 
     // ---------------------------------------------------------------- barra de envio ao Drive
@@ -3360,7 +3411,18 @@
       if (t.classList.contains('gl-t')) {
         var i = +t.getAttribute('data-i'), it = lista[i];
         if (!it) return;
-        if (selecionando) { if (sel[it.id]) delete sel[it.id]; else sel[it.id] = 1; t.setAttribute('aria-pressed', !!sel[it.id]); renderBar(); }
+        if (selecionando) {
+          // v214 (item 86): Shift + clique marca de uma vez da última foto clicada até esta, na ordem em que estão na tela
+          var tsS = e.shiftKey && ultSel ? [].slice.call(root.querySelectorAll('.gl-body .gl-t')) : [];
+          var pA = tsS.indexOf(t), pB = -1;
+          tsS.some(function (x, k) { if (x.getAttribute('data-id') === ultSel) { pB = k; return true; } return false; });
+          if (pA >= 0 && pB >= 0 && pA !== pB) {
+            tsS.slice(Math.min(pA, pB), Math.max(pA, pB) + 1).forEach(function (x) { var y = lista[+x.getAttribute('data-i')]; if (y) { sel[y.id] = 1; x.setAttribute('aria-pressed', 'true'); } });
+            try { var sl = window.getSelection && window.getSelection(); if (sl) sl.removeAllRanges(); } catch (e2) { /* nada */ }
+          } else { if (sel[it.id]) delete sel[it.id]; else sel[it.id] = 1; t.setAttribute('aria-pressed', !!sel[it.id]); }
+          ultSel = it.id;
+          renderBar();
+        }
         else abrir(i);
         return;
       }
@@ -3374,7 +3436,7 @@
       // v190: o selo de um filtro ligado (pessoa, ponto, situação) tira o filtro
       if (g === 'f-tirar') { var fk = t.getAttribute('data-f'); if (fk === 'fl') fLocal = ''; else filtro[fk] = ''; sel = {}; render(); return; }
       if (g === 'fo-fechar') { fecharFo(); return; }
-      if (t.closest('.gl-sh.ma')) { fecharFo(false, function () { acaoMais(g); }); return; }
+      if (t.closest('.gl-sh.ma') || t.closest('.gl-fo-mais')) { fecharFo(false, function () { acaoMais(g); }); return; }
       if (g === 'desfazer') { var df = desfazerFn; fecharAviso(); if (df) df(); return; }
       // v119: cópias de fotos apagadas da equipe, conferência com a equipe e o aviso que fica até fechar
       if (g === 'apg-tirar') { tirarCopias(apagadasAqui()); return; }
@@ -3486,7 +3548,7 @@
     }
     // as ações que no celular ficam em "Mais ações": os mesmos botões, de um lugar só
     function acaoMais(g) {
-      if (g === 'selecionar') { selecionando = true; sel = {}; render(); }
+      if (g === 'selecionar') { selecionando = true; sel = {}; ultSel = ''; render(); }
       else if (g === 'baixar-tudo') baixar(lista.slice());
       else if (g === 'drive-trazer') trazerDoDrive();
       else if (g === 'drive-pastas') pastasDrive();
