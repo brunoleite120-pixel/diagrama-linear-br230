@@ -10,7 +10,7 @@
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
     var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
     // v202: o contrato aberto tem as partes Medições e Pagamentos; na tabela dos pagamentos, todas as linhas ou só as não pagas
-    var secao = 'med', pagTodas = false, pagAbertas = false;
+    var secao = 'med', pagTodas = false, pagAbertas = false, confTodos = false, ordSit = 'prazo';
     var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '', folha = false, folhaHist = false, folhaPula = false;
     var mqCel = window.matchMedia ? window.matchMedia('(max-width:700px)') : null;
     var meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -201,8 +201,8 @@
     }
     function cabecalho(cs) {
       var carregados = cs.filter(function (c) { var d = dado(c); return d && d.ms.length; }).length;
-      return '<div class="md-top"><div><h1>' + (modo === 'mes' ? 'Medições por mês' : 'Medições dos contratos') + '</h1><p>' + carregados + ' de ' + cs.length + ' contratos com medições carregadas. Valores a preços iniciais (PI).</p></div>' +
-        '<div class="seg md-modo" role="group" aria-label="Organização">' + [['contrato', 'Por contrato'], ['mes', 'Por mês']].map(function (x) {
+      return '<div class="md-top"><div><h1>' + (modo === 'mes' ? 'Medições por mês' : modo === 'sit' ? 'Situação no SIAC' : 'Medições dos contratos') + '</h1><p>' + carregados + ' de ' + cs.length + ' contratos com medições carregadas.' + (modo === 'sit' ? ' Pagamento, empenho, prazos e garantia.' : ' Valores a preços iniciais (PI).') + '</p></div>' +
+        '<div class="seg md-modo" role="group" aria-label="Organização">' + [['contrato', 'Por contrato'], ['mes', 'Por mês'], ['sit', 'Situação']].map(function (x) {
           return '<button type="button" data-md="modo" data-v="' + x[0] + '" aria-pressed="' + (modo === x[0]) + '">' + x[1] + '</button>';
         }).join('') + '</div></div>';
     }
@@ -215,16 +215,18 @@
       else {
         h += '<div><div class="md-medido"><span><b>' + moeda(d.total) + '</b> medido</span><span title="' + esc(d.base) + '">' + (d.pi != null ? 'de ' + moeda(d.pi) + ' (' + esc(d.base.replace(/ \(.+\)$/, '')) + ')' : 'falta o PI') + '</span></div>' + reajHtml(d) + barra(d) +
           '<div class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' do valor medido (PI)' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></div></div>';
-        h += '<dl class="md-dl"><div><dt>Ritmo (últimos 6 meses)</dt><dd title="' + esc(ritmoTxt(d)) + '">' + (d.ritmo == null ? 'Sem base' : moeda(d.ritmo, '/mês')) + '</dd></div><div><dt>No ritmo atual</dt><dd title="' + esc(projTxt(d)) + '">' + esc(projTxt(d, true)) + '</dd></div>' +
-          '<div><dt>Medições</dt><dd>' + d.ms.length + ' (' + d.comValor + ' com valor)</dd></div><div><dt>Avisos da leitura</dt><dd>' + avisos(d).length + '</dd></div></dl>' +
-          '<div class="md-acoes"><small class="' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</small>' + botao('abrir', 'Abrir medições →', attrs) + '</div>';
+        var sdl = siacDl(c, d);
+        if (sdl) h += '<dl class="md-dl">' + sdl + '</dl>';
+        else h += '<dl class="md-dl"><div><dt>Ritmo (últimos 6 meses)</dt><dd title="' + esc(ritmoTxt(d)) + '">' + (d.ritmo == null ? 'Sem base' : moeda(d.ritmo, '/mês')) + '</dd></div><div><dt>No ritmo atual</dt><dd title="' + esc(projTxt(d)) + '">' + esc(projTxt(d, true)) + '</dd></div>' +
+          '<div><dt>Medições</dt><dd>' + d.ms.length + ' (' + d.comValor + ' com valor)</dd></div><div><dt>Avisos da leitura</dt><dd>' + avisos(d).length + '</dd></div></dl>';
+        h += '<div class="md-acoes"><small class="' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</small>' + botao('abrir', 'Abrir medições →', attrs) + '</div>';
         if (op.estado(c) === 'carregando') h += '<small role="status">Atualizando a análise…</small>';
         if (op.estado(c) === 'erro') h += estadoHtml(c);
       }
       h += '</article>';
       if (!d || !d.ms.length) return h.replace('md-card-desktop', 'md-card-estado');
       return h + '<button type="button" class="card md-card md-card-cel" data-md="abrir"' + attrs + ' aria-label="' + esc('Abrir medições de ' + nome(c) + '; última: ' + d.ult.n + 'ª · ' + mesTxt(d.ultima) + '; ' + baseTxt(d) + '; saldo: ' + (d.pi != null ? dinheiro(d.pi - d.total) : 'falta o PI') + '; ' + falta(d)) + '"><span class="md-cel-top"><b>' + esc(nome(c)) + '</b><span>Última: <b>' + esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)) + '</b></span></span>' + barra(d) +
-        '<span class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' do valor medido (PI)' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></span><span class="md-falta ' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</span></button>';
+        '<span class="md-saldo"><b class="md-accent">' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) + ' do valor medido (PI)' : 'falta o PI') + '</b><span>Saldo <b>' + (d.pi != null ? moeda(d.pi - d.total) : 'falta o PI') + '</b></span></span>' + celChips(c, d) + '<span class="md-falta ' + (d.ultima < hoje() - 1 ? 'md-aviso' : '') + '">' + esc(falta(d)) + '</span></button>';
     }
     function semMedicoes(c) {
       var d = dado(c);
@@ -235,12 +237,12 @@
       return !csSem.length ? '' : '<div class="md-sem-med"><span>Ainda sem medições carregadas:</span> ' + (pilulas ? csSem.map(function (c) { return '<span class="md-sem-pill">' + esc(nome(c)) + '</span>'; }).join('') : esc(csSem.map(nome).join(', '))) + '</div>';
     }
     function inicioHtml(cs) {
-      var soma = 0, n = 0, al = 0, ultTipos = {};
-      cs.forEach(function (c) { var d = dado(c), t = tipoCurto(c); if (d && d.ms.length) { soma += d.total; n++; al += avisos(d).length; if (d.ultima != null && (ultTipos[t] == null || d.ultima > ultTipos[t])) ultTipos[t] = d.ultima; } });
+      var soma = 0, n = 0, al = 0, ultTipos = {}, apg = 0, napg = 0, emp = 0, nemp = 0;
+      cs.forEach(function (c) { var d = dado(c), t = tipoCurto(c); if (d && d.ms.length) { soma += d.total; n++; al += avisos(d).length; var pg0 = pags(d), e0 = empMed(d); apg += pg0.aPagar; napg += pg0.abertas.length; if (e0) { emp += e0.saldo; nemp++; } if (d.ultima != null && (ultTipos[t] == null || d.ultima > ultTipos[t])) ultTipos[t] = d.ultima; } });
       var ult = ['OAEs', 'conservação', 'sinalização', 'pontos críticos', 'supervisão'].filter(function (t) { return ultTipos[t] != null; }).map(function (t) { return mesTxt(ultTipos[t]) + ' ' + t; }).join(' · ');
       var h = cabecalho(cs) + '<div class="md-filtros"><label class="md-busca">Buscar serviço<input type="search" id="mdBusca" placeholder="Nome ou código: roçada, 50821…" value="' + esc(busca) + '"></label>' +
         '<label class="md-ordenar">Ordenar<select id="mdOrdem">' + [['km', 'pelo km'], ['saldo', 'menor saldo'], ['antiga', 'medição mais antiga'], ['avisos', 'mais avisos']].map(function (x) { return '<option value="' + x[0] + '"' + (ordem === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>' +
-        '<div id="mdBuscaRes" aria-live="polite">' + buscaHtml(cs) + '</div><div class="md-resumo card"><div><span class="md-label">Medido nos ' + n + ' contratos carregados (PI)</span><strong>' + moeda(soma) + '</strong></div><div><span class="md-label">Última competência</span><strong>' + esc(ult || '—') + '</strong></div><div><span class="md-label">Avisos para conferir</span><strong>' + al + '</strong></div></div>';
+        '<div id="mdBuscaRes" aria-live="polite">' + buscaHtml(cs) + '</div><div class="md-resumo card"><div><span class="md-label">Medido nos ' + n + ' contratos carregados (PI)</span><strong>' + moeda(soma) + '</strong></div><div><span class="md-label">Última competência</span><strong>' + esc(ult || '—') + '</strong></div>' + (nemp ? '<div><span class="md-label">A pagar no SIAC</span><strong>' + (napg ? moeda(apg) + ' <small>' + nMed(napg) + '</small>' : 'Nada') + '</strong></div><div><span class="md-label">Saldo de empenho (' + nemp + ' contratos)</span><strong>' + moeda(emp) + '</strong></div>' : '<div><span class="md-label">Avisos para conferir</span><strong>' + al + '</strong></div>') + '</div>';
       var list = cs.slice().sort(function (a, b) {
         var da = dado(a), db = dado(b), va, vb;
         if (ordem === 'saldo') { va = da && da.pi != null ? da.pi - da.total : Infinity; vb = db && db.pi != null ? db.pi - db.total : Infinity; }
@@ -550,6 +552,128 @@
       if (celular()) return '<div class="md-ct-grid"><div class="md-ct-col">' + vc + prazosHtml(c, d) + aditivosHtml(d) + (emp ? empenhoHtml(d, emp) : '') + garantiaHtml(d) + fonteCtHtml(d) + '</div></div>';
       var esq = vc + aditivosHtml(d), dir = prazosHtml(c, d) + (emp ? empenhoHtml(d, emp) : '') + garantiaHtml(d) + fonteCtHtml(d);
       return '<div class="md-ct-grid"><div class="md-ct-col">' + esq + '</div><div class="md-ct-col">' + dir + '</div></div>';
+    }
+    // v205: Situação (3ª organização), "Para conferir" (também na faixa da tela inicial), cartões com o SIAC e marca de a pagar em Por mês
+    var ABAS = { med: 'Medições', pag: 'Pagamentos', ct: 'Contrato' };
+    function empMed(d) {
+      var e = d.an.siac && d.an.siac.empenho, sd = e ? numero(e.saldo) : null;
+      if (sd == null) return null;
+      var p = pags(d), md = media6(d);
+      return { saldo: sd, sobra: sd - p.aPagar, media: md, cobre: md == null ? null : sd - p.aPagar >= md };
+    }
+    function mesesSem(d) { return d.ultima == null ? null : Math.max(0, hoje() - 1 - d.ultima); }
+    function confItens() {
+      var its = [], semEmp = [], parados = [], total = 0;
+      var item = function (tom, tipo, quem, cid, txt, ab, ord) { its.push({ tom: tom, tipo: tipo, quem: quem, cid: cid, txt: txt, ab: ab, ord: ord }); };
+      permitidos().forEach(function (c) {
+        var d = dado(c);
+        if (!d || !d.ms.length) return;
+        total++;
+        var nm = nome(c), p = prazosCt(c, d), ne = dias(p.exe), nv = dias(p.vig), f = fichaS(d) || {}, fe = diaIso(f.termino_execucao) ? f.termino_execucao : null;
+        if (nv != null && nv < 0) item('dg', 'Prazo', nm, c.id, 'A vigência terminou em ' + dataTxt(p.vig) + '.', 'ct', nv);
+        else if (ne != null && ne < 0) item('dg', 'Prazo', nm, c.id, 'Execução vencida desde ' + dataTxt(p.exe) + (p.vig && p.vig !== p.exe && nv != null ? '; a vigência vai até ' + dataTxt(p.vig) + ' (' + nv + (nv === 1 ? ' dia' : ' dias') + ').' : '.'), 'ct', ne);
+        else if (ne != null && ne <= 120) item(ne <= 45 ? 'dg' : 'at', 'Prazo', nm, c.id, 'A execução termina em ' + dataTxt(p.exe) + ' (' + ne + (ne === 1 ? ' dia' : ' dias') + ').', 'ct', ne);
+        // o cadastro (conferido no SEI) já leva o prazo adiante, mas o SIAC ainda não
+        var fs = foraSiac(c), nf = dias(fe);
+        if (fe && p.exe && fe < p.exe && nf != null && nf <= 120) fs = [{ t: 'No SIAC a execução ' + (nf < 0 ? 'terminou' : 'termina') + ' em ' + dataTxt(fe) + '; no cadastro, em ' + dataTxt(p.exe), v: '' }].concat(fs);
+        if (fs.length) item('az', 'Fora do SIAC', nm, c.id, fs.map(function (x) { return x.t + (x.v ? ' (' + x.v + ')' : ''); }).join('; ') + '.', 'ct', 9000);
+        var g = d.an.siac && d.an.siac.garantia, ng = g ? dias(g.vencimento) : null;
+        if (ng != null && ng <= 90) item(ng <= 30 ? 'dg' : 'at', 'Garantia', nm, c.id, (ng < 0 ? 'A garantia venceu em ' : 'A garantia vence em ') + dataTxt(g.vencimento) + (ng >= 0 ? ' (' + ng + (ng === 1 ? ' dia' : ' dias') + ').' : '.'), 'ct', ng);
+        pags(d).abertas.forEach(function (m) {
+          var sm = sMed(d, m.n), pg = sm && sm.pagamento, idade = pg && pg.data ? -dias(pg.data) : null;
+          item(idade != null && idade > 60 ? 'dg' : 'at', 'Pagamento', nm, c.id, m.n + 'ª medição (' + mesTxt(idx(m.ref)) + ') com AES emitido' + (pg && pg.data ? ' em ' + dataTxt(pg.data) : '') + (idade > 60 ? ', há ' + idade + ' dias' : '') + ': ' + dinheiro(totalMed(d, m)) + ' ainda sem pagamento aprovado.', 'pag', idade != null ? -idade : 0);
+        });
+        var e = empMed(d);
+        if (e && e.cobre === false) semEmp.push(c);
+        var ms = mesesSem(d);
+        if (ms != null && ms >= 4 && !(ne != null && ne < 0)) parados.push(c);
+      });
+      if (semEmp.length) item('at', 'Empenho', semEmp.length === 1 ? nome(semEmp[0]) : semEmp.length + ' de ' + total, semEmp.length === 1 ? semEmp[0].id : '',
+        (semEmp.length === 1 ? 'O saldo de empenho' : 'Em ' + semEmp.length + ' contratos, o saldo de empenho') + ', depois do que está a pagar, não cobre a próxima medição (média das 6 últimas)' + (semEmp.length > 1 ? ': ' + lista(semEmp.map(curto)) : '') + '.', 'pag', 8000);
+      if (parados.length) item('at', 'Medição', parados.length === 1 ? nome(parados[0]) : parados.length + ' de ' + total, parados.length === 1 ? parados[0].id : '',
+        'Sem medição nova no SIAC há 4 meses ou mais: ' + lista(parados.map(function (c) { return curto(c) + ' (desde ' + mesTxt(dado(c).ultima) + ')'; })) + '.', 'med', 8500);
+      var rk = { dg: 0, at: 1, az: 2 };
+      return its.sort(function (a, b) { return rk[a.tom] - rk[b.tom] || a.ord - b.ord; });
+    }
+    function confItemHtml(x) {
+      return '<li class="md-conf-it ' + x.tom + '"><div class="md-conf-q">' + chipTom(x.tipo, x.tom) + '<b>' + esc(x.quem) + '</b></div><span class="md-conf-txt">' + esc(x.txt) + '</span>' +
+        (x.cid ? botao('abrir-ab', 'Abrir', ' data-cid="' + esc(x.cid) + '" data-ab="' + x.ab + '" aria-label="' + esc('Abrir ' + x.quem + ' em ' + ABAS[x.ab]) + '"', 'small ghost md-accent md-conf-abrir') : '') + '</li>';
+    }
+    function confHtml(its) {
+      var cel = celular(), mostra = cel && !confTodos ? its.slice(0, 3) : its, nDg = its.filter(function (x) { return x.tom === 'dg'; }).length;
+      var h = '<section class="card md-conf" aria-label="Para conferir"><div class="md-pg-tit"><h2>Para conferir</h2>' + (its.length ? chipTom(String(its.length), nDg ? 'dg' : 'at') : chipTom('nada', 'ok', IC_OK)) + '<small>Prazo, garantia, pagamento e empenho, do mais urgente para o menos. Some quando o SIAC mudar.</small></div>';
+      if (!its.length) return h + vazio('Nada para conferir nos contratos carregados.') + '</section>';
+      h += '<ul class="md-conf-lista">' + mostra.map(confItemHtml).join('') + '</ul>';
+      if (mostra.length < its.length || (cel && confTodos)) h += botao('conf-todos', confTodos ? 'Mostrar só os 3 primeiros ▴' : 'Ver os ' + its.length + ' ▾', '', 'ghost md-accent md-pg-mais');
+      return h + '</section>';
+    }
+    function sitTd(v, sub, tom) { return '<td><div class="md-sit-c"><span>' + v + '</span>' + (sub ? '<small class="' + (tom && tom !== 'ok' ? tom : '') + '">' + esc(sub) + '</small>' : '') + '</div></td>'; }
+    function pagUlt(d) {
+      var st = pagSit(d, d.ult), t = pagTxt(d, d.ult);
+      return st === 'apagar' ? '<span class="md-chip-pg apagar">' + IC_REL + esc(t) + '</span>' : st === 'paga' ? '<span class="md-pg-ok">' + IC_OK + esc(t) + '</span>' : esc(t || '—');
+    }
+    function sitOrd(cs) {
+      var k = function (c) { var d = dado(c), v = d ? dias(prazosCt(c, d).exe) : null; return v == null ? 1e9 : v; };
+      return cs.slice().sort(function (a, b) { return ordSit === 'prazo' ? k(a) - k(b) || nome(a).localeCompare(nome(b)) : nome(a).localeCompare(nome(b)); });
+    }
+    function sitLinhaHtml(c) {
+      var d = dado(c), p = prazosCt(c, d), ne = dias(p.exe), nv = dias(p.vig), g = d.an.siac && d.an.siac.garantia, ng = g ? dias(g.vencimento) : null, e = empMed(d), ms = mesesSem(d);
+      return '<tr>' + '<th scope="row">' + botao('abrir-ab', '<b>' + esc(nome(c)) + '</b><small>' + esc(tipoNome(c, 1) + (c.executora ? ' · ' + String(c.executora).split(/\s+/)[0] : '')) + '</small>', ' data-cid="' + esc(c.id) + '" data-ab="ct" aria-label="' + esc('Abrir ' + nome(c) + ' em Contrato') + '"', 'ghost md-sit-ct') + '</th>' +
+        sitTd(d.pi > 0 ? esc(pctCurto(d.total / d.pi * 100)) : '—', d.pi > 0 ? 'de ' + compacto(d.pi) : 'falta o PI') +
+        sitTd(esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)), ms ? 'há ' + ms + (ms === 1 ? ' mês' : ' meses') : 'em dia', ms >= 4 ? 'at' : '') +
+        '<td>' + pagUlt(d) + '</td>' +
+        sitTd(e ? esc(dinheiro(e.saldo)) : '—', e ? (e.cobre === false ? 'não cobre a próxima' : e.cobre ? 'cobre a próxima' : '') : '', e && e.cobre === false ? 'at' : '') +
+        sitTd(p.exe ? esc(dataTxt(p.exe)) : '—', diasTxt(ne), tomDias(ne, 45, 120)) +
+        sitTd(p.vig ? esc(dataTxt(p.vig)) : '—', diasTxt(nv), tomDias(nv, 45, 120)) +
+        sitTd(g && g.vencimento ? esc(dataTxt(g.vencimento)) : '—', diasTxt(ng), tomDias(ng, 30, 90)) + '</tr>';
+    }
+    function sitCartaoHtml(c) {
+      var d = dado(c), p = prazosCt(c, d), ne = dias(p.exe), g = d.an.siac && d.an.siac.garantia, ng = g ? dias(g.vencimento) : null, e = empMed(d), ms = mesesSem(d), ch = '';
+      if (ne != null && ne < 0) ch += chipTom('execução vencida', 'dg');
+      else if (ne != null && ne <= 120) ch += chipTom('execução em ' + ne + ' dias', ne <= 45 ? 'dg' : 'at');
+      if (ng != null && ng <= 90) ch += chipTom(ng < 0 ? 'garantia vencida' : 'garantia em ' + ng + ' dias', ng <= 30 ? 'dg' : 'at');
+      pags(d).abertas.forEach(function (m) { ch += chipTom(m.n + 'ª a pagar', 'at', IC_REL); });
+      if (e && e.cobre === false) ch += chipTom('empenho não cobre', 'at');
+      if (ms >= 4) ch += chipTom(ms + ' meses sem medição', 'at');
+      if (foraSiac(c).length) ch += chipTom('fora do SIAC', 'az');
+      if (!ch) ch = chipTom('em dia', 'ok', IC_OK);
+      return '<li>' + botao('abrir-ab', '<span class="md-sit-top"><span><b>' + esc(nome(c)) + '</b><small>' + esc(tipoNome(c, 1) + (c.executora ? ' · ' + String(c.executora).split(/\s+/)[0] : '')) + '</small></span><span class="md-sit-dir"><b>' + esc(d.pi > 0 ? pctCurto(d.total / d.pi * 100) : '—') + '</b> medido<small>' + esc(d.ult.n + 'ª · ' + mesTxt(d.ultima)) + '</small></span></span>' +
+        '<span class="md-sit-chips">' + ch + '</span><span class="md-sit-pe"><span>Empenho <b>' + esc(e ? compacto(e.saldo) : '—') + '</b></span><span>Execução até <b>' + esc(p.exe ? dataTxt(p.exe) : '—') + '</b></span></span>',
+        ' data-cid="' + esc(c.id) + '" data-ab="ct" aria-label="' + esc('Abrir ' + nome(c) + ' em Contrato') + '"', 'md-sit-card') + '</li>';
+    }
+    function situacaoHtml(cs) {
+      var com = cs.filter(function (c) { var d = dado(c); return d && d.ms.length; }), obras = sitOrd(com.filter(function (c) { return !ehSup(c); })), sups = sitOrd(com.filter(ehSup)), cel = celular();
+      var qs = [];
+      com.forEach(function (c) { var q = dado(c).an.siac && dado(c).an.siac.consulta; if (q && qs.indexOf(q) < 0) qs.push(q); });
+      var h = cabecalho(cs) + confHtml(confItens());
+      h += '<div class="md-sit-ctl"><h2>Contratos</h2><small>' + esc(com.length + ' contratos' + (qs.length ? ' · consulta ao SIAC de ' + qs.sort().map(dataTxt).join(', ') : '')) + '</small><label class="md-ordenar">Ordem<select id="mdOrdSit"><option value="prazo"' + (ordSit === 'prazo' ? ' selected' : '') + '>fim da execução mais perto</option><option value="nome"' + (ordSit === 'nome' ? ' selected' : '') + '>número do contrato</option></select></label></div>';
+      if (cel) {
+        h += '<ul class="md-sit-lista">' + obras.map(sitCartaoHtml).join('') + '</ul>';
+        if (sups.length) h += '<h2 class="md-sec">Supervisão</h2><ul class="md-sit-lista">' + sups.map(sitCartaoHtml).join('') + '</ul>';
+      } else {
+        h += '<div class="card md-scroll md-sit-tab" tabindex="0" role="region" aria-label="Situação dos contratos, tabela com rolagem"><table class="md-tabela md-sit-tabela"><thead><tr><th scope="col">Contrato</th><th scope="col">Medido ÷ PI vigente</th><th scope="col">Última medição</th><th scope="col">Pagamento da última</th><th scope="col">Saldo de empenho</th><th scope="col">Fim da execução</th><th scope="col">Fim da vigência</th><th scope="col">Garantia até</th></tr></thead><tbody>' +
+          obras.map(sitLinhaHtml).join('') + (sups.length ? '<tr class="md-sit-sep"><th scope="rowgroup" colspan="8">Supervisão</th></tr>' + sups.map(sitLinhaHtml).join('') : '') + '</tbody></table></div>';
+      }
+      h += semMedicoesHtml(cs, true);
+      return h + '<p class="md-legenda">Saldo de empenho comparado com a média das 6 últimas medições (PI + reajuste), depois do que está a pagar. Prazos: vermelho até 45 dias ou vencido, amarelo até 120 (garantia: 30 e 90). Os prazos são os do cadastro conferido; quando o SIAC ainda não tem o termo, o item aparece em "Fora do SIAC". Tocar no contrato abre a aba Contrato.</p>';
+    }
+    // a linha do cartão de Por contrato com o SIAC; sem os dados do SIAC, o cartão fica como antes
+    function siacDl(c, d) {
+      if (!d.an.siac) return '';
+      var p = prazosCt(c, d), ne = dias(p.exe), e = empMed(d), st = pagSit(d, d.ult), fs = foraSiac(c), tn = tomDias(ne, 45, 120);
+      return '<div><dt>Pagamento da última</dt><dd' + (st === 'apagar' ? ' class="md-dd-at"' : '') + '>' + esc(pagTxt(d, d.ult) || '—') + '</dd></div>' +
+        '<div><dt>Saldo de empenho</dt><dd' + (e && e.cobre === false ? ' class="md-dd-at" title="' + esc('Depois do que está a pagar, não cobre a próxima medição (média das 6 últimas: ' + dinheiro(e.media) + ')') + '"' : '') + '>' + (e ? moeda(e.saldo) + (e.cobre === false ? ' · não cobre' : '') : '—') + '</dd></div>' +
+        '<div><dt>Fim da execução</dt><dd' + (tn && tn !== 'ok' ? ' class="md-dd-' + tn + '"' : '') + '>' + esc(p.exe ? dataTxt(p.exe) + ' · ' + diasTxt(ne) : '—') + '</dd></div>' +
+        '<div><dt>No ritmo atual</dt><dd title="' + esc(projTxt(d)) + '">' + esc(projTxt(d, true)) + '</dd></div>' +
+        (fs.length ? '<div class="md-dl-todo"><dt>Fora do SIAC</dt><dd class="md-dd-az">' + esc(fs.map(function (x) { return x.t; }).join('; ')) + '</dd></div>' : '');
+    }
+    function celChips(c, d) {
+      if (!d.an.siac) return '';
+      var p = prazosCt(c, d), ne = dias(p.exe), e = empMed(d), ch = '';
+      pags(d).abertas.forEach(function (m) { ch += chipTom(m.n + 'ª a pagar', 'at', IC_REL); });
+      if (ne != null && ne < 0) ch += chipTom('execução vencida', 'dg'); else if (ne != null && ne <= 120) ch += chipTom('execução em ' + ne + ' dias', ne <= 45 ? 'dg' : 'at');
+      if (e && e.cobre === false) ch += chipTom('empenho não cobre', 'at');
+      return ch ? '<span class="md-sit-chips">' + ch + '</span>' : '';
     }
     function contratoHtml(c) {
       var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + (ehSup(c) ? '' : botao('diagrama', 'Ver no diagrama', ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama')) + '</div>';
@@ -902,13 +1026,17 @@
         return '<th scope="col">' + (cel ? '' : '<button type="button" class="md-barra-mes" data-md="mes" data-v="' + i + '" aria-pressed="' + (i === mesSel) + '" aria-label="' + esc(tot) + '" title="' + esc(tot) + '"><i class="' + (i === mesSel ? 's' : parc ? 'p' : '') + '" style="height:' + Math.max(2, s.tot / topo * 44).toFixed(1) + 'px"></i></button>') +
           botao('mes', esc(mesTxt(i)) + '<small>' + (sub || '&nbsp;') + '</small>', ' data-v="' + i + '" aria-pressed="' + (i === mesSel) + '"' + (parc ? ' aria-label="' + esc(mesTxt(i) + ', faltam ' + s.nf + ' contratos no SIAC') + '"' : ''), 'md-mh' + (parc ? ' parc' : '')) + '</th>';
       }).join('') + (cel ? '' : '<th scope="col" class="md-x">12 meses<small>' + esc(mesTxt(doze) + ' a ' + mesTxt(max)) + '</small></th><th scope="col" class="md-x">Última<small>no SIAC</small></th>') + '</tr></thead><tbody>';
-      var t12 = 0;
+      var t12 = 0, temApagar = false;
       carregados.forEach(function (c) {
         var d = dado(c), consulta = d.an.siac && d.an.siac.consulta, lt = loteCurto(c);
         h += '<tr><th scope="row" class="md-nm" title="' + esc(nome(c)) + '">' + (cel ? '<b>' + esc(curto(c).replace(/^CT /, '')) + '</b><small>' + esc(tipoNome(c, 2) + (lt && c.tipo !== 'oae' ? ' · ' + lt : '')) + '</small>'
           : esc(curto(c)) + '<small>' + esc(c.tipo === 'oae' ? 'OAEs' : [c.lote, tipoCurto(c)].filter(Boolean).join(' · ')) + '</small>') + '</th>' + cols.map(function (i) {
           var e = estadoMes(d, i), cell = d.porMes[i], txt, cls, tip = nome(c) + ' · ' + mesTxt(i);
-          if (cell) { txt = cell.total === 0 ? '0' : mil(cell.total); cls = cell.total === 0 ? 'md-zero' : 'md-tom' + tom(cell.total); tip += ' · ' + dinheiro(cell.total) + ' PI' + (cell.total === 0 ? ' · medição zerada' : ''); }
+          if (cell) {
+            txt = cell.total === 0 ? '0' : mil(cell.total); cls = cell.total === 0 ? 'md-zero' : 'md-tom' + tom(cell.total); tip += ' · ' + dinheiro(cell.total) + ' PI' + (cell.total === 0 ? ' · medição zerada' : '');
+            var apM = cell.ms.filter(function (m) { return pagSit(d, m) === 'apagar'; });
+            if (apM.length) { cls += ' md-apagar'; temApagar = true; tip += ' · a pagar: ' + apM.map(function (m) { return pagTxt(d, m); }).join(', '); }
+          }
           else if (e === 'falta') { txt = '…'; cls = 'md-pend'; tip += ': ainda não saiu no SIAC' + (consulta ? ' (consulta de ' + dataTxt(consulta) + ')' : ''); }
           else if (e === 'sem') { txt = '—'; cls = 'md-ausente'; tip += ': sem medição neste mês'; }
           else { txt = ''; cls = 'md-branco'; tip += e === 'antes' ? ': antes da 1ª medição' : ': depois do fim da execução (' + mesTxt(d.fim) + ')'; }
@@ -927,7 +1055,7 @@
       }).join('') + (cel ? '' : '<td class="md-x"><b>' + mil(t12) + '</b></td><td></td>') + '</tr></tbody></table></div>';
       h += semMedicoesHtml(cs, false);
       h += '<div class="md-legenda">' + (cel ? [[1, 'até 250'], [3, '500 a 1.000'], [5, 'mais de 2.000']] : [[1, 'até 250'], [2, '250 a 500'], [3, '500 a 1.000'], [4, '1.000 a 2.000'], [5, 'mais de 2.000']]).map(function (x) { return '<span><i class="md-swatch md-tom' + x[0] + '"></i>' + esc(x[1]) + '</span>'; }).join('') +
-        '<span><i class="md-swatch md-zero"></i>zerada</span><span><i class="md-swatch md-ausente"></i>— sem medição no mês</span><span><i class="md-swatch md-pend"></i>' + esc('… ainda não saiu no SIAC' + consultaTxt) + '</span>' + (cel ? '' : '<span>em branco: antes da 1ª medição</span>') + '</div>';
+        (temApagar ? '<span><i class="md-swatch md-apagar-sw"></i>a pagar no SIAC (AES emitido)</span>' : '') + '<span><i class="md-swatch md-zero"></i>zerada</span><span><i class="md-swatch md-ausente"></i>— sem medição no mês</span><span><i class="md-swatch md-pend"></i>' + esc('… ainda não saiu no SIAC' + consultaTxt) + '</span>' + (cel ? '' : '<span>em branco: antes da 1ª medição</span>') + '</div>';
       // o mês escolhido: só quem mediu, do maior para o menor, e uma caixa com os que ainda não saíram no SIAC
       var s = stat(mesSel), quem = [], grupos = {}, sem = [];
       carregados.forEach(function (c) {
@@ -939,8 +1067,8 @@
       quem.sort(function (a, b) { return valor(b.m.total) - valor(a.m.total); });
       var maior = quem.reduce(function (x, q) { return Math.max(x, Math.abs(valor(q.m.total))); }, 0) || 1;
       var lista = quem.map(function (q) {
-        var v = valor(q.m.total), lt = loteCurto(q.c);
-        return '<button type="button" class="md-linha-mes" data-md="abrir" data-cid="' + esc(q.c.id) + '" data-n="' + esc(q.m.n) + '" aria-label="' + esc('Abrir a ' + q.m.n + 'ª medição de ' + nome(q.c) + ', ' + dinheiro(v) + ' PI') + '"><span><b>' + esc(curto(q.c)) + '</b> <small>' + esc(tipoNome(q.c, 1) + (lt && q.c.tipo !== 'oae' ? ' · ' + lt : '') + ' · ' + q.m.n + 'ª medição' + (v ? '' : ' · zerada')) + '</small></span><b>' + esc(dinheiro(v)) + '</b><span aria-hidden="true">›</span><span class="md-linha-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(v) / maior * 100) + '%"></i></span></button>';
+        var v = valor(q.m.total), lt = loteCurto(q.c), dq = dado(q.c), pq = pagTxt(dq, q.m), sq = pagSit(dq, q.m);
+        return '<button type="button" class="md-linha-mes" data-md="abrir" data-cid="' + esc(q.c.id) + '" data-n="' + esc(q.m.n) + '" aria-label="' + esc('Abrir a ' + q.m.n + 'ª medição de ' + nome(q.c) + ', ' + dinheiro(v) + ' PI') + '"><span><b>' + esc(curto(q.c)) + '</b> <small>' + esc(tipoNome(q.c, 1) + (lt && q.c.tipo !== 'oae' ? ' · ' + lt : '') + ' · ' + q.m.n + 'ª medição' + (v ? '' : ' · zerada')) + '</small>' + (pq && sq !== 'zerada' ? '<small class="md-linha-pg' + (sq === 'apagar' ? ' apagar' : '') + '">' + esc(pq) + '</small>' : '') + '</span><b>' + esc(dinheiro(v)) + '</b><span aria-hidden="true">›</span><span class="md-linha-bar" aria-hidden="true"><i style="width:' + largura(Math.abs(v) / maior * 100) + '%"></i></span></button>';
       }).join('');
       var box = s.nf ? '<div class="md-pend-box"><b>' + s.nf + (s.nf === 1 ? ' contrato ainda sem a medição de ' : ' contratos ainda sem a medição de ') + esc(mesTxt(mesSel)) + ' no SIAC</b>' + esc(consultaTxt) + Object.keys(grupos).map(Number).sort(function (a, b) { return a - b; }).map(function (u) {
         var n = Math.max(0, hoje() - 1 - u);
@@ -963,16 +1091,17 @@
       var matriz = host.querySelector('.md-matriz-scroll');
       if (matriz && matriz.clientWidth) matrizScroll = matriz.scrollLeft + matriz.clientWidth >= matriz.scrollWidth - 1 ? null : matriz.scrollLeft;
       var folhaEl = host.querySelector('.md-folha .esc-f'), folhaY = folhaEl ? folhaEl.scrollTop : 0;
-      host.innerHTML = cid ? contratoHtml(contrato(cid)) : modo === 'mes' ? mensalHtml(cs) : inicioHtml(cs);
+      host.innerHTML = cid ? contratoHtml(contrato(cid)) : modo === 'mes' ? mensalHtml(cs) : modo === 'sit' ? situacaoHtml(cs) : inicioHtml(cs);
       matriz = host.querySelector('.md-matriz-scroll');
       if (matriz) matriz.scrollLeft = matrizScroll == null ? matriz.scrollWidth : matrizScroll;
       if (focado) { var novo = document.getElementById(focado); if (novo) { novo.focus({ preventScroll: true }); if (novo.setSelectionRange && ini != null) novo.setSelectionRange(ini, fim); } }
       if (folha) { folhaEl = host.querySelector('.md-folha .esc-f'); if (folhaEl) { folhaEl.scrollTop = folhaY; folhaEl.focus({ preventScroll: true }); } else fechaFolha(); }
     }
-    function abrir(id, n) {
+    function abrir(id, n, ab) {
       if (!contrato(id)) return;
       if (id !== cid) { secao = 'med'; pagTodas = false; pagAbertas = false; }
       if (n != null) secao = 'med';
+      if (ab === 'pag' || ab === 'ct') secao = ab;
       cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segSem = null; segOrdem = 'km';
       var d = dado(contrato(id));
       if (d && n != null) d.ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; });
@@ -987,6 +1116,7 @@
       if (act === 'folha-x') { fechaFolha(); return; }
       if (act === 'diagrama') { var c = contrato(b.dataset.cid); if (c) op.diagrama(c); return; }
       if (act === 'abrir') { abrir(b.dataset.cid, b.dataset.n); return; }
+      if (act === 'abrir-ab') { abrir(b.dataset.cid, null, b.dataset.ab); return; }
       if (act === 'copiar') { copiar(b.dataset.txt || '', 'Copiado.'); return; }
       if (act === 'pag-copiar') { var cc = contrato(cid), dc = cc && dado(cc); if (dc) copiar(pagTabelaTxt(cc, dc), 'Tabela copiada: cole na planilha.'); return; }
       if (act === 'pag-med') { abrir(cid, b.dataset.n); return; }
@@ -996,7 +1126,8 @@
         return;
       }
       if (act === 'voltar') { cid = ''; med = null; segAberto = ''; }
-      else if (act === 'modo') { modo = b.dataset.v === 'mes' ? 'mes' : 'contrato'; cid = ''; matrizScroll = null; }
+      else if (act === 'modo') { modo = b.dataset.v === 'mes' || b.dataset.v === 'sit' ? b.dataset.v : 'contrato'; cid = ''; matrizScroll = null; }
+      else if (act === 'conf-todos') confTodos = !confTodos;
       else if (act === 'med') { daFolha = folha; fechaFolha(); med = b.dataset.n; grupo = null; semValor = false; }
       else if (act === 'passo') {
         var dp = dado(contrato(cid)), mp = dp && aberta(dp), vz = mp ? vizinhas(dp, mp) : {}, alvo = b.dataset.v === '-1' ? vz.ant : vz.prox;
@@ -1053,10 +1184,11 @@
       else if (!ev.shiftKey && (i < 0 || i === l.length - 1)) { ev.preventDefault(); l[0].focus(); }
     });
     // celular ⇄ computador (girar o tablet, mudar a janela): a matriz troca de 6 para 16 meses
-    if (mqCel) { var trocou = function () { if (op.ativa() && ((modo === 'mes' && !cid) || (cid && secao !== 'med'))) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
+    if (mqCel) { var trocou = function () { if (op.ativa() && (((modo === 'mes' || modo === 'sit') && !cid) || (cid && secao !== 'med'))) { matrizScroll = null; render(); } }; if (mqCel.addEventListener) mqCel.addEventListener('change', trocou); else if (mqCel.addListener) mqCel.addListener(trocou); }
     host.addEventListener('change', function (ev) {
       if (!op.ativa()) return;
       if (ev.target.id === 'mdOrdem') ordem = ev.target.value;
+      else if (ev.target.id === 'mdOrdSit') ordSit = ev.target.value === 'nome' ? 'nome' : 'prazo';
       else if (ev.target.id === 'mdZeradas') zeradas = ev.target.checked;
       else return;
       render();
@@ -1069,6 +1201,9 @@
     return {
       render: render,
       carregar: carregar,
+      // v205: "Para conferir" (faixa da tela inicial) e a entrada direto na Situação
+      conferir: function () { try { return confItens(); } catch (e) { return []; } },
+      situacao: function () { modo = 'sit'; cid = ''; med = null; },
       // chamada no popstate do app; true: a folha resolveu
       voltar: function () {
         if (folhaPula) { folhaPula = false; return true; }

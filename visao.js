@@ -373,6 +373,13 @@
         '<p>' + (noMapa ? 'No mapa, pelo eixo do SNV.' : 'Em escala de km.') + ' Só na tela: o PDF oficial continua dentro de cada contrato.</p></div>' + bForma +
         '<span class="vg-tot">' + its.length + (its.length === 1 ? ' item' : ' itens') + ' no desenho' + (d.semKm ? ' · <b>' + d.semKm + ' sem km</b> (não aparecem)' : ' · nenhum sem km') +
         (ruins ? ' · <b>' + ruins + ' com km fora da rodovia</b> (confira a vírgula)' : '') + '</span></div>';
+      // v205: "Para conferir" das Medições (prazo, garantia, pagamento, empenho), curto, com atalho para a Situação
+      var conf = o.conferir ? o.conferir() : null;
+      if (conf && conf.length) {
+        var nDg = conf.filter(function (x) { return x.tom === 'dg'; }).length, porTipo = {}, ordT = [];
+        conf.forEach(function (x) { if (!porTipo[x.tipo]) { porTipo[x.tipo] = 0; ordT.push(x.tipo); } porTipo[x.tipo]++; });
+        h += '<button type="button" class="vg-conf' + (nDg ? ' dg' : '') + '" data-vg="conf"><b>Para conferir · ' + conf.length + '</b><span>' + esc(ordT.map(function (t) { return porTipo[t] + ' ' + t.toLowerCase().replace('siac', 'SIAC'); }).join(' · ')) + '</span><span class="vg-conf-ir">Ver em Medições ›</span></button>';
+      }
 
       // desenho, antes dos cartões e da busca: marcar um contrato só muda o que está embaixo da barra
       // passo da régua pela distância entre marcas: no máximo uma a cada 60–70 px, qualquer que seja a faixa
@@ -1089,6 +1096,7 @@
           : 'OAEs 230: mostrando só as não atendidas pelo Proarte.');
       }
       else if (a === 'rasc') { if (o.onRascunho) o.onRascunho(); }
+      else if (a === 'conf') { if (o.onConferir) o.onConferir(); }
       // Raias | Mapa: o trecho na tela continua o mesmo, e o cartão aberto continua aberto
       else if (a === 'forma') {
         var fm = b.dataset.f === 'mapa' ? 'mapa' : 'raias';

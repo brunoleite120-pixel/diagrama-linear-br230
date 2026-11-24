@@ -257,6 +257,11 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-modo button[aria-pressed="true"]{background:var(--ink);color:#fff}
 .vg-modo button:focus-visible{outline-offset:-4px}
 .vg-modo button[aria-pressed="true"]:focus-visible{outline-color:#fff}
+.vg-conf{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;width:100%;margin:10px 0 0;padding:10px 14px;border:1px solid var(--atencao-borda);border-left:4px solid var(--atencao);border-radius:8px;background:var(--atencao-bg);color:var(--ink);font:inherit;font-size:13.5px;text-align:left;cursor:pointer;min-height:44px}
+.vg-conf.dg{border-color:#F0B4AC;border-left-color:var(--danger);background:#FDECEA}
+.vg-conf b{font-weight:700}
+.vg-conf span{color:var(--ink-2)}
+.vg-conf .vg-conf-ir{margin-left:auto;color:var(--accent);font-weight:650}
 .vg-rasc{min-height:34px;padding:4px 10px;border:1px dashed var(--rasc-borda);border-radius:6px;background:var(--rasc-bg);color:var(--atencao-ink);font:inherit;font-size:13px;font-weight:600}
 .vg-modo b{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--danificado);color:var(--danificado-ink);font-size:12px;line-height:17px;text-align:center}
 /* faixa "OAEs 230": só as não atendidas pelo Proarte ou todas (na caixa "Contratos" e no cartão da faixa) */
@@ -1810,6 +1815,55 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
 .md-pg-linha.apagar.btn{background:#FFFBEF}
 .md-pg-linha>span:first-child{display:flex;flex-direction:column;min-width:0}
 .md-pg-dir{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right}
+/* v205: Situação, Para conferir, cartões com o SIAC e a marca de a pagar em Por mês */
+.md-modo{grid-template-columns:repeat(3,minmax(0,1fr));min-width:330px}
+.md-conf{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.md-conf h2{font-size:16px;font-weight:650}
+.md-conf-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.md-conf-it{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border:1px solid var(--line-2);border-left-width:4px;border-radius:8px;background:var(--panel);min-width:0}
+.md-conf-it.dg{border-left-color:var(--danger)}
+.md-conf-it.at{border-left-color:var(--atencao)}
+.md-conf-it.az{border-left-color:var(--accent)}
+.md-conf-q{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex:none;width:130px}
+.md-conf-q b{font-size:13px}
+.md-conf-txt{flex:1;min-width:0;font-size:13px;color:var(--ink-2)}
+.md-conf-abrir.btn{align-self:center;flex:none}
+.md-sit-ctl{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.md-sit-ctl h2{font-size:16px;font-weight:650}
+.md-sit-ctl small{color:var(--ink-3)}
+.md-sit-ctl .md-ordenar{margin-left:auto}
+.md-sit-tab{padding:0}
+.md-sit-tabela th[scope="row"]{padding:4px 8px}
+.md-sit-tabela td{vertical-align:middle}
+.md-sit-ct.btn{display:flex;flex-direction:column;align-items:flex-start;gap:0;min-height:44px;padding:4px 8px;text-align:left;white-space:nowrap}
+.md-sit-ct.btn b{color:var(--accent)}
+.md-sit-ct.btn small{font-size:12px;color:var(--ink-3);font-weight:400}
+.md-sit-c{display:flex;flex-direction:column;white-space:nowrap}
+.md-sit-c small{font-size:12px;color:var(--ink-3)}
+.md-sit-c small.at{color:var(--atencao);font-weight:650}
+.md-sit-c small.dg{color:var(--danger);font-weight:650}
+.md-sit-sep th{background:var(--ground);text-align:left;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.md-sit-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.md-sit-card.btn{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;padding:12px;text-align:left;white-space:normal;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.md-sit-top{display:flex;justify-content:space-between;gap:8px}
+.md-sit-top>span{display:flex;flex-direction:column;min-width:0}
+.md-sit-top b{font-size:16px}
+.md-sit-top small{font-size:12.5px;color:var(--ink-2);font-weight:400}
+.md-sit-dir{text-align:right;font-size:13px;font-weight:400}
+.md-sit-dir b{font-size:13px}
+.md-sit-chips{display:flex;flex-wrap:wrap;gap:6px}
+.md-sit-pe{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ink-2);font-weight:400;padding-top:8px;border-top:1px solid var(--line-2)}
+.md-sit-pe b{color:var(--ink)}
+.md-dl .md-dd-at{color:var(--atencao)}
+.md-dl .md-dd-dg{color:var(--danger)}
+.md-dl .md-dd-az{color:var(--accent);font-weight:500}
+.md-dl-todo{grid-column:1/-1}
+.md-resumo strong small{font-size:12.5px;font-weight:400;color:var(--ink-2)}
+.md-matriz .btn.md-apagar{position:relative}
+.md-matriz .btn.md-apagar::after{content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#E0A100;box-shadow:0 0 0 1.5px #fff}
+.md-swatch.md-apagar-sw{background:#E0A100;border-radius:50%;width:9px;height:9px}
+.md-linha-pg{display:block;color:var(--ink-3)}
+.md-linha-pg.apagar{color:var(--atencao);font-weight:650}
 /* v203: a parte Contrato do contrato aberto */
 .md-ct-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
 .md-ct-col{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -1906,6 +1960,14 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
   .md-soma .md-soma-tot{order:-1;flex-basis:calc(100% - 56px)}
   .md-soma .md-copiar{order:-1}
   .md-op-ig{display:none}
+  .md-modo{min-width:0}
+  .md-conf{padding:12px}
+  .md-conf-it{flex-wrap:wrap;gap:6px 10px}
+  .md-conf-q{flex-direction:row;align-items:center;width:auto}
+  .md-conf-txt{flex-basis:100%;order:3}
+  .md-conf-abrir.btn{margin-left:auto;min-height:44px}
+  .md-sit-ctl .md-ordenar{margin-left:0}
+  .md-card-cel .md-sit-chips{width:100%}
   .md-kpis.md-kpis-sem-cel{display:none}
   .md-ct-grid,.md-ct-col{gap:12px}
   .md-ct-card{padding:12px}

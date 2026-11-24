@@ -5566,6 +5566,7 @@
       temSemProarte: function () { return !isPublico() && !!ctSemProarte(); },
       // "1 rascunho neste aparelho": à parte do número do botão, que conta só as NC salvas
       rascunhos: function () { return rascNaLista().length; }, onRascunho: rascIr,
+      conferir: conferirFaixa, onConferir: abrirSituacao,
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
       onAbrir: function (c, p) { if (c.oaes230) abrir230(p, false); else abrirDaVisao(c, p, false); },
@@ -5653,7 +5654,20 @@
   }
   function desenhaMedicoes() {
     if (!medicoesOn || !temMedicoes() || !$('medicoesHost')) return false;
-    if (!medicoes) medicoes = window.Medicoes({
+    medObj();
+    medicoes.render(); medicoes.carregar();
+    return true;
+  }
+  // v205: o "Para conferir" das Medições, na faixa da tela inicial; só para quem vê as medições e com as análises já no aparelho
+  function conferirFaixa() {
+    if (isPublico() || !temMedicoes() || !medObj()) return null;
+    var its = medicoes.conferir();
+    return its.length ? its : null;
+  }
+  function abrirSituacao() { if (!medObj()) return; medicoes.situacao(); abrirMedicoes(); }
+  function medObj() {
+    if (medicoes || !window.Medicoes || !$('medicoesHost')) return medicoes;
+    medicoes = window.Medicoes({
       host: $('medicoesHost'), contratos: ctsMedicoes, pode: function (c) { return parte(c, 'med'); },
       ativa: function () { return medicoesOn && temMedicoes(); },
       base: function (c) { return parte(c, 'med') ? analise.dados[c.id] : null; }, analise: function (c) { return anOf(c, true); },
@@ -5678,8 +5692,7 @@
         return true;
       }
     });
-    medicoes.render(); medicoes.carregar();
-    return true;
+    return medicoes;
   }
   // do cartão da visão geral para o contrato: abre o ponto no editor ou no mapa
   function abrirDaVisao(c, p, noMapa) {
