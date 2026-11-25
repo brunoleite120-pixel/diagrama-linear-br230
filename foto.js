@@ -33,6 +33,7 @@
     { k: 'rodkm', label: 'Rodovia e km', on: true },
     { k: 'lado', label: 'Lado e distância do eixo', on: true },
     { k: 'coord', label: 'Coordenadas', on: true },
+    { k: 'alt', label: 'Altitude', on: true },   // v219: junto das coordenadas ("Alt: 112 m"), só com GPS de verdade
     { k: 'data', label: 'Data e hora', on: true },
     { k: 'ponto', label: 'Ponto crítico ou OAE', on: true },
     { k: 'contrato', label: 'Lote e contrato', curto: 'lote', on: true },
@@ -289,6 +290,9 @@
     function f(v) { var s = Math.abs(v).toFixed(5).replace('.', ','); if (s.indexOf(',') < 2) s = '0' + s; return (v < 0 ? '-' : '') + s; }
     return f(ll[0]) + '/' + f(ll[1]);
   }
+  // altitude do GPS (m), ou null quando o aparelho não mede
+  function altDe(c) { var a = c && c.altitude; return a != null && isFinite(a) ? Number(a) : null; }
+  function altTxt(a) { return 'Alt: ' + Math.round(a) + ' m'; }
   function pad(n) { return String(n).padStart(2, '0'); }
   function dateTxt(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
   function dateInput(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
@@ -346,6 +350,11 @@
         if (g[3] && ascii(g[3]).toUpperCase() === 'W') lon = -lon;
         if (isFinite(lat) && isFinite(lon) && (lat !== 0 || lon !== 0)) out.ll = [lat, lon];
         else out.gpsZero = true;   // Android 10+: o sistema zera o GPS antes de entregar a foto a quem não tem permissão
+      }
+      if (out.ll && g[6]) {
+        var al = rats(g[6])[0];
+        if (g[5] && v.getUint8(start + dataAt(g[5])) === 1) al = -al;   // 1: abaixo do nível do mar
+        if (isFinite(al) && al !== 0) out.alt = al;
       }
     }
     if (out.date) {
@@ -1066,6 +1075,7 @@
       var c = contract();
       if (k === 'lado' && !st.side) return 'sem lado nesta foto';
       if (k === 'coord' && !st.ll && st.km == null) return 'sem local nesta foto';
+      if (k === 'alt' && !(st.ll && st.alt != null)) return st.ll ? 'o GPS não mediu nesta foto' : 'só com o GPS da foto';
       if (ehSup(c) && (k === 'ponto' || k === 'executora')) return k === 'ponto' ? 'a Supervisora não tem' : 'sem construtora';
       if (k === 'ponto' && !findPoint(st.pid)) return semPontos() ? 'conservação: sem ponto' : 'nenhum ponto nesta foto';
       if (k === 'desc' && !(st.desc || '').trim()) return 'vazia nesta foto';
@@ -1420,7 +1430,7 @@
       if (!opts.gps || gpsWatch != null || !navigator.geolocation) return;
       gpsDesde = Date.now(); lastFixErr = ''; gpsBloq = false;
       gpsWatch = navigator.geolocation.watchPosition(function (pos) {
-        lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, t: Date.now() };
+        lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, alt: altDe(pos.coords), t: Date.now() };
         lastFixErr = ''; gpsBloq = false;
         if (root && !q('.ft-start').hidden) renderGps();
         if (cam) renderCamGps();
@@ -1477,7 +1487,7 @@
     // posição, data, lote e ponto de uma foto (a única ou cada uma do lote de fotos)
     function place(o, ex, file, from) {
       var ac = activeContract();
-      o.ll = null; o.km = null; o.ramal = ''; o.side = ''; o.dist = null; o.acc = null; o.src = 'manual'; o.pid = ''; o.cid = ac ? ac.id : '';
+      o.ll = null; o.km = null; o.ramal = ''; o.side = ''; o.dist = null; o.acc = null; o.alt = null; o.src = 'manual'; o.pid = ''; o.cid = ac ? ac.id : '';
       // foto guardada que volta para o carimbo (Galeria › sem carimbo): fica no contrato e no ponto que já tinha
       if (ex.cid && byId(ex.cid)) o.cid = ex.cid;
       if (opts.nc && byId(opts.nc.cid)) o.cid = opts.nc.cid;
@@ -1486,9 +1496,9 @@
       o.from = from;
       o.meta = ex;
       o.info = fileInfo(file, ex);
-      if (ex.live) { if (ex.ll) { o.ll = ex.ll; o.acc = ex.acc; o.src = 'gps'; } }
-      else if (ex.ll) { o.ll = ex.ll; o.src = 'exif'; }
-      else if (from === 'camera' && lastFix && Date.now() - lastFix.t < 120000) { o.ll = lastFix.ll; o.acc = lastFix.acc; o.src = 'gps'; }
+      if (ex.live) { if (ex.ll) { o.ll = ex.ll; o.acc = ex.acc; o.alt = ex.alt != null ? ex.alt : null; o.src = 'gps'; } }
+      else if (ex.ll) { o.ll = ex.ll; o.alt = ex.alt != null ? ex.alt : null; o.src = 'exif'; }
+      else if (from === 'camera' && lastFix && Date.now() - lastFix.t < 120000) { o.ll = lastFix.ll; o.acc = lastFix.acc; o.alt = lastFix.alt; o.src = 'gps'; }
       if (o.ll) {
         var loc = locate(o.ll);
         o.loc = loc;
@@ -1604,7 +1614,7 @@
         if (lastFix && Date.now() - lastFix.t < 15000) { resolve(lastFix); return; }
         if (!navigator.geolocation) { resolve(null); return; }
         navigator.geolocation.getCurrentPosition(function (pos) {
-          lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, t: Date.now() };
+          lastFix = { ll: [pos.coords.latitude, pos.coords.longitude], acc: pos.coords.accuracy, alt: altDe(pos.coords), t: Date.now() };
           resolve(lastFix);
         }, function (e) {
           if (e && e.code === 1) { gpsBloq = true; lastFixErr = bloqueado('A localização') + '.'; }
@@ -1614,7 +1624,7 @@
     }
     function applyFix(o, fix) {
       var loc = locate(fix.ll), near = loc.dist <= 2000;
-      o.ll = fix.ll; o.acc = fix.acc; o.src = 'gps'; o.noLoc = false; o.loc = loc; o.keepLot = ''; o.kmDoPt = false; o.kmRuim = null;
+      o.ll = fix.ll; o.acc = fix.acc; o.alt = fix.alt != null ? fix.alt : null; o.src = 'gps'; o.noLoc = false; o.loc = loc; o.keepLot = ''; o.kmDoPt = false; o.kmRuim = null;
       o.km = near ? loc.km : null;
       o.ramal = near ? loc.ramal : '';
       o.side = near && loc.dist >= 10 ? loc.side : '';
@@ -1773,7 +1783,10 @@
       var c = contract(), out = [], C = set.campos, p = findPoint(st.pid);
       var ll = st.ll || (st.km != null ? refR(st.ramal).at(st.km) : null);
       if (C.rodkm) out.push(st.km != null ? kmLine(st.km, st.side, st.dist, C.lado, st.ramal) : rodovia().replace(/^BR-/, 'BR '));
-      if (C.coord && ll) out.push(coordTxt(ll));
+      // altitude só com a posição do GPS (a do km informado à mão não tem altura); com as coordenadas desligadas, vai sozinha
+      var alt = C.alt && st.ll && st.alt != null ? altTxt(st.alt) : '';
+      if (C.coord && ll) out.push(coordTxt(ll) + (alt ? ' - ' + alt : ''));
+      else if (alt) out.push(alt);
       if (C.data && st.date) out.push(dateTxt(st.date));
       // OAE não atendida pelo Proarte: a legenda sai sem o contrato e sem a executora (nenhuma empresa atende a ponte), e a
       // linha da OAE é só o nome dela ("Ponte sobre o Rio Pacajá - km 406,91"; pedido do dono, 29/10/2026)
@@ -2116,7 +2129,7 @@
           c && nomes.formal(c) !== nomes.nome(c) ? nomes.formal(c) : '',
           p ? (oaeCt(c) ? 'OAE ' : 'Ponto ') + p.nome : semPontos() ? '' : oaeCt(c) ? 'Sem OAE' : 'Sem ponto',
           st.km != null ? kmLine(st.km, st.side, st.dist, true, st.ramal) : '',
-          ll ? coordTxt(ll) : '',
+          ll ? coordTxt(ll) + (st.ll && st.alt != null ? ' - ' + altTxt(st.alt) : '') : '',
           st.date ? dateTxt(st.date) : '',
           desc
         ].filter(Boolean).join('\n');
@@ -2891,7 +2904,7 @@
     // os dados que a foto teria agora (GPS, hora, contrato e ponto), para a prévia do carimbo
     function camPrev() {
       var f = camFix(), o = { desc: '' };
-      place(o, { live: true, date: new Date(), ll: f ? f.ll : null, acc: f ? f.acc : null }, { lastModified: Date.now(), size: 0, type: 'image/jpeg' }, 'camapp');
+      place(o, { live: true, date: new Date(), ll: f ? f.ll : null, acc: f ? f.acc : null, alt: f ? f.alt : null }, { lastModified: Date.now(), size: 0, type: 'image/jpeg' }, 'camapp');
       return o;
     }
     // por cima da imagem: escurece o que fica fora da foto e desenha o carimbo como vai sair (girado junto com a cena)
@@ -3020,7 +3033,7 @@
         btn.disabled = false;
         if (!blob) { notify('Não foi possível capturar a foto. Tente de novo.'); return; }
         var name = 'Foto ' + pad(when.getHours()) + 'h' + pad(when.getMinutes()) + 'm' + pad(when.getSeconds()) + 's.jpg', uid = newUid();
-        var sh = { uid: uid, file: new File([blob], name, { type: 'image/jpeg', lastModified: when.getTime() }), meta: { live: true, date: when, ll: fix ? fix.ll : null, acc: fix ? fix.acc : null, uid: uid } };
+        var sh = { uid: uid, file: new File([blob], name, { type: 'image/jpeg', lastModified: when.getTime() }), meta: { live: true, date: when, ll: fix ? fix.ll : null, acc: fix ? fix.acc : null, alt: fix ? fix.alt : null, uid: uid } };
         c.shots.push(sh);
         sh.guarda = guardarCaptura(sh, blob, name);
         if (c.lastUrl) URL.revokeObjectURL(c.lastUrl);
