@@ -63,6 +63,7 @@ ok(h().includes('data-md="ponte-xls"') && h().includes('>Baixar Excel ▾</butto
 ok(!h().includes('md-xls-op'), 'escolhas fechadas no início');
 t.click('ponte-xls', { p: 'oae-18' });
 ok(h().includes('Todas as medições desta OAE') && h().includes('4 medições · 15 serviços'), 'escolha: todas as medições, com a conta');
+ok(h().includes('resumo, uma aba por medição, serviços × medições e lançamentos'), 'texto da escolha com as abas por medição');
 ok(H.texto(h()).includes('Só a 27ª medição') && h().includes('5 serviços · código, serviço, unidade e quantidade'), 'escolha: só a medição aberta');
 ok(h().includes('md-xls-op on'), 'todas marcada');
 t.click('ponte-xls-ir', { p: 'oae-18', q: 'med', n: '27' });
@@ -92,7 +93,10 @@ setTimeout(function () {
           ok(txt.includes('CT 424/2024 · OAE Paraná (km 556,240) · 27ª medição · set/26'), 'título da simples');
           ok(txt.indexOf('<v>395000</v>') < txt.indexOf('<v>51114</v>') && txt.indexOf('<v>51114</v>') < txt.indexOf('<v>7200835</v>') && txt.indexOf('<v>7200835</v>') < txt.indexOf('<v>91982</v>'), 'ordem do código como texto');
         } else {
-          ok(txt.includes('name="Resumo"') && txt.includes('name="Serviços × medições"') && txt.includes('name="Lançamentos"'), 'três abas');
+          var abas = (txt.match(/<sheet name="[^"]*"/g) || []).map(function (x) { return x.slice(13, -1); });
+          ok(abas.join(' | ') === 'Resumo | 15ª · set-25 | 25ª · jul-26 | 26ª · ago-26 | 27ª · set-26 | Serviços × medições | Lançamentos', 'abas na ordem: ' + abas.join(' | '));
+          var i27 = txt.indexOf('CT 424/2024 · OAE Paraná (km 556,240) · 27ª medição · set/26'), i26 = txt.indexOf('CT 424/2024 · OAE Paraná (km 556,240) · 26ª medição · ago/26');
+          ok(i27 > 0 && i26 > 0 && txt.indexOf('<v>7200835</v>', i27) > i27, 'abas das medições no formato da individual');
           var m15 = /SUMIF\('Lançamentos'!\$A:\$A,15,'Lançamentos'!\$I:\$I\)<\/f><v>([\d.]+)<\/v>/.exec(txt); ok(m15 && Math.abs(Number(m15[1]) - 98799.54) < 0.005, 'resumo soma os lançamentos da 15ª: ' + (m15 && m15[1]));
           ok(/<f>SUM\(F\d+:F\d+\)<\/f><v>178256\.72<\/v>/.test(txt), 'acumulado 178.256,72');
           ok(txt.includes('Paga em 26/11/2026') && txt.includes('50602.002659/2026-37'), 'processo e pagamento');

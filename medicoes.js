@@ -937,7 +937,7 @@
           (xs && xs.todas ? botao('ponte-xls', 'Baixar Excel ' + (segXls ? '▴' : '▾'), ' data-p="' + esc(pid) + '" aria-expanded="' + segXls + '"', 'small') : '') + '</div>';
         // v220: as duas planilhas (todas as medições dele, marcada; ou só a medição aberta, no formato simples)
         if (xs && xs.todas && segXls) pe += '<div class="md-xls" role="group" aria-label="Baixar Excel">' +
-          botao('ponte-xls-ir', '<b>Todas as medições ' + (oae ? 'desta OAE' : cons ? 'deste segmento' : 'deste ponto') + '</b><small>' + esc(nMed(xs.meds) + ' · ' + xs.todas + (xs.todas === 1 ? ' serviço' : ' serviços') + ' · resumo, serviços × medições e lançamentos') + '</small>', ' data-p="' + esc(pid) + '" data-q="todas" data-n="' + esc(m.n) + '"', 'md-xls-op on') +
+          botao('ponte-xls-ir', '<b>Todas as medições ' + (oae ? 'desta OAE' : cons ? 'deste segmento' : 'deste ponto') + '</b><small>' + esc(nMed(xs.meds) + ' · ' + xs.todas + (xs.todas === 1 ? ' serviço' : ' serviços') + ' · resumo, uma aba por medição, serviços × medições e lançamentos') + '</small>', ' data-p="' + esc(pid) + '" data-q="todas" data-n="' + esc(m.n) + '"', 'md-xls-op on') +
           botao('ponte-xls-ir', '<b>Só a ' + esc(m.n + 'ª') + ' medição</b><small>' + esc(xs.med ? xs.med + (xs.med === 1 ? ' serviço' : ' serviços') + ' · código, serviço, unidade e quantidade' : 'sem serviço localizado nesta medição') + '</small>', ' data-p="' + esc(pid) + '" data-q="med" data-n="' + esc(m.n) + '"' + (xs.med ? '' : ' disabled'), 'md-xls-op') + '</div>';
         if (segServ) {
           h += '<h4 class="md-painel-sv">Serviços nesta medição (' + esc(m.n + 'ª') + ')</h4>';
@@ -985,17 +985,21 @@
       return [n ? 'CT' + n[1] : slug(nome(c)), slug(pt.cod).replace(/_/g, ''), slug(pt.nome), fim].filter(Boolean).join('_') + '.xlsx';
     }
     // só a medição aberta: Código | Serviço | Unidade | Quantidade, na ordem do código (como a tabela de referência)
-    function xlsMed(P, c, d, pid, m) {
-      var E = P.E, pt = pontoXls(c, d, pid), rows = pt.servs.filter(function (s) { return temQv(s, m.n); }).map(function (s) { return { i: servInfo(c, s), q: numero(s.por[m.n][0]) }; });
+    // v221: a mesma tabela vira uma aba por medição no "todas as medições" (pedido de 26/11/2026)
+    function abaMed(P, c, pt, m, nomeAba) {
+      var E = P.E, rows = pt.servs.filter(function (s) { return temQv(s, m.n); }).map(function (s) { return { i: servInfo(c, s), q: numero(s.por[m.n][0]) }; });
       if (!rows.length) return null;
       rows.sort(function (a, b) { return cmpTxt(a.i.cod || '￿', b.i.cod || '￿') || cmpTxt(a.i.nome, b.i.nome); });
       var tit = [nome(c), pt.tipo + ' ' + pt.nome + (pt.k ? ' (' + pt.kmR + decimal(pt.k[0], 3) + ')' : ''), m.n + 'ª medição', mesTxt(idx(m.ref))].join(' · ');
       var linhasX = [[{ v: tit, e: E.sTitulo }], [], ['Código', 'Serviço', 'Unidade', 'Quantidade'].map(function (t) { return { v: t, e: E.sCab }; })];
       rows.forEach(function (r) { linhasX.push([{ v: codXls(r.i.cod), e: E.sCentro }, { v: r.i.nome, e: E.sTxt }, { v: r.i.un, e: E.sCentro }, { v: r.q, e: E.sQtd }]); });
-      var ref = String(m.ref || '').slice(0, 7);
-      return { nome: arquivoXls(c, pt, m.n + 'a' + (ref ? '_' + ref : '')), abas: [{ nome: pt.nome + ' ' + m.n + 'ª', cols: [10, 62, 10, 14], linhas: linhasX, mesclar: ['A1:D1'] }] };
+      return { nome: nomeAba, cols: [10, 62, 10, 14], linhas: linhasX, mesclar: ['A1:D1'] };
     }
-    // todas as medições dele: Resumo, Serviços × medições e Lançamentos (os totais em fórmula, com o valor já calculado)
+    function xlsMed(P, c, d, pid, m) {
+      var pt = pontoXls(c, d, pid), aba = abaMed(P, c, pt, m, pt.nome + ' ' + m.n + 'ª'), ref = String(m.ref || '').slice(0, 7);
+      return aba ? { nome: arquivoXls(c, pt, m.n + 'a' + (ref ? '_' + ref : '')), abas: [aba] } : null;
+    }
+    // todas as medições dele: Resumo, uma aba por medição (v221), Serviços × medições e Lançamentos (os totais em fórmula, com o valor já calculado)
     function xlsTodas(P, c, d, pid) {
       var E = P.E, col = P.col, pt = pontoXls(c, d, pid), ordG = {}, rotG = {};
       (op.grupos(c) || []).forEach(function (g, i) { ordG[g.key] = i; rotG[g.key] = g.short || g.label || g.key; });
@@ -1075,9 +1079,10 @@
       if (difs.length) res.push([{ v: 'Valor da medição diferente da soma dos serviços (' + difs.join('; ') + ').', e: E.sub }]);
       return { nome: arquivoXls(c, pt, 'servicos_' + hoje.getFullYear() + '-' + dois(hoje.getMonth() + 1) + '-' + dois(hoje.getDate())), abas: [
         { nome: 'Resumo', cols: [24, 13, 8, 24, 26, 18, 15], linhas: res, paisagem: true },
+      ].concat(ms.map(function (m) { return abaMed(P, c, pt, m, m.n + 'ª · ' + mesTxt(idx(m.ref)).replace('/', '-')); }).filter(Boolean), [
         { nome: 'Serviços × medições', cols: cm, linhas: mx, mesclar: mes, congelar: 'E6', paisagem: true },
         { nome: 'Lançamentos', cols: [9, 12, 7, 20, 10, 60, 6, 12, 15, 17, 23, 22], linhas: lan, congelar: 'A2', filtro: 'A1:L' + nl, paisagem: true }
-      ] };
+      ]) };
     }
     var planilhaP = null;
     function comPlanilha() {
