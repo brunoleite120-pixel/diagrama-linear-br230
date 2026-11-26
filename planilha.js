@@ -128,13 +128,23 @@
     return new Blob(parts.concat(central, [end.buffer]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  function xlsx(abas) {
+  // nomes finais das abas: sem caractere proibido, até 31 letras e sem repetir (pode ser chamado antes, para fazer links)
+  function nomes(abas) {
     var usados = {};
     abas.forEach(function (a, i) {
       var n = nomeAba(a.nome), b = n, k = 2;
       while (usados[n.toLowerCase()]) n = b.slice(0, 28) + ' ' + k++;
       usados[n.toLowerCase()] = 1; a.nome = n; a.ativa = i === 0;
     });
+    return abas;
+  }
+  // link para outra aba (fórmula HYPERLINK, com o texto já calculado)
+  function link(aba, txt) {
+    var t = txt == null ? aba : txt;
+    return { f: 'HYPERLINK("#\'' + String(aba).replace(/'/g, "''") + '\'!A1","' + String(t).replace(/"/g, '""') + '")', v: String(t) };
+  }
+  function xlsx(abas) {
+    nomes(abas);
     var arqs = [
       ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
@@ -158,5 +168,5 @@
     return zip(arqs);
   }
 
-  window.Planilha = { xlsx: xlsx, E: E, col: col, nomeAba: nomeAba };
+  window.Planilha = { xlsx: xlsx, E: E, col: col, nomeAba: nomeAba, nomes: nomes, link: link };
 })();

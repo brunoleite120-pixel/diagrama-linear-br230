@@ -888,6 +888,10 @@
           return '<button type="button" class="' + cls + '" data-md="ponte" data-p="' + esc(p.id) + '" style="' + st + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' + (cons ? esc(nomeP(p.id)) : '') + '</button>';
         }).join('') + '</div><div class="md-regua-eixo"><span>' + kmP + kt(ka, 1) + (cons ? ' · início do contrato' : '') + '</span><span>' + kmP + kt(kb, 1) + (cons ? ' · fim' : '') + '</span></div></div>';
       }
+      // v222: a medição aberta inteira num Excel, uma aba por OAE/segmento/ponto (no formato da planilha de uma medição)
+      var nXls = op.salvar ? com.filter(function (pid) { return ((an[pid] || {}).servicos || []).some(function (sv) { return temQv(sv, m.n); }); }).length : 0;
+      if (nXls) h += '<div class="md-seg-xls">' + botao('seg-xls', 'Baixar Excel da ' + esc(m.n + 'ª') + ' · ' + (oae ? 'todas as OAEs' : cons ? 'todos os segmentos' : 'todos os pontos'), ' data-n="' + esc(m.n) + '"', 'small') +
+        '<small>' + esc('Uma aba para ' + (oae ? 'cada OAE' : cons ? 'cada segmento' : 'cada ponto') + ' com serviço nesta medição (' + nXls + '), com código, serviço, unidade e quantidade, e um resumo na frente.') + '</small></div>';
       h += '<div class="md-segs md-segmentos' + (segAberto ? ' aberto' : '') + '">';
       lista.forEach(function (pid) {
         var k = kms(pid), v = vm(pid, m.n), on = segAberto === pid, nm = nMeds(pid);
@@ -1097,9 +1101,40 @@
       });
       return planilhaP;
     }
+    // v222: uma medição, todas as OAEs (segmentos, pontos): Resumo e uma aba por OAE com serviço nesta medição, na ordem do km
+    function xlsMedTodas(P, c, d, m) {
+      var E = P.E, an = d.an.pontes || {}, ordem = op.pontos(c).map(function (p) { return p.id; });
+      var pids = ordem.filter(function (id) { return an[id]; }).concat(Object.keys(an).filter(function (id) { return ordem.indexOf(id) < 0; }))
+        .filter(function (id) { return (an[id].servicos || []).some(function (s) { return temQv(s, m.n); }); });
+      if (!pids.length) return null;
+      var rot = c.tipo === 'oae' ? 'OAE' : c.tipo === 'conserva' ? 'Segmento' : 'Ponto', abas = [], linhasR = [], tot = 0;
+      linhasR.push([{ v: [nome(c), m.n + 'ª medição', mesTxt(idx(m.ref)), 'serviços por ' + (c.tipo === 'oae' ? 'OAE' : rot.toLowerCase())].join(' · '), e: E.sTitulo }], [{ v: tipo(c) + ' · valores em preço inicial (PI), sem reajuste', e: E.sub }], []);
+      linhasR.push([rot, 'Código', 'km inicial', 'km final', 'Serviços', 'Valor (PI)', 'Aba'].map(function (t) { return { v: t, e: E.cab }; }));
+      var r0 = linhasR.length + 1;
+      pids.forEach(function (pid) {
+        var pt = pontoXls(c, d, pid), nomeA = (pt.cod && pt.cod !== pt.nome ? pt.cod + ' ' : '') + pt.nome, aba = abaMed(P, c, pt, m, nomeA);
+        abas.push(aba);
+        var ss = pt.servs.filter(function (s) { return temQv(s, m.n); }), v = ss.reduce(function (a, s) { return a + valor(s.por[m.n][1]); }, 0);
+        v = Math.round(v * 100) / 100; tot = Math.round((tot + v) * 100) / 100;
+        linhasR.push([{ v: pt.nome, e: E.txt }, { v: pt.cod || '—', e: E.centro }, { v: pt.k ? decimal(pt.k[0], 3) : '—', e: E.centro }, { v: pt.k ? decimal(pt.k[1], 3) : '—', e: E.centro },
+          { v: ss.length, e: E.centro }, { v: v, e: E.rs }, { v: '', e: E.centro, aba: aba }]);
+      });
+      var rt = linhasR.length;
+      linhasR.push([{ v: 'Total nas ' + (c.tipo === 'oae' ? 'OAEs' : c.tipo === 'conserva' ? 'segmentos' : 'pontos'), e: E.totTxt }, { e: E.tot }, { e: E.tot }, { e: E.tot }, { e: E.tot }, { f: 'SUM(F' + r0 + ':F' + rt + ')', v: tot, e: E.totRs }, { e: E.tot }]);
+      linhasR.push([]);
+      var tm = valor(m.total);
+      linhasR.push([{ v: 'Total da medição (PI)', e: E.sub }, null, null, null, null, { v: tm, e: E.rs }]);
+      if (Math.abs(tm - tot) > 1) linhasR.push([{ v: 'Sem local (administração, mobilização, canteiro e o que a memória não localiza)', e: E.sub }, null, null, null, null, { f: 'F' + (rt + 3) + '-F' + (rt + 1), v: Math.round((tm - tot) * 100) / 100, e: E.rs }]);
+      linhasR.push([{ v: 'Medição registra quantidade e valor; não comprova execução.', e: E.sub }]);
+      var ref = String(m.ref || '').slice(0, 7), num = /(\d+)/.exec(nome(c));
+      var todasAbas = [{ nome: 'Resumo', cols: [34, 10, 11, 11, 10, 17, 24], linhas: linhasR, paisagem: true }].concat(abas);
+      P.nomes(todasAbas);   // nomes finais das abas (sem repetir), para a coluna "Aba" do resumo
+      linhasR.forEach(function (l) { l.forEach(function (x) { if (x && x.aba) { var lk = P.link(x.aba.nome); x.f = lk.f; x.v = lk.v; delete x.aba; } }); });
+      return { nome: [num ? 'CT' + num[1] : slug(nome(c)), m.n + 'a' + (ref ? '_' + ref : ''), c.tipo === 'oae' ? 'OAEs' : c.tipo === 'conserva' ? 'segmentos' : 'pontos'].join('_') + '.xlsx', abas: todasAbas };
+    }
     function baixarXls(c, d, pid, m, todas) {
       return comPlanilha().then(function (P) {
-        var x = todas ? xlsTodas(P, c, d, pid) : xlsMed(P, c, d, pid, m);
+        var x = todas === 'med' ? xlsMedTodas(P, c, d, m) : todas ? xlsTodas(P, c, d, pid) : xlsMed(P, c, d, pid, m);
         if (!x) { op.toast('Sem serviços localizados para a planilha.'); return; }
         return op.salvar(x.nome, P.xlsx(x.abas), 'Planilha pronta: ' + x.nome);
       }).catch(function (e) { op.toast('Não foi possível montar a planilha: ' + ((e && e.message) || e), 6000); });
@@ -1288,6 +1323,12 @@
       else if (act === 'ponte-todas') segTodas = !segTodas;
       else if (act === 'ponte-serv') segServ = !segServ;
       else if (act === 'ponte-xls') segXls = !segXls;
+      else if (act === 'seg-xls') {
+        var cs = contrato(cid), ds = cs && dado(cs), msx = null;
+        if (ds) ds.ms.forEach(function (x) { if (String(x.n) === String(b.dataset.n)) msx = x; });
+        if (cs && ds && msx) baixarXls(cs, ds, '', msx, 'med');
+        return;
+      }
       else if (act === 'ponte-xls-ir') {
         var cx = contrato(cid), dx = cx && dado(cx), mx = null;
         if (dx) dx.ms.forEach(function (x) { if (String(x.n) === String(b.dataset.n)) mx = x; });

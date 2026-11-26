@@ -76,12 +76,16 @@ ok(h().includes('7200835 · Pingadeira de elastômero 40×40 mm'), 'código do c
 // OAE sem serviço em nenhuma medição: sem botão
 t.click('ponte', { p: 'oae-19' });
 ok(h().includes('data-md="ponte-xls"'), 'outra OAE com serviço tem o botão');
+// v222: a medição inteira, uma aba por OAE
+ok(h().includes('data-md="seg-xls"') && h().includes('Baixar Excel da 27ª · todas as OAEs') && h().includes('com serviço nesta medição (2)'), 'botão da medição inteira acima da lista');
+t.click('seg-xls', { n: '27' });
 
 setTimeout(function () {
   try {
-    ok(salvos.length === 2, 'duas planilhas entregues (' + salvos.length + ')' + (avisos.length ? ' avisos: ' + avisos.join(' | ') : ''));
+    ok(salvos.length === 3, 'três planilhas entregues (' + salvos.length + ')' + (avisos.length ? ' avisos: ' + avisos.join(' | ') : ''));
     ok(salvos[0].nome === 'CT424_OAE18_Parana_27a_2026-09.xlsx', 'nome da planilha simples: ' + salvos[0].nome);
     ok(/^CT424_OAE18_Parana_servicos_\d{4}-\d{2}-\d{2}\.xlsx$/.test(salvos[1].nome), 'nome da planilha completa: ' + salvos[1].nome);
+    ok(salvos[2].nome === 'CT424_27a_2026-09_OAEs.xlsx', 'nome da planilha da medição: ' + salvos[2].nome);
     var saida = process.argv[2];
     Promise.all(salvos.map(function (s) { return s.blob.arrayBuffer(); })).then(function (bufs) {
       bufs.forEach(function (b, i) {
@@ -92,6 +96,12 @@ setTimeout(function () {
           ok(txt.includes('Pingadeira de elastômero perfil 40 x 40 mm com aba inclinada') && txt.includes('<v>7200835</v>') && txt.includes('<v>1600</v>'), 'simples com código, nome completo e quantidade');
           ok(txt.includes('CT 424/2024 · OAE Paraná (km 556,240) · 27ª medição · set/26'), 'título da simples');
           ok(txt.indexOf('<v>395000</v>') < txt.indexOf('<v>51114</v>') && txt.indexOf('<v>51114</v>') < txt.indexOf('<v>7200835</v>') && txt.indexOf('<v>7200835</v>') < txt.indexOf('<v>91982</v>'), 'ordem do código como texto');
+        } else if (i === 2) {
+          var abas2 = (txt.match(/<sheet name="[^"]*"/g) || []).map(function (x) { return x.slice(13, -1); });
+          ok(abas2.join(' | ') === 'Resumo | OAE 18 Paraná | OAE 19 Lageado', 'abas da medição: ' + abas2.join(' | '));
+          ok(txt.includes('CT 424/2024 · 27ª medição · set/26 · serviços por OAE') && txt.includes("HYPERLINK(&quot;#'OAE 18 Paraná'!A1&quot;"), 'resumo com título e link para a aba');
+          ok(/<f>SUM\(F\d+:F\d+\)<\/f><v>18492\.49<\/v>/.test(txt) && txt.includes('Sem local (administração'), 'total nas OAEs e o sem local');
+          ok(txt.includes('CT 424/2024 · OAE Paraná (km 556,240) · 27ª medição · set/26') && txt.includes('CT 424/2024 · OAE Lageado (km 560,000) · 27ª medição · set/26'), 'uma aba por OAE no formato da individual');
         } else {
           var abas = (txt.match(/<sheet name="[^"]*"/g) || []).map(function (x) { return x.slice(13, -1); });
           ok(abas.join(' | ') === 'Resumo | 15ª · set-25 | 25ª · jul-26 | 26ª · ago-26 | 27ª · set-26 | Serviços × medições | Lançamentos', 'abas na ordem: ' + abas.join(' | '));
