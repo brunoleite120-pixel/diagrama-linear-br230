@@ -55,8 +55,12 @@ function cto(id, tipo) { return { id: id, numero: id + '/2026', tipo: tipo || 'c
 function analise(ms) { return { tipo: 'conserva', medicoes: ms, servicos: [{ id: 'a', cod: '50821', nome: 'Base solo-brita', un: 'm3', g: 'revprim' }], porMedicao: {}, pontes: {}, alertas: [], cobertura: {} }; }
 function med(n, ref, v, e) { return { n: n, ref: ref, mes: ref, total: v, etapa: e || 1 }; }
 function tela(cts, dados, extras) {
-  var host = elemento(), doc = { activeElement: null, getElementById: function () { return null; } }, w = { scrollTo: function () {} };
-  vm.runInNewContext(fs.readFileSync(path.join(raiz, 'medicoes.js'), 'utf8'), { window: w, document: doc, Promise: Promise, setTimeout: setTimeout, Date: dataFixa });
+  var host = elemento(), doc = { activeElement: null, getElementById: function () { return null; }, addEventListener: function () {}, head: { appendChild: function () {} } }, w = { scrollTo: function () {} };
+  var ctxT = { window: w, document: doc, Promise: Promise, setTimeout: setTimeout, Date: dataFixa, TextEncoder: TextEncoder, Blob: Blob, DataView: DataView, ArrayBuffer: ArrayBuffer, Uint32Array: Uint32Array };
+  vm.createContext(ctxT);
+  vm.runInContext(fs.readFileSync(path.join(raiz, 'medicoes.js'), 'utf8'), ctxT);
+  // v220: o gerador de planilha já carregado (no app ele vem por <script> na hora do clique)
+  vm.runInContext(fs.readFileSync(path.join(raiz, 'planilha.js'), 'utf8'), ctxT);
   var permit = {}, estados = {}, calls = {}, on = true;
   cts.forEach(function (c) { permit[c.id] = true; estados[c.id] = dados[c.id] ? 'ok' : 'vazia'; });
   var op = {

@@ -5984,6 +5984,8 @@
       kmRotulo: function (c) { return kmSoContrato(c) ? txtLimpo(c.rotuloKmContrato) : ''; }, pontos: sortedPoints, grupos: function (c) { return servicesOf(c).concat([MED_OUTROS, MED_ACESSO]); },
       esc: esc, fmtN: fmtN, dinheiro: function (v) { return v == null || !isFinite(v) ? '—' : 'R$ ' + fmt(v, 2); },
       medTxt: medTxt, etapaInfo: etapaInfo, unTxt: unTxt, semLocal: MED_SEMLOCAL, data: fmtIsoDate, toast: toast,
+      // v220: Baixar Excel do painel da OAE (no computador baixa; no app e no iPhone, o compartilhar do sistema)
+      salvar: function (nomeArq, blob, msg) { return saveBlob(nomeArq, blob, msg); },
       diagrama: function (c) { if (parte(c, 'med') && !ehSup(c)) abrirDaVisao(c, null, false); },
       // painel da ponte/segmento: o ponto no diagrama e as fotos dele (conservação: pelo km do segmento, as fotos não têm ponto)
       diagramaPonto: function (c, p) { if (parte(c, 'med')) abrirDaVisao(c, p, false); },

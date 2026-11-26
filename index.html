@@ -1835,6 +1835,13 @@ span.an-chip{cursor:default}
 .btn.md-hist .md-num{text-align:right}
 .md-hist-acum{display:flex;justify-content:space-between;padding:0 6px;font-weight:700;font-variant-numeric:tabular-nums}
 .md-painel-acoes{display:flex;flex-wrap:wrap;gap:8px}
+/* v220: Baixar Excel no painel da OAE/segmento/ponto: as duas escolhas, uma embaixo da outra */
+.md-xls{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.btn.md-xls-op{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:0;border-radius:0;min-height:48px;padding:9px 12px;white-space:normal}
+.btn.md-xls-op+.btn.md-xls-op{border-top:1px solid var(--line)}
+.btn.md-xls-op small{color:var(--ink-3);font-weight:400}
+.btn.md-xls-op.on{background:var(--accent-soft)}
+.btn.md-xls-op:disabled{opacity:.55}
 .md-tabela.md-tabela-p{min-width:0}
 .md-alerta{padding:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:8px}
 .md-alerta p{margin-top:4px;overflow-wrap:anywhere}

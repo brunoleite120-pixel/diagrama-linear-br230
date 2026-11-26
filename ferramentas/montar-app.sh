@@ -23,6 +23,8 @@ cp "$SRC/index.html" "$SRC/manifest.webmanifest" "$DEST/"
 for f in $(grep -o '<script src="[^"]*"' "$SRC/index.html" | sed 's/^<script src="//; s/"$//'); do
   case "$f" in lib/*) ;; *) cp "$SRC/$f" "$DEST/" ;; esac
 done
+# carregados só quando pedidos (v220: planilha.js, o Excel do painel da OAE)
+cp "$SRC/planilha.js" "$DEST/"
 cp -R "$SRC/lib" "$SRC/icons" "$DEST/"
 rm -rf "$DEST/icons/android"
 

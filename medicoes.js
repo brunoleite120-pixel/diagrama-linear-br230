@@ -8,7 +8,7 @@
   window.Medicoes = function (op) {
     var host = op.host, esc = op.esc, fmtN = op.fmtN, dinheiro = op.dinheiro;
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
-    var segAberto = '', segTodas = false, segServ = false, segSem = null, segOrdem = 'km';
+    var segAberto = '', segTodas = false, segServ = false, segXls = false, segSem = null, segOrdem = 'km';
     // v202: o contrato aberto tem as partes Medições e Pagamentos; na tabela dos pagamentos, todas as linhas ou só as não pagas
     var secao = 'med', pagTodas = false, pagAbertas = false, ordSit = 'prazo';
     var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '', folha = false, folhaHist = false, folhaPula = false;
@@ -930,21 +930,175 @@
           if (desc.length > 8) h += botao('ponte-todas', segTodas ? 'Mostrar só as 8 últimas ▴' : 'Ver as ' + desc.length + ' medições ▾', '', 'small ghost md-accent');
           pe += '<div class="md-hist-acum"><span>Acumulado</span><span>' + esc(dinheiro(acum)) + '</span></div>';
         }
+        var xs = lin.length && op.salvar ? xlsConta(c, d, pid, m) : null;
         pe += '<div class="md-painel-acoes">' + (p && op.diagramaPonto ? botao('ponte-diag', 'Ver no diagrama', ' data-p="' + esc(pid) + '"', 'small primary') : '') +
           (p && op.fotos && op.fotos(c) ? botao('ponte-fotos', 'Fotos ' + (oae ? 'da OAE' : cons ? 'do segmento' : 'do ponto'), ' data-p="' + esc(pid) + '"', 'small') : '') +
-          botao('ponte-serv', 'Serviços nesta medição', ' data-p="' + esc(pid) + '" aria-pressed="' + segServ + '"', 'small') + '</div>';
+          botao('ponte-serv', 'Serviços nesta medição', ' data-p="' + esc(pid) + '" aria-pressed="' + segServ + '"', 'small') +
+          (xs && xs.todas ? botao('ponte-xls', 'Baixar Excel ' + (segXls ? '▴' : '▾'), ' data-p="' + esc(pid) + '" aria-expanded="' + segXls + '"', 'small') : '') + '</div>';
+        // v220: as duas planilhas (todas as medições dele, marcada; ou só a medição aberta, no formato simples)
+        if (xs && xs.todas && segXls) pe += '<div class="md-xls" role="group" aria-label="Baixar Excel">' +
+          botao('ponte-xls-ir', '<b>Todas as medições ' + (oae ? 'desta OAE' : cons ? 'deste segmento' : 'deste ponto') + '</b><small>' + esc(nMed(xs.meds) + ' · ' + xs.todas + (xs.todas === 1 ? ' serviço' : ' serviços') + ' · resumo, serviços × medições e lançamentos') + '</small>', ' data-p="' + esc(pid) + '" data-q="todas" data-n="' + esc(m.n) + '"', 'md-xls-op on') +
+          botao('ponte-xls-ir', '<b>Só a ' + esc(m.n + 'ª') + ' medição</b><small>' + esc(xs.med ? xs.med + (xs.med === 1 ? ' serviço' : ' serviços') + ' · código, serviço, unidade e quantidade' : 'sem serviço localizado nesta medição') + '</small>', ' data-p="' + esc(pid) + '" data-q="med" data-n="' + esc(m.n) + '"' + (xs.med ? '' : ' disabled'), 'md-xls-op') + '</div>';
         if (segServ) {
           h += '<h4 class="md-painel-sv">Serviços nesta medição (' + esc(m.n + 'ª') + ')</h4>';
           var rows = ((an[pid] && an[pid].servicos) || []).map(function (s) { var qv = s.por && s.por[m.n]; return qv && (valor(qv[0]) || valor(qv[1])) ? { s: s, q: numero(qv[0]), v: valor(qv[1]) } : null; }).filter(Boolean)
             .sort(function (x, y) { return y.v - x.v; });
           h += rows.length ? '<div class="md-scroll" tabindex="0" role="region" aria-label="Serviços nesta medição"><table class="md-tabela md-tabela-p"><thead><tr><th scope="col">Serviço</th><th scope="col">Quantidade</th><th scope="col">Valor (PI)</th></tr></thead><tbody>' + rows.map(function (r) {
-            return '<tr><td>' + esc((r.s.cod ? r.s.cod + ' · ' : '') + (r.s.nome || r.s.id || '')) + '</td><td class="md-num">' + (r.q == null ? '—' : fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un))) + '</td><td class="md-num">' + dinheiro(r.v) + '</td></tr>';
+            var cod = servInfo(c, r.s).cod;
+            return '<tr><td>' + esc((cod ? cod + ' · ' : '') + (r.s.nome || r.s.id || '')) + '</td><td class="md-num">' + (r.q == null ? '—' : fmtN(r.q) + ' ' + esc(op.unTxt(r.s.un))) + '</td><td class="md-num">' + dinheiro(r.v) + '</td></tr>';
           }).join('') + '</tbody></table></div>' : vazio('Sem serviços localizados nesta medição.');
         }
         return h + '</div><div class="md-painel-pe">' + pe + '</div></section>';
       }
     }
     function kmTxt(v, casas) { return v == null ? '—' : decimal(v, casas); }
+
+    // ---------------- v220: Baixar Excel no painel da OAE, do segmento ou do ponto (pedido de 26/11/2026)
+    // Código e nome completo: os da análise; no 424, que só tem o nome curto, os do cadastro do contrato (c.catServ, tirado
+    // do relatório de controle financeiro do SIAC: { "nome curto": [código, nome completo, unidade] })
+    function servInfo(c, s) {
+      var cat = c && c.catServ && (c.catServ[s.nome] || (s.id && c.catServ[s.id])) || null;
+      return { cod: String(s.cod || (cat && cat[0]) || '').trim(), nome: String((cat && cat[1]) || s.nome || s.id || ''), un: op.unTxt(s.un || (cat && cat[2]) || '') };
+    }
+    function temQv(s, n) { var qv = s.por && s.por[n]; return !!(qv && (valor(qv[0]) || valor(qv[1]))); }
+    function xlsConta(c, d, pid, m) {
+      var ss = ((d.an.pontes || {})[pid] || {}).servicos || [], meds = d.ms.filter(function (x) { return ss.some(function (s) { return temQv(s, x.n); }); }).length;
+      return { meds: meds, todas: ss.filter(function (s) { return d.ms.some(function (x) { return temQv(s, x.n); }); }).length, med: ss.filter(function (s) { return temQv(s, m.n); }).length };
+    }
+    function semAcento(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+    function slug(t) { return semAcento(t).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40); }
+    function dois(n) { return ('0' + n).slice(-2); }
+    function cmpTxt(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
+    function codXls(cod) { return /^\d{1,15}$/.test(cod) ? Number(cod) : cod || '—'; }
+    function pontoXls(c, d, pid) {
+      var p = op.pontos(c).filter(function (x) { return x.id === pid; })[0] || null, an = (d.an.pontes || {})[pid] || {};
+      var nm = (p && (p.nome || p.codigo)) || an.nome || pid, ki = p ? numero(p.kmIni) : null, kf = p ? numero(p.kmFim) : null;
+      if (ki == null) ki = kf; if (kf == null) kf = ki;
+      var mp = kmMp(c, c.kmIni) != null, km = function (v) { return mp ? kmMp(c, v) : v; };
+      var k = ki == null ? null : [Math.min(ki, kf), Math.max(ki, kf)];
+      return { nome: nm, cod: p && p.codigo && p.codigo !== nm ? p.codigo : '', tipo: c.tipo === 'oae' ? 'OAE' : c.tipo === 'conserva' ? 'Segmento' : 'Ponto',
+        kmR: mp ? 'km MP ' : 'km ', k: k ? [km(k[0]), km(k[1])] : null, ext: k && k[1] > k[0] ? (k[1] - k[0] < 1 ? Math.round((k[1] - k[0]) * 1000) + ' m' : decimal(k[1] - k[0], 1) + ' km') : '',
+        servs: an.servicos || [], meses: an.meses || {} };
+    }
+    function arquivoXls(c, pt, fim) {
+      var n = /(\d+)/.exec(nome(c));
+      return [n ? 'CT' + n[1] : slug(nome(c)), slug(pt.cod).replace(/_/g, ''), slug(pt.nome), fim].filter(Boolean).join('_') + '.xlsx';
+    }
+    // só a medição aberta: Código | Serviço | Unidade | Quantidade, na ordem do código (como a tabela de referência)
+    function xlsMed(P, c, d, pid, m) {
+      var E = P.E, pt = pontoXls(c, d, pid), rows = pt.servs.filter(function (s) { return temQv(s, m.n); }).map(function (s) { return { i: servInfo(c, s), q: numero(s.por[m.n][0]) }; });
+      if (!rows.length) return null;
+      rows.sort(function (a, b) { return cmpTxt(a.i.cod || '￿', b.i.cod || '￿') || cmpTxt(a.i.nome, b.i.nome); });
+      var tit = [nome(c), pt.tipo + ' ' + pt.nome + (pt.k ? ' (' + pt.kmR + decimal(pt.k[0], 3) + ')' : ''), m.n + 'ª medição', mesTxt(idx(m.ref))].join(' · ');
+      var linhasX = [[{ v: tit, e: E.sTitulo }], [], ['Código', 'Serviço', 'Unidade', 'Quantidade'].map(function (t) { return { v: t, e: E.sCab }; })];
+      rows.forEach(function (r) { linhasX.push([{ v: codXls(r.i.cod), e: E.sCentro }, { v: r.i.nome, e: E.sTxt }, { v: r.i.un, e: E.sCentro }, { v: r.q, e: E.sQtd }]); });
+      var ref = String(m.ref || '').slice(0, 7);
+      return { nome: arquivoXls(c, pt, m.n + 'a' + (ref ? '_' + ref : '')), abas: [{ nome: pt.nome + ' ' + m.n + 'ª', cols: [10, 62, 10, 14], linhas: linhasX, mesclar: ['A1:D1'] }] };
+    }
+    // todas as medições dele: Resumo, Serviços × medições e Lançamentos (os totais em fórmula, com o valor já calculado)
+    function xlsTodas(P, c, d, pid) {
+      var E = P.E, col = P.col, pt = pontoXls(c, d, pid), ordG = {}, rotG = {};
+      (op.grupos(c) || []).forEach(function (g, i) { ordG[g.key] = i; rotG[g.key] = g.short || g.label || g.key; });
+      var ms = d.ms.filter(function (m) { return pt.servs.some(function (s) { return temQv(s, m.n); }); });
+      if (!ms.length) return null;
+      var sv = pt.servs.filter(function (s) { return ms.some(function (m) { return temQv(s, m.n); }); }).map(function (s) {
+        return { s: s, i: servInfo(c, s), o: ordG[s.g] == null ? 999 : ordG[s.g], gn: rotG[s.g] || 'Outros' };
+      }).sort(function (a, b) { return a.o - b.o || cmpTxt(a.gn, b.gn) || cmpTxt(a.i.nome, b.i.nome); });
+      function qv(x, n) { var r = x.s.por && x.s.por[n]; return r ? [numero(r[0]) || 0, valor(r[1])] : [0, 0]; }
+      var LA = "'Lançamentos'!";
+      // Lançamentos: uma linha por serviço em cada medição
+      var lan = [['Medição', 'Competência', 'Etapa', 'Grupo', 'Código', 'Serviço', 'Un', 'Quantidade', 'Valor (PI)', 'Preço unitário (PI)', 'Processo SEI', 'Pagamento'].map(function (t) { return { v: t, e: E.cab }; })];
+      var porMed = {}, total = 0;
+      ms.forEach(function (m) {
+        var x = sMed(d, m.n) || {}, pg = pagTxt(d, m) || '—';
+        porMed[m.n] = 0;
+        sv.forEach(function (it) {
+          if (!temQv(it.s, m.n)) return;
+          var a = qv(it, m.n), r = lan.length + 1;
+          porMed[m.n] += a[1]; total += a[1];
+          lan.push([{ v: Number(m.n), e: E.ordinal }, { v: mesTxt(idx(m.ref)), e: E.centro }, { v: m.etapa ? m.etapa + 'ª' : '', e: E.centro }, { v: it.gn, e: E.txt },
+            { v: codXls(it.i.cod), e: E.centro }, { v: it.i.nome, e: E.txtQ }, { v: it.i.un, e: E.centro }, { v: a[0], e: E.qtd }, { v: a[1], e: E.rs },
+            { f: 'IFERROR(I' + r + '/H' + r + ',0)', v: a[0] ? a[1] / a[0] : 0, e: E.rs }, { v: x.processo || '—', e: E.centro }, { v: pg, e: E.txt }]);
+        });
+      });
+      var nl = lan.length;
+      lan.push([{ e: E.tot }, { e: E.tot }, { e: E.tot }, { e: E.tot }, { e: E.tot }, { v: 'Total', e: E.totTxt }, { e: E.tot }, { e: E.tot }, { f: 'SUBTOTAL(9,I2:I' + nl + ')', v: total, e: E.totRs }, { e: E.tot }, { e: E.tot }, { e: E.tot }]);
+      // Serviços × medições: grupos da vistoria, quantidade e valor em cada medição e o acumulado
+      var mx = [[{ v: 'Quantidade e valor (PI) de cada serviço em cada medição', e: E.sTitulo }], [{ v: 'Traço = serviço não medido naquela medição.', e: E.sub }], []];
+      var c1 = [{ v: 'Grupo', e: E.cab }, { v: 'Código', e: E.cab }, { v: 'Serviço', e: E.cab }, { v: 'Un', e: E.cab }], c2 = [{ e: E.cab }, { e: E.cab }, { e: E.cab }, { e: E.cab }], mes = ['A4:A5', 'B4:B5', 'C4:C5', 'D4:D5'];
+      ms.concat([null]).forEach(function (m, j) {
+        var cc = 4 + j * 2;
+        c1.push({ v: m ? m.n + 'ª · ' + mesTxt(idx(m.ref)) : 'Acumulado', e: E.cab }, { e: E.cab });
+        c2.push({ v: 'Qtd', e: E.cab }, { v: 'Valor', e: E.cab });
+        mes.push(col(cc) + '4:' + col(cc + 1) + '4');
+      });
+      mx.push(c1, c2);
+      var ultG = null, ncol = 4 + (ms.length + 1) * 2, ini = mx.length + 1;
+      sv.forEach(function (it) {
+        if (it.gn !== ultG) { ultG = it.gn; var g = [{ v: it.gn, e: E.grupo }]; for (var k = 1; k < ncol; k++) g.push({ e: E.grupo }); mx.push(g); }
+        var r = mx.length + 1, l = [{ e: E.txt }, { v: codXls(it.i.cod), e: E.centro }, { v: it.i.nome, e: E.txtQ }, { v: it.i.un, e: E.centro }], sq = 0, sv2 = 0, fq = [], fv = [];
+        ms.forEach(function (m, j) {
+          var a = qv(it, m.n), cc = 4 + j * 2;
+          sq += a[0]; sv2 += a[1]; fq.push(col(cc) + r); fv.push(col(cc + 1) + r);
+          l.push({ v: a[0], e: E.qtd }, { v: a[1], e: E.rs });
+        });
+        l.push({ f: fq.join('+'), v: sq, e: E.qtdB }, { f: fv.join('+'), v: sv2, e: E.rsB });
+        mx.push(l);
+      });
+      var fimM = mx.length, tl = [{ e: E.tot }, { e: E.tot }, { v: 'Total', e: E.totTxt }, { e: E.tot }];
+      ms.concat([null]).forEach(function (m, j) {
+        var cv = col(4 + j * 2 + 1);
+        tl.push({ e: E.tot }, { f: 'SUM(' + cv + ini + ':' + cv + fimM + ')', v: m ? porMed[m.n] : total, e: E.totRs });
+      });
+      mx.push(tl);
+      var cm = [18, 10, 56, 6];
+      ms.concat([null]).forEach(function () { cm.push(10, 14); });
+      // Resumo
+      var hoje = new Date(), res = [[{ v: pt.tipo + ' ' + pt.nome + ' · serviços medidos', e: E.titulo }], [{ v: [nome(c), tipo(c)].join(' · '), e: E.sub }], []];
+      [[pt.tipo, pt.nome + (pt.cod ? ' (' + pt.cod + ')' : '')], [pt.kmR + 'inicial', pt.k ? decimal(pt.k[0], 3) : '—'], [pt.kmR + 'final', pt.k ? decimal(pt.k[1], 3) : '—'],
+        ['Extensão', pt.ext || '—'], ['Medições com serviço', nMed(ms.length) + ' de ' + d.ms.length], ['Valores', 'Preço inicial (PI), sem reajuste'],
+        ['Fonte', 'Memória de cálculo das medições no VIA-230; processo e pagamento conforme a consulta ao SIAC'],
+        ['Gerado em', dois(hoje.getDate()) + '/' + dois(hoje.getMonth() + 1) + '/' + hoje.getFullYear()]].forEach(function (x) { res.push([{ v: x[0], e: E.sub }, x[1]]); });
+      res.push([]);
+      res.push(['Medição', 'Competência', 'Etapa', 'Processo SEI', 'Pagamento', 'Valor (PI)', '% do acumulado'].map(function (t) { return { v: t, e: E.cab }; }));
+      var r0 = res.length + 1, rt = r0 + ms.length, difs = [];
+      ms.forEach(function (m) {
+        var x = sMed(d, m.n) || {}, r = res.length + 1, vMes = valor(pt.meses[m.n]);
+        if (Math.abs(vMes - porMed[m.n]) > 1) difs.push(m.n + 'ª: ' + dinheiro(vMes) + ' na análise, ' + dinheiro(porMed[m.n]) + ' nos serviços');
+        res.push([{ v: Number(m.n), e: E.ordinal }, { v: mesTxt(idx(m.ref)), e: E.centro }, { v: m.etapa ? m.etapa + 'ª' : '', e: E.centro }, { v: x.processo || '—', e: E.centro },
+          { v: pagTxt(d, m) || '—', e: E.txt }, { f: 'SUMIF(' + LA + '$A:$A,' + Number(m.n) + ',' + LA + '$I:$I)', v: porMed[m.n], e: E.rs },
+          { f: 'IFERROR(F' + r + '/$F$' + rt + ',0)', v: total ? porMed[m.n] / total : 0, e: E.pct }]);
+      });
+      res.push([{ v: 'Acumulado', e: E.totTxt }, { e: E.tot }, { e: E.tot }, { e: E.tot }, { e: E.tot }, { f: 'SUM(F' + r0 + ':F' + (rt - 1) + ')', v: total, e: E.totRs }, { e: E.tot }]);
+      res.push([]);
+      res.push([{ v: 'Medição registra quantidade e valor; não comprova execução.', e: E.sub }]);
+      if (difs.length) res.push([{ v: 'Valor da medição diferente da soma dos serviços (' + difs.join('; ') + ').', e: E.sub }]);
+      return { nome: arquivoXls(c, pt, 'servicos_' + hoje.getFullYear() + '-' + dois(hoje.getMonth() + 1) + '-' + dois(hoje.getDate())), abas: [
+        { nome: 'Resumo', cols: [24, 13, 8, 24, 26, 18, 15], linhas: res, paisagem: true },
+        { nome: 'Serviços × medições', cols: cm, linhas: mx, mesclar: mes, congelar: 'E6', paisagem: true },
+        { nome: 'Lançamentos', cols: [9, 12, 7, 20, 10, 60, 6, 12, 15, 17, 23, 22], linhas: lan, congelar: 'A2', filtro: 'A1:L' + nl, paisagem: true }
+      ] };
+    }
+    var planilhaP = null;
+    function comPlanilha() {
+      if (window.Planilha) return Promise.resolve(window.Planilha);
+      if (planilhaP) return planilhaP;
+      planilhaP = new Promise(function (ok, no) {
+        var s = document.createElement('script');
+        s.src = 'planilha.js';
+        s.onload = function () { if (window.Planilha) ok(window.Planilha); else no(new Error('gerador incompleto')); };
+        s.onerror = function () { planilhaP = null; s.remove(); no(new Error('sem sinal para carregar o gerador')); };
+        document.head.appendChild(s);
+      });
+      return planilhaP;
+    }
+    function baixarXls(c, d, pid, m, todas) {
+      return comPlanilha().then(function (P) {
+        var x = todas ? xlsTodas(P, c, d, pid) : xlsMed(P, c, d, pid, m);
+        if (!x) { op.toast('Sem serviços localizados para a planilha.'); return; }
+        return op.salvar(x.nome, P.xlsx(x.abas), 'Planilha pronta: ' + x.nome);
+      }).catch(function (e) { op.toast('Não foi possível montar a planilha: ' + ((e && e.message) || e), 6000); });
+    }
     function avisosHtml(als) {
       // os avisos para a fiscalização (SIAC × MP e os de vistoria) vêm primeiro e em destaque
       var fisc = function (a) { return a.tipo === 'siac' || a.tipo === 'fiscal' ? 1 : 0; };
@@ -1081,7 +1235,7 @@
       if (id !== cid) { secao = 'med'; pagTodas = false; pagAbertas = false; }
       if (n != null) secao = 'med';
       if (ab === 'pag' || ab === 'ct') secao = ab;
-      cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segSem = null; segOrdem = 'km';
+      cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
       var d = dado(contrato(id));
       if (d && n != null) d.ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; });
       render(); window.scrollTo(0, 0);
@@ -1125,9 +1279,16 @@
       else if (act === 'secao') secao = b.dataset.v === 'pag' || b.dataset.v === 'ct' ? b.dataset.v : 'med';
       else if (act === 'pag-todas') pagTodas = !pagTodas;
       else if (act === 'pag-abertas') { pagAbertas = !pagAbertas; pagTodas = false; }
-      else if (act === 'ponte') { segAberto = segAberto === b.dataset.p ? '' : b.dataset.p; segTodas = false; segServ = false; }
+      else if (act === 'ponte') { segAberto = segAberto === b.dataset.p ? '' : b.dataset.p; segTodas = false; segServ = false; segXls = false; }
       else if (act === 'ponte-todas') segTodas = !segTodas;
       else if (act === 'ponte-serv') segServ = !segServ;
+      else if (act === 'ponte-xls') segXls = !segXls;
+      else if (act === 'ponte-xls-ir') {
+        var cx = contrato(cid), dx = cx && dado(cx), mx = null;
+        if (dx) dx.ms.forEach(function (x) { if (String(x.n) === String(b.dataset.n)) mx = x; });
+        if (cx && dx && mx) baixarXls(cx, dx, b.dataset.p, mx, b.dataset.q === 'todas');
+        segXls = false;
+      }
       else if (act === 'ponte-sem') segSem = b.dataset.v === '1';
       else if (act === 'ponte-ordem') segOrdem = segOrdem === 'valor' ? 'km' : 'valor';
       else if (act === 'grupo') grupo = grupo === b.dataset.g ? '' : b.dataset.g;
@@ -1146,6 +1307,7 @@
       var pc1 = host.querySelector('.md-painel-corpo');
       if (pc1 && rol0) pc1.scrollTop = rol0;
       if (pc1 && act === 'ponte-serv' && segServ) { var sv = pc1.querySelector('.md-painel-sv'); if (sv) pc1.scrollTop = Math.max(0, sv.offsetTop - pc1.offsetTop - 8); }
+      if (act === 'ponte-xls-ir') { var bx = host.querySelector('[data-md="ponte-xls"]'); if (bx) bx.focus({ preventScroll: true }); return; }
       var alvos = host.querySelectorAll('[data-md="' + act + '"]');
       for (var i = 0; i < alvos.length; i++) if (alvos[i].dataset.n === b.dataset.n && alvos[i].dataset.g === b.dataset.g && alvos[i].dataset.e === b.dataset.e && alvos[i].dataset.v === b.dataset.v && alvos[i].dataset.p === b.dataset.p && alvos[i].className === b.className) { alvos[i].focus({ preventScroll: true }); break; }
       if (daFolha || (act === 'passo' && !host.contains(document.activeElement))) focaSeletor();
@@ -1185,7 +1347,7 @@
         if (!contrato(id)) return false;
         if (id !== cid) { pagTodas = false; pagAbertas = false; }
         secao = ab === 'pag' || ab === 'ct' ? ab : 'med';
-        cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segSem = null; segOrdem = 'km';
+        cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
         return true;
       },
       // chamada no popstate do app; true: a folha resolveu
