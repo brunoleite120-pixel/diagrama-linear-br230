@@ -7187,6 +7187,7 @@
       var btn = $('btnPdf'), c = active(), old = btn.innerHTML, nome = pdfName(c, !semAnalise && !!anOf(c));
       btn.disabled = true;
       btn.textContent = 'Gerando PDF…';
+      if (btn.offsetParent === null) toast('Gerando o PDF…', 2500);   // v229: pelo menu (ou pela página Diagrama) o botão do topo não está na tela
       buildPdf(c, semAnalise).then(function (doc) {
         return saveBlob(nome, doc.output('blob'), 'PDF gerado: ' + nome);
       }).catch(function (err) {
