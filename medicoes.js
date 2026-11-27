@@ -1389,6 +1389,8 @@
       carregar: carregar,
       // v209: os números de um contrato para o painel do editor e a entrada direto no contrato (aba Medições, Pagamentos ou Contrato)
       resumo: function (c) { try { return resumoCt(c); } catch (e) { return null; } },
+      // v223: o contrato aberto em Medições ('' na lista de contratos), para o menu Dados e a galeria não usarem o do editor, que está escondido
+      aberto: function () { return cid && contrato(cid) ? cid : ''; },
       irContrato: function (id, ab) {
         if (!contrato(id)) return false;
         if (id !== cid) { pagTodas = false; pagAbertas = false; }

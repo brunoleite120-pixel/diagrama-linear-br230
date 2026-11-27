@@ -7460,8 +7460,8 @@
       $('fileInput').click();
     }
     else if (act === 'print') { if (visaoOn || medicoesOn) { toast('Abra um contrato para imprimir o diagrama dele.'); return; } imprimir(); }
-    // na visão o contrato ativo está escondido: o relatório começa em "Todos"
-    else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: visaoOn ? '' : active().id });
+    // na visão o contrato ativo está escondido: o relatório começa em "Todos"; em Medições vale o contrato aberto nela (v223)
+    else if (act === 'relfoto') abrirGaleria({ aba: 'relatorio', cid: ctFotoNaTela() });
     else if (act === 'lixeira') openLixeira();
     else if (act === 'arquivados') openArquivados();
     else if (act === 'recusadas') openRecusadas();
@@ -9514,6 +9514,13 @@
   // ---------------- galeria (galeria.js): fotos deste aparelho e da equipe, conforme o acesso
   var galeria = null;
   function galeriaOn() { return !!(banco.on && driveQ && window.Galeria && banco.login && podeFotos()); }
+  // v223: o contrato que está na tela, para a galeria: na visão geral nenhum; em Medições o que está aberto nela (e não o do editor,
+  // escondido por trás); no editor, o ativo. Só vale se o acesso tem fotos nele
+  function ctFotoNaTela() {
+    if (visaoOn) return '';
+    var id = medicoesOn ? (medicoes && medicoes.aberto ? medicoes.aberto() : '') : (active() || {}).id;
+    return id && ctsFoto().some(function (x) { return x.id === id; }) ? id : '';
+  }
   function abrirGaleria(f) {
     if (!galeriaOn()) return;
     var c = active();
@@ -9535,7 +9542,7 @@
         driveUrl: function () { return driveReady() ? banco.cfg.driveFotos.url : null; },
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
-        contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: function () { var c = active(); return c && !visaoOn && ctsFoto().indexOf(c) >= 0 ? c.id : ''; },
+        contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: ctFotoNaTela,
         toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin, carimbar: function (fotos) { openFoto('', fotos); },
         podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, nativo: isNativeApp, onBaixa: renderGaleriaBtn,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null, ncFotos: ncFotosIds, ncDaFoto: ncDaFoto, abrirNc: abrirNcDaFoto
