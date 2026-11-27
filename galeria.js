@@ -2400,7 +2400,7 @@
     function soFotoFecha(viaVoltar, depois) {
       var h = soFoto && soFoto.hist;
       soFoto = null;
-      var fim = function () { close(true); if (depois) depois(); };
+      var fim = function () { close(); if (depois) depois(); };   // v227: avisa o app, que tira do histórico o passo da janela
       if (h && !viaVoltar) histTira(fim); else fim();
     }
     // ---------------------------------------------------------------- celular: barra única e folhas
@@ -4026,7 +4026,7 @@
       }
       // página do celular: uma região da tela (o app continua em volta); janela: cobre tudo e trava a rolagem de trás
       var pagina = !!f.pagina;
-      aoFechar = pagina && f.aoFechar ? f.aoFechar : null;
+      aoFechar = typeof f.aoFechar === 'function' ? f.aoFechar : null;   // v227: também na janela (o app tira o passo dela do histórico)
       root.classList.toggle('gl-pag', pagina);
       tamAplica();
       soFoto = f.foto ? { id: String(f.foto), irPara: typeof f.irPara === 'function' ? f.irPara : null, aberta: false, hist: false } : null;

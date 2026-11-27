@@ -2666,19 +2666,33 @@
     var t = v.pg === 'mapa' ? 'Voltar ao mapa' : 'Voltar ao diagrama' + (v.folha >= 0 ? ' · folha ' + (v.folha + 1) : '');
     return '<button type="button" class="btn small ld-voltar" data-act="ld-voltar">' + ICON_VOLTA + esc(t) + '</button>';
   }
+  // v227 (item 12 dos Caminhos): se o salto para o ponto criou um passo no histórico (v.passo) e ele ainda é o de cima,
+  // "Voltar ao mapa" volta por ele (antes empilhava outro passo, e o Voltar do aparelho passava duas vezes pelo mesmo lugar)
+  var voltaPend = null;
   function voltarDe(v) {
-    irPg(v.pg);
+    var hs = history.state || {};
+    if (v.passo != null && pgAtivo() && pg === 'pontos' && hs.pg === 'pontos' && hs.n === v.passo && !hs.modal && !hs.escolha) {
+      voltaPend = v;
+      try { history.back(); return; } catch (e) { voltaPend = null; }
+    }
+    voltaAplica(v, false);
+  }
+  function voltaAplica(v, jaFoi) {
+    if (!jaFoi) irPg(v.pg);
     if (v.pg === 'diagrama' && v.top != null) { var pgs = $('pages'); requestAnimationFrame(function () { pgs.scrollTop = v.top; marcaFolha(); }); }
     renderEditor();
   }
+  // o passo que o salto acabou de criar (null: a página não mudou, nada foi empilhado)
+  function passoDoSalto(antes) { var hs = history.state || {}; return hs !== antes && hs.pg === 'pontos' ? hs.n : null; }
   // tocar em "Abrir em OAEs" no balão do mapa
   function abrirDoMapa(pid) {
     if (!findPoint(pid)) return;
     undoProxima();
     ui.open = {}; ui.open[pid] = true;
     listaMostra(findPoint(pid), active());
-    ui.voltar = mdOn() ? { pg: 'mapa' } : null;
+    var hsM = history.state, eraMapa = mdOn();
     if (pgAtivo()) irPg('pontos');
+    ui.voltar = eraMapa ? { pg: 'mapa', passo: passoDoSalto(hsM) } : null;
     renderEditor();
     scrollToPoint(pid, true);
   }
@@ -2733,9 +2747,10 @@
     window.scrollTo(0, 0);
   }
   // ícone da tela inicial no topo: se o contrato foi aberto pela tela inicial, o histórico volta até ela (sem voltas em círculo)
+  var semReabre = false;   // v227: pelo ícone, a lista de NC marcada para reabrir (reabre: 'lnc') não reabre
   function irInicio() {
     var hs = history.state || {};
-    if (!visaoOn && hs.casa && hs.n > 0) { try { history.go(-hs.n); return; } catch (e) { /* segue sem histórico */ } }
+    if (!visaoOn && hs.casa && hs.n > 0) { semReabre = true; try { history.go(-hs.n); return; } catch (e) { semReabre = false; /* segue sem histórico */ } }
     if (visaoOn && !medicoesOn && telaG !== 'geral') { irGeral('geral'); return; }
     try { history.replaceState({ tela: 'geral', n: 0 }, ''); } catch (e) { /* segue sem histórico */ }
     mostraGeral('geral');
@@ -3446,8 +3461,9 @@
     h += '<p class="lnc-nota">Medição é o serviço feito; não conformidade é o que falta corrigir. A data de abertura passou a ser guardada em 24/11/2026: as NC anteriores aparecem sem data.</p>';
     return { h: h + '<div class="modal-foot"><button type="button" class="btn" data-close>Fechar</button></div>', l: l };
   }
-  function listaNcAbre() {
+  function listaNcAbre(y) {
     var r = listaNcCorpo(), f = modal(r.h, null, 'lnc-box');
+    if (y) { var sc0 = f.querySelector('.lnc-scroll'); if (sc0) sc0.scrollTop = y; }
     var refaz = function (foco) {
       r = listaNcCorpo();
       var y = f.scrollTop;
@@ -3466,7 +3482,13 @@
       } else if (k === 'ir') {
         var c = contractById(b.dataset.cid), p = c && c.pontos.find(function (q) { return q.id === b.dataset.pid; });
         if (!c || !p) return;
-        closeModal(function () { abrirDaVisao(c, p, false); });
+        // v227: a entrada de baixo fica marcada; o Voltar, ao cair nela, reabre a lista no mesmo filtro e na mesma rolagem
+        var sc = f.querySelector('.lnc-scroll');
+        lnc.y = sc ? sc.scrollTop : 0;
+        closeModal(function () {
+          try { history.replaceState(Object.assign({}, history.state || {}, { reabre: 'lnc' }), ''); } catch (e) { /* segue sem histórico */ }
+          abrirDaVisao(c, p, false);
+        });
       }
     });
     f.addEventListener('change', function (ev) { if (ev.target.getAttribute('data-lnc') === 'ct') { lnc.cid = ev.target.value; refaz('[data-lnc="ct"]'); } });
@@ -5759,7 +5781,7 @@
       },
       abrirGaleria: function (ids, nome) { abrirGaleria({ aba: 'todas', ids: ids, idsNome: nome }); },
       // v191: a foto aberta por cima do mapa (a galeria em janela, só com o visualizador; o mapa fica onde está)
-      verFoto: function (ids, id, nome, irPara) { if (galeriaOn()) abrirGaleriaJa({ aba: 'todas', ids: ids, idsNome: nome, foto: id, irPara: irPara }); }
+      verFoto: function (ids, id, nome, irPara) { if (galeriaOn()) abrirGaleriaJa({ aba: 'todas', ids: ids, idsNome: nome, foto: id, irPara: irPara ? function (idF) { glDepois(function () { irPara(idF); }); } : null }); }
     };
   }
   function pausaMapa() { if (mapa && mapa.pausa && mapa.pausa()) toast('Localização ao vivo desligada: você saiu do Mapa.'); }
@@ -7066,12 +7088,13 @@
     var id = g.getAttribute('data-pid');
     var trocou = pgAtivo() && pg !== 'pontos';
     var sh = g.closest('.sheet'), fol = sh ? Array.prototype.indexOf.call($('pages').querySelectorAll('.sheet'), sh) : -1, topo = $('pages').scrollTop;
+    var hsD = history.state;
     if (pgAtivo()) irPg('pontos');
     if (ui.wide) toggleWide(false);
     undoProxima();
     ui.open = {}; ui.open[id] = true;
     if (findPoint(id)) listaMostra(findPoint(id), active());
-    ui.voltar = trocou && mdOn() ? { pg: 'diagrama', folha: fol, top: topo } : null;
+    ui.voltar = trocou && mdOn() ? { pg: 'diagrama', folha: fol, top: topo, passo: passoDoSalto(hsD) } : null;
     renderEditor();
     scrollToPoint(id, trocou);
   }
@@ -9598,14 +9621,39 @@
         ambiente: (window.AMBIENTE && window.AMBIENTE.nome) || 'oficial',
         // na visão geral não há contrato na tela: a galeria não escolhe sozinha o contrato escondido
         contratos: ctsFoto, ocultos: function () { return (banco.arquivados || []).map(function (x) { return x.id; }); }, ativo: ctFotoNaTela,
-        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: openLogin, carimbar: function (fotos) { openFoto('', fotos); },
+        toast: toast, confirmar: confirmar, saveBlob: saveBlob, entrar: function () { glDepois(openLogin); }, carimbar: function (fotos) { openFoto('', fotos); },
         podeCompartilharFotos: podeCompartilharFotos, salvarFotos: salvarFotos, nativo: isNativeApp, onBaixa: renderGaleriaBtn,
         relatorioPdf: window.RelatorioFoto ? relatorioPdf : null, ncFotos: ncFotosIds, ncDaFoto: ncDaFoto, abrirNc: abrirNcDaFoto
       });
     }
     return galeria;
   }
-  function abrirGaleriaJa(f) { galeriaInst().open(f); }
+  // v227 (item 12 dos Caminhos): a galeria aberta em janela (por cima da tela, fora das páginas do contrato) ganha um passo no
+  // histórico: o Voltar do aparelho fecha a janela em vez de trocar a tela de baixo. Fechada pelo botão ou pelo Esc, ela
+  // tira o próprio passo (glJanFechou); fechada por código (close(true)), o passo fica e o Voltar passa direto por ele
+  var glJan = false, glJanPula = false, glJanDepois = null;
+  function glJanAberta() { return glJan && !!galeria && galeria.isOpen() && glPgCid === null; }
+  function abrirGaleriaJa(f) {
+    if (f && f.pagina) { galeriaInst().open(f); return; }
+    var ja = glJanAberta();
+    galeriaInst().open(Object.assign({}, f || {}, { aoFechar: glJanFechou }));
+    if (ja) return;   // já estava aberta em janela: só trocou o filtro
+    try { history.pushState(Object.assign({}, history.state || {}, { glJan: 1 }), ''); glJan = true; } catch (e) { glJan = false; }
+  }
+  function glJanFechou() {
+    if (!glJan) return;
+    glJan = false;
+    if (!(history.state || {}).glJan) return;
+    glJanPula = true;
+    var n = ++glJanPed;
+    // se o Voltar pedido não chegar, a marca se desfaz sozinha (não engole o toque seguinte)
+    setTimeout(function () { if (glJanPula && n === glJanPed) glJanAssenta(); }, 700);
+    try { history.back(); } catch (e) { glJanAssenta(); }
+  }
+  var glJanPed = 0;
+  function glJanAssenta() { glJanPula = false; var f = glJanDepois; glJanDepois = null; if (f) f(); }
+  // o que vem logo depois de a janela fechar (o Entrar, "Ir para o lugar") espera o histórico assentar
+  function glDepois(fn) { if (glJanPula) glJanDepois = fn; else fn(); }
   // ---------------- v213 (itens 58 e 59): as fotos do ponto no cartão (antes e depois) e o relatório fotográfico só dele
   // as fotos da equipe vêm do banco numa leitura só, que serve a todos os pontos por 5 minutos (a falha espera 1 minuto)
   var fotosEq = { em: 0, p: null, arr: null, erro: null, falhou: 0 }, adT = null;
@@ -9887,17 +9935,38 @@
     window.addEventListener('popstate', function (e) {
       if (modalPula) { modalPula = false; var fm = modalDepois; modalDepois = null; if ($('modal')) modalPoeHist(); if (fm) fm(); return; }
       if (escPula) { escPula = false; var f = escDepois; escDepois = null; if (f) f(); return; }
+      var vp = voltaPend; voltaPend = null;   // v227: "Voltar ao mapa" pediu este passo
+      // v227: a janela da galeria fechou e tirou o próprio passo (se ainda sobrar entrada dela, segue voltando)
+      if (glJanPula) {
+        if ((e.state || {}).glJan) { try { history.back(); } catch (er) { glJanAssenta(); } return; }
+        glJanAssenta(); return;
+      }
       if (galeria && galeria.voltar()) return;   // as folhas da galeria no celular
+      // v227: o Voltar saiu do passo da janela da galeria: fecha a janela (a tela de baixo, cartão do mapa incluído, já é a desta entrada)
+      if (glJan && !(e.state || {}).glJan) { var gAb = glJanAberta(); glJan = false; if (gAb) { galeria.close(true); return; } }
       if (mapa && mapa.voltar && mapa.voltar()) return;   // o cartão das fotos no mapa (v170)
       if (mapaG && mapaG.voltar && mapaG.voltar()) return;   // o mesmo cartão no mapa de todos os contratos (v174)
       if (medicoes && medicoes.voltar()) return;   // a folha de escolher a medição no celular
       if ($('modal')) { modalHist = false; if ($('modal').dataset.ocupado) modalPoeHist(); else if (modalCancela) modalCancela(); return; }
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};
-      if (s.modal || s.glFolha || s.mpFoto) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
+      if (s.glJan && glJanAberta()) return;
+      if (s.modal || s.glFolha || s.mpFoto || s.glJan) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
       // v226: entrada de Medições (sem as medições liberadas, passa adiante)
       if (s.md) { if (temMedicoes()) mdRestaura(s); else { try { history.back(); } catch (er) { /* segue */ } } return; }
-      if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria' || s.tela === 'mapa') { mostraGeral(s.tela); return; }
+      if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria' || s.tela === 'mapa') {
+        mostraGeral(s.tela);
+        // v227: a lista de NC de onde se abriu o contrato: reabre (pelo ícone do início, não) e a marca sai da entrada
+        if (s.reabre === 'lnc') {
+          var naoReabre = semReabre, s2 = Object.assign({}, s);
+          delete s2.reabre;
+          try { history.replaceState(s2, ''); } catch (er) { /* segue */ }
+          if (!naoReabre && !isPublico() && !$('modal')) listaNcAbre(lnc.y || 0);
+        }
+        semReabre = false;
+        return;
+      }
+      semReabre = false;
       if (visaoOn) { if (!s.tela && s.pg) try { history.back(); } catch (er) { /* segue */ } return; }
       // v226: de Medições para uma entrada de contrato: sai de Medições e mostra o contrato dela
       if (medicoesOn) {
@@ -9906,6 +9975,7 @@
         renderAll(); syncTopbar();
       }
       if (s.pg && s.pg !== pg && pgAtivo()) irPg(s.pg, true);
+      if (vp && pgAtivo() && pg === vp.pg) voltaAplica(vp, true);
     });
     $('contratosHost').addEventListener('click', function (e) {
       var x = e.target.closest('[data-cid]'), c = x ? state.contracts.filter(function (k) { return k.id === x.dataset.cid; })[0] : null;
