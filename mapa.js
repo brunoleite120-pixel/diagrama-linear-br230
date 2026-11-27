@@ -1173,7 +1173,10 @@
               .bindTooltip(esc(x.tip || x.nome || ''), { sticky: true, className: 'mp-lbl' }).on('click', clique(x)).addTo(cores);
           }
           if (u && !s && !u.sel && juntar && it.pm.distanceTo(u.ult) < (u.w + w) / 2 + 4 && it.pm.distanceTo(u.ini) < 75) {
-            u.l.push(it); u.ult = it.pm; u.w = numW(u.l[0].x.num + '–' + x.num); return;
+            // v224: itens de contratos diferentes no mesmo grupo (Proarte 424 e OAEs sem Proarte, cada um com a sua numeração):
+            // em vez de "6–1", quantos são ("4 OAEs"), em cinza
+            u.l.push(it); u.ult = it.pm; if (x.c !== u.l[0].x.c) u.mix = true;
+            u.w = numW(u.mix ? u.l.length + (lado ? ' pontos' : ' OAEs') : u.l[0].x.num + '–' + x.num); return;
           }
           gs.push({ l: [it], ini: it.pm, ult: it.pm, w: w, sel: s });
         });
@@ -1183,8 +1186,8 @@
           var cen = n > 1 ? map.unproject([sx / n, sy / n], z) : it.ll[it.ll.length >> 1], pt = noLado([cen], it, dN)[0];
           if (!vb.contains(pt)) return;
           // OAE: a cor do contrato (no modo NC, a da situação); ponto crítico: a situação (a pior do grupo)
-          var cor = pior.x.neutro ? corCt[pior.x.c.id] || pior.x.cor : pior.x.cor;
-          var txt = n > 1 ? x.num + '–' + ult.num : String(x.num);
+          var cor = g.mix ? '#59615D' : pior.x.neutro ? corCt[pior.x.c.id] || pior.x.cor : pior.x.cor;
+          var txt = n > 1 ? (g.mix ? n + (lado ? ' pontos' : ' OAEs') : x.num + '–' + ult.num) : String(x.num);
           var nomes = g.l.map(function (y) { return y.x.nomeN; }).filter(Boolean);
           var tip = n > 1 ? n + ' itens: ' + g.l.map(function (y) { return y.x.num + (y.x.nomeN ? ' ' + y.x.nomeN : ''); }).join(', ') + '. Toque para aproximar' : (x.num + ' · ' + (x.tip || x.nome || ''));
           var f = n > 1 ? function (e) {
@@ -2426,7 +2429,7 @@
         if (!ll || !map.getSize().x) return;
         var bb = Lf.latLngBounds(ll), vb = map.getBounds().pad(-0.12), dentro = vb.contains(bb);
         // v192: com os números (poucos contratos de pontos), aproxima até o nome aparecer (régua de 1 km ou menos)
-        var zI = gd.ident && x.num != null ? Math.max(map.getZoom(), Math.min(15, map.getBoundsZoom(bb.pad(0.6)))) : 0;
+        var zI = x.num != null ? Math.max(map.getZoom(), Math.min(15, map.getBoundsZoom(bb.pad(0.6)))) : 0;
         if (area) {
           if (zI && map.getZoom() < zI) map.setView(bb.getCenter(), zI, { animate: false });
           else if (!dentro) map.setView(bb.getCenter(), Math.max(map.getZoom(), 11), { animate: false });

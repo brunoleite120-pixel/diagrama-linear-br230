@@ -124,7 +124,7 @@
   function VisaoGeral(o) {
     // mais: <details> "Serviços" do cartão (null = padrão do aparelho); ct: a caixa seletora "Contratos" aberta
     // (fica aberta entre os redesenhos, enquanto a pessoa marca vários)
-    var host = o.host, st = { k0: null, k1: null, sel: null, off: {}, q: '', mais: null, ct: false };
+    var host = o.host, st = { k0: null, k1: null, sel: null, off: {}, q: '', mais: null, ct: false, lst: {} };
     var W = 0, F = [0, 100], raf = 0, ptrs = {}, gesto = null, semClique = 0, cacheIt = null, ultW = 0;
     // grupoDe: item → data-fid do grupo que o contém no último desenho (ao fechar o cartão, o foco volta a ele);
     // ptrTipo/toque: o clique veio do dedo ou da caneta (o foco não volta ao campo de busca: o teclado virtual reabriria);
@@ -562,6 +562,20 @@
             }).join('') + '</div></div>';
           pri = false;
         });
+        // v224 (pedido de 27/11/2026): o grupo das OAEs (Proarte 424 e as sem Proarte), como os dos contratos com linha; o toque
+        // abre logo abaixo a lista numerada das OAEs dele (a mesma da v192) e põe os números no mapa
+        var oaes = d.mostra.filter(function (c) { return grupoCt(c) === 'oae' && d.on.some(function (x) { return x.c === c && !copia230(x, d); }); });
+        if (oaes.length) {
+          var naT = {}, idt = identDe(d), abertas = oaes.filter(function (c) { return listaOn(d, c); });
+          vis.forEach(function (x) { naT[x.key] = true; });
+          out += '<div class="vg-lgg"><span class="vg-lgh"><b>OAEs</b> · na rodovia · toque para ver a lista</span><div class="vg-lgc">' +
+            oaes.map(function (c) {
+              var on = listaOn(d, c);
+              return '<button type="button" class="vg-lch oae' + (on ? ' on' : '') + '" data-vg="leg-oae" data-fid="lg:' + esc(c.id) + '" data-cid="' + esc(c.id) + '" aria-expanded="' + on + '" style="--c:' + esc(corOae(d, c)) + '" title="' + (on ? 'Esconder' : 'Ver') + ' a lista de ' + esc(nomeOae(d, c)) + '"><i></i>' + esc(nomeOae(d, c)) +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>';
+            }).join('') + '</div>' +
+            (idt ? abertas.map(function (c) { return listaCt(d, idt, c, naT, listaTodasT(idt, naT), true); }).join('') : '') + '</div>';
+        }
         var neu = dm.itens.some(function (x) { return x.neutro; }), mob = cel();
         var numOae = '', numPc = false;
         dm.itens.forEach(function (x) { if (x.num == null) return; if (x.lado) numPc = true; else if (!numOae) dm.cts.forEach(function (k) { if (k.c === x.c) numOae = k.cor; }); });
@@ -569,9 +583,9 @@
         return '<div class="vg-leg vg-leg-m">' + out +
           '<div class="vg-lgg vg-lgp"><span class="vg-lgh"><b>' + (dm.ident ? 'Nos pontos' : 'De perto, nos pontos') + '</b>' + (md === 'nc' && nNC ? ' · ' + nNC + (nNC === 1 ? ' local' : ' locais') + ' · ' + nGr + ' NC' : '') + '</span>' +
           (sts ? '<div class="vg-lgs">' + (md !== 'nc' && neu ? '<small>Pontos críticos: a cor é a situação</small>' : '') + sts + '</div>' : '') +
-          (numOae ? '<span><b class="vg-in" style="--c:' + esc(numOae) + '">1</b>OAEs: o número pela ordem do km, como na lista embaixo do mapa</span>' : '') +
+          (numOae ? '<span><b class="vg-in" style="--c:' + esc(numOae) + '">1</b>OAEs: o número pela ordem do km, como na lista aberta acima</span>' : '') +
           (numPc ? '<span><b class="vg-in" style="--c:#2B5797">P1</b>Pontos críticos: o nome na cor da situação; o trecho de cada um marcado na linha do contrato</span>' : '') +
-          (dm.ident ? '<span><b class="vg-in" style="--c:#59615D">2–5</b>Os que se encostam viram um só; toque para aproximar</span>' : '') +
+          (numOae || numPc ? '<span><b class="vg-in" style="--c:#59615D">2–5</b>Os que se encostam viram um só; toque para aproximar</span>' : '') +
           (dm.itens.some(function (x) { return x.neutro && !(x.lado < 0) && x.num == null; }) ? '<span><i class="vg-lpt oco" style="--c:#59615D"></i>OAEs: ponto vazado, na cor do contrato</span>' : '') +
           // v188: conservação e sinalização sem ponto; o toque na linha ou no nome destaca o contrato inteiro
           (md !== 'nc' && dm.cts.some(function (k) { return k.trilho && k.lado < 0; }) ? '<span><i style="display:inline-block;flex:none;width:18px;height:4px;border-radius:2px;background:#3949AB"></i>Conservação e sinalização: toque na linha ou no nome para destacar o contrato inteiro</span>' : '') +
@@ -738,7 +752,7 @@
     }
     // lista "No trecho da tela" (no mapa, "No trecho do mapa": o onMove a refaz sozinha quando o mapa mexe)
     function listaSec(d, vis, mob, noMapa) {
-      if (noMapa && identDe(d)) return listaIdent(d, vis);
+      if (noMapa && (identDe(d) || {}).auto) return listaIdent(d, vis);
       var visL = vis.filter(function (x) { return !copia230(x, d); });
       var ord = visL.sort(function (a, b) { return a.km - b.km; }), max = mob ? 8 : 12;
       return '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>' + (noMapa ? 'No trecho do mapa' : 'No trecho da tela') + '</h3><span>' + visL.length + (visL.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
@@ -755,24 +769,46 @@
     // v192: a lista numerada de cada contrato de pontos escolhido (opção C): número, nome, km e extensão; as que estão no mapa
     // ficam marcadas e a aberta mais forte. Tocar abre o cartão e aproxima o mapa (mostrar → focaMapa → MG.foca)
     function listaIdent(d, vis) {
-      var idt = identDe(d), naTela = {}, cor = {};
+      var idt = identDe(d), naTela = {};
       vis.forEach(function (x) { naTela[x.key] = true; });
-      idt.cts.forEach(function (c) { cor[c.id] = idt.cor[c.id]; });
-      var todasT = idt.cts.every(function (c) { return idt.por[c.id].every(function (x) { return naTela[x.key] || st.off[x.fk]; }); });
-      return idt.cts.map(function (c) {
-        var pc = grupoCt(c) === 'pc', xs = idt.por[c.id].filter(function (x) { return !st.off[x.fk]; });
-        var oQue = pc ? (xs.length === 1 ? 'ponto crítico' : 'pontos críticos') : xs.length === 1 ? 'OAE' : 'OAEs';
-        return '<section class="vg-box vg-lista vg-ident" aria-label="' + esc(N.nome(c)) + ': ' + oQue + ' numerados"><div class="vg-lista-h"><h3>' + esc(N.nome(c)) + '</h3><span>' + xs.length + ' ' + oQue + ', pela ordem do km · tocar abre no mapa</span></div>' +
-          '<div class="vg-il' + (pc ? ' pc' : xs.some(function (x) { return String(idt.nome[x.key] || '').length > 16; }) ? ' longo' : '') + '">' + xs.map(function (x) {
-            var n = idt.num[x.key], nm = idt.nome[x.key], c0 = pc || modo() === 'nc' ? x.cor : cor[c.id];
-            var ext = x.oae ? (Number(x.p.extensao) ? nf(x.p.extensao, 0) + ' m' : '') : x.kf > x.km ? nf(x.kf - x.km, 2) + ' km' : '';
-            var km = 'km ' + nf(x.km, 1) + (!x.oae && x.kf - x.km >= 0.05 ? ' a ' + nf(x.kf, 1) : '');
-            var dt = km + (ext ? ' · ' + ext : '') + (pc ? ' · ' + x.st + (x.inf && x.inf.pctText ? ' ' + x.inf.pctText : '') : '');
-            return '<button type="button" class="vg-ir' + (st.sel === x.key ? ' sel' : '') + (naTela[x.key] && !todasT ? ' tela' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '">' +
-              '<b class="vg-in' + (claro(c0) ? ' cl' : '') + '" style="--c:' + esc(c0) + '">' + esc(n) + '</b>' + (nm ? '<b class="vg-inm">' + esc(nm) + '</b>' : '') + '<span class="vg-ikm">' + esc(dt) + '</span></button>';
-          }).join('') + '</div></section>';
-      }).join('');
+      var todasT = listaTodasT(idt, naTela);
+      // v224: as listas das OAEs passaram para a legenda do mapa, embaixo do botão de cada uma; aqui ficam as dos pontos críticos
+      return idt.cts.filter(function (c) { return grupoCt(c) === 'pc'; }).map(function (c) { return listaCt(d, idt, c, naTela, todasT, false); }).join('');
     }
+    function listaTodasT(idt, naTela) { return idt.cts.every(function (c) { return idt.por[c.id].every(function (x) { return naTela[x.key] || st.off[x.fk]; }); }); }
+    // a lista de um contrato; naLeg: dentro da legenda do mapa (as das OAEs), sem a moldura de seção
+    function listaCt(d, idt, c, naTela, todasT, naLeg) {
+      if (!idt.por[c.id]) return '';
+      var pc = grupoCt(c) === 'pc', xs = idt.por[c.id].filter(function (x) { return !st.off[x.fk]; }), tit = pc ? N.nome(c) : nomeOae(d, c);
+      var oQue = pc ? (xs.length === 1 ? 'ponto crítico' : 'pontos críticos') : xs.length === 1 ? 'OAE' : 'OAEs';
+      return (naLeg ? '<div class="vg-lgl vg-ident" role="region"' : '<section class="vg-box vg-lista vg-ident"') + ' aria-label="' + esc(tit) + ': ' + oQue + ' numerados"><div class="vg-lista-h"><h3>' + esc(tit) + '</h3><span>' + xs.length + ' ' + oQue + ', pela ordem do km · tocar abre no mapa</span></div>' +
+        '<div class="vg-il' + (pc ? ' pc' : xs.some(function (x) { return String(idt.nome[x.key] || '').length > 16; }) ? ' longo' : '') + '">' + xs.map(function (x) {
+          var n = idt.num[x.key], nm = idt.nome[x.key], c0 = pc || modo() === 'nc' ? x.cor : idt.cor[c.id];
+          var ext = x.oae ? (Number(x.p.extensao) ? nf(x.p.extensao, 0) + ' m' : '') : x.kf > x.km ? nf(x.kf - x.km, 2) + ' km' : '';
+          var km = 'km ' + nf(x.km, 1) + (!x.oae && x.kf - x.km >= 0.05 ? ' a ' + nf(x.kf, 1) : '');
+          var dt = km + (ext ? ' · ' + ext : '') + (pc ? ' · ' + x.st + (x.inf && x.inf.pctText ? ' ' + x.inf.pctText : '') : '');
+          return '<button type="button" class="vg-ir' + (st.sel === x.key ? ' sel' : '') + (naTela[x.key] && !todasT ? ' tela' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '">' +
+            '<b class="vg-in' + (claro(c0) ? ' cl' : '') + '" style="--c:' + esc(c0) + '">' + esc(n) + '</b>' + (nm ? '<b class="vg-inm">' + esc(nm) + '</b>' : '') + '<span class="vg-ikm">' + esc(dt) + '</span></button>';
+        }).join('') + '</div>' + (naLeg ? '</div>' : '</section>');
+    }
+    // v224: a lista das OAEs de um contrato está aberta? O toque no botão da legenda decide; sem toque, aberta só quando o
+    // contrato foi escolhido no filtro (o modo dos números da v192)
+    function listaOn(d, c) {
+      if (st.lst[c.id] != null) return !!st.lst[c.id];
+      var idt = identDe(d);
+      return !!(idt && idt.auto && idt.por[c.id]);
+    }
+    // a cor de cada faixa de OAEs (sem cor de contrato nas raias), fixa pela ordem dos contratos: a mesma no botão, no número e na lista
+    function corOae(d, c) {
+      if (corCt(c)) return corCt(c);
+      var usadas = {};
+      Object.keys(CORES).forEach(function (k) { usadas[CORES[k]] = true; });
+      var livres = COR_LIVRE.filter(function (h) { return !usadas[h]; }).sort(function (a, b) { return (b === '#00838F') - (a === '#00838F'); });
+      var i = d.todos.filter(function (k) { return grupoCt(k) === 'oae' && !corCt(k); }).indexOf(c);
+      return (i >= 0 && livres[i]) || '#3B4540';
+    }
+    // "OAEs 230" só com as não atendidas na tela: "OAEs sem Proarte" (o nome do item no app); com todas, "OAEs 230"
+    function nomeOae(d, c) { return c.oaes230 ? (todas230(d, c) ? 'OAEs 230' : 'OAEs sem Proarte') : N.nome(c); }
     function claro(c) {
       var m = /^#?([0-9a-f]{6})$/i.exec(String(c || ''));
       if (!m) return false;
@@ -791,22 +827,24 @@
     // Números: OAEs pela ordem do km (1 a N); pontos críticos pelo nome (P1), ou P e a ordem quando o nome é comprido
     function identDe(d) {
       if (d._ident !== undefined) return d._ident;
-      var cs = d.ativo && d.mostra.length <= 3 ? d.mostra.filter(function (c) { var g = grupoCt(c); return g === 'pc' || g === 'oae'; }) : [];
+      // v224: fora desse modo (auto), só as OAEs cuja lista foi aberta pelo botão da legenda do mapa (st.lst)
+      var auto = !!(d.ativo && d.mostra.length <= 3);
+      var cs = d.mostra.filter(function (c) { var g = grupoCt(c); return auto ? g === 'pc' || g === 'oae' : g === 'oae' && st.lst[c.id] === true; });
       if (!cs.length) return (d._ident = null);
-      // OAEs (sem cor de contrato nas raias): ganham uma cor livre aqui, para o número e a lista
-      var usadas = {}, livres;
-      Object.keys(CORES).forEach(function (k) { usadas[CORES[k]] = true; });
-      livres = COR_LIVRE.filter(function (h) { return !usadas[h]; }).sort(function (a, b) { return (b === '#00838F') - (a === '#00838F'); });
-      var r = { cts: cs, num: {}, nome: {}, por: {}, cor: {} };
+      var r = { cts: cs, num: {}, nome: {}, por: {}, cor: {}, auto: auto };
       cs.forEach(function (c) {
         var pc = grupoCt(c) === 'pc', xs = d.on.filter(function (x) { return x.c === c && !copia230(x, d); }).sort(function (a, b) { return a.km - b.km || a.kf - b.kf; });
         r.por[c.id] = xs;
-        r.cor[c.id] = corCt(c) || (pc ? null : livres.shift()) || '#3B4540';
+        // OAEs (sem cor de contrato nas raias): uma cor livre, para o número e a lista
+        r.cor[c.id] = pc ? corCt(c) || '#3B4540' : corOae(d, c);
         xs.forEach(function (x, i) {
           var nm = String(x.p.nome || x.p.codigo || '').trim();
           // v197: OAE sem o "sobre o" ("Ponte sobre o Rio Pacajá" → "Ponte Rio Pacajá"; "Ponte Ambé I" fica igual;
           // pedido de 17/11/2026, depois da v196 sem o "Ponte"); só na lista e no rótulo do mapa, o cadastro fica igual
           if (!pc) nm = nm.replace(/^(ponte)\s+sobre\s+(o|a)\s+/i, '$1 ');
+          // v224 (pedido de 27/11/2026): as do Proarte com "Ponte" na frente, como as sem Proarte ("Butique" → "Ponte Butique");
+          // a que já diz o que é (ponte, pontilhão, viaduto, passarela, passagem, bueiro, galeria, túnel) fica igual
+          if (!pc && nm && x.p.nome && !/^(ponte|pontilh[aã]o|viaduto|passarela|passagem|bueiro|galeria|t[uú]nel)(\s|$)/i.test(nm)) nm = 'Ponte ' + nm;
           if (pc && nm && nm.length <= 6) { r.num[x.key] = nm; r.nome[x.key] = ''; }
           else { r.num[x.key] = pc ? 'P' + (i + 1) : String(i + 1); r.nome[x.key] = nm; }
         });
@@ -838,7 +876,7 @@
           nome: nome, num: idt && idt.num[x.key] != null ? idt.num[x.key] : null, nomeN: idt ? idt.nome[x.key] || '' : '', tip: (nome || (x.oae ? 'OAE' : 'Ponto')) + (x.oae && x.p.codigo && x.p.nome ? ' · ' + x.p.codigo : '') + ' · ' + kmTxt(x, x.kf > x.km) + (x.st ? ' · ' + x.st : '') };
       });
       leg.sort(function (a, b) { return ordem.indexOf(a.txt) - ordem.indexOf(b.txt); });
-      return { itens: itM, cts: cts, sel: st.sel, leg: modo() ? leg : [], legT: leg, ident: !!idt };
+      return { itens: itM, cts: cts, sel: st.sel, leg: modo() ? leg : [], legT: leg, ident: !!(idt && idt.auto) };
     }
     // toque num item do mapa: abre (ou fecha) o mesmo cartão das raias, sem mexer no trecho do mapa
     function noMapaSel(key) {
@@ -867,13 +905,16 @@
       st.k0 = f[0]; st.k1 = f[1]; st.mpK = [f[0], f[1]];
       var d = itens(), vis = d.on.filter(function (x) { return x.kf >= f[0] && x.km <= f[1] && !st.off[x.fk]; });
       // v192: na lista numerada só as marcas "no mapa" mudam (a lista fica onde está, com a rolagem e o foco)
-      if (identDe(d)) {
+      var idt = identDe(d);
+      if (idt) {
         var naT = {};
         vis.forEach(function (x) { naT[x.key] = true; });
         var bs = host.querySelectorAll('.vg-ident .vg-ir'), todas = [].every.call(bs, function (b) { return naT[b.getAttribute('data-key')]; });
         bs.forEach(function (b) { b.classList.toggle('tela', !todas && !!naT[b.getAttribute('data-key')]); });
-      } else {
-        var li = host.querySelector('.vg-lista');
+      }
+      // v224: com a lista de OAEs aberta pela legenda (sem o modo dos números), a lista "No trecho do mapa" continua embaixo
+      if (!idt || !idt.auto) {
+        var li = host.querySelector('.vg-lista:not(.vg-ident)');
         if (li && !li.contains(document.activeElement)) li.outerHTML = listaSec(d, vis, cel(), true);
       }
       var fx = host.querySelector('.vg-faixa');
@@ -957,7 +998,9 @@
     }
     function anuncio() { var d = itens(); return 'Mostrando ' + (d.ativo ? eLista(d.mostra.map(function (c) { return N.nome(c); })) : 'todos os contratos') + '.'; }
     // o filtro mudou: enquadra a união dos escolhidos (a faixa total, com folga) e o leitor de tela diz o que ficou
-    function mudaFiltro(s) { aplicaFiltro(s); st.k0 = null; render(); avisa(anuncio()); }
+    // v224: a troca do filtro esquece as listas de OAEs fechadas à mão (com o contrato escolhido no filtro, a lista dele volta aberta);
+    // as abertas à mão continuam
+    function mudaFiltro(s) { aplicaFiltro(s); st.k0 = null; Object.keys(st.lst).forEach(function (k) { if (!st.lst[k]) delete st.lst[k]; }); render(); avisa(anuncio()); }
 
     function resultados() {
       var q = (st.q || '').trim();
@@ -1135,6 +1178,12 @@
       else if (a === 'fechar') fechar();
       // legenda do mapa: enquadra o contrato e traz o mapa à vista (no celular, a legenda fica abaixo dele)
       else if (a === 'leg-ct') { if (MG && MG.enquadra) { MG.enquadra(b.dataset.cid); if (MG.el && MG.el.scrollIntoView) MG.el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } }
+      // v224: botão das OAEs na legenda do mapa: abre ou fecha a lista numerada dele, logo abaixo
+      else if (a === 'leg-oae') {
+        var dl = itens(), cl = null;
+        dl.mostra.forEach(function (c) { if (c.id === b.dataset.cid) cl = c; });
+        if (cl) { st.lst[cl.id] = !listaOn(dl, cl); cacheIt = null; render(); avisa('Lista de ' + nomeOae(dl, cl) + (st.lst[cl.id] ? ' aberta, abaixo do botão.' : ' fechada.')); }
+      }
       // o grupo no mesmo km passa pelos itens um a um: o foco fica nele
       else if (a === 'sel') { x = achar(b.dataset.key); if (x) { if (st.sel === x.key && b.classList.contains('vg-mk')) fechar(); else { mostrar(x, '', baixo); if (!b.classList.contains('grupo')) focoX(); } } }
       else if (a === 'km' || a === 'kmtodos') {
