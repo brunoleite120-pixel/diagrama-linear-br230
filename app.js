@@ -2701,7 +2701,7 @@
     if (pg === 'mapa' && mapa) { mapa.invalidate(); mapa.show(); }   // o mapa estava escondido: mede de novo
     else pausaMapa();
     window.scrollTo(0, pg === 'mapa' || pg === 'galeria' ? 0 : pgRolY[pg] || 0);
-    if (!semHist) try { var hs = history.state || {}; history.pushState({ pg: pg, casa: !!hs.casa, n: (hs.n || 0) + 1 }, ''); } catch (e) { /* segue sem histórico */ }
+    if (!semHist) try { var hs = history.state || {}; history.pushState({ pg: pg, id: state.activeId, casa: !!hs.casa, n: (hs.n || 0) + 1 }, ''); } catch (e) { /* segue sem histórico */ }
   }
   // barra geral: Geral, Contratos, Mapa (v174: a tela inicial em mapa, com todos os contratos) e Galeria trocam a parte da tela
   // inicial. Contratos, Mapa e Galeria ficam um passo acima dela no histórico: o Voltar (e o Geral) voltam para ela
@@ -2741,11 +2741,15 @@
     mostraGeral('geral');
   }
   // entrou num contrato pela tela inicial (desenho, Contratos ou Mapa): o Voltar volta para ela
+  // v226: também vindo de Medições (era === 'md'): o Voltar volta para Medições, no contrato e na medição em que estava
   function marcaEntrada(c, era) {
     lsPut(ULT_KEY, c.id);
     if (!era) return;
-    var hs = history.state || {};
-    try { history.pushState({ tela: 'contrato', id: c.id, pg: pg, casa: true, n: (hs.tela && hs.tela !== 'contrato' ? hs.n || 0 : 0) + 1 }, ''); } catch (e) { /* segue sem histórico */ }
+    var hs = history.state || {}, md = era === 'md';
+    try {
+      history.pushState({ tela: 'contrato', id: c.id, pg: pg, casa: md ? !!hs.casa : true,
+        n: md ? (hs.casa ? (hs.n || 0) + 1 : 1) : (hs.tela && hs.tela !== 'contrato' ? hs.n || 0 : 0) + 1 }, '');
+    } catch (e) { /* segue sem histórico */ }
   }
   // v174: o Mapa da barra geral abre a tela inicial em Mapa, com todos os contratos (irGeral('mapa')). Sem o mapa de todos
   // (mapaNaVisao falso), fica como antes: o mapa do último contrato aberto; sem último, pergunta
@@ -5825,7 +5829,12 @@
   function renderAll() {
     if (medicoesOn && !temMedicoes()) { if (medicoes) medicoes.limpar(); medicoesOn = false; }
     // o link pode ter sido aberto antes de o banco devolver os contratos e as partes liberadas
-    if (location.hash === '#medicoes' && temMedicoes()) { medicoesOn = true; visaoOn = false; }
+    if (location.hash === '#medicoes' && temMedicoes()) {
+      medicoesOn = true; visaoOn = false;
+      // v226: aberto pelo link ou na recarga, a entrada da tela vira a de Medições (as das janelas por cima ficam como estão)
+      var hsM = history.state || {};
+      if (!hsM.md && !hsM.modal && !hsM.escolha && !hsM.glFolha && !hsM.mpFoto && !hsM.mdFolha) { try { history.replaceState({ md: 1, cid: mdAberto(), casa: false, n: 1 }, ''); } catch (eM) { /* segue sem histórico */ } }
+    }
     if (medicoes && !medicoesOn) medicoes.render();   // limpa o HTML escondido e poda contratos cujo acesso saiu
     if (soVisao() && window.VisaoGeral && $('visaoHost')) visaoOn = true;
     aplicaPapel();
@@ -5956,11 +5965,54 @@
   function hashMedicoes(on) {
     try { history.replaceState(history.state, '', location.pathname + location.search + (on ? '#medicoes' : location.hash === '#medicoes' ? '' : location.hash)); } catch (e) { /* segue sem link */ }
   }
+  // v226 (item 12 dos Caminhos): Medições entra no histórico. Abrir Medições é um passo e abrir um contrato dentro dela é
+  // outro (trocar de medição, de aba ou de OAE não): o Voltar do Android e do navegador anda um passo de cada vez. A entrada
+  // é { md: 1, cid, sub, casa, n } e leva o #medicoes no endereço; casa e n valem como nas do contrato (irInicio)
+  var mdListaY = 0, mdSaiu = null;   // a rolagem da lista ao abrir um contrato; a do contrato de Medições ao sair para o editor
+  function mdGuardaSaida() { if (medicoesOn) mdSaiu = { cid: mdAberto(), y: window.scrollY || 0 }; }
+  function mdUrl() { return location.pathname + location.search + '#medicoes'; }
+  function mdAberto() { return (medicoes && medicoes.aberto && medicoes.aberto()) || ''; }
   function abrirMedicoes() {
     if (!temMedicoes()) return;
     ctsMedicoes().forEach(function (c) { if (parte(c, 'med') && analise.estado[c.id] === 'erro') delete analise.estado[c.id]; });
-    setVisao(false); medicoesOn = true; hashMedicoes(true);
+    var ja = medicoesOn, hs = history.state || {}, casa = visaoOn ? !!hs.tela : !!hs.casa;
+    setVisao(false); medicoesOn = true;
+    medObj();
+    try {
+      // já em Medições (toque no botão de novo), entrada já marcada, ou criada pelo próprio link #medicoes: só acerta a entrada
+      if (ja || hs.md || location.hash === '#medicoes') history.replaceState(hs.md ? Object.assign({}, hs, { cid: mdAberto() }) : { md: 1, cid: mdAberto(), casa: casa, n: casa ? (hs.n || 0) + 1 : 1 }, '', mdUrl());
+      else history.pushState({ md: 1, cid: mdAberto(), casa: casa, n: casa ? (hs.n || 0) + 1 : 1 }, '', mdUrl());
+    } catch (e) { hashMedicoes(true); }
     closeMenu(); renderAll(); syncTopbar(); window.scrollTo(0, 0);
+  }
+  // medicoes.js avisa: um contrato foi aberto (da lista: passo novo; de outro contrato: a mesma entrada)
+  function mdAbriu(id, daLista) {
+    if (!medicoesOn) return;
+    var hs = history.state || {};
+    if (daLista) mdListaY = window.scrollY || 0;
+    try {
+      if (daLista && hs.md) history.pushState({ md: 1, cid: id, sub: 1, casa: !!hs.casa, n: (hs.n || 0) + 1 }, '', mdUrl());
+      else history.replaceState(Object.assign({}, hs, { md: 1, cid: id }), '', mdUrl());
+    } catch (e) { /* segue sem histórico */ }
+  }
+  // "← Medições": com o passo da lista logo abaixo, volta por ele (true: o Voltar redesenha); senão, a entrada vira a da lista
+  function mdVoltou() {
+    var hs = history.state || {};
+    if (hs.md && hs.sub) { try { history.back(); return true; } catch (e) { /* segue sem histórico */ } }
+    try { history.replaceState(Object.assign({}, hs, { md: 1, cid: '', sub: 0 }), '', mdUrl()); } catch (e2) { /* segue sem histórico */ }
+    return false;
+  }
+  // o Voltar (ou o Avançar) caiu numa entrada de Medições: mostra Medições na lista ou no contrato dela
+  function mdRestaura(s) {
+    setVisao(false); medicoesOn = true; hashMedicoes(true);
+    if (medObj() && medicoes.irPara) medicoes.irPara(s.cid || '');
+    closeMenu(); renderAll(); syncTopbar();
+    // volta ao ponto em que a pessoa estava; de novo depois do popstate, porque o navegador repõe a rolagem que ele guardou
+    // para a entrada (a do contrato, de onde o passo saiu)
+    var y = mdSaiu && mdSaiu.cid === (s.cid || '') ? mdSaiu.y : s.cid ? 0 : mdListaY || 0;
+    mdSaiu = null;
+    window.scrollTo(0, y);
+    setTimeout(function () { if (medicoesOn && mdAberto() === (s.cid || '')) window.scrollTo(0, y); }, 0);
   }
   function desenhaMedicoes() {
     if (!medicoesOn || !temMedicoes() || !$('medicoesHost')) return false;
@@ -5986,6 +6038,7 @@
       medTxt: medTxt, etapaInfo: etapaInfo, unTxt: unTxt, semLocal: MED_SEMLOCAL, data: fmtIsoDate, toast: toast,
       // v220: Baixar Excel do painel da OAE (no computador baixa; no app e no iPhone, o compartilhar do sistema)
       salvar: function (nomeArq, blob, msg) { return saveBlob(nomeArq, blob, msg); },
+      abriu: mdAbriu, voltou: mdVoltou,   // v226: o histórico de Medições
       diagrama: function (c) { if (parte(c, 'med') && !ehSup(c)) abrirDaVisao(c, null, false); },
       // painel da ponte/segmento: o ponto no diagrama e as fotos dele (conservação: pelo km do segmento, as fotos não têm ponto)
       diagramaPonto: function (c, p) { if (parte(c, 'med')) abrirDaVisao(c, p, false); },
@@ -6003,7 +6056,8 @@
   function abrirDaVisao(c, p, noMapa) {
     if (isPublico()) { toast('Entre com o seu código para abrir o contrato.', 5000); openLogin(); return; }
     undoProxima();
-    var era = visaoOn;
+    var era = visaoOn, eraMd = medicoesOn;   // v226: de Medições ("Ver no diagrama"), o Voltar volta para ela
+    mdGuardaSaida();
     mexeu = true;
     setVisao(false);
     if (analise.estado[c.id] === 'erro') delete analise.estado[c.id];
@@ -6018,16 +6072,16 @@
     syncTopbar();   // o PDF voltou à barra, que pode ter mudado de altura: mede antes de rolar (o observer só avisa depois)
     if (noMapa) {
       setView('mapa');
-      if (pgAtivo()) irPg('mapa', era);
+      if (pgAtivo()) irPg('mapa', era || eraMd);
       if (p && mapa && mapa.foco) setTimeout(function () { mapa.foco(p.id); }, 200);
       var mh = $('mapHost');
       if (mh && !pgAtivo()) mh.scrollIntoView({ block: 'start' });
     } else if (p) {
-      if (pgAtivo()) irPg('pontos', era);
+      if (pgAtivo()) irPg('pontos', era || eraMd);
       if (ui.wide) toggleWide(false);
       scrollToPoint(p.id, pgAtivo());
     } else window.scrollTo(0, 0);
-    marcaEntrada(c, era);
+    marcaEntrada(c, era ? true : eraMd ? 'md' : false);
   }
 
   // ------------------------------------------------------------------ eventos do editor
@@ -6188,7 +6242,8 @@
     var tab = e.target.closest('[data-tab]');
     if (tab) {
       if (analise.estado[tab.dataset.tab] === 'erro') delete analise.estado[tab.dataset.tab];
-      var veioDaVisao = visaoOn, daLista = !!tab.closest('#ctmPop');
+      var veioDaVisao = visaoOn, veioDeMd = medicoesOn, daLista = !!tab.closest('#ctmPop');
+      mdGuardaSaida();
       setVisao(false);
       state.activeId = tab.dataset.tab;
       ui.open = {};
@@ -6196,7 +6251,7 @@
       save();
       renderAll();
       if (veioDaVisao) window.scrollTo(0, 0);
-      marcaEntrada(active(), veioDaVisao);
+      marcaEntrada(active(), veioDaVisao ? true : veioDeMd ? 'md' : false);   // v226: de Medições, o Voltar volta para ela
       if (daLista) { var nb = document.querySelector('[data-act="ct-menu"]'); if (nb) nb.focus({ preventScroll: true }); }
       return;
     }
@@ -9826,7 +9881,7 @@
     $('pgNav').addEventListener('click', function (e) { var x = e.target.closest('[data-pg]'); if (x) irPg(x.dataset.pg); });
     $('pgNav').querySelector('[data-pg="foto"]').hidden = $('btnFoto').hidden;
     $('pgNav').querySelector('[data-pg="mapa"]').hidden = !temMapa();
-    try { history.replaceState(visaoOn ? { tela: 'geral', n: 0 } : { pg: pg }, ''); } catch (e) { /* segue sem histórico */ }
+    try { history.replaceState(visaoOn ? { tela: 'geral', n: 0 } : { pg: pg, id: state.activeId }, ''); } catch (e) { /* segue sem histórico */ }
     // Voltar (Android e navegador): a janela aberta e a escolha do contrato aberta só fecham; tela inicial e suas partes; páginas do contrato.
     // Uma página de contrato antiga com a tela inicial na tela (o app abriu dentro do contrato): pula para trás
     window.addEventListener('popstate', function (e) {
@@ -9840,8 +9895,16 @@
       if (escolha) { fechaEsc(true); return; }
       var s = e.state || {};
       if (s.modal || s.glFolha || s.mpFoto) { try { history.back(); } catch (er) { /* segue */ } return; }   // entrada de uma janela que ficou por baixo de outra tela
+      // v226: entrada de Medições (sem as medições liberadas, passa adiante)
+      if (s.md) { if (temMedicoes()) mdRestaura(s); else { try { history.back(); } catch (er) { /* segue */ } } return; }
       if (s.tela === 'geral' || s.tela === 'contratos' || s.tela === 'galeria' || s.tela === 'mapa') { mostraGeral(s.tela); return; }
       if (visaoOn) { if (!s.tela && s.pg) try { history.back(); } catch (er) { /* segue */ } return; }
+      // v226: de Medições para uma entrada de contrato: sai de Medições e mostra o contrato dela
+      if (medicoesOn) {
+        setVisao(false);
+        if (s.id && s.id !== state.activeId && state.contracts.some(function (k) { return k.id === s.id; })) { state.activeId = s.id; ui.open = {}; save(); }
+        renderAll(); syncTopbar();
+      }
       if (s.pg && s.pg !== pg && pgAtivo()) irPg(s.pg, true);
     });
     $('contratosHost').addEventListener('click', function (e) {

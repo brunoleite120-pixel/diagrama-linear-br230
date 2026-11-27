@@ -1275,6 +1275,8 @@
       if (id !== cid) { secao = 'med'; pagTodas = false; pagAbertas = false; }
       if (n != null) secao = 'med';
       if (ab === 'pag' || ab === 'ct') secao = ab;
+      // v226: o app guarda o passo no histórico (da lista para o contrato) antes de a tela mudar
+      if (op.abriu && id !== cid) op.abriu(id, !cid);
       cid = id; med = n == null ? null : n; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
       var d = dado(contrato(id));
       if (d && n != null) d.ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; });
@@ -1298,7 +1300,7 @@
         if (pp) (act === 'ponte-diag' ? op.diagramaPonto : op.fotos)(cp, pp);
         return;
       }
-      if (act === 'voltar') { cid = ''; med = null; segAberto = ''; }
+      if (act === 'voltar') { if (op.voltou && op.voltou()) return; cid = ''; med = null; segAberto = ''; }   // v226: com o passo da lista no histórico, volta por ele
       else if (act === 'modo') { modo = b.dataset.v === 'mes' || b.dataset.v === 'sit' ? b.dataset.v : 'contrato'; cid = ''; matrizScroll = null; }
       else if (act === 'med') { daFolha = folha; fechaFolha(); med = b.dataset.n; grupo = null; semValor = false; }
       else if (act === 'passo') {
@@ -1397,6 +1399,14 @@
         secao = ab === 'pag' || ab === 'ct' ? ab : 'med';
         cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
         return true;
+      },
+      // v226: o Voltar do app caiu numa entrada de Medições: a lista ('') ou o contrato dela, sem desenhar (o app desenha)
+      irPara: function (id) {
+        id = id && contrato(id) ? id : '';
+        if (id === cid) return;
+        fechaFolha(true);
+        if (!id) { cid = ''; med = null; segAberto = ''; return; }
+        this.irContrato(id, '');
       },
       // chamada no popstate do app; true: a folha resolveu
       voltar: function () {
