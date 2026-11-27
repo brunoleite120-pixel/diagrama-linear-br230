@@ -378,6 +378,14 @@
       var bForma = temMapaG() && !formaFixa() ? '<div class="vg-forma" role="group" aria-label="Forma do desenho">' + [['raias', 'Raias', '<path d="M2 4h12M2 8h12M2 12h12"/>'], ['mapa', 'Mapa', '<path d="M1.5 3.5l4.3-1.5 4.4 1.5 4.3-1.5v10.5l-4.3 1.5-4.4-1.5-4.3 1.5z M5.8 2v10.5 M10.2 3.5V14"/>']].map(function (f) {
         return '<button type="button" data-vg="forma" data-f="' + f[0] + '" data-fid="fm:' + f[0] + '" aria-pressed="' + (forma() === f[0]) + '"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' + f[2] + '</svg>' + f[1] + '</button>';
       }).join('') + '</div>' : '';
+      // v238 (item 11 dos Caminhos): Foto e Galeria na tela inicial do computador, ao lado de Raias | Mapa, fazendo o mesmo
+      // que a barra de baixo do celular (a Foto pergunta de qual contrato é; a Galeria abre com todos os contratos). No
+      // celular e no tablet a barra de baixo já tem os dois (formaFixa() diz que ela está lá)
+      var fgF = !formaFixa() && o.onFoto && o.podeFoto && o.podeFoto(), fgG = !formaFixa() && o.onGaleria && o.temFotos && o.temFotos();
+      var bFg = fgF || fgG ? '<div class="vg-fg">' +
+        (fgF ? '<button type="button" data-vg="foto" data-fid="fg:foto"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 5.5h2.3l1-1.5h5.4l1 1.5H14v7H2z"/><circle cx="8" cy="8.8" r="2.3"/></svg>Foto</button>' : '') +
+        (fgG ? '<button type="button" data-vg="galeria" data-fid="fg:galeria"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>Galeria</button>' : '') + '</div>' : '';
+      if (bFg) bForma = '<div class="vg-head-a">' + bFg + bForma + '</div>';
       h += '<div class="vg-head' + (bForma ? ' com-forma' : '') + '"><div><h2>' + esc(rod) + ' · ' + (d.ativo ? cs.length + ' de ' + nT + (nT === 1 ? ' contrato' : ' contratos') : 'todos os contratos') + '</h2>' +
         '<p>' + (noMapa ? 'No mapa, pelo eixo do SNV.' : 'Em escala de km.') + ' Só na tela: o PDF oficial continua dentro de cada contrato.</p></div>' + bForma +
         '<span class="vg-tot">' + its.length + (its.length === 1 ? ' item' : ' itens') + ' no desenho' + (d.semKm ? ' · <b>' + d.semKm + ' sem km</b> (não aparecem)' : ' · nenhum sem km') +
@@ -1250,6 +1258,8 @@
         var ficou = !!x && a === 'mapa' && verNoMapa(x);   // v235: ficou na tela inicial, no mapa de todos os contratos
         if (x && !ficou && MG && MG.sairCheia) MG.sairCheia();
         if (x && !ficou) (a === 'abrir' ? o.onAbrir : a === 'mapa' ? o.onMapa : o.onFotos)(x.c, x.p);
+      } else if (a === 'foto') { if (o.onFoto) o.onFoto();          // v238: Foto e Galeria da tela inicial do computador
+      } else if (a === 'galeria') { if (o.onGaleria) o.onGaleria();
       } else if (a === 'medicao') {
         x = st.sel ? achar(st.sel) : null;
         if (x && MG && MG.sairCheia) MG.sairCheia();

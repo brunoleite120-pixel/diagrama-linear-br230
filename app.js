@@ -5952,6 +5952,11 @@
       // Mapa = mapa); no computador, o botão da própria visão
       mapa: function (hooks) { return mapaGeralCria(hooks); },
       formaFixa: function () { return geralAtivo() ? (telaG === 'mapa' ? 'mapa' : 'raias') : null; },
+      // v238 (item 11 dos Caminhos): Foto e Galeria na tela inicial do computador (o celular e o tablet têm os dois na barra
+      // de baixo): a Foto pergunta de qual contrato é; a Galeria abre em janela, com todos os contratos
+      podeFoto: function () { return !isPublico() && podeFotos(); },
+      onFoto: function () { if (podeFotos()) openFoto(''); },
+      onGaleria: function () { if (galeriaOn()) abrirGaleriaJa({}); },
       // v235 (item 8 dos Caminhos): "Ver no mapa" do cartão, no celular e no tablet: a parte Mapa da tela inicial, com o
       // cartão aberto (um passo no histórico: o Voltar volta às raias)
       onVerMapa: function () { if (!geralAtivo() || !mapaNaVisao()) return false; irGeral('mapa'); return telaG === 'mapa'; },

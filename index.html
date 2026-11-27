@@ -287,6 +287,11 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-forma button[aria-pressed="true"]{background:var(--ink);color:#fff}
 .vg-forma button:focus-visible{outline-offset:-4px}
 .vg-forma button[aria-pressed="true"]:focus-visible{outline-color:#fff}
+/* v238: Foto e Galeria na tela inicial do computador, ao lado de Raias | Mapa */
+.vg-head-a{display:flex;flex-wrap:wrap;align-items:center;align-self:center;gap:8px 12px}
+.vg-fg{display:flex;gap:8px}
+.vg-fg button{display:flex;align-items:center;gap:7px;min-height:36px;padding:4px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:13.5px;font-weight:600;white-space:nowrap;cursor:pointer}
+.vg-fg button:hover{background:var(--accent-soft)}
 .vg-head.com-forma .vg-tot{flex-basis:100%}
 .vg-mapa{height:min(600px,calc(100vh - var(--topbar-h,61px) - 150px));min-height:380px}
 .vg-mapa .mp{height:100%;min-height:0}
