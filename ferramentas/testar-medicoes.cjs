@@ -15,7 +15,9 @@ function copia(x) { return JSON.parse(JSON.stringify(x)); }
 function escape(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function dinheiro(n) { return 'R$ ' + Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function texto(h) { return h.replace(/<[^>]*>/g, ''); }
-function dataFixa() { return new Date(2026, 9, 20); }
+// o "hoje" do teste é 20/10/2026; com argumentos vale a data pedida (antes a data pedida era ignorada e todo prazo dava "vence hoje")
+function dataFixa() { return arguments.length ? new (Function.prototype.bind.apply(Date, [null].concat([].slice.call(arguments))))() : new Date(2026, 9, 20); }
+dataFixa.now = function () { return new Date(2026, 9, 20).getTime(); }; dataFixa.UTC = Date.UTC; dataFixa.parse = Date.parse;
 function elemento() {
   return { innerHTML: '', hidden: false, style: { setProperty: function () {} }, dataset: {}, events: {},
     classList: { toggle: function () {}, contains: function () { return false; }, add: function () {}, remove: function () {} },
@@ -120,9 +122,10 @@ function calculos() {
   ok(t.host.innerHTML.includes('PI vigente (SIAC)'), 'base SIAC vence cadastro');
   ok(t.host.innerHTML.includes('PI acaba por nov/26 (prazo ago/27)'), 'esgotamento do PI');
   t.click('abrir', { cid: 'teste' });
-  ok(t.host.innerHTML.includes('Com reajuste R$ 750,00'), 'total com reajuste separado do PI');
-  ok(t.host.innerHTML.includes('Reajuste da medição: R$ 150,00'), 'reajuste da medição');
-  ok(t.host.innerHTML.includes('processada no SIAC em 10/09/2026'), 'data de processamento do SIAC');
+  // v202: com dados do SIAC, a medição aberta mostra a soma (PI + Reajuste = Total da medição) e o andamento no SIAC
+  ok(t.host.innerHTML.includes('<span class="md-label">Preços iniciais (PI)</span><b>R$ 600,00</b>') && t.host.innerHTML.includes('<span class="md-label">Total da medição</span><strong class="md-total">R$ 750,00</strong>'), 'total com reajuste separado do PI');
+  ok(t.host.innerHTML.includes('<span class="md-label">Reajuste</span><b>R$ 150,00</b>'), 'reajuste da medição');
+  ok(texto(t.host.innerHTML).includes('Andamento no SIACProcessada no SIAC10/09/2026'), 'data de processamento do SIAC');
   novo.alertas = [{ tipo: 'siac', n: 7, motivo: '<conferir>' }]; t = tela([c], { teste: copia(novo) }); t.click('abrir', { cid: 'teste' }); t.click('aba', { v: 'avisos' });
   ok(t.host.innerHTML.includes('SIAC · conferir com a fiscalização'), 'SIAC destacado');
   ok(t.host.innerHTML.includes('&lt;conferir&gt;'), 'texto de dados escapado');
@@ -257,7 +260,9 @@ function desenho() {
   ok(visivel.includes('R$ 1,81 mi medidode R$ 66,24 mi (PI vigente)'), 'medido e PI compactos na mesma linha');
   ok(h.includes('title="R$ 1.807.571,40" aria-label="R$ 1.807.571,40"'), 'valor compacto guarda valor completo em title e aria-label');
   ok(h.includes('<span>R$ 650.556,86</span>'), 'última medição mantém valor completo');
-  ok(h.includes('R$ 903,8 mil/mês'), 'ritmo abaixo de milhão em mil com uma casa');
+  // v205: o cartão do contrato com dados do SIAC (o 437) troca a linha do ritmo pelas do SIAC; o ritmo fica nos que não têm (o 424)
+  ok(h.includes('R$ 730,0 mil/mês'), 'ritmo abaixo de milhão em mil com uma casa');
+  ok(!h.includes('R$ 903,8 mil/mês') && h.includes('<dt>Pagamento da última</dt>') && h.includes('<dt>Fim da execução</dt><dd>30/08/2027 · faltam 314 dias</dd>'), 'cartão com SIAC mostra pagamento e fim da execução no lugar do ritmo');
   ok(!cards.includes('Ver no diagrama'), 'diagrama só no contrato');
   ok(visivel.includes('Sem medição no SIAC desde mai/26 (4 meses)'), 'aviso curto de atraso');
   ok(visivel.includes('Em dia: medição de set/26 no SIAC'), 'aviso em dia');
