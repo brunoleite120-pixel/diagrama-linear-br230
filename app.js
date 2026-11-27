@@ -2785,9 +2785,10 @@
     var c = active(), f = glPend || {};
     glPend = null;
     syncTopbar();   // a página fica fixa logo abaixo da barra: mede de novo antes de abrir
-    if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba && !f.ids)) return;
+    if (!c || (glPgCid === c.id && galeria && galeria.isOpen() && !f.pid && !f.aba && !f.ids && !f.km)) return;
     glPgCid = c.id;
-    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, ids: f.ids, idsNome: f.idsNome, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg(glVolta === 'mapa' || glVolta === 'pontos' ? glVolta : 'diagrama'); } });
+    // v237: o trecho de km (fotos de um segmento da conservação) também chega à página; antes se perdia aqui
+    abrirGaleriaJa({ cid: c.id, pid: f.pid || '', aba: f.aba, ids: f.ids, idsNome: f.idsNome, km: f.km, kmNome: f.kmNome, pagina: true, aoFechar: function () { glPgCid = null; if (pg === 'galeria') irPg(glVolta === 'mapa' || glVolta === 'pontos' ? glVolta : 'diagrama'); } });
   }
   function abreGaleriaGeral() {
     syncTopbar();
@@ -4547,7 +4548,9 @@
       h += '</div></details>';
       var tid = 'obs-' + id;
       h += '<div class="field"><label for="' + tid + '">Observações gerais</label><textarea id="' + tid + '" data-p="obs" data-id="' + id + '" rows="4">' + esc(p.obs) + '</textarea></div>';
-      h += '<div class="pt-foot"><span class="pt-foot-l"></span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir segmento</button></div>';
+      // v237 (item 10 dos Caminhos): "Fotos deste segmento" abre a galeria já no trecho de km do segmento (como o cartão da tela inicial)
+      h += '<div class="pt-foot"><span class="pt-foot-l">' + (galeriaOn() && isFinite(parseFloat(p.kmIni)) && isFinite(parseFloat(p.kmFim)) ? '<button type="button" class="btn small" data-act="fotos-seg" data-id="' + id + '">Fotos deste segmento</button>' : '') +
+        '</span><button type="button" class="btn small danger" data-act="del-point" data-id="' + id + '">Excluir segmento</button></div>';
       h += '</div>';
     }
     return h + '</article>';
@@ -6326,6 +6329,12 @@
     if (isFiscal() && EDIT_ACTS.indexOf(act) >= 0 && act !== 'set-st' && act !== 'set-marca' && act !== 'set-item' && act !== 'set-desemp') { toast('Fiscal de campo só altera o status dos serviços.'); return; }
     if (act === 'prop-ok' || act === 'prop-no') { decidirPropostas([Number(b.dataset.prop)], act === 'prop-ok'); return; }
     if (act === 'fotos-ponto') { abrirGaleria({ cid: c.id, pid: b.dataset.id }); return; }
+    // v237 (item 10 dos Caminhos): as fotos do segmento da conservação, pelo trecho de km dele
+    if (act === 'fotos-seg') {
+      var pSeg = findPoint(b.dataset.id);
+      if (pSeg) abrirGaleria({ cid: c.id, km: [Number(pSeg.kmIni), Number(pSeg.kmFim)], kmNome: pSeg.nome || pSeg.codigo || '' });
+      return;
+    }
     if (act === 'ad-denovo') { adCarrega(true); return; }
     if (act === 'rel-ponto') { relatorioDoPonto(c, findPoint(b.dataset.id), b); return; }
     if (act === 'nc-fotos-ver') {
