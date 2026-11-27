@@ -694,6 +694,9 @@ body[data-pg="mapa"] .map-host .mp-chip{min-height:44px;padding-left:12px;paddin
 @media (max-width:1100px){
   /* o "Contratos ▾" vira o botão Contratos da barra; na prévia, a palavra PRÉVIA fica ao lado */
   body[data-geral] .topbar .ctmenu{display:none}
+  /* v230 (item 13 dos Caminhos): com a barra de baixo da tela inicial na tela, "Geral" já é o início; o ícone do alto repetia.
+     Em Medições e dentro do contrato o corpo não tem data-geral e o ícone fica: é a saída para o início */
+  body[data-geral] .tab-visao{display:none}
   body[data-geral] .tab-prev{display:inline-flex;align-items:center;align-self:center;padding:2px 8px;border-radius:6px;background:#FDEBD8;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#B54708}
   body[data-geral] .toast{bottom:calc(var(--pgnav-h,0px) + 16px)}
   body[data-geral] .share-ready{bottom:calc(var(--pgnav-h,0px) + 12px)}
@@ -1682,7 +1685,7 @@ span.an-chip{cursor:default}
 .medicoes h3{font-size:15px}
 .medicoes p{color:var(--ink-2)}
 .medicoes small{display:block;font-size:12.5px;color:var(--ink-2);font-weight:400;overflow-wrap:anywhere}
-.medicoes .btn,.medicoes .seg button,#menuMedicoes{min-height:44px}
+.medicoes .btn,.medicoes .seg button{min-height:44px}
 .medicoes button{color:var(--ink);font:inherit;cursor:pointer}
 .medicoes button:disabled{cursor:default;opacity:.5}
 .medicoes button:focus-visible,.medicoes input:focus-visible,.medicoes select:focus-visible,.medicoes [tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -2234,7 +2237,6 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
       <div class="menu-pop" id="menuPop" hidden>
         <div class="menu-grupo" role="group" aria-labelledby="menuGTrabalho">
           <div class="menu-g" id="menuGTrabalho">Trabalho</div>
-          <button type="button" data-act="medicoes" id="menuMedicoes" hidden>Medições</button>
           <button type="button" data-act="aprovar" hidden>Aprovar mudanças dos fiscais</button>
           <button type="button" data-act="relfoto" hidden>Relatório fotográfico (PDF)</button>
           <!-- v229 (item 14 dos Caminhos): também no computador, onde o botão do PDF só existe na página Diagrama -->

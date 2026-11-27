@@ -8808,7 +8808,6 @@
   }
   // classes do corpo conforme o papel e o contrato aberto (o CSS esconde o que o papel não usa)
   function aplicaPapel() {
-    if ($('menuMedicoes')) $('menuMedicoes').hidden = !temMedicoes();
     var c = state && state.contracts.length && !visaoOn && !medicoesOn ? active() : null, b = document.body.classList;
     b.toggle('ro', readOnly());
     b.toggle('fiscal', isFiscal());
