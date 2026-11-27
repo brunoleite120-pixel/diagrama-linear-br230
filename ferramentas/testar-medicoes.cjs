@@ -146,7 +146,7 @@ function acessos() {
     engine.api.configurar(cs, dados, p); engine.api.render(); engine.api.abrir();
     ok(!engine.api.parte(cs[0], 'med'), 'fiscal/público sem med');
     ok(!engine.els.tabs.innerHTML.includes('tab-medicoes'), 'sem aba');
-    ok(engine.els.menuMedicoes.hidden, 'sem menu');
+    // v230: "Medições" saiu do menu (item 13 dos Caminhos); o acesso sem medições se confere pela aba do alto, acima
     ok(!engine.api.anOf(cs[0]), 'anOf nega análise');
     engine.api.carregar(cs[0], true); igual(chamadas, 0, 'fiscal/público não chama Banco.analise');
   });
