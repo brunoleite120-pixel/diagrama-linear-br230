@@ -2420,7 +2420,9 @@
       sairCheia: function () { closeFull(); },
       faixa: gFaixa,
       // area: { top, bottom } da tela que fica à vista (no celular, entre a barra do topo e a folha do cartão): o item vai para lá
-      foca: function (key, area) {
+      // perto (v235, "Ver no mapa" do cartão da tela inicial): aproxima sempre no item (um ponto, até a régua de uns 2 km;
+      // um trecho, até ele caber na parte livre da tela)
+      foca: function (key, area, perto) {
         // v194: o item aberto pela lista ou pela busca também fecha o cartão do contrato (o toque no mapa já fechava, em clique)
         if (gCtSel) { gCtSel = null; map.closePopup(); gPede(); }
         var x = null;
@@ -2430,16 +2432,24 @@
         var bb = Lf.latLngBounds(ll), vb = map.getBounds().pad(-0.12), dentro = vb.contains(bb);
         // v192: com os números (poucos contratos de pontos), aproxima até o nome aparecer (régua de 1 km ou menos)
         var zI = x.num != null ? Math.max(map.getZoom(), Math.min(15, map.getBoundsZoom(bb.pad(0.6)))) : 0;
+        var zP = 0;
+        if (perto) {
+          var cR = map.getContainer().getBoundingClientRect();
+          var livre = area ? Math.max(120, Math.min(cR.bottom, area.bottom) - Math.max(cR.top, area.top) - 66) : cR.height;
+          zP = Math.max(zI, Math.min(ll.length > 1 ? 15 : 14, map.getBoundsZoom(bb.pad(0.4), false, Lf.point(48, Math.min(Math.max(0, cR.height - 80), Math.max(0, cR.height - livre) + 64)))));
+        }
         if (area) {
-          if (zI && map.getZoom() < zI) map.setView(bb.getCenter(), zI, { animate: false });
+          if (zP) map.setView(bb.getCenter(), zP, { animate: false });
+          else if (zI && map.getZoom() < zI) map.setView(bb.getCenter(), zI, { animate: false });
           else if (!dentro) map.setView(bb.getCenter(), Math.max(map.getZoom(), 11), { animate: false });
           var c = map.getContainer().getBoundingClientRect(), p = map.latLngToContainerPoint(bb.getCenter());
           var y = c.top + p.y, x0 = c.left + p.x, topo = Math.max(c.top, area.top) + 36, base = Math.min(c.bottom, area.bottom) - 30;
           if (base - topo < 50) return;
-          var dy = y < topo || y > base ? y - (topo + base) / 2 : 0, dx = x0 < c.left + 30 || x0 > c.right - 70 ? x0 - (c.left + c.right) / 2 : 0;
+          var dy = perto || y < topo || y > base ? y - (topo + base) / 2 : 0, dx = x0 < c.left + 30 || x0 > c.right - 70 ? x0 - (c.left + c.right) / 2 : 0;
           if (dx || dy) map.panBy([dx, dy], { animate: !reduced() });
           return;
         }
+        if (zP) { map.setView(bb.getCenter(), zP, { animate: !reduced() }); return; }
         if (zI && (map.getZoom() < zI || !dentro)) { map.setView(bb.getCenter(), zI, { animate: !reduced() }); return; }
         if (dentro) return;
         if (map.getZoom() < 11) map.fitBounds(bb.pad(0.5), { maxZoom: 13, animate: !reduced(), paddingTopLeft: [16, 64], paddingBottomRight: [16, 40] });

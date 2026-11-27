@@ -5949,6 +5949,9 @@
       // Mapa = mapa); no computador, o botão da própria visão
       mapa: function (hooks) { return mapaGeralCria(hooks); },
       formaFixa: function () { return geralAtivo() ? (telaG === 'mapa' ? 'mapa' : 'raias') : null; },
+      // v235 (item 8 dos Caminhos): "Ver no mapa" do cartão, no celular e no tablet: a parte Mapa da tela inicial, com o
+      // cartão aberto (um passo no histórico: o Voltar volta às raias)
+      onVerMapa: function () { if (!geralAtivo() || !mapaNaVisao()) return false; irGeral('mapa'); return telaG === 'mapa'; },
       onForma: function (f) { if (f !== 'mapa') pausaMapaG(); },
       // erro num evento da visão (clique, busca, arrasto): mostra o contrato
       onErro: function (e) { console.error(e); visaoOn = false; renderAll(); }

@@ -904,13 +904,20 @@
       if (cel()) { enquadrar(); focaMapa(key); } else { verTopo(host.querySelector('.vg-card')); if (identDe(itens()) && MG) MG.foca(key); }
     }
     // o item do cartão à vista no mapa. Celular: depois da rolagem do enquadrar(), na faixa entre a barra do topo e a folha
-    function focaMapa(key) {
+    // perto (v235, "Ver no mapa" do cartão): aproxima sempre no item, e não só quando ele está fora da tela
+    function focaMapa(key, perto) {
       if (!st.ultMapa || !MG) return;
-      if (!cel()) { MG.foca(key); return; }
+      if (!cel()) {
+        if (!perto) { MG.foca(key); return; }
+        // o mapa acabou de entrar na tela: espera ele ter tamanho e enquadrar o trecho (show, 30 ms)
+        setTimeout(function () { if (st.sel === key && MG && st.ultMapa) MG.foca(key, null, true); }, 90);
+        return;
+      }
       setTimeout(function () {
         if (st.sel !== key || !MG) return;
+        if (perto) enquadrar(true);   // confere de novo: uma rolagem suave que ainda corria (a do toque no item) pode ter passado do ponto
         var tb = document.querySelector('.topbar'), cd = host.querySelector('.vg-card');
-        MG.foca(key, { top: tb ? tb.getBoundingClientRect().bottom : 0, bottom: cd ? cd.getBoundingClientRect().top : window.innerHeight });
+        MG.foca(key, { top: tb ? tb.getBoundingClientRect().bottom : 0, bottom: cd ? cd.getBoundingClientRect().top : window.innerHeight }, perto);
       }, 450);
     }
     // o mapa mexeu: o trecho dele vira o trecho da visão (volta para as raias no mesmo km) e a lista acompanha, sem redesenhar
@@ -1066,6 +1073,21 @@
     }
     // pre: o que o leitor de tela diz antes (o contrato que entrou no filtro); baixo: veio da busca ou da lista, embaixo
     // do desenho (no computador, o cartão que abriu lá em cima vem à vista)
+    // v235 (item 8 dos Caminhos): "Ver no mapa" do cartão, nas raias, fica na tela inicial: troca para o mapa de todos os
+    // contratos, aproximado no item, com o cartão aberto (antes abria o mapa do contrato). No computador é a troca
+    // Raias | Mapa (sem gravar a preferência); no celular e no tablet, a parte Mapa da barra de baixo (o app troca, e o
+    // Voltar volta às raias). Já no mapa, o botão é "Mapa do contrato" e abre o contrato, como antes. false = não deu
+    function verNoMapa(x) {
+      if (forma() === 'mapa' || !temMapaG() || !mapaG() || st.off[x.fk] || copia230(x, itens())) return false;
+      var key = x.key;
+      if (formaFixa()) { if (!o.onVerMapa || !o.onVerMapa()) return false; }
+      else { st.forma = 'mapa'; render(); if (o.onForma) o.onForma('mapa'); }
+      if (forma() !== 'mapa' || !st.ultMapa || st.sel !== key) return true;
+      avisa('No mapa de todos os contratos, em ' + String(nomeP(x) || x.p.codigo || 'item') + '. Cartão aberto.');
+      if (cel()) enquadrar(true);   // celular: o mapa sobe para logo abaixo da barra do topo (o cartão cobre a parte de baixo)
+      focaMapa(key, true);
+      return true;
+    }
     function mostrar(x, pre, baixo) {
       // escolhido fora da tela: centraliza nele, mantendo o zoom
       if (x.kf < st.k0 || x.km > st.k1) { var R = st.k1 - st.k0, m = (x.km + x.kf) / 2, r = lim(m - R / 2, m + R / 2); st.k0 = r[0]; st.k1 = r[1]; }
@@ -1090,7 +1112,7 @@
       if (m) { try { m.focus({ preventScroll: true }); } catch (e) { /* navegador antigo */ } }
     }
     // celular: mostra o desenho entre a barra do topo (fixa) e a folha do cartão; se o marcador já está à vista, não rola
-    function enquadrar() {
+    function enquadrar(ja) {
       var dg = host.querySelector('.vg-diag');
       if (!dg) return;
       var tb = document.querySelector('.topbar'), card = host.querySelector('.vg-card'), mk = host.querySelector('.vg-mk.sel');
@@ -1104,7 +1126,7 @@
         // cabe com os botões do topo do desenho: o desenho logo abaixo da barra; senão, o marcador no meio da faixa livre
         dy = rm.bottom - rd.top <= base - topo ? rd.top - topo : (rm.top + rm.bottom) / 2 - (topo + base) / 2;
       } else dy = rd.top - topo;
-      if (Math.abs(dy) > 2) window.scrollBy({ top: dy, behavior: rolagem() });
+      if (Math.abs(dy) > 2) window.scrollBy({ top: dy, behavior: ja ? 'auto' : rolagem() });   // ja (v235): a tela acabou de trocar, sem animação
     }
     // computador: o desenho e o cartão ficam em cima, e a busca, a lista e os cartões dos contratos embaixo. A ação feita lá
     // embaixo rola até o topo do desenho ou do cartão só se ele passou para cima da tela (o html{scroll-padding-top}
@@ -1222,8 +1244,9 @@
         if (x) { var pd = Math.max(2, (x.kf - x.km) * 3), r = lim(x.km - pd, x.kf + pd); st.q = ''; st.k0 = r[0]; st.k1 = r[1]; delete st.off[x.fk]; mostrar(x, pre, baixo); focoX(); }
       } else if (a === 'abrir' || a === 'mapa' || a === 'fotos') {
         x = st.sel ? achar(st.sel) : null;
-        if (x && MG && MG.sairCheia) MG.sairCheia();
-        if (x) (a === 'abrir' ? o.onAbrir : a === 'mapa' ? o.onMapa : o.onFotos)(x.c, x.p);
+        var ficou = !!x && a === 'mapa' && verNoMapa(x);   // v235: ficou na tela inicial, no mapa de todos os contratos
+        if (x && !ficou && MG && MG.sairCheia) MG.sairCheia();
+        if (x && !ficou) (a === 'abrir' ? o.onAbrir : a === 'mapa' ? o.onMapa : o.onFotos)(x.c, x.p);
       } else if (a === 'medicao') {
         x = st.sel ? achar(st.sel) : null;
         if (x && MG && MG.sairCheia) MG.sairCheia();
