@@ -1978,6 +1978,14 @@
       filtro.pid = p0 === SEM ? '' : p0; filtro.rel = false;
       var base = itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); });
       filtro.pid = p0; filtro.rel = r0;
+      // v234 (item 7 dos Caminhos): no celular, a galeria aberta já no contrato do app tem "Todos os contratos" a um toque
+      // (no computador é a ficha "Todos" da fila de contratos). O número é o que a ficha mostra, no mesmo período
+      if (ctApp && filtro.cid === ctApp && aba !== 'relatorio' && celular()) {
+        filtro.cid = ''; filtro.pid = ''; filtro.rel = false;
+        var nTd = itens.filter(function (it) { return semPeriodo(it) && noPeriodo(it, iv); }).length;
+        filtro.cid = ctApp; filtro.pid = p0; filtro.rel = r0;
+        h += '<button type="button" class="gl-fx" data-ct="" title="Ver as fotos de todos os contratos">Todos os contratos <b>' + nTd.toLocaleString('pt-BR') + '</b></button>';
+      }
       if (aba !== 'deletadas') {
         var nSp = base.filter(function (x) { return !x.pid && x.cid && !ehCons(x.cid); }).length;
         if (nSp || p0 === SEM) h += '<button type="button" class="gl-fx at" data-g="fx-sp" aria-pressed="' + (p0 === SEM) + '"' + (aba === 'relatorio' ? ' title="As fotos sem ponto não entram no PDF"' : '') + '>' + (aba === 'relatorio' ? 'Sem ponto, fora do PDF' : 'Sem ponto') + ' <b>' + nSp.toLocaleString('pt-BR') + '</b></button>';
@@ -4034,10 +4042,11 @@
       root.setAttribute('role', pagina ? 'region' : 'dialog');
       if (pagina) root.removeAttribute('aria-modal'); else root.setAttribute('aria-modal', 'true');
       document.body.style.overflow = pagina ? '' : 'hidden';
-      // página do celular: o contrato do app vira a ficha "314 · 28"; a galeria abre em Todos (menos "Fotos deste ponto",
-      // do segmento e a aba Relatório, que ficam no contrato)
+      // página da galeria dentro de um contrato: o contrato do app vira a ficha "314 · 28". v234 (item 7 dos Caminhos): ela já
+      // abre nele (antes abria em Todos, menos "Fotos deste ponto", do segmento e a aba Relatório); "Todos" fica a um toque, na
+      // fila de contratos. Contrato sem fotos para este acesso: continua em Todos
       ctApp = pagina && f.cid ? f.cid : '';
-      var noCt = f.cid && (!pagina || f.pid || f.km || f.ids || f.aba === 'relatorio');
+      var noCt = f.cid && (!pagina || f.pid || f.km || f.ids || f.aba === 'relatorio' || contratos().some(function (c) { return c.id === f.cid; }));
       filtro = { cid: noCt ? f.cid : '', pid: f.pid || '', autor: '', mes: '' };
       // "Fotos da NC" (cartão da não conformidade): só as fotos da lista da NC
       filtro.ids = Array.isArray(f.ids) && f.ids.length ? f.ids.slice() : null;
