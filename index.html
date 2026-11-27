@@ -304,6 +304,8 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 .vg-modo{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .vg-modo button{min-height:34px;padding:4px 12px;border:0;border-right:1px solid var(--line);background:var(--panel);font-size:13px;font-weight:600;white-space:nowrap}
 .vg-modo button:last-child{border-right:0}
+/* v236: o rótulo do par (o botão pinta o desenho, não leva a outra tela); no celular fica só "Medido | NC" */
+.vg-modo-r{display:flex;align-items:center;padding:4px 10px;border-right:1px solid var(--line);background:var(--ground);color:var(--ink-2);font-size:12.5px;white-space:nowrap}
 .vg-ncc{display:none}
 .vg-modo button[aria-pressed="true"]{background:var(--ink);color:#fff}
 .vg-modo button:focus-visible{outline-offset:-4px}
@@ -481,6 +483,7 @@ button.vg-tr.sel{background:var(--accent-soft)}
   .vg-modo button{min-height:40px;padding:4px 10px}
   /* v189: no celular, o contrato e Medições | NC numa linha só (o mapa ganha a altura de uma linha) */
   .vg-ncl{display:none}.vg-ncc{display:inline}
+  .vg-modo-r{display:none}
   .vg-bar .vg-ctw{flex:1 1 auto}.vg-bar .vg-pre{flex:1 1 auto}.vg-bar .vg-pre .vg-ctb{flex:1 1 auto;justify-content:space-between}
   .vg-zoom{margin-left:auto}
   .vg-zoom button{width:40px;height:40px}
@@ -1623,7 +1626,8 @@ span.an-chip{cursor:default}
   .editor{overflow-x:clip;overflow-y:visible}
 }
 .conf-bar{align-items:flex-start;max-height:min(60vh,420px);overflow:auto;border-color:#E5B800;box-shadow:0 0 0 3px #FBF3D0,var(--shadow)}
-.aba-bar{top:calc(8px + env(safe-area-inset-top,0px));bottom:auto;z-index:4002;align-items:center;justify-content:space-between}
+/* v236: bottom com !important: no celular a regra da barra de baixo (body[data-geral] .share-ready) vencia e o aviso esticava */
+.aba-bar{top:calc(8px + env(safe-area-inset-top,0px));bottom:auto !important;z-index:4002;align-items:center;justify-content:space-between}
 .aba-bar .aba-txt{flex:1 1 240px;min-width:0}
 .conf-body{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:4px}
 .conf-body span{color:var(--ink-3)}

@@ -407,12 +407,15 @@
       // barra: [Tudo] [Contratos ▾] (com um contrato só não há o que escolher), o zoom e o trecho na tela
       if (nT < 2) st.ct = false;
       // Medições | Não conformidades (N): só com pontes ou conservação na tela e para quem vê as medições
+      // v236 (item 9 dos Caminhos): o par diz "Pintar por: Medido | Não conformidades" (no celular, "Medido | NC"): o botão
+      // muda a cor do desenho e não leva a outro lugar. "Medições" fica só para a área Medições
       var dm = noMapa ? dadosMapa(d, its) : null;
       var nNC = its.filter(function (x) { return x.nc; }).length, md = modo();
       var nGr = its.reduce(function (t, x) { return t + (x.nc && x.inf.ncN || 0); }, 0);   // as NC desses locais (a legenda do modo NC diz os dois)
       var nBt = Math.max(nGr, nNC);   // o botão diz "Não conformidades": conta as NC, como a legenda (4 locais · 5 NC → 5), não os locais
-      var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="OAEs e segmentos">' +
-        '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medições</button>' +
+      var bMod = (tem.conserva || tem.oae) && doisModos() ? '<div class="vg-modo" role="group" aria-label="Pintar OAEs e segmentos por">' +
+        '<span class="vg-modo-r" aria-hidden="true">Pintar por</span>' +
+        '<button type="button" data-vg="modo" data-m="med" data-fid="md:med" aria-pressed="' + (md === 'med') + '">Medido</button>' +
         '<button type="button" data-vg="modo" data-m="nc" data-fid="md:nc" aria-pressed="' + (md === 'nc') + '" aria-label="Não conformidades, ' + nBt + '"><span class="vg-ncl">Não conformidades</span><span class="vg-ncc">NC</span> <b>' + nBt + '</b></button></div>' : '';
       // v211: a lista com todas as NC (abertas e em correção) dos contratos, no modo Não conformidades
       if (md === 'nc' && nBt > 0 && o.onListaNc) bMod += '<button type="button" class="btn small vg-lnc" data-vg="lista-nc">Lista das NC</button>';
