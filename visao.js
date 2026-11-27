@@ -145,6 +145,15 @@
       'ct-731': '#F06292' };
     var COR_LIVRE = ['#8E24AA', '#00838F', '#AD1457', '#5D4037', '#E65100', '#283593', '#00695C', '#827717'], CORES = {};
     function grupoCt(c) { return c.oaes230 ? 'oae' : N.grupo ? N.grupo(c) : N.tipo(c); }
+    // v225 (pedido de 27/11/2026): o nome da OAE na visão geral com "Ponte" na frente ("Butique" → "Ponte Butique"), nas raias,
+    // no cartão, nas listas, na busca e no mapa; a que já diz o que é (ponte, pontilhão, viaduto, passarela, passagem, bueiro,
+    // galeria, túnel) fica igual. O cadastro não muda; ponto crítico e segmento ficam como estão
+    function nomeP(x) {
+      var n = x.p.nome;
+      if (!x.oae || n == null || !String(n).trim()) return n;
+      n = String(n).trim();
+      return /^(ponte|pontilh[aã]o|viaduto|passarela|passagem|bueiro|galeria|t[uú]nel)(\s|$)/i.test(n) ? n : 'Ponte ' + n;
+    }
     function coresCt(todos) {
       var m = {}, usadas = {};
       todos.forEach(function (c) { if (COR_CT[c.id]) { m[c.id] = COR_CT[c.id]; usadas[COR_CT[c.id]] = true; } });
@@ -501,7 +510,7 @@
             mk += '<button type="button" class="vg-mk grupo' + apG + '" data-vg="ir" data-fid="ga:' + esc(g.xs[0].key) + '" data-a="' + (meio - alvo / 2) + '" data-b="' + (meio + alvo / 2) + '"' + estilo + ' title="' + esc(tipA) + '" aria-label="' + esc(tipA) + '">' + n + '</button>';
             return;
           }
-          var mid = (x.km + x.kf) / 2, nome = String(x.p.nome || x.p.codigo || (x.oae ? 'OAE' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
+          var mid = (x.km + x.kf) / 2, nome = String(nomeP(x) || x.p.codigo || (x.oae ? 'OAE' : 'Ponto')), lw = nome.length * (mob ? 6.2 : 6.6) + 10, cx = P(mid);
           // sem nome (visão pública, que não recebe os nomes): sem rótulo, em vez de um "?" em cima de cada marca
           var temNome = !!(x.p.nome || x.p.codigo);
           if (temNome) cand.push({ cx: cx, lw: lw, txt: nome + (x.p.kmConferir ? ' ~' : ''), sel: st.sel === x.key });
@@ -607,7 +616,7 @@
       if (sel) {
         // sem código (o.publico): o banco manda só a posição; o cartão diz só o km e pede o código para abrir
         var pub = !!(o.publico && o.publico());
-        var x = sel, inf = x.inf, nomeS = pub ? (x.oae ? 'OAE' : 'Ponto') : x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
+        var x = sel, inf = x.inf, nomeS = pub ? (x.oae ? 'OAE' : 'Ponto') : x.oae ? (nomeP(x) || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?');
         var kmS = x.oae ? (x.p.kmLocal != null && x.p.kmIni == null ? kmTxt(x) : 'km ' + (x.p.kmConferir ? '~' : '') + nf(x.km, 2)) + (Number(x.p.extensao) ? ' · ' + nf(x.p.extensao, 1) + ' m de OAE' : '')
           : kmTxt(x, true) + ' · ' + nf(x.kf - x.km, 2) + ' km';
         var servs = (inf.servs || []).map(function (s) {
@@ -758,7 +767,7 @@
       return '<section class="vg-box vg-lista" aria-label="Itens no trecho da tela"><div class="vg-lista-h"><h3>' + (noMapa ? 'No trecho do mapa' : 'No trecho da tela') + '</h3><span>' + visL.length + (visL.length === 1 ? ' item' : ' itens') + ', por km</span></div><div class="vg-tab">' +
         (mob ? '' : '<div class="vg-tr h"><span>Contrato</span><span>Ponto ou OAE</span><span class="n">km</span><span class="n">Extensão</span><span>Situação</span></div>') +
         ord.slice(0, max).map(function (x) {
-          var nome = x.oae ? (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local |MP )?/, '');
+          var nome = x.oae ? (nomeP(x) || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') : (x.p.nome || '?'), km = kmTxt(x).replace(/^km (local |MP )?/, '');
           var sit = '<i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (!x.oae && x.inf.pctText ? ' · ' + esc(x.inf.pctText) : '');
           // celular: "314 · P1"; computador: o nome do contrato na primeira coluna
           if (mob) return '<button type="button" class="vg-tr m' + (st.sel === x.key ? ' sel' : '') + '" data-vg="sel" data-fid="li:' + esc(x.key) + '" data-key="' + esc(x.key) + '"><span><b>' + esc((N.numeroCurto(x.c) || N.nome(x.c)) + ' · ' + nome) + '</b><small class="s">' + sit + '</small></span><span class="n">km ' + km + '</span></button>';
@@ -838,13 +847,11 @@
         // OAEs (sem cor de contrato nas raias): uma cor livre, para o número e a lista
         r.cor[c.id] = pc ? corCt(c) || '#3B4540' : corOae(d, c);
         xs.forEach(function (x, i) {
-          var nm = String(x.p.nome || x.p.codigo || '').trim();
+          var nm = String(nomeP(x) || x.p.codigo || '').trim();
           // v197: OAE sem o "sobre o" ("Ponte sobre o Rio Pacajá" → "Ponte Rio Pacajá"; "Ponte Ambé I" fica igual;
           // pedido de 17/11/2026, depois da v196 sem o "Ponte"); só na lista e no rótulo do mapa, o cadastro fica igual
           if (!pc) nm = nm.replace(/^(ponte)\s+sobre\s+(o|a)\s+/i, '$1 ');
-          // v224 (pedido de 27/11/2026): as do Proarte com "Ponte" na frente, como as sem Proarte ("Butique" → "Ponte Butique");
-          // a que já diz o que é (ponte, pontilhão, viaduto, passarela, passagem, bueiro, galeria, túnel) fica igual
-          if (!pc && nm && x.p.nome && !/^(ponte|pontilh[aã]o|viaduto|passarela|passagem|bueiro|galeria|t[uú]nel)(\s|$)/i.test(nm)) nm = 'Ponte ' + nm;
+          // v224/v225: as do Proarte com "Ponte" na frente, como as sem Proarte (nomeP, acima)
           if (pc && nm && nm.length <= 6) { r.num[x.key] = nm; r.nome[x.key] = ''; }
           else { r.num[x.key] = pc ? 'P' + (i + 1) : String(i + 1); r.nome[x.key] = nm; }
         });
@@ -868,7 +875,7 @@
         var semSit = md !== 'nc' && grupoCt(x.c) !== 'pc' && !x.c.oaes230, lado = ladoDe[x.c.id] || 0;
         var cor = semSit ? corCt(x.c) || (lado === -2 ? '#5C6661' : '#59615D') : x.cor;
         if (!semSit && !vistos[x.st]) { vistos[x.st] = true; leg.push({ cor: x.cor, txt: x.st }); }
-        var nome = x.p.nome || x.p.codigo ? String(x.p.nome || x.p.codigo) : '';
+        var nome = x.p.nome || x.p.codigo ? String(nomeP(x) || x.p.codigo) : '';
         // v195 (pedido de 16/11/2026): no modo NC, segmento sem NC também fica sem ponto (só a linha do contrato); o ponto cinza
         // de "sem NC" em cada segmento não informava nada. Com NC aberta ou em correção, o ponto continua
         var semPto = semSit || (md === 'nc' && x.st === 'Sem não conformidade');
@@ -885,7 +892,7 @@
       if (st.sel === key) { fechar(); return; }
       st.mais = null; st.sel = key;
       render();
-      avisa(String(x.p.nome || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
+      avisa(String(nomeP(x) || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
       if (cel()) { enquadrar(); focaMapa(key); } else { verTopo(host.querySelector('.vg-card')); if (identDe(itens()) && MG) MG.foca(key); }
     }
     // o item do cartão à vista no mapa. Celular: depois da rolagem do enquadrar(), na faixa entre a barra do topo e a folha
@@ -1031,18 +1038,18 @@
       var txt = {};
       d.todos.forEach(function (c) { txt[c.id] = semAc([c.lote, c.numero, N.nome(c), N.formal(c), N.tipo(c) === 'oae' ? 'pontes oae oaes' : '', c.oaes230 ? 'nao atendidas fora proarte' : ''].map(function (v) { return v == null ? '' : String(v); }).join(' ')); });
       function nota(x) {
-        var nome = semAc(x.p.nome), cod = semAc(x.p.codigo), ctw = txt[x.c.id].split(/\s+/), ct = N.numeroCurto(x.c);
-        return termos.reduce(function (t, w) { return t + (w === nome || w === cod || ql === nome || ql === cod ? 2 : ctw.indexOf(w) >= 0 || w === ct ? 1 : 0); }, 0);
+        var nome = semAc(x.p.nome), nomeC = semAc(nomeP(x)), cod = semAc(x.p.codigo), ctw = txt[x.c.id].split(/\s+/), ct = N.numeroCurto(x.c);
+        return termos.reduce(function (t, w) { return t + (w === nome || w === cod || ql === nome || ql === nomeC || ql === cod ? 2 : ctw.indexOf(w) >= 0 || w === ct ? 1 : 0); }, 0);
       }
       var ach = d.lista.filter(function (x) {
         if (copia230(x, d) || (nl != null && nLote(x.c) !== nl)) return false;
-        var s = semAc((x.p.nome || '') + ' ' + (x.p.codigo || '')) + ' ' + txt[x.c.id];
+        var s = semAc((nomeP(x) || '') + ' ' + (x.p.codigo || '')) + ' ' + txt[x.c.id];
         return termos.every(function (w) { return s.indexOf(w) >= 0; });
       }).map(function (x) { return { x: x, n: nota(x) }; }).sort(function (a, b) { return b.n - a.n || b.x.on - a.x.on || a.x.km - b.x.km; }).map(function (r) { return r.x; });
       // resultado de contrato fora do filtro (no mesmo peso, depois dos de dentro): "· fora do filtro"; ao escolher, o
       // contrato entra no filtro
       ach.slice(0, max).forEach(function (x) {
-        out.push('<button type="button" data-vg="achar" data-key="' + esc(x.key) + '">' + esc(N.nome(x.c) + ' · ' + (x.p.nome || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') + ' · km ' + nf(x.km, 2)) +
+        out.push('<button type="button" data-vg="achar" data-key="' + esc(x.key) + '">' + esc(N.nome(x.c) + ' · ' + (nomeP(x) || '?') + (x.p.codigo ? ' · ' + x.p.codigo : '') + ' · km ' + nf(x.km, 2)) +
           (x.on ? '' : '<span class="vg-res-f"> · fora do filtro</span>') + '</button>');
       });
       if (ach.length > max) out.push('<span class="vg-res-n">e mais ' + (ach.length - max) + '; digite também o número do contrato</span>');
@@ -1057,7 +1064,7 @@
       if (st.sel !== x.key) st.mais = null;
       st.sel = x.key;
       render();
-      avisa((pre || '') + String(x.p.nome || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
+      avisa((pre || '') + String(nomeP(x) || x.p.codigo || 'Ponto') + ', km ' + nf(x.km, 2) + ', ' + x.st + '. Cartão aberto.');
       if (cel()) enquadrar(); else if (baixo) verTopo(host.querySelector('.vg-card'));
       focaMapa(x.key);
     }
