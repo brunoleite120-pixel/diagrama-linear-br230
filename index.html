@@ -146,6 +146,35 @@ body.sem-fotos [data-act="fotos-ponto"],body.sem-fotos [data-act="relfoto"]{disp
 /* ---------- visão geral: todos os contratos em escala de km (visao.js); só na tela ---------- */
 .tab-visao{display:inline-flex;align-items:center;gap:6px;font-weight:600}
 .tab-visao svg{width:16px;height:16px}
+/* v239: busca em qualquer tela. A lupa (computador e tablet) abre .bg-pop; no celular o campo fica no alto da lista de contratos */
+.tab-busca{display:inline-flex;align-items:center;justify-content:center;width:40px;padding:0}
+.tab-busca svg{width:17px;height:17px}
+.tab-busca[aria-expanded="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.bg-pop{position:fixed;z-index:60;width:440px;max-width:calc(100vw - 24px);max-height:min(72vh,580px);overflow:auto;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.bg-pop input,.ctm-busca input{width:100%;min-height:40px;padding:6px 10px;border:1px solid var(--line-campo);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;font-size:14px}
+.bg-res{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.bg-res:empty{display:none}
+.bg-l{display:flex;align-items:center;gap:6px}
+.bg-i{flex:1 1 auto;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;padding:6px 10px;border:0;border-radius:6px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.bg-i:hover,.bg-i:focus-visible{background:var(--accent-soft)}
+.bg-t{display:flex;flex-direction:column;min-width:0}
+.bg-t b{font-size:13.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bg-t small{font-size:12px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bg-ir{flex:none;font-size:12px;font-weight:650;color:var(--accent);white-space:nowrap}
+.bg-a{flex:none;min-height:36px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--accent);font:inherit;font-size:12.5px;font-weight:650;white-space:nowrap;cursor:pointer}
+.bg-a:hover{background:var(--accent-soft)}
+.bg-n{margin:6px 10px;font-size:12.5px;color:var(--ink-3)}
+.ctm-lista{display:flex;flex-direction:column}
+.ctm-busca,#ctmRes{display:none}
+@media (max-width:700px){
+  .tab-busca{display:none}
+  .ctm-busca{display:block;padding:4px 4px 6px}
+  .ctm-busca input{min-height:44px;font-size:16px}
+  #ctmRes:not(:empty){display:flex;margin-top:0}
+  .ctm-pop.com-busca .ctm-lista,.ctm-pop.com-busca .ctm-add{display:none}
+  .bg-a{min-height:44px}
+  .bg-t small{white-space:normal}
+}
 .visao{display:block;max-width:1480px;margin:0 auto;padding:16px calc(20px + env(safe-area-inset-right,0px)) calc(32px + env(safe-area-inset-bottom,0px)) calc(20px + env(safe-area-inset-left,0px))}
 .vg{display:flex;flex-direction:column;gap:14px}
 .vg-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:4px 16px}
@@ -2296,6 +2325,11 @@ rect.md-g-apagar{fill:var(--atencao-bg);stroke:var(--atencao);stroke-width:1.5;s
     <div class="pg-tools" id="pgTools" hidden></div>
   </nav>
 </header>
+<!-- v239: a busca de qualquer tela (a lupa do cabeçalho abre; no celular o campo fica na lista de contratos) -->
+<div class="bg-pop" id="buscaPop" role="dialog" aria-label="Buscar em todos os contratos" hidden>
+  <input id="buscaQ" type="search" inputmode="search" autocomplete="off" placeholder="km (794,5), ponto, OAE, contrato ou medição (27ª)" aria-label="Buscar km, ponto, OAE, contrato ou medição em todos os contratos">
+  <div class="bg-res" id="buscaRes" aria-live="polite"></div>
+</div>
 
 <main class="layout" id="layout">
   <aside class="editor" id="editor" aria-label="Edição do contrato"></aside>

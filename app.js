@@ -2445,6 +2445,8 @@
   var ICON_DESCE = '<svg class="ctm-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   function renderTabs() {
     var nav = $('tabs'), at = !visaoOn && !medicoesOn ? active() : null;
+    // v239: a lista é refeita a cada desenho; quem estava digitando no campo dela continua com ela aberta e com o cursor
+    var aeB = document.activeElement, bEra = !!aeB && aeB.id === 'ctmBusca' && !!$('ctmPop') && !$('ctmPop').hidden, bSel = bEra ? [aeB.selectionStart, aeB.selectionEnd] : null;
     var lista = GRUPOS_MENU.map(function (g) {
       // na ordem fixa (ctOrdem): a conservação pela posição no eixo, e não pela ordem de cadastro no banco
       var cs = ctOrdem(state.contracts).filter(function (c) { return ctGrupo(c) === g[0]; });
@@ -2462,9 +2464,13 @@
       (isPublico() ? '' : '<div class="ctmenu"><button type="button" class="tab ctm-btn" data-act="ct-menu" aria-expanded="false" aria-controls="ctmPop" aria-current="' + !!at + '">' +
       '<span class="ctm-nome"><span class="ctm-n">' + (at ? '<span class="ctm-longo">' + esc(ctNome(at)) + '</span><span class="ctm-cur">' + esc(ctNumeroCurto(at) || ctCurto(at)) + '</span></span><small>' + esc(abaSub(at)) + '</small>' : 'Contratos</span>') +
       (window.AMBIENTE && window.AMBIENTE.previa ? '<span class="ctm-prev">Prévia</span>' : '') + '</span>' + ICON_DESCE + '</button>' +
-      '<div class="ctm-pop" id="ctmPop" hidden>' + lista +
-      '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>');
+      '<div class="ctm-pop" id="ctmPop" hidden>' +
+      '<div class="ctm-busca"><input id="ctmBusca" type="search" inputmode="search" autocomplete="off" placeholder="' + BUSCA_DICA + '" aria-label="Buscar km, ponto, OAE, contrato ou medição em todos os contratos"></div>' +
+      '<div class="bg-res" id="ctmRes"></div><div class="ctm-lista">' + lista + '</div>' +
+      '<div class="ctm-add"><hr><button type="button" class="ctm-i add" data-act="new-contract">+ Contrato</button></div></div></div>' +
+      '<button type="button" class="tab tab-busca" data-busca="1" aria-label="Buscar em todos os contratos" title="Buscar km, ponto, OAE, contrato ou medição" aria-expanded="' + buscaAberta() + '" aria-controls="buscaPop">' + ICON_LUPA + '</button>');
     nav.classList.toggle('com-med', !!nav.querySelector('.tab-medicoes'));
+    if (bEra) { ctMenu(true, true); var bNovo = $('ctmBusca'); if (bNovo) { bNovo.focus({ preventScroll: true }); try { bNovo.setSelectionRange(bSel[0], bSel[1]); } catch (e) { /* segue */ } } }
     var cc = $('ctCurto');
     if (cc) cc.innerHTML = esc(at ? ctCurto(at) : 'Contratos') + ICON_DESCE;
     var atl = $('atalhos');
@@ -2534,12 +2540,121 @@
     rolY = window.scrollY || 0;
     marcaAtalho(onde === 'pontos' ? 'pontos' : view === 'mapa' ? 'mapa' : 'diagrama');
   }
-  function ctMenu(abrir) {
+  function ctMenu(abrir, semFoco) {
     var pop = $('ctmPop'), b = document.querySelector('[data-act="ct-menu"]');
     if (!pop || !b) return;
     pop.hidden = !abrir;
     b.setAttribute('aria-expanded', String(!!abrir));
-    if (abrir) { var f = pop.querySelector('.ctm-i[aria-current="true"]') || pop.querySelector('.ctm-i'); if (f) f.focus(); }
+    if (abrir) buscaNoCtm();
+    if (abrir && !semFoco) { var f = pop.querySelector('.ctm-i[aria-current="true"]') || pop.querySelector('.ctm-i'); if (f) f.focus(); }
+  }
+  // ---------------- v239 (item 6 dos Caminhos): busca em qualquer tela. No computador e no tablet, a lupa do cabeçalho abre o
+  // campo (#buscaPop); no celular, o campo fica no alto da lista de contratos (#ctmBusca), sem botão novo no cabeçalho.
+  // Procura km, ponto, OAE, segmento, contrato ou medição ("27ª", "med 27") em todos os contratos (a mesma regra da busca
+  // da tela inicial: visao.buscar). O resultado leva ao item no contrato, à medição dele ou às fotos
+  var BUSCA_DICA = 'km (794,5), ponto, OAE, contrato ou medição (27ª)';
+  var ICON_LUPA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
+  var bgQ = '', bgUlt = null;
+  function buscaAberta() { var pp = $('buscaPop'); return !!pp && !pp.hidden; }
+  function buscaMedN(q) { var m = /^med[a-zçã.]*\s*(\d{1,3})\s*[ªa]?$/i.exec(q) || /^(\d{1,3})\s*ª$/.exec(q); return m ? Number(m[1]) : null; }
+  // as medições pintam os resultados ("27ª" ao lado do item) e respondem "tem a 27ª?": pede as que ainda não vieram
+  function buscaCarrega() { if (banco.login) state.contracts.forEach(function (c) { if (!semContrato(c) && !analise.estado[c.id]) carregarAnalise(c, true); }); }
+  function buscaHtml() {
+    var q = bgQ.trim(), h = '';
+    bgUlt = null;
+    if (!q) return '<p class="bg-n">Digite um km, o nome de um ponto ou OAE, um contrato ou uma medição. Procura em todos os contratos.</p>';
+    var v = ensureVisao(), r = v && v.buscar ? v.buscar(q, 8) : null, nM = buscaMedN(q);
+    if (nM != null && temMedicoes() && medObj() && medicoes.temMedicao) ctsMedicoes().forEach(function (c) {
+      if (!parte(c, 'med') || !medicoes.temMedicao(c.id, nM)) return;
+      h += '<button type="button" class="bg-i" data-bg="med" data-cid="' + esc(c.id) + '" data-n="' + nM + '"><span class="bg-t"><b>' + nM + 'ª medição</b><small>' + esc(ctNome(c)) + '</small></span><span class="bg-ir">Medições ›</span></button>';
+    });
+    if (r) {
+      r.cts.forEach(function (c) {
+        h += '<button type="button" class="bg-i" data-bg="ct" data-cid="' + esc(c.id) + '"><span class="bg-t"><b>' + esc(ctNome(c)) + '</b><small>Contrato' + (abaSub(c) ? ' · ' + esc(abaSub(c)) : '') + '</small></span><span class="bg-ir">Abrir ›</span></button>';
+      });
+      if (r.longe) h += '<p class="bg-n">Nada a menos de 500 m do km ' + esc(String(r.km).replace('.', ',')) + '. Os mais próximos:</p>';
+      r.itens.forEach(function (x, i) {
+        var md = x.medN != null && !x.c.oaes230 && temMedicoes() && parte(x.c, 'med') && medObj() && medicoes.irItem;
+        h += '<div class="bg-l"><button type="button" class="bg-i" data-bg="item" data-i="' + i + '"><span class="bg-t"><b>' + esc(x.nome) + '</b><small>' + esc([x.ct, x.kmT, x.st].filter(Boolean).join(' · ')) + '</small></span></button>' +
+          (md ? '<button type="button" class="bg-a" data-bg="item-med" data-i="' + i + '" aria-label="' + esc('Abrir a ' + x.medN + 'ª medição de ' + x.nome + ' em Medições') + '">' + esc(x.medN) + 'ª</button>' : '') +
+          (galeriaOn() ? '<button type="button" class="bg-a" data-bg="item-fotos" data-i="' + i + '" aria-label="' + esc('Fotos de ' + x.nome) + '">Fotos</button>' : '') + '</div>';
+      });
+      if (r.total > r.itens.length) h += '<p class="bg-n">e mais ' + (r.total - r.itens.length) + '; escreva também o número do contrato.</p>';
+      bgUlt = r;
+    }
+    return h || '<p class="bg-n">Nada encontrado.</p>';
+  }
+  // o campo da lista de contratos (só aparece no celular): mostra o que já estava escrito e os resultados
+  function buscaNoCtm() {
+    var i = $('ctmBusca'), r = $('ctmRes'), pop = $('ctmPop');
+    if (!i || !r || !pop || i.offsetParent === null) return;
+    if (i.value !== bgQ) i.value = bgQ;
+    r.innerHTML = bgQ.trim() ? buscaHtml() : '';
+    pop.classList.toggle('com-busca', !!bgQ.trim());
+    buscaCarrega();
+  }
+  function buscaAbre(on) {
+    var pp = $('buscaPop'), b = document.querySelector('[data-busca]');
+    if (!pp) return;
+    if (!on) { buscaFecha(); return; }
+    closeMenu(); ctMenu(false);
+    var rb = b ? b.getBoundingClientRect() : { left: 12, bottom: 56 };
+    pp.hidden = false;
+    pp.style.top = Math.round(rb.bottom + 6) + 'px';
+    pp.style.left = Math.max(12, Math.min(Math.round(rb.left), window.innerWidth - pp.offsetWidth - 12)) + 'px';
+    if (b) b.setAttribute('aria-expanded', 'true');
+    var i = $('buscaQ');
+    i.value = bgQ; $('buscaRes').innerHTML = buscaHtml();
+    buscaCarrega();
+    i.focus(); i.select();
+  }
+  function buscaFecha(limpa) {
+    var pp = $('buscaPop'), b = document.querySelector('[data-busca]');
+    if (limpa) {
+      bgQ = ''; bgUlt = null;
+      ['buscaQ', 'ctmBusca'].forEach(function (id) { var i = $(id); if (i) i.value = ''; });
+      var cr = $('ctmRes'), cp = $('ctmPop');
+      if (cr) cr.innerHTML = '';
+      if (cp) cp.classList.remove('com-busca');
+    }
+    if (pp) pp.hidden = true;
+    if (b) b.setAttribute('aria-expanded', 'false');
+  }
+  function buscaDigita(el) {
+    bgQ = el.value;
+    if (el.id === 'buscaQ') { $('buscaRes').innerHTML = buscaHtml(); return; }
+    var cr = $('ctmRes'), cp = $('ctmPop');
+    if (cr) cr.innerHTML = bgQ.trim() ? buscaHtml() : '';
+    if (cp) cp.classList.toggle('com-busca', !!bgQ.trim());
+  }
+  function buscaClique(e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('[data-busca]')) { buscaAbre(!buscaAberta()); return; }
+    var b = t.closest('[data-bg]');
+    if (!b) { if (buscaAberta() && !t.closest('#buscaPop')) buscaFecha(); return; }
+    var a = b.dataset.bg, x = bgUlt && b.dataset.i != null ? bgUlt.itens[Number(b.dataset.i)] : null, cid = b.dataset.cid, n = b.dataset.n;
+    // escolheu um resultado: o campo solta o foco (o teclado do celular desce) e a lista fecha antes de a tela trocar
+    if (document.activeElement && document.activeElement.id === 'ctmBusca') document.activeElement.blur();
+    buscaFecha(true); ctMenu(false);
+    if (a === 'ct') {
+      // o mesmo caminho do toque na lista de contratos (histórico, lista do contrato, foco)
+      var ci = [].slice.call(document.querySelectorAll('#ctmPop .ctm-i[data-tab]')).filter(function (el) { return el.dataset.tab === cid; })[0];
+      if (ci) ci.click();
+    } else if (a === 'med') {
+      if (temMedicoes() && medObj() && medicoes.irMedicao && medicoes.irMedicao(cid, n)) abrirMedicoes();
+    } else if (!x) return;
+    else if (a === 'item') { if (x.c.oaes230) abrir230(x.p, false); else abrirDaVisao(x.c, x.p, false); }
+    else if (a === 'item-med') { if (temMedicoes() && parte(x.c, 'med') && medObj() && medicoes.irItem && medicoes.irItem(x.c.id, x.p.id, x.medN)) abrirMedicoes(); }
+    else if (a === 'item-fotos') fotosDoItem(x.c, x.p);
+  }
+  // as fotos de um item (cartão da tela inicial e busca): a não atendida pelo Proarte, o segmento pelo km, o resto pelo ponto
+  function fotosDoItem(c, p) {
+    var sp = c.oaes230 && !p._at ? ctSemProarte() : null;
+    if (c.oaes230) abrirGaleria({ cid: sp ? sp.id : c.de, pid: p._at || p.id });
+    // conservação: as fotos vão pelo km do segmento (não têm ponto), como no editor
+    else if (c.tipo === 'conserva') abrirGaleria({ cid: c.id, km: [Number(p.kmIni), Number(p.kmFim)], kmNome: p.nome || p.codigo || '' });
+    else abrirGaleria({ cid: c.id, pid: p.id });
   }
   // a barra do topo é fixa: as rolagens até um elemento (ponto, mapa, desenho) param logo abaixo dela
   function syncTopbar() {
@@ -5939,13 +6054,7 @@
         if (medicoes.irItem(c.id, p.id, n)) abrirMedicoes();
       },
       onMapa: function (c, p) { if (c.oaes230) abrir230(p, true); else abrirDaVisao(c, p, podeMapa(c)); },
-      onFotos: function (c, p) {
-        var sp = c.oaes230 && !p._at ? ctSemProarte() : null;
-        if (c.oaes230) abrirGaleria({ cid: sp ? sp.id : c.de, pid: p._at || p.id });
-        // conservação: as fotos vão pelo km do segmento (não têm ponto), como no editor
-        else if (c.tipo === 'conserva') abrirGaleria({ cid: c.id, km: [Number(p.kmIni), Number(p.kmFim)], kmNome: p.nome || p.codigo || '' });
-        else abrirGaleria({ cid: c.id, pid: p.id });
-      },
+      onFotos: fotosDoItem,
       // as fotos de um contrato inteiro (cartão do contrato no mapa de todos)
       onFotosCt: function (c) { abrirGaleria({ cid: c.id }); },
       // v174: o mapa de todos os contratos (Raias | Mapa). No celular e no tablet a barra de baixo escolhe (Geral = raias,
@@ -9947,6 +10056,14 @@
       if (!e.target.closest('.menu')) closeMenu();
       if (!e.target.closest('.ctmenu') && !e.target.closest('#ctCurto')) ctMenu(false);
     });
+    // v239 (item 6 dos Caminhos): a busca de qualquer tela (lupa do cabeçalho e campo da lista de contratos)
+    document.addEventListener('click', buscaClique);
+    document.addEventListener('input', function (e) { if (e.target.id === 'buscaQ' || e.target.id === 'ctmBusca') buscaDigita(e.target); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || (e.target.id !== 'buscaQ' && e.target.id !== 'ctmBusca')) return;
+      var f = $(e.target.id === 'buscaQ' ? 'buscaRes' : 'ctmRes').querySelector('.bg-i');
+      if (f) { e.preventDefault(); f.click(); }
+    });
     $('atalhos').addEventListener('click', function (e) { var x = e.target.closest('[data-ir]'); if (x) irPara(x.dataset.ir); });
     // barra encolhida: o contrato curto devolve a barra inteira e abre a lista de contratos
     $('ctCurto').addEventListener('click', function () { topoMini(false); ctMenu(true); });
@@ -10095,6 +10212,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       closeMenu();
+      if (buscaAberta()) { buscaFecha(); var lb = document.querySelector('[data-busca]'); if (lb) lb.focus(); }
       if ($('ctmPop') && !$('ctmPop').hidden) { ctMenu(false); var b = document.querySelector('[data-act="ct-menu"]'); if (b) b.focus(); }
     });
     if (!window.VisaoGeral || !$('visaoHost')) visaoOn = false;

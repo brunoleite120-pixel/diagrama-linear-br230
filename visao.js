@@ -1035,19 +1035,9 @@
     // as abertas à mão continuam
     function mudaFiltro(s) { aplicaFiltro(s); st.k0 = null; Object.keys(st.lst).forEach(function (k) { if (!st.lst[k]) delete st.lst[k]; }); render(); avisa(anuncio()); }
 
-    function resultados() {
-      var q = (st.q || '').trim();
-      if (!q) return '';
-      var d = itens();
-      var out = [], kmB = [], n = kmBusca(q);
-      if (n != null) {
-        // fora do trecho dos contratos escolhidos (sem a folga do desenho; nenhum deles com km conta como fora), mas no
-        // trecho dos outros: mostra todos e vai ao km
-        var FT = d.ativo ? faixaTotal(d.todos, d.fx, W) : F, U = d.ativo ? envoltoria(d.mostra, d.fx) : F;
-        if (U && n >= U[0] && n <= U[1]) kmB.push('<button type="button" data-vg="km" data-km="' + n + '">Ir ao km ' + nf(n, n % 1 ? 2 : 0) + '</button>');
-        else if (n >= FT[0] && n <= FT[1]) kmB.push('<button type="button" data-vg="kmtodos" data-km="' + n + '">Mostrar todos e ir ao km ' + nf(n, n % 1 ? 2 : 0) + '</button>');
-        else kmB.push('<span class="vg-res-n">O desenho vai do km ' + nf(FT[0], 0) + ' ao km ' + nf(FT[1], 0) + '.</span>');
-      }
+    // v239 (item 6 dos Caminhos): a parte da busca por nome ficou à parte, para servir também à busca de qualquer tela
+    // (buscar, pedida pelo app). cts: os contratos em que todos os termos batem (o "OAEs 230" não é contrato)
+    function acharNome(q, d) {
       // o nº de um contrato ("315", sem "km"): os pontos dele vêm antes do botão de km (o Enter escolhe o primeiro)
       var ehCt = /^\d+$/.test(q) && d.todos.some(function (c) { return N.numeroCurto(c) === String(Number(q)); });
       // nome: cada palavra em qualquer ordem ("Lote 02 P1", "315 P1", "proarte"), sem ligar para acento; procura em todos
@@ -1072,6 +1062,43 @@
         var s = semAc((nomeP(x) || '') + ' ' + (x.p.codigo || '')) + ' ' + txt[x.c.id];
         return termos.every(function (w) { return s.indexOf(w) >= 0; });
       }).map(function (x) { return { x: x, n: nota(x) }; }).sort(function (a, b) { return b.n - a.n || b.x.on - a.x.on || a.x.km - b.x.km; }).map(function (r) { return r.x; });
+      var cts = d.todos.filter(function (c) {
+        return !c.oaes230 && (nl == null || nLote(c) === nl) && (termos.length > 0 || nl != null) && termos.every(function (w) { return txt[c.id].indexOf(w) >= 0; });
+      });
+      return { ehCt: ehCt, ach: ach, cts: cts };
+    }
+    // a busca de qualquer tela: por km (o que está no km, com 500 m de folga; sem nada ali, os 4 mais próximos) e por nome,
+    // em todos os contratos, sem mexer no desenho nem no filtro. Devolve dados; quem desenha e abre é o app
+    function buscar(q, max) {
+      q = String(q == null ? '' : q).trim();
+      if (!q) return null;
+      if (!gesto) cacheIt = null;
+      var d = itens(), n = kmBusca(q), r = acharNome(q, d), FOLGA = 0.5, longe = false;
+      var dist = function (x) { return n >= x.km && n <= x.kf ? 0 : Math.min(Math.abs(n - x.km), Math.abs(n - x.kf)); };
+      var noKm = n == null ? [] : d.lista.filter(function (x) { return !copia230(x, d); }).sort(function (a, b) { return dist(a) - dist(b) || a.km - b.km; });
+      var perto = noKm.filter(function (x) { return dist(x) <= FOLGA; });
+      if (n != null && !perto.length && !r.ach.length && noKm.length) { perto = noKm.slice(0, 4); longe = true; }
+      var vistos = {}, its = [];
+      (r.ehCt ? r.ach.concat(perto) : perto.concat(r.ach)).forEach(function (x) { if (!vistos[x.key]) { vistos[x.key] = true; its.push(x); } });
+      return { km: n, longe: longe, cts: r.cts, total: its.length, itens: its.slice(0, max || 8).map(function (x) {
+        return { key: x.key, c: x.c, p: x.p, ct: N.nome(x.c), nome: String(nomeP(x) || '?') + (x.p.codigo && String(nomeP(x) || '').indexOf(x.p.codigo) < 0 ? ' · ' + x.p.codigo : ''),
+          kmT: kmTxt(x, x.kf > x.km), st: x.st || '', medN: x.inf && x.inf.medN != null ? x.inf.medN : null };
+      }) };
+    }
+    function resultados() {
+      var q = (st.q || '').trim();
+      if (!q) return '';
+      var d = itens();
+      var out = [], kmB = [], n = kmBusca(q);
+      if (n != null) {
+        // fora do trecho dos contratos escolhidos (sem a folga do desenho; nenhum deles com km conta como fora), mas no
+        // trecho dos outros: mostra todos e vai ao km
+        var FT = d.ativo ? faixaTotal(d.todos, d.fx, W) : F, U = d.ativo ? envoltoria(d.mostra, d.fx) : F;
+        if (U && n >= U[0] && n <= U[1]) kmB.push('<button type="button" data-vg="km" data-km="' + n + '">Ir ao km ' + nf(n, n % 1 ? 2 : 0) + '</button>');
+        else if (n >= FT[0] && n <= FT[1]) kmB.push('<button type="button" data-vg="kmtodos" data-km="' + n + '">Mostrar todos e ir ao km ' + nf(n, n % 1 ? 2 : 0) + '</button>');
+        else kmB.push('<span class="vg-res-n">O desenho vai do km ' + nf(FT[0], 0) + ' ao km ' + nf(FT[1], 0) + '.</span>');
+      }
+      var rN = acharNome(q, d), ehCt = rN.ehCt, ach = rN.ach, max = 6;
       // resultado de contrato fora do filtro (no mesmo peso, depois dos de dentro): "· fora do filtro"; ao escolher, o
       // contrato entra no filtro
       ach.slice(0, max).forEach(function (x) {
@@ -1390,7 +1417,7 @@
 
     // sel(): o item do cartão aberto ({ c, p }) ou null; a Foto da barra põe o contrato dele em primeiro (app.js escolheCt)
     // modoNc(): a tela inicial está em Não conformidades (também para quem só tem esse modo, como o fiscal): a lista do contrato abre só com as NC
-    return { render: render, forma: forma, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; }, modoNc: function () { return modo() === 'nc'; } };
+    return { render: render, forma: forma, sel: function () { var x = st.sel ? achar(st.sel) : null; return x ? { c: x.c, p: x.p } : null; }, modoNc: function () { return modo() === 'nc'; }, buscar: buscar };
   }
 
   VisaoGeral.kmBusca = kmBusca;   // a busca da lista do contrato (app.js) usa as mesmas formas de km

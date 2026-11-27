@@ -1440,6 +1440,17 @@
         cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
         return true;
       },
+      // v239 (item 6 dos Caminhos): a busca de qualquer tela pergunta se o contrato tem a medição n e abre direto nela
+      temMedicao: function (id, n) {
+        var c = contrato(id), d = c && dado(c);
+        return !!d && d.ms.some(function (m) { return String(m.n) === String(n); });
+      },
+      irMedicao: function (id, n) {
+        if (!this.temMedicao(id, n) || !this.irContrato(id, '')) return false;
+        med = String(n);
+        dado(contrato(id)).ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; });
+        return true;
+      },
       // v232 (item 2 dos Caminhos): para o cartão do item no contrato (aba Medições), sem abrir Medições. xlsItem conta o que
       // a planilha teria (n vazio: todas as medições do item; com n: só aquela) e baixarItem monta e salva a planilha
       xlsItem: function (id, pid, n) {
