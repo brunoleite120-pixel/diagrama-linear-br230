@@ -724,6 +724,19 @@
       if (sm && sm.processo) t += '. Processo ' + sm.processo;
       return t + '.';
     }
+    // v233 (item 5 dos Caminhos): o Excel da medição inteira no alto dela, sem depender da aba "Por OAE" nem dos dados do
+    // SIAC. O rótulo diz como a planilha é dividida ("por OAE", "por segmento", "por ponto"). A conta é a mesma do botão da aba
+    function xlsTopoHtml(c, d, m) {
+      if (!op.salvar || soSiac(d)) return '';
+      var pts = d.an.pontes || {}, oae = c.tipo === 'oae', cons = c.tipo === 'conserva';
+      var n = Object.keys(pts).filter(function (pid) {
+        var x = pts[pid] || {};
+        return valor(x.meses && x.meses[m.n]) !== 0 && (x.servicos || []).some(function (sv) { return temQv(sv, m.n); });
+      }).length;
+      if (!n) return '';
+      var dica = 'Uma aba para ' + (oae ? 'cada OAE' : cons ? 'cada segmento' : 'cada ponto') + ' com serviço nesta medição (' + n + '), com código, serviço, unidade e quantidade, e um resumo na frente.';
+      return '<div class="md-med-acoes">' + botao('seg-xls', 'Baixar Excel da ' + esc(m.n + 'ª') + ' · ' + (oae ? 'por OAE' : cons ? 'por segmento' : 'por ponto'), ' data-n="' + esc(m.n) + '" title="' + esc(dica) + '"', 'small') + '</div>';
+    }
     function medicaoHtml(c, d, m) {
       var sm = d.an.siac && d.an.siac.medicoes && d.an.siac.medicoes[m.n], anterior = d.ms[d.ms.indexOf(m) - 1], v = valor(m.total), als = avisos(d, m.n);
       var processado = sm && sm.processado || m.processado, situacao = sm && sm.situacao || m.situacao, indices = sm && sm.indices || m.indices;
@@ -738,6 +751,7 @@
           (rj != null && tt != null ? '<div><span class="md-label">Preços iniciais (PI)</span><b>' + esc(dinheiro(v)) + '</b></div><span class="md-op" aria-hidden="true">+</span><div><span class="md-label">Reajuste</span><b>' + esc(dinheiro(rj)) + '</b></div><span class="md-op md-op-ig" aria-hidden="true">=</span><div class="md-soma-tot"><span class="md-label">Total da medição</span><strong class="md-total">' + esc(dinheiro(tt)) + '</strong></div>'
             : '<div class="md-soma-tot"><span class="md-label">Preços iniciais (PI)</span><strong class="md-total">' + esc(dinheiro(v)) + '</strong></div>') +
           copiarBtn(resumoMedTxt(c, d, m, sm), 'Copiar o resumo da medição') + '</div></div>';
+        h += xlsTopoHtml(c, d, m);
         h += trilhaHtml(c, d, m, sm);
       } else {
       h = '<div class="md-top"><div><small>' + esc((m.etapa != null ? m.etapa + 'ª etapa · ' : '') + 'Competência ' + (m.mes || mesTxt(idx(m.ref)))) + '</small><h2 id="mdTituloMed" tabindex="-1">' + esc(m.n + 'ª medição' + (m.retificada ? ' · retificada' : '')) + '</h2><small>' + esc('Fonte: ' + (m.fonte || d.an.sobre && d.an.sobre.fonte || 'não informada') + ' · processada no SIAC em ' + (processado ? dataTxt(processado) : 'data não informada')) + '</small>' +
@@ -746,6 +760,7 @@
       if (sm && numero(sm.reaj) != null) h += '<small>Reajuste da medição: ' + dinheiro(sm.reaj) + '</small>';
       if (anterior) h += '<small>' + esc(varTxt) + '</small>';
       h += '</div></div>';
+      h += xlsTopoHtml(c, d, m);
       }
       // As análises antigas trazem [localizado, semLocal]; as novas podem trazer [localizado, total].
       // O total PI da medição é a base em ambos os casos; nunca se soma uma segunda vez o que já é total.
