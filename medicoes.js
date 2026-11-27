@@ -9,6 +9,7 @@
     var host = op.host, esc = op.esc, fmtN = op.fmtN, dinheiro = op.dinheiro;
     var cache = {}, cid = '', med = null, modo = 'contrato', aba = 'grupos', zeradas = false, semValor = false;
     var segAberto = '', segTodas = false, segServ = false, segXls = false, segSem = null, segOrdem = 'km';
+    var segRola = false;   // v231: veio do cartão do item (irItem): depois de desenhar, rola até ele e até os serviços
     // v202: o contrato aberto tem as partes Medições e Pagamentos; na tabela dos pagamentos, todas as linhas ou só as não pagas
     var secao = 'med', pagTodas = false, pagAbertas = false, ordSit = 'prazo';
     var etapas = {}, grupo = null, busca = '', ordem = 'km', mesSel = null, janela = null, fila = false, geracao = 0, resumoCel = false, matrizScroll = null, tipoMes = '', folha = false, folhaHist = false, folhaPula = false;
@@ -1274,6 +1275,24 @@
       if (matriz) matriz.scrollLeft = matrizScroll == null ? matriz.scrollWidth : matrizScroll;
       if (focado) { var novo = document.getElementById(focado); if (novo) { novo.focus({ preventScroll: true }); if (novo.setSelectionRange && ini != null) novo.setSelectionRange(ini, fim); } }
       if (folha) { folhaEl = host.querySelector('.md-folha .esc-f'); if (folhaEl) { folhaEl.scrollTop = folhaY; folhaEl.focus({ preventScroll: true }); } else fechaFolha(); }
+      if (segRola) rolaItem();
+    }
+    // v231 (item 1 dos Caminhos): o item aberto pelo cartão da tela inicial. Sem a linha dele na tela (os dados ainda não
+    // chegaram), espera o próximo desenho. No computador o painel fica preso ao lado e o corpo dele rola até os serviços;
+    // no celular o painel vai dentro da lista e é a página que rola até os serviços
+    function rolaItem() {
+      if (!host.querySelector('.md-seg-btn.on')) return;
+      segRola = false;
+      setTimeout(function () {
+        var b = host.querySelector('.md-seg-btn.on'); if (!b) return;
+        var tb = document.querySelector('.topbar'), alto = tb && getComputedStyle(tb).position !== 'static' ? Math.max(0, tb.getBoundingClientRect().bottom) : 0;
+        var pn = host.querySelector('.md-painel'), pc = pn && pn.querySelector('.md-painel-corpo'), sv = pc && pc.querySelector('.md-painel-sv');
+        var aoLado = !!pn && getComputedStyle(pn).position === 'sticky';   // computador largo: painel preso ao lado da lista
+        var alvo = sv && !aoLado ? sv : b;
+        window.scrollTo(0, Math.max(0, alvo.getBoundingClientRect().top + (window.scrollY || 0) - alto - 12));
+        if (sv && aoLado) pc.scrollTop = Math.max(0, sv.offsetTop - pc.offsetTop - 8);
+        b.focus({ preventScroll: true });
+      }, 0);
     }
     function abrir(id, n, ab) {
       if (!contrato(id)) return;
@@ -1292,6 +1311,7 @@
       if (ev.target.classList && ev.target.classList.contains('md-folha')) { fechaFolha(); return; }
       var b = ev.target.closest('[data-md]'); if (!b || !host.contains(b) || !op.ativa()) return;
       var act = b.dataset.md, daFolha = false;
+      segRola = false;
       if (act === 'folha') { abreFolha(); return; }
       if (act === 'folha-x') { fechaFolha(); return; }
       if (act === 'diagrama') { var c = contrato(b.dataset.cid); if (c) op.diagrama(c); return; }
@@ -1403,6 +1423,15 @@
         if (id !== cid) { pagTodas = false; pagAbertas = false; }
         secao = ab === 'pag' || ab === 'ct' ? ab : 'med';
         cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
+        return true;
+      },
+      // v231 (item 1 dos Caminhos): direto no item (OAE, segmento ou ponto) dentro de uma medição, na aba "Por OAE", com o
+      // painel dele aberto e os serviços daquela medição à vista. Sem desenhar (o app desenha ao abrir Medições)
+      irItem: function (id, pid, n) {
+        if (!pid || !this.irContrato(id, '')) return false;
+        var d = dado(contrato(id));
+        if (n != null && n !== '') { med = n; if (d) d.ms.forEach(function (m) { if (String(m.n) === String(n)) etapas[String(m.etapa)] = true; }); }
+        aba = 'segmentos'; segAberto = String(pid); segServ = true; segRola = true;
         return true;
       },
       // v226: o Voltar do app caiu numa entrada de Medições: a lista ('') ou o contrato dela, sem desenhar (o app desenha)

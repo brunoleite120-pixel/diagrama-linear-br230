@@ -5315,10 +5315,16 @@
     // v194: "última medição: 26ª (ago/26)"; antes "última na 26ª med.", que ao lado de "Sem não conformidade" lia-se como a última NC
     var med = medDoPonto(dono, p), medT = med ? 'última medição: ' + med.n + 'ª' + (med.mes != null ? ' (' + mesCurto(med.mes) + ')' : '') : '';
     // no modo NC, ao lado da situação: quantas NC (com mais de uma) e a última medição
-    if (modo !== 'med') { inf.pctText = [k > 1 ? k + ' NC' : '', medT].filter(Boolean).join(' · '); return inf; }
+    // v231 (item 1 dos Caminhos): a medição vai também em separado (medN, medTxt, antes, depois), para o cartão fazer dela um toque
+    var medN = med && temMedicoes() && parte(dono, 'med') ? med.n : null;
+    if (modo !== 'med') {
+      inf.pctText = [k > 1 ? k + ' NC' : '', medT].filter(Boolean).join(' · ');
+      inf.medN = medN; inf.medTxt = medT; inf.antes = k > 1 ? k + ' NC' : ''; inf.depois = '';
+      return inf;
+    }
     var ncT = k ? k + ' NC' + (n.dn ? '' : ' em correção') : '';
     return { color: med ? '#1E9E55' : NO_STATUS.fill, status: med ? 'Medido' : 'Sem medição', nc: inf.nc, ncN: k, servs: inf.servs,
-      pctText: medT + (med && ncT ? ' · ' : '') + ncT };
+      pctText: medT + (med && ncT ? ' · ' : '') + ncT, medN: medN, medTxt: medT, antes: '', depois: ncT };
   }
   // quem vê as medições de alguma ponte ou conservação: a tela inicial começa em Medições (sem elas, só o modo NC)
   // e quem vê a parte de acompanhamento (as NC) de alguma: sem ela (analista só das medições), a tela fica em Medições, sem o botão
@@ -5911,6 +5917,11 @@
       // 709 (kmSoContrato): os textos com o km das MPs; dos outros contratos, null (o km do site, como sempre)
       kmMp: function (c, k) { var r = kmSoContrato(c) ? kmDoContrato(c, k) : null; return r ? r.km : null; },
       onAbrir: function (c, p) { if (c.oaes230) abrir230(p, false); else abrirDaVisao(c, p, false); },
+      // v231 (item 1 dos Caminhos): "última medição: 27ª" do cartão abre Medições no contrato, na OAE, naquela medição, com os serviços
+      onMedicao: function (c, p, n) {
+        if (c.oaes230 || !temMedicoes() || !parte(c, 'med') || !medObj() || !medicoes.irItem) return;
+        if (medicoes.irItem(c.id, p.id, n)) abrirMedicoes();
+      },
       onMapa: function (c, p) { if (c.oaes230) abrir230(p, true); else abrirDaVisao(c, p, podeMapa(c)); },
       onFotos: function (c, p) {
         var sp = c.oaes230 && !p._at ? ctSemProarte() : null;

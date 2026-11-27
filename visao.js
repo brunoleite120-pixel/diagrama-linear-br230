@@ -612,6 +612,14 @@
         });
         return out;
       }
+      // v231 (item 1 dos Caminhos): no cartão, "última medição: 27ª (set/26)" é um botão que abre Medições nesse item e nessa
+      // medição, com os serviços (para quem vê as medições do contrato; sem isso, o texto de sempre)
+      function sitCartao(x, inf) {
+        if (inf.medN == null || !o.onMedicao || x.c.oaes230) return esc(x.st) + (inf.pctText ? ' · ' + esc(inf.pctText) : '');
+        return '<span>' + esc(x.st) + (inf.antes ? ' · ' + esc(inf.antes) : '') + '</span>' +
+          '<button type="button" class="vg-med" data-vg="medicao" data-n="' + esc(inf.medN) + '" aria-label="' + esc('Abrir a ' + inf.medN + 'ª medição ' + (x.oae ? 'desta OAE' : 'deste item') + ' em Medições, com os serviços') + '">' +
+          esc(inf.medTxt) + '<span aria-hidden="true"> ›</span></button>' + (inf.depois ? '<span>' + esc(inf.depois) + '</span>' : '');
+      }
       // cartão do ponto escolhido (no celular, sobe da parte de baixo)
       if (sel) {
         // sem código (o.publico): o banco manda só a posição; o cartão diz só o km e pede o código para abrir
@@ -626,7 +634,7 @@
         var c230 = !!x.c.oaes230, do424 = c230 && !!x.p._at, naSp = c230 && !do424 && !pub && !!(o.temSemProarte && o.temSemProarte());
         h += '<aside class="vg-box vg-card" aria-label="Ponto escolhido" data-key="' + esc(x.key) + '"><div class="vg-card-top"><div><small>' + esc(c230 ? 'OAEs 230 · ' + (do424 ? 'Proarte 424' : 'não atendida pelo Proarte') : N.completo(x.c)) + '</small>' +
           '<h3>' + esc(nomeS) + '</h3><span>' + kmS + '</span></div><button type="button" class="vg-x" data-vg="fechar" aria-label="Fechar">×</button></div>' +
-          (pub ? '<p class="vg-obs">A situação e os detalhes aparecem para quem entra com o código.</p>' : '<div class="vg-st"><i style="background:' + esc(x.cor) + '"></i>' + esc(x.st) + (inf.pctText ? ' · ' + esc(inf.pctText) : '') + '</div>') +
+          (pub ? '<p class="vg-obs">A situação e os detalhes aparecem para quem entra com o código.</p>' : '<div class="vg-st"><i style="background:' + esc(x.cor) + '"></i>' + sitCartao(x, inf) + '</div>') +
           (!pub && (servs || x.p.obs) ? '<details class="vg-mais"' + ((st.mais != null ? st.mais : !mob) ? ' open' : '') + '><summary>' + (servs ? 'Serviços' + (x.p.obs ? ' e observações' : '') : 'Observações') + '</summary>' + servs +
             (x.p.obs ? '<p class="vg-obs">' + esc(x.p.obs) + '</p>' : '') + '</details>' : '') +
           '<div class="vg-acoes">' + (c230 && !do424 && !naSp ? '' : '<button type="button" class="btn primary" data-vg="abrir">' + (pub ? 'Entrar para ver' : do424 ? 'Abrir no Proarte 424' : naSp ? 'Abrir em OAEs sem Proarte' : 'Abrir no contrato') + '</button>') +
@@ -1216,6 +1224,10 @@
         x = st.sel ? achar(st.sel) : null;
         if (x && MG && MG.sairCheia) MG.sairCheia();
         if (x) (a === 'abrir' ? o.onAbrir : a === 'mapa' ? o.onMapa : o.onFotos)(x.c, x.p);
+      } else if (a === 'medicao') {
+        x = st.sel ? achar(st.sel) : null;
+        if (x && MG && MG.sairCheia) MG.sairCheia();
+        if (x && o.onMedicao) o.onMedicao(x.c, x.p, b.dataset.n);
       } else if (a === 'ct') {
         o.contratos().forEach(function (c) { if (c.id === b.dataset.cid) o.onAbrir(c, null); });
       }
