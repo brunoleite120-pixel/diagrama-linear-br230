@@ -1425,6 +1425,23 @@
         cid = id; med = null; etapas = {}; grupo = null; aba = 'grupos'; semValor = false; segAberto = ''; segTodas = false; segServ = false; segXls = false; segSem = null; segOrdem = 'km';
         return true;
       },
+      // v232 (item 2 dos Caminhos): para o cartão do item no contrato (aba Medições), sem abrir Medições. xlsItem conta o que
+      // a planilha teria (n vazio: todas as medições do item; com n: só aquela) e baixarItem monta e salva a planilha
+      xlsItem: function (id, pid, n) {
+        var c = contrato(id), d = c && dado(c), m = null;
+        if (!d || !d.ms.length || !op.salvar) return null;
+        if (n != null && n !== '') d.ms.forEach(function (x) { if (String(x.n) === String(n)) m = x; });
+        var r = xlsConta(c, d, pid, m || d.ult);
+        return { meds: r.meds, todas: r.todas, med: m ? r.med : 0 };
+      },
+      baixarItem: function (id, pid, n) {
+        var c = contrato(id), d = c && dado(c), m = null, uma = n != null && n !== '';
+        if (!d || !d.ms.length) return false;
+        if (uma) d.ms.forEach(function (x) { if (String(x.n) === String(n)) m = x; });
+        if (uma && !m) return false;
+        baixarXls(c, d, pid, m || d.ult, !uma);
+        return true;
+      },
       // v231 (item 1 dos Caminhos): direto no item (OAE, segmento ou ponto) dentro de uma medição, na aba "Por OAE", com o
       // painel dele aberto e os serviços daquela medição à vista. Sem desenhar (o app desenha ao abrir Medições)
       irItem: function (id, pid, n) {

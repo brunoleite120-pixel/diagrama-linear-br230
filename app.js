@@ -4961,6 +4961,7 @@
         '<button type="button" class="an-nav-c' + (sel ? ' on' : '') + '" data-act="abc-todas"' + (sel ? ' title="Voltar ao total"' : ' disabled') + '>' + meio + '</button>' +
         '<button type="button" class="an-nav-s" data-act="med-nav" data-d="1" aria-label="Próxima medição com serviço">›</button></div>';
       h += '<div class="an-nav-t">‹ › pulam entre ' + (com.length === 1 ? 'a única medição' : 'as ' + com.length + ' medições') + ' com serviço' + (E ? ' na ' + E + 'ª etapa' : '') + (sel ? ' · o meio volta ao total' : '') + '</div>';
+      h += medAtalhosHtml(c, p, com, sel);
     }
     var modo = ui.medModo === 'abc' ? 'abc' : 'grupo';
     h += '<div class="seg an-modo" role="group" aria-label="Ordem dos serviços">' + [['grupo', 'Por grupo'], ['abc', 'Por valor (ABC)']].map(function (x) {
@@ -4985,6 +4986,18 @@
     h += '<div class="an-rod">' + esc((modo === 'grupo' ? 'Valores ' + (sel ? 'da ' + medTxt(an, sel) : E ? 'da ' + E + 'ª etapa' : 'de todas as medições') + ' em cada grupo; o estado vem da aba Vistoria. ' : 'Classe A/B/C pelo valor; a quantidade em destaque. ') +
       'Medição registra quantidade e valor; não comprova execução.') + '</div>';
     return h;
+  }
+  // v232 (item 2 dos Caminhos): do cartão do item (OAE ou segmento) para a tela Medições e para o Excel dele, sem refazer o
+  // caminho. Os dois botões seguem a medição escolhida na régua: com uma escolhida, "Abrir a 27ª em Medições" e o Excel só
+  // dela; em "Todas as medições", abre na última com serviço no item e o Excel traz todas. Só para quem vê as medições
+  function medAtalhosHtml(c, p, com, sel) {
+    if (!temMedicoes() || !parte(c, 'med') || ehSup(c) || !medObj() || !medicoes.irItem) return '';
+    var alvo = sel || com[com.length - 1].n, x = medicoes.xlsItem ? medicoes.xlsItem(c.id, p.id, sel || '') : null;
+    var h = '<div class="an-atalhos"><button type="button" class="btn small" data-act="med-ir" data-id="' + esc(p.id) + '" data-n="' + esc(alvo) + '">' +
+      (sel ? 'Abrir a ' + esc(sel) + 'ª em Medições' : 'Abrir em Medições') + ' ›</button>';
+    if (x && (sel ? x.med : x.todas)) h += '<button type="button" class="btn small" data-act="med-xls" data-id="' + esc(p.id) + '" data-n="' + esc(sel || '') + '">' +
+      (sel ? 'Baixar Excel da ' + esc(sel) + 'ª' : 'Baixar Excel · ' + (x.meds === 1 ? '1 medição' : 'as ' + x.meds + ' medições')) + '</button>';
+    return h + '</div>';
   }
   // serviços medidos, nos grupos da vistoria (na ordem da aba Vistoria) e, por último, "Acesso e limpeza" (plataforma e jato,
   // que não são grupo da vistoria). Por grupo só se soma o valor; a quantidade fica em cada serviço
@@ -6337,6 +6350,15 @@
       if (n && medSelDe(pidSel) === n) n = null;
       ui.medSel[pidSel] = n;   // null = todas, mesmo com uma medição escolhida na lista
       refazPonte(pidSel, act === 'med-bar' ? '.an-bar[data-n="' + b.dataset.n + '"]' : '.an-nav-s[data-d="1"]');
+      return;
+    }
+    // v232 (item 2 dos Caminhos): do cartão para Medições (no item e na medição da régua) e o Excel do item
+    if (act === 'med-ir') {
+      if (temMedicoes() && parte(c, 'med') && medObj() && medicoes.irItem && medicoes.irItem(c.id, b.dataset.id, b.dataset.n)) abrirMedicoes();
+      return;
+    }
+    if (act === 'med-xls') {
+      if (temMedicoes() && parte(c, 'med') && medObj() && medicoes.baixarItem && !medicoes.baixarItem(c.id, b.dataset.id, b.dataset.n || '')) toast('Sem serviços localizados para a planilha.');
       return;
     }
     // ‹ › da aba Medições: a medição com serviço anterior ou a seguinte (sem nenhuma escolhida, a última ou a primeira)
