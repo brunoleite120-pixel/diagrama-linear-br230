@@ -263,7 +263,7 @@ function desenho() {
   // v205: o cartão do contrato com dados do SIAC (o 437) troca a linha do ritmo pelas do SIAC; o ritmo fica nos que não têm (o 424)
   ok(h.includes('R$ 730,0 mil/mês'), 'ritmo abaixo de milhão em mil com uma casa');
   ok(!h.includes('R$ 903,8 mil/mês') && h.includes('<dt>Pagamento da última</dt>') && h.includes('<dt>Fim da execução</dt><dd>30/08/2027 · faltam 314 dias</dd>'), 'cartão com SIAC mostra pagamento e fim da execução no lugar do ritmo');
-  ok(!cards.includes('Ver no diagrama'), 'diagrama só no contrato');
+  ok(!cards.includes('Abrir contrato'), 'abrir o contrato só com o contrato aberto');
   ok(visivel.includes('Sem medição no SIAC desde mai/26 (4 meses)'), 'aviso curto de atraso');
   ok(visivel.includes('Em dia: medição de set/26 no SIAC'), 'aviso em dia');
   var cel = h.match(/<button[^>]*md-card-cel[^>]*data-cid="437"[^>]*>([\s\S]*?)<\/button>/)[1];

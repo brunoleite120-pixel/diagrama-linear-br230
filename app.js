@@ -6061,7 +6061,7 @@
       // v220: Baixar Excel do painel da OAE (no computador baixa; no app e no iPhone, o compartilhar do sistema)
       salvar: function (nomeArq, blob, msg) { return saveBlob(nomeArq, blob, msg); },
       abriu: mdAbriu, voltou: mdVoltou,   // v226: o histórico de Medições
-      diagrama: function (c) { if (parte(c, 'med') && !ehSup(c)) abrirDaVisao(c, null, false); },
+      diagrama: function (c) { if (parte(c, 'med') && !ehSup(c)) abrirDaVisao(c, null, 'diagrama'); },   // v228: "Abrir contrato 424" abre no Diagrama, e não na última página usada
       // painel da ponte/segmento: o ponto no diagrama e as fotos dele (conservação: pelo km do segmento, as fotos não têm ponto)
       diagramaPonto: function (c, p) { if (parte(c, 'med')) abrirDaVisao(c, p, false); },
       fotos: function (c, p) {
@@ -6078,7 +6078,7 @@
   function abrirDaVisao(c, p, noMapa) {
     if (isPublico()) { toast('Entre com o seu código para abrir o contrato.', 5000); openLogin(); return; }
     undoProxima();
-    var era = visaoOn, eraMd = medicoesOn;   // v226: de Medições ("Ver no diagrama"), o Voltar volta para ela
+    var era = visaoOn, eraMd = medicoesOn;   // v226: de Medições ("Abrir contrato 424", "Abrir OAE no contrato"), o Voltar volta para ela
     mdGuardaSaida();
     mexeu = true;
     setVisao(false);
@@ -6092,7 +6092,11 @@
     save();
     renderAll();
     syncTopbar();   // o PDF voltou à barra, que pode ter mudado de altura: mede antes de rolar (o observer só avisa depois)
-    if (noMapa) {
+    if (noMapa === 'diagrama') {
+      // v228: o contrato aberto pelo cabeçalho de Medições cai no Diagrama (quem não vê o diagrama fica na página em que estava)
+      if (podeDiagrama(c)) { setView('diagrama'); if (pgAtivo()) irPg('diagrama', true); }
+      window.scrollTo(0, 0);
+    } else if (noMapa) {
       setView('mapa');
       if (pgAtivo()) irPg('mapa', era || eraMd);
       if (p && mapa && mapa.foco) setTimeout(function () { mapa.foco(p.id); }, 200);

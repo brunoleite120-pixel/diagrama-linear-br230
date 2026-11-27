@@ -30,6 +30,11 @@
       var n = /^\s*(?:CT\s*)?(?:\d{2}\s+)?0*(\d+)(\/\d{4})?\s*$/i.exec(String(c.numero || ''));
       return n ? 'CT ' + Number(n[1]) + (n[2] || '') : op.nome(c);
     }
+    // v228 (item 4 dos Caminhos): o botão que sai de Medições para o contrato diz para onde vai ("Abrir contrato 424")
+    function rotAbrirCt(c) {
+      var n = /^\s*(?:CT\s*)?(?:\d{2}\s+)?0*(\d+)(\/\d{4})?\s*$/i.exec(String(c.numero || ''));
+      return n ? 'Abrir contrato ' + Number(n[1]) : 'Abrir o contrato';
+    }
     function decimal(v, casas) { return Number(v).toFixed(casas).replace('.', ','); }
     function pctCurto(v) { return decimal(v, 1) + '%'; }
     function compacto(v) {
@@ -655,7 +660,7 @@
       return ch ? '<span class="md-sit-chips">' + ch + '</span>' : '';
     }
     function contratoHtml(c) {
-      var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + (ehSup(c) ? '' : botao('diagrama', 'Ver no diagrama', ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama')) + '</div>';
+      var d = dado(c), h = '<div class="md-caminho">' + botao('voltar', '← Medições') + '<span class="md-caminho-ct">' + esc(nome(c)) + '<span class="md-caminho-info">' + esc(' · ' + tipo(c) + ' · ' + faixa(c)) + '</span></span>' + (ehSup(c) ? '' : botao('diagrama', esc(rotAbrirCt(c)), ' data-cid="' + esc(c.id) + '"', 'ghost md-diagrama')) + '</div>';
       if (!d || !d.ms.length) return h + '<section class="card md-card"><h1>' + esc(nome(c)) + '</h1>' + (d && !d.ms.length && op.estado(c) === 'ok' ? vazio('Ainda sem medições carregadas.') : estadoHtml(c)) + '</section>';
       var m = null;
       d.ms.forEach(function (x) { if (String(x.n) === String(med)) m = x; });
@@ -935,7 +940,7 @@
           pe += '<div class="md-hist-acum"><span>Acumulado</span><span>' + esc(dinheiro(acum)) + '</span></div>';
         }
         var xs = lin.length && op.salvar ? xlsConta(c, d, pid, m) : null;
-        pe += '<div class="md-painel-acoes">' + (p && op.diagramaPonto ? botao('ponte-diag', 'Ver no diagrama', ' data-p="' + esc(pid) + '"', 'small primary') : '') +
+        pe += '<div class="md-painel-acoes">' + (p && op.diagramaPonto ? botao('ponte-diag', 'Abrir ' + (oae ? 'OAE' : cons ? 'segmento' : 'ponto') + ' no contrato', ' data-p="' + esc(pid) + '"', 'small primary') : '') +
           (p && op.fotos && op.fotos(c) ? botao('ponte-fotos', 'Fotos ' + (oae ? 'da OAE' : cons ? 'do segmento' : 'do ponto'), ' data-p="' + esc(pid) + '"', 'small') : '') +
           botao('ponte-serv', 'Serviços nesta medição', ' data-p="' + esc(pid) + '" aria-pressed="' + segServ + '"', 'small') +
           (xs && xs.todas ? botao('ponte-xls', 'Baixar Excel ' + (segXls ? '▴' : '▾'), ' data-p="' + esc(pid) + '" aria-expanded="' + segXls + '"', 'small') : '') + '</div>';
